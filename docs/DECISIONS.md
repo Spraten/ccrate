@@ -30,7 +30,16 @@ Maintain confirmed decisions separately from proposals. Date: 2026-10-02. The co
 - Revisit: yes, by explicit user decision with the integration gap explained.
 - Source: user's approval of Homebox with a companion interaction layer.
 
-## Pending Proposals
+## DEC 004 Temporary Printer Diagnostic Access
+
+- Date: 2026-10-02.
+- Question: grant scoped temporary printer access for the hardware proof or postpone printing?
+- Options considered: temporary user ACL; defer printer tests. Persistent access rules are a later decision.
+- User choice: authorized sudo access using the Pi account credential.
+- Implementation consequence: grant only user read/write access to the matched SUPVAN hidraw device; no permanent service or system-wide permission rule. Credential is not stored in project files.
+- Revisit: yes; ACL expires on unplug/reboot and can be removed.
+
+## Pending Architecture Proposals
 
 - DEC P001: resolved by DEC 003.
 - DEC P002: prior blanket Ops SQLite recommendation superseded; evaluate native Homebox first, then propose persistence only for demonstrated gaps.

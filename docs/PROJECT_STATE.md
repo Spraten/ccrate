@@ -1,6 +1,6 @@
 # Current Phase
 
-Phase 0 reconnaissance complete; companion interaction-layer boundary approved. Next: Phase 1 hardware proof, 2026-10-02.
+Phase 1 hardware proof in progress, 2026-10-02. Companion interaction-layer boundary approved.
 
 # Working
 
@@ -15,7 +15,9 @@ Phase 0 reconnaissance complete; companion interaction-layer boundary approved. 
 
 # In Progress
 
-- Documents updated to the user's Homebox-native companion direction; no product implementation yet.
+- Printer ARM64 CLI built successfully; one 40 by 30 mm test label completed. Physical legibility awaits confirmation.
+- Diagnostic UI running; five targets registered. Browser scaling and local camera permission adjusted; physical QR test pending.
+- Latest evidence in docs/03-hardware-proof.md and hardware JSON reports.
 
 # Decisions Waiting on User
 
@@ -26,18 +28,19 @@ Phase 0 reconnaissance complete; companion interaction-layer boundary approved. 
 # Known Problems
 
 - SSH intermittently times out; cause unknown.
-- No camera capture, QR decode, touch input or test print has been verified.
-- Printer ARM64 build is plausible from source, but unproven.
+- Webcam captured valid 640 by 480 frames at approximately 9.8 FPS after reconnect, then disconnected again with USB error -71. Browser preview and physical QR decoding remain unverified.
+- Printer build, device probe and one-label command succeeded; physical print quality remains unverified.
 - Published schema differs from actual source routes.
 - Maintenance requires a completed or scheduled date; missing both produces 500 rather than a useful validation status.
-- Printer hidraw device is root-only (0600); user access needs a scoped permission setup in hardware proof.
+- Printer access temporarily granted by a scoped user ACL; no persistent permission rule.
 - Homebox retail barcode lookup requires Internet; offline catalog remains future custom work.
 - No RTC detected; offline timekeeping remains unresolved.
 
 # Next
 
-Perform Phase 1 hardware proof, then demonstrate results. Keep data native to Homebox where supported; review demonstrated gaps before adding custom persistence. No checkout implementation yet.
+SSH recovered; user confirmed address 192.168.1.61. Await webcam reconnect and physical test-label feedback, verify browser preview and physical QR scanning, then review the hardware checkpoint. Keep data native to Homebox where supported. No checkout implementation yet.
 
 # Resume Information
 
 Pi folder `/home/user/Desktop/inventory-system`; source commit `e01dd737238a3fa7e1a6454b37de6c6fc88c86e4`. Baseline process PID, log, pepper and synthetic test credentials live under `work/baseline` with restrictive permissions. This is a test process, not a boot service. Never paste the private test credentials or pepper into reports. `deploy/probe_homebox.py` reproduces the API checks with synthetic assets; each run adds test entities, so use only the isolated test database. The original handoff is preserved at `docs/PROJECT_HANDOFF.md`.
+

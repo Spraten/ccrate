@@ -1,0 +1,20 @@
+{
+  "synthetic_qr_decode": "passed",
+  "touch_targets": [
+    "2",
+    "1",
+    "3",
+    "4",
+    "5"
+  ],
+  "touch_event_types": [
+    "mouse"
+  ],
+  "camera": null,
+  "scans": [],
+  "camera_error": {
+    "type": "camera_error",
+    "name": "NotFoundError",
+    "message": "Requested device not found"
+  }
+}
