@@ -1,0 +1,3 @@
+[submodule "upstream/homebox"]
+	path = upstream/homebox
+	url = https://github.com/sysadminsmedia/homebox.git
