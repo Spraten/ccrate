@@ -1,4 +1,4 @@
-import hashlib, json, os, pathlib, secrets, subprocess, time, urllib.request, urllib.error
+import hashlib, json, os, pathlib, secrets, signal, subprocess, time, urllib.request, urllib.error
 
 root = pathlib.Path('/home/user/Desktop/inventory-system')
 work = root / 'work'
@@ -16,7 +16,7 @@ if not pepper.exists():
 env = dict(os.environ, HBOX_WEB_HOST='127.0.0.1', HBOX_WEB_PORT='17745',
            HBOX_STORAGE_PREFIX_PATH=str(run / 'data'),
            HBOX_DATABASE_SQLITE_PATH=str(run / 'data/homebox.db')+'?_pragma=busy_timeout=999&_pragma=journal_mode=WAL&_fk=1&_time_format=sqlite',
-           HBOX_AUTH_API_KEY_PEPPER=pepper.read_text(), HBOX_OPTIONS_CHECK_GITHUB_RELEASE='false',
+           HBOX_AUTH_API_KEY_PEPPER=pepper.read_text(), HBOX_OPTIONS_GITHUB_RELEASE_CHECK='false',
            HBOX_OPTIONS_ALLOW_ANALYTICS='false', HBOX_LOG_LEVEL='info')
 base = 'http://127.0.0.1:17745'
 results = []
@@ -36,6 +36,16 @@ def request(method, path, payload=None, token=None, record=True, content_type='a
     try: data = json.loads(raw)
     except (ValueError, UnicodeDecodeError): data = raw
     return code, data
+
+if os.environ.get('PHASE0_RESTART') == '1' and (run/'homebox.pid').exists():
+    pid = int((run/'homebox.pid').read_text())
+    exe = pathlib.Path('/proc')/str(pid)/'exe'
+    if exe.exists() and exe.resolve() == binary.resolve():
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(50):
+            if not exe.exists(): break
+            time.sleep(0.1)
+        assert not exe.exists(), 'Old baseline process failed to stop'
 
 try:
     request('GET', '/api/v1/status', record=False)
@@ -82,6 +92,17 @@ for path in ['/api/v1/entities?isLocation=true', '/api/v1/entities?parentIds='+s
     request('GET', path, token=api_token)
 assert request('PATCH', '/api/v1/entities/'+aid, {'quantity':2}, api_token)[0] == 200
 request('POST', '/api/v1/entities/'+aid+'/maintenance', {'name':'Recon inspection'}, api_token)
+assert request('POST', '/api/v1/entities/'+aid+'/maintenance',
+               {'name':'Recon inspection', 'completedDate':'2026-10-02T12:00:00-04:00','cost':'0'}, api_token)[0] == 201
+code, detail = request('GET', '/api/v1/entities/'+aid, token=api_token)
+update = {'name':detail['name'], 'description':detail['description'], 'quantity':detail['quantity'],
+          'parentId':shelf['id'], 'entityTypeId':detail['entityType']['id'], 'assetId':detail['assetId'],
+          'tagIds':[t['id'] for t in detail.get('tags',[])], 'manufacturer':'Recon manufacturer',
+          'serialNumber':'RECON-001', 'modelNumber':'Test model',
+          'fields':[{'name':'Recon field','type':'text','textValue':'preserved'}]}
+assert request('PUT','/api/v1/entities/'+aid,update,api_token)[0] == 200
+code, detail = request('GET','/api/v1/entities/'+aid,token=api_token)
+assert detail['serialNumber'] == 'RECON-001' and detail['fields'][0]['textValue'] == 'preserved'
 request('GET', '/api/v1/labelmaker/entity/'+aid, token=api_token)
 request('GET', '/api/v1/entities/fields', token=api_token)
 request('GET', '/api/v1/assets/'+asset['assetId'], token=api_token)

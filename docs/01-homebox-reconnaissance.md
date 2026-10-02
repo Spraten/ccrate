@@ -10,7 +10,11 @@ SHA256: `a7197a54b830a21be0142c5b4b3dd3a730d5d6a0599aa680d089b4e128d82f12`.
 
 Checksum matched the official checksums list locally and on the Pi. The Pi successfully started the unmodified release with an isolated database. `GET /api/v1/status` returned 200, health true, version 0.26.2 and the pinned commit. `GET /` returned 200. Registration returned 204 and login 200. Unauthenticated entity access returned 401.
 
-The first API-key request failed with 401 because the probe added a Bearer prefix to a login token that may already include that prefix. The revised probe normalizes the prefix. Further live results are recorded separately when completed. Source and schema findings below are not a claim that every endpoint has been tested live.
+The first API-key request failed with 401 because the probe added a Bearer prefix to the login token's existing prefix. Normalizing it resolved the failure. Live probes then verified API-key creation (201), entity-type listing, location and asset creation (201), location filtering, parent filtering, detail/path/tree retrieval, quantity PATCH and rich metadata/custom-field PUT (200), QR generation and label rendering (200), CSV export (200), template listing, collection-export listing, asset ID resolution, key deletion (204), and rejection of the revoked key (401).
+
+Maintenance POST without either date returned 500; the server log reported that completedDate or scheduledDate must be set. Supplying completedDate and cost returned 201. Validate this requirement in the adapter and surface a helpful error; the schema only marks name required. This failure is retained in `api-probe-results.json` as evidence, not hidden as a successful test.
+
+The source/API table below includes additional inspected integration points. Attachment upload/download, template creation, collection export creation/import/restore, mutation subscriptions and printer transport were not tested live. Upstream source remains unchanged.
 
 ## API and Source Findings
 
@@ -50,6 +54,8 @@ The baseline binds `HBOX_WEB_HOST=127.0.0.1`, `HBOX_WEB_PORT=17745`, stores file
 
 Source defaults to SQLite with WAL. A raw copy of a running database file alone is not a verified backup. Future backup design must capture a consistent database, attachments, configuration and pepper, plus Ops/catalog/map state. Collection export is promising but experimental in release-line documentation; verify a restore before accepting it as recovery.
 
+Correct release-check configuration is `HBOX_OPTIONS_GITHUB_RELEASE_CHECK=false`; the first probe used a misnamed environment variable. The final baseline was restarted with the correct setting, and status returned an empty latest-release value. Analytics and telemetry were disabled. Short-run RSS was approximately 136 MiB after API probing; startup CPU is not a sustained kiosk benchmark.
+
 Baseline startup is handled by the reconnaissance probe; process PID and log are in `work/baseline`. Production reboot startup, registration policy, integration-account permissions, TLS origin for browser camera access and backups remain unresolved.
 
 ## Existing Build and Tests
@@ -60,7 +66,7 @@ Homebox has a Go backend, embedded Nuxt web frontend, Go repository/service/hand
 
 Candidate: `heeen/supvan-cups`, inspected commit `9fd7af09580c3e710202e5471e77e0b88db0e3bb`, workspace version 0.5.1, MIT license. The source README explicitly lists T50M Pro support, USB hidraw and Bluetooth transports, an IPP printer service, and mock testing. The observed USB VID matches its declared SUPVAN VID 1820.
 
-The code is Rust 2024 with Linux native dependencies such as DBus, libc and LZMA. No inspected manifest declares an x86-only requirement. This makes ARM64 a plausible build target, not a proven compatible driver. Its current Cargo manifest names ipp-printer-app 0.10.0; the fetched GitHub HTML README described an older framework version, so use pinned source and Cargo.lock for reproducibility.
+The code is Rust 2024 with Linux native dependencies such as DBus, libc and LZMA. No inspected manifest declares an x86-only requirement. This makes ARM64 a plausible build target, not a proven compatible driver. Its current Cargo manifest names ipp-printer-app 0.10.0; the fetched GitHub HTML README described an older framework version, so use pinned source and Cargo.lock for reproducibility. On this Pi `/dev/hidraw0` is root-owned mode 0600; the regular user cannot access it without a reviewed device-permission setup. Do not solve this by running the whole kiosk as root.
 
 Next proof: check hidraw permissions, capture loaded label metadata, build a pinned driver with dependencies preserved for offline installation, run a diagnostic and print one test label. Check QR readability, orientation, dimensions, repeatability, reconnect and reboot behavior. Do not configure unattended print retries or consume multiple labels without defining the test.
 

@@ -1,0 +1,180 @@
+{
+  "build": {
+    "health": true,
+    "versions": null,
+    "title": "Homebox",
+    "message": "Track, Manage, and Organize your Things",
+    "build": {
+      "version": "0.26.2",
+      "commit": "e01dd737238a3fa7e1a6454b37de6c6fc88c86e4",
+      "buildTime": "now"
+    },
+    "latest": {
+      "version": "",
+      "date": ""
+    },
+    "demo": false,
+    "allowRegistration": true,
+    "labelPrinting": false,
+    "oidc": {
+      "enabled": false,
+      "buttonText": "Sign in with OIDC",
+      "allowLocal": true
+    },
+    "telemetry": {
+      "enabled": false
+    }
+  },
+  "results": [
+    {
+      "method": "GET",
+      "path": "/api/v1/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities",
+      "status": 401
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users/self/api-keys",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entity-types",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/entities",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/entities",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities?isLocation=true",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities?parentIds=d483b3c4-8378-4a31-b725-e7bccb5973ae",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff/path",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities/tree?withItems=true",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/templates",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff/maintenance",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/swagger/doc.json",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/qrcode?data=phase0-test",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities/export",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/group/exports",
+      "status": 200
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff/maintenance",
+      "status": 500
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff/maintenance",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff",
+      "status": 200
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities/f4a383eb-2116-4f15-8f00-be7cb4751aff",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/labelmaker/entity/f4a383eb-2116-4f15-8f00-be7cb4751aff",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities/fields",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/000-012",
+      "status": 200
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/users/self/api-keys/5a082d9a-2ee9-41fd-aa31-375017138d95",
+      "status": 204
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/entities",
+      "status": 401
+    }
+  ]
+}
