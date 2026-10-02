@@ -1,6 +1,6 @@
 # Project Decisions
 
-Maintain confirmed decisions separately from proposals. Date: 2026-10-02. No architecture, authentication, status vocabulary, QR namespace, label contents, map storage or deployment choice has been approved yet.
+Maintain confirmed decisions separately from proposals. Date: 2026-10-02. The companion interaction-layer boundary is approved. Authentication, status vocabulary, QR namespace, label contents, map storage and deployment remain undecided.
 
 ## DEC 001 Phased Collaboration
 
@@ -19,10 +19,21 @@ Maintain confirmed decisions separately from proposals. Date: 2026-10-02. No arc
 - Implementation consequence: USB identities were verified; Phase 1 can test real hardware.
 - Revisit: yes; peripherals can be disconnected or changed.
 
+## DEC 003 Homebox Companion Interaction Layer
+
+- Date: 2026-10-02.
+- Question: customize Homebox or build a companion, and where should inventory behavior live?
+- Options considered: upstream fork; companion with independent operational authority; companion using native Homebox data and behavior.
+- User choice: unmodified Homebox with a companion interaction layer that makes workflows convenient and keeps as much as possible native to Homebox.
+- Implementation consequence: use supported APIs and native entities, fields, types, templates, relationships, attachments and maintenance first. Do not patch Homebox, write its database directly, or duplicate inventory as another authority.
+- Additional persistence: not approved by this decision. Demonstrate a concrete native capability gap and review the smallest extension before implementing extra storage. Durable accountability must not be silently reduced to overwriteable fields or notes.
+- Revisit: yes, by explicit user decision with the integration gap explained.
+- Source: user's approval of Homebox with a companion interaction layer.
+
 ## Pending Proposals
 
-- DEC P001: unmodified Homebox plus companion Ops/kiosk, rather than fork.
-- DEC P002: Ops SQLite for custody/events/maps rather than Homebox custom fields or attachments.
+- DEC P001: resolved by DEC 003.
+- DEC P002: prior blanket Ops SQLite recommendation superseded; evaluate native Homebox first, then propose persistence only for demonstrated gaps.
 - DEC P003: native service deployment rather than containers; final service scope/network access still pending.
 
 See the architecture proposal for options, tradeoffs and visible effects. Do not treat these entries as user approval.

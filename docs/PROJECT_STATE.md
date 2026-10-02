@@ -1,6 +1,6 @@
 # Current Phase
 
-Phase 0 reconnaissance and initial architecture checkpoint, 2026-10-02.
+Phase 0 reconnaissance complete; companion interaction-layer boundary approved. Next: Phase 1 hardware proof, 2026-10-02.
 
 # Working
 
@@ -15,12 +15,12 @@ Phase 0 reconnaissance and initial architecture checkpoint, 2026-10-02.
 
 # In Progress
 
-- Phase 0 findings ready for user review; no product implementation in progress.
+- Documents updated to the user's Homebox-native companion direction; no product implementation yet.
 
 # Decisions Waiting on User
 
-- DEC P001 companion architecture versus upstream fork.
-- DEC P002 operational/map persistence.
+- DEC P001 resolved: approved unmodified Homebox plus companion interaction layer (DEC 003).
+- No blanket Ops database approval; evaluate native capabilities and review specific storage gaps when relevant.
 - DEC P003 final deployment approach; hardware checks can begin without boot-service installation.
 
 # Known Problems
@@ -36,7 +36,7 @@ Phase 0 reconnaissance and initial architecture checkpoint, 2026-10-02.
 
 # Next
 
-Present the initial architecture checkpoint and await feedback. Then perform Phase 1 hardware proof. No checkout implementation yet.
+Perform Phase 1 hardware proof, then demonstrate results. Keep data native to Homebox where supported; review demonstrated gaps before adding custom persistence. No checkout implementation yet.
 
 # Resume Information
 
