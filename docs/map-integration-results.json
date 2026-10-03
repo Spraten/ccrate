@@ -1,0 +1,11 @@
+{
+  "touch_room_configuration": true,
+  "touch_position_and_resize": true,
+  "native_fields_store_layout": true,
+  "asset_exact_shelf_highlight": true,
+  "map_fits_800x480": true,
+  "asset_unchanged": true,
+  "visual_removal_preserves_native_location": true,
+  "browser_errors": [],
+  "fixture": "Synthetic native room/shelves; no real workshop layout assumed"
+}

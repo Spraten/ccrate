@@ -16,6 +16,7 @@ from urllib.parse import urlsplit, parse_qs
 from homebox import Homebox
 from checkout import confirm_checkout
 from returns import confirm_return, recover, RETURN_STATES
+from maps import list_map,save_room,save_object,remove_object
 from ledger import Conflict
 from conditions import STATES, condition, checkout_blocker, set_condition
 BASE='http://127.0.0.1:17745'
@@ -58,7 +59,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve'):
+        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -71,6 +72,14 @@ class Handler(BaseHTTPRequestHandler):
                         codes=[c.text for c in zxingcpp.read_barcodes(frame)]
                     self.reply_json(200,{'codes':codes});return
                 data=json.loads(raw)
+                if self.path in ('/map/room','/map/object','/map/remove'):
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT)
+                        if self.path=='/map/room':result=save_room(client,data.get('entity_id'),data)
+                        elif self.path=='/map/object':result=save_object(client,data.get('entity_id'),data)
+                        else:result=remove_object(client,data.get('entity_id'))
+                    self.reply_json(200,result);return
                 if self.path=='/recovery/resolve':
                     if not OPEN_ADMIN:self.send_error(403);return
                     with lock:
@@ -154,6 +163,13 @@ class Handler(BaseHTTPRequestHandler):
             try:os.kill(pid,signal.SIGTERM)
             except ProcessLookupError:pass
     def do_GET(self):
+        if urlsplit(self.path).path=='/api/map':
+            try:
+                entity_id=parse_qs(urlsplit(self.path).query).get('entity',[None])[0]
+                self.reply_json(200,list_map(Homebox(ROOT),entity_id))
+            except (ValueError,TypeError,KeyError):self.reply_json(400,{'error':'Map or location needs review'})
+            except OSError:self.reply_json(503,{'error':'Homebox map unavailable'})
+            return
         if self.path=='/api/session' and session.current() is None:
             self.reply_json(200,{'user':None});return
         if urlsplit(self.path).path=='/api/history':

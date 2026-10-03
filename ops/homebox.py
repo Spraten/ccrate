@@ -26,3 +26,11 @@ class Homebox:
 
     def entity(self, entity_id):
         return self.call('/api/v1/entities/'+str(UUID(str(entity_id))))
+
+    def entities(self,locations=False):
+        items=[];page=1
+        while True:
+            result=self.call('/api/v1/entities?page='+str(page)+'&pageSize=100&includeArchived=true&isLocation='+str(locations).lower())
+            items.extend(result['items'])
+            if len(items)>=result['total'] or not result['items']:return items
+            page+=1
