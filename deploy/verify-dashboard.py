@@ -14,8 +14,8 @@ with sync_playwright() as pw:
         page.locator('[data-action="'+action+'"]').tap()
         page.wait_for_timeout(300)
         assert not page.locator('#view').evaluate('(el)=>el.classList.contains("dashboard")')
-        page.get_by_role('button',name='← Home',exact=True).tap()
-    page.get_by_role('button',name='Report a problem',exact=True).tap();page.get_by_role('heading',name='Report problem',exact=True).wait_for();page.get_by_role('button',name='← Home',exact=True).tap()
+        page.locator('#home-nav').tap()
+    page.get_by_role('button',name='Report a problem',exact=True).tap();page.get_by_role('heading',name='Report problem',exact=True).wait_for();page.locator('#home-nav').tap()
     page.locator('#manual').tap();page.get_by_role('dialog',name='Touchscreen search keyboard').wait_for();page.get_by_role('button',name='Use code',exact=True).last.wait_for()
     page.reload();page.get_by_text('Homebox connected · 0 assets',exact=True).wait_for();page.set_viewport_size({'width':480,'height':800});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth');page.screenshot(path=str(root/'work/dashboard-redesign-mobile.png'));assert not errors,errors
     browser.close()
