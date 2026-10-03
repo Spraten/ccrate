@@ -1,0 +1,8 @@
+import pathlib,sys,json
+root=pathlib.Path('/home/user/Desktop/inventory-system');sys.path.insert(0,str(root/'work/hardware/python'))
+from playwright.sync_api import sync_playwright
+with sync_playwright() as pw:
+    browser=pw.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox']);page=browser.new_page(viewport={'width':800,'height':480},has_touch=True);errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+    page.goto('http://127.0.0.1:17749');page.locator('#layout-nav').tap();page.locator('svg[aria-label="Overhead workshop floor plan"]').wait_for();assert page.locator('#workshop-view-tools').is_hidden();height=page.locator('.workshop-scroll').bounding_box()['height'];assert height>375
+    page.get_by_role('button',name='Show view controls',exact=True).tap();assert page.locator('#workshop-view-tools').is_visible();page.get_by_role('button',name='Zoom in',exact=True).tap();assert page.evaluate('workshopZoom')==1.25;assert page.locator('#workshop-view-tools').is_visible();page.get_by_role('button',name='Fit',exact=True).tap();assert page.evaluate('workshopZoom')==1;before=page.evaluate('workshopViewTurn');page.get_by_role('button',name='Turn view',exact=True).tap();assert page.evaluate('workshopViewTurn')!=before;page.get_by_role('button',name='Hide view controls',exact=True).tap();assert page.locator('#workshop-view-tools').is_hidden();assert not page.evaluate('workshopDirty');assert page.locator('.workshop-scroll').bounding_box()['height']==height;assert not errors,errors;browser.close()
+print(json.dumps({'side_tab_opens_controls':True,'hidden_by_default':True,'zoom_fit_turn_work':True,'drawer_keeps_canvas_height':True,'saved_layout_unchanged':True,'browser_errors':errors}))
