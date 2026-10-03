@@ -23,7 +23,7 @@ def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=Non
     matrix=qr.get_matrix();scale=min((height-28)//len(matrix),(width-112)//len(matrix))
     if scale<4:raise ValueError('Loaded label does not leave enough room for a readable QR code')
     image=Image.new('L',(width,height),255);draw=ImageDraw.Draw(image);draw.fontmode='1'
-    draw.text((8,3),title_override or ('LOCATION' if location else 'EQUIPMENT'),font=font(18),fill=0)
+    draw.text((8,15),title_override or ('LOCATION' if location else 'EQUIPMENT'),font=font(18),fill=0)
     for y,row in enumerate(matrix):
         for x,black in enumerate(row):
             if black:draw.rectangle((x*scale,26+y*scale,(x+1)*scale-1,26+(y+1)*scale-1),fill=0)
@@ -36,13 +36,13 @@ def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=Non
             lines.append(line.rstrip());line=character.lstrip()
         else:line=candidate
     if line:lines.append(line)
-    max_lines=max(1,(height-58-top)//22)
+    max_lines=max(1,(height-74-top)//22)
     for line in lines[:max_lines]:
         draw.text((left,top),line,font=name_font,fill=0);top+=22
     identifier=entity.get('assetId','');identifier_font=font(17)
     while identifier and draw.textbbox((0,0),identifier,font=identifier_font)[2]>available:identifier=identifier[:-1]
-    draw.text((left,height-40),identifier,font=identifier_font,fill=0)
-    draw.text((left,height-18),'Homebox',font=font(13),fill=0)
+    draw.text((left,height-56),identifier,font=identifier_font,fill=0)
+    draw.text((left,height-32),'Homebox',font=font(13),fill=0)
     return image,code
 def preview(client,entity_id):
     entity=client.entity(uuid(entity_id));image,code=render(entity);stream=io.BytesIO();image.save(stream,format='PNG')
