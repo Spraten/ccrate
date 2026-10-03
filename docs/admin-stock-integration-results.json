@@ -1,0 +1,10 @@
+{
+  "touch_native_category_creation": true,
+  "native_stock_category_condition_filters": true,
+  "native_photo_viewer": true,
+  "touch_native_maintenance_completion": true,
+  "explicit_ready_inspection_journaled": true,
+  "manual_asset_code_touch_fallback": true,
+  "serial_scan_preserves_case": true,
+  "browser_errors": []
+}

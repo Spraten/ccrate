@@ -1,0 +1,12 @@
+{
+  "camera_preview_cancel_stops_stream": true,
+  "deliberate_capture_stops_stream": true,
+  "native_problem_photo_verified": true,
+  "native_enrollment_photo_verified": true,
+  "native_photo_size": [
+    640,
+    480
+  ],
+  "browser_errors": [],
+  "camera_source": "Synthetic Chromium device; physical webcam acceptance remains outstanding"
+}

@@ -1,6 +1,7 @@
 """Create native records once, with temporary native markers for recovery."""
 import json,urllib.error
 from ledger import Conflict,uuid
+from attachments import photo_bytes,ensure_photo
 from conditions import FIELD,NOTE_FIELD,condition
 from native_fields import update_payload,text_field
 from maps import ROOM_FIELD,room_geometry
@@ -38,6 +39,7 @@ def prepare_product(client,data):
 
 
 def prepare_asset(client,data):
+    if data.get("photo"):photo_bytes(data["photo"])
     name=text(data.get('name',''),'Equipment name',required=True)
     serial=text(data.get('serial',''),'Serial number')
     destination=client.entity(uuid(data.get('location_id')))
@@ -172,6 +174,7 @@ def perform_creation(client,jobs,group,key,start=False):
             try:client.call('/api/v1/tags/'+marker,'DELETE')
             except urllib.error.HTTPError as error:
                 if error.code!=404:raise
+    if not plan.get("template"):ensure_photo(client,jobs,group,key,entity["id"])
     jobs.complete(group,key)
 
 

@@ -158,3 +158,20 @@ Date: 2026-10-02. Options: companion map tables; native custom fields; native la
 ## DEC023 - Native issue records
 
 2026-10-03. Problem reporting requires a badge, blocks checkout with an approved problem condition, preserves assigned shelf and creates a scheduled native maintenance entry. It does not mark repair completed. Uncertain responses require Admin verification and must not cause duplicate maintenance records.
+
+
+## DEC024 - Verified native kits
+
+2026-10-03. Under delegated judgement, manifests store native UUID references in a versioned custom field. Nested manifests are flattened for one atomic cart, with cycles and excessive size rejected. Scan the kit and every expected component. Complete-kit return is required while a kit is checked out. Definition and checkout do not relocate native records.
+
+## DEC025 - Stable labels and deliberate photos
+
+2026-10-03. Asset/location QR codes contain native record paths only; changing location, condition and borrower are not encoded. Badge print code/raster stays in memory; only a hash and native references enter the journal. Unknown printer outcomes require physical inspection and explicit recovery. Equipment photos are deliberate captures stored as native attachments; scan frames are not stored.
+
+## DEC026 - Managed user services and private recovery
+
+2026-10-03. Enable user services at boot with scoped SUPVAN access, and desktop autostart of the existing fullscreen launcher. Create cold matching native/operational/runtime backups and verify in isolation. Copying the private recovery archive off the Pi is pending explicit approval after automatic approval review rejected the requested PC copy.
+
+## DEC027 - Original scope audit
+
+2026-10-03. Handoff section75 explicitly says not to build consumable inventory and other future possibilities yet. These remain future work, not unfinished core features. All core phases still require their stated evidence and physical acceptance.

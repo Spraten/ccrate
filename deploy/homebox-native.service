@@ -1,0 +1,13 @@
+[Unit]
+Description=Native Homebox inventory
+StartLimitIntervalSec=60
+StartLimitBurst=5
+[Service]
+Type=simple
+WorkingDirectory=/home/user/Desktop/inventory-system/work/baseline
+ExecStart=/usr/bin/python3 /home/user/Desktop/inventory-system/deploy/run-homebox.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+[Install]
+WantedBy=default.target

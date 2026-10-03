@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Loopback read-only prototype using the isolated Homebox demonstration account."""
+"""Loopback Homebox companion using the isolated native demonstration account."""
 import base64, io, json, os, pathlib, signal, sys, threading, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT=pathlib.Path('/home/user/Desktop/inventory-system')
@@ -18,6 +18,13 @@ from checkout import confirm_checkout
 from returns import confirm_return, recover, RETURN_STATES
 from maps import list_map,save_room,save_object,remove_object
 from native_jobs import NativeJobs
+from categories import create_category,recover_category
+from stock import browse as browse_stock,invalidate as invalidate_stock
+from reviews import submit_review,recover_review
+from kits import manifest as kit_manifest,save as save_kit
+from system_status import status as system_status,start_backup
+from accounts import create_account
+from labels import preview as label_preview,print_label,print_badge,recover_print,probe as printer_probe
 from problems import submit_problem,recover_problem
 from setup_native import submit, recover_creation
 from products import catalog,lookup
@@ -64,7 +71,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm'):
+        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -77,6 +84,43 @@ class Handler(BaseHTTPRequestHandler):
                         codes=[c.text for c in zxingcpp.read_barcodes(frame)]
                     self.reply_json(200,{'codes':codes});return
                 data=json.loads(raw)
+                if self.path not in ('/scan','/session/end','/session/activity','/label/preview','/backup/start'):invalidate_stock()
+                if self.path=='/badge/print':
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=print_badge(client,badges,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),data.get('badge_id'),data.get('code'))
+                    self.reply_json(200,result);return
+                if self.path=='/categories/create':
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=create_category(client,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),data.get('input',{}))
+                    self.reply_json(200,result);return
+                if self.path=='/maintenance/complete':
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=submit_review(client,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),data,'complete_maintenance')
+                    self.reply_json(200,result);return
+                if self.path=='/kit/save':
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];held={r['entity_id'] for r in ledger.custody(native['defaultGroupId'])}
+                        if held & {data.get('entity_id'),*data.get('members',[])}:raise Conflict('Return the kit and components before changing its manifest')
+                        result=save_kit(client,data.get('entity_id'),data.get('members',[]))
+                    self.reply_json(200,result);return
+                if self.path=='/backup/start':
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:result=start_backup(data.get('request_key'))
+                    self.reply_json(202,result);return
+                if self.path=='/accounts/create':
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:result=create_account(Homebox(ROOT),data)
+                    self.reply_json(200,result);return
+                if self.path in ('/label/preview','/label/print'):
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
+                        result=label_preview(client,data.get('entity_id')) if self.path=='/label/preview' else print_label(client,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),data.get('entity_id'))
+                    self.reply_json(200,result);return
                 if self.path in ('/locations/create','/catalog/create','/enroll/confirm','/problem/confirm'):
                     if self.path not in ('/enroll/confirm','/problem/confirm') and not OPEN_ADMIN:self.send_error(403);return
                     actor,generation=session.snapshot()
@@ -106,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
                         group=native['defaultGroupId']
                         if data.get('native_job'):
                             job=native_jobs.detail(group,data.get('id'))
-                            handler=recover_problem if job['kind']=='report_problem' else recover_creation
+                            handler=recover_category if job['kind']=='create_type' else recover_review if job['kind'] in ('review_condition','complete_maintenance') else recover_print if job['kind'] in ('print_label','print_badge') else recover_problem if job['kind']=='report_problem' else recover_creation
                             result=handler(client,native_jobs,group,data.get('id'),data.get('outcome'))
                         else:result=recover(client,ledger,group,data.get('id'),data.get('outcome'))
                     self.reply_json(200,result);return
@@ -116,7 +160,7 @@ class Handler(BaseHTTPRequestHandler):
                     if data.get('session_generation')!=generation or data.get('session_instance')!=session.instance:raise Conflict('Badge session changed; review your selection again')
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
-                        result=confirm_return(client,ledger,native['defaultGroupId'],actor,data.get('targets'),data.get('request_key'),lambda:session.snapshot()==(actor,generation))
+                        result=confirm_return(client,ledger,native['defaultGroupId'],actor,data.get('targets'),data.get('request_key'),lambda:session.snapshot()==(actor,generation),session.scans(generation),data.get('kit_versions'))
                         session.end(generation)
                     self.reply_json(200,result);return
                 if self.path=='/checkout/confirm':
@@ -125,12 +169,13 @@ class Handler(BaseHTTPRequestHandler):
                     if data.get('session_generation')!=generation or data.get('session_instance')!=session.instance:raise Conflict('Badge session changed; review your selection again')
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
-                        result=confirm_checkout(client,ledger,native['defaultGroupId'],actor,data.get('assets',[]),data.get('request_key'),lambda:session.snapshot()==(actor,generation))
+                        result=confirm_checkout(client,ledger,native['defaultGroupId'],actor,data.get('assets',[]),data.get('request_key'),lambda:session.snapshot()==(actor,generation),session.scans(generation),data.get('kit_versions'))
                         session.end(generation)
                     self.reply_json(200,result);return
                 if self.path=='/condition':
                     if not OPEN_ADMIN:self.send_error(403);return
-                    with lock:entity=set_condition(Homebox(ROOT),data.get('entity_id'),data.get('state'))
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=submit_review(client,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),{'entity_id':data.get('entity_id'),'state':data.get('state')});entity=client.entity(result['entity_id'])
                     self.reply_json(200,{'entity':entity,'condition':condition(entity),'blocker':checkout_blocker(entity)});return
                 if self.path=='/session/activity':
                     self.reply_json(200,{'active':session.current(activity=True) is not None});return
@@ -163,7 +208,8 @@ class Handler(BaseHTTPRequestHandler):
                 if code['kind'] in ('asset','entity'):
                     with lock:items=inventory()+inventory(True)
                     match=next((e for e in items if ('asset_id' in code and e.get('assetId')==code['asset_id']) or ('entity_id' in code and e['id']==code['entity_id'])),None)
-                    if match:code['entity']=match
+                    if match:
+                        code['entity']=match;session.record_scan(match['id'])
                     else:code={'kind':'unknown','reason':'This code is not in this Homebox inventory'}
                 self.reply_json(200,code)
             except Conflict as error:self.reply_json(409,{'error':str(error),'reason':str(error)})
@@ -189,6 +235,43 @@ class Handler(BaseHTTPRequestHandler):
             try:os.kill(pid,signal.SIGTERM)
             except ProcessLookupError:pass
     def do_GET(self):
+        if urlsplit(self.path).path=='/api/file':
+            try:
+                from ledger import uuid
+                query=parse_qs(urlsplit(self.path).query);entity_id=uuid(query.get('entity',[None])[0]);attachment_id=uuid(query.get('attachment',[None])[0]);client=Homebox(ROOT);entity=client.entity(entity_id)
+                attachment=next(a for a in entity.get('attachments',[]) if a['id']==attachment_id)
+                request=urllib.request.Request(client.base+'/api/v1/entities/'+entity_id+'/attachments/'+attachment_id,headers={'Authorization':'Bearer '+client.token})
+                class LocalRedirect(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self,request,fp,code,msg,headers,newurl):
+                        destination=urlsplit(newurl)
+                        if destination.hostname!='127.0.0.1' or destination.port!=17745:raise ValueError('External file unavailable offline')
+                        return super().redirect_request(request,fp,code,msg,headers,newurl)
+                with urllib.request.build_opener(LocalRedirect()).open(request,timeout=15) as response:
+                    content=response.read(10000001);mime=response.headers.get_content_type()
+                if len(content)>10000000:raise ValueError('File exceeds kiosk preview limit')
+                self.send_response(200);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(content)));self.send_header('X-Content-Type-Options','nosniff');self.send_header('Cache-Control','no-store')
+                if mime not in ('image/jpeg','image/png','image/webp','image/gif'):self.send_header('Content-Disposition','attachment')
+                self.end_headers();self.wfile.write(content)
+            except (OSError,ValueError,StopIteration):self.reply_json(404,{'error':'Native file unavailable'})
+            return
+        if urlsplit(self.path).path=='/api/stock':
+            try:self.reply_json(200,browse_stock(Homebox(ROOT),'refresh' in parse_qs(urlsplit(self.path).query)))
+            except (OSError,ValueError):self.reply_json(503,{'error':'Native stock unavailable'})
+            return
+        if urlsplit(self.path).path=='/api/maintenance':
+            try:
+                from ledger import uuid
+                entity_id=uuid(parse_qs(urlsplit(self.path).query).get('entity',[None])[0]);self.reply_json(200,Homebox(ROOT).call('/api/v1/entities/'+entity_id+'/maintenance'))
+            except (OSError,ValueError):self.reply_json(503,{'error':'Native maintenance unavailable'})
+            return
+        if urlsplit(self.path).path=='/api/kit':
+            try:
+                data=kit_manifest(Homebox(ROOT),parse_qs(urlsplit(self.path).query).get('id',[None])[0]);data['verified']=list(session.scans(session.snapshot()[1]));self.reply_json(200,data)
+            except (ValueError,OSError):self.reply_json(400,{'error':'Kit manifest or native equipment needs review'})
+            return
+        if self.path=='/api/system':
+            if not OPEN_ADMIN:self.send_error(403);return
+            self.reply_json(200,system_status());return
         if urlsplit(self.path).path in ('/api/catalog','/api/product','/api/types'):
             try:
                 client=Homebox(ROOT)
@@ -215,7 +298,7 @@ class Handler(BaseHTTPRequestHandler):
                 rows=ledger.history(group,entity_id)+native_jobs.history(group,entity_id)
                 rows=sorted(rows,key=lambda r:r['created_at'],reverse=True)[:100]
                 client=Homebox(ROOT);labels={e['id']:e['name'] for e in client.entities()+client.entities(True)}
-                labels.update({t['id']:t['name'] for t in client.call('/api/v1/templates')})
+                labels.update(names);labels.update({t['id']:t['name'] for t in client.call('/api/v1/templates')});labels.update({t['id']:t['name'] for t in client.call('/api/v1/entity-types')})
                 for row in rows:row['asset_names']=[labels.get(key,'Deleted native record') for key in row['assets']]
                 for row in rows:row['actor']=names.get(row['actor_id'],'Former Homebox member')
                 self.reply_json(200,rows)

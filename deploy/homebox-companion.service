@@ -1,0 +1,15 @@
+[Unit]
+Description=Homebox touchscreen companion
+After=homebox-native.service
+Wants=homebox-native.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+[Service]
+Type=simple
+WorkingDirectory=/home/user/Desktop/inventory-system
+ExecStart=/usr/bin/python3 /home/user/Desktop/inventory-system/deploy/kiosk-server.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+[Install]
+WantedBy=default.target

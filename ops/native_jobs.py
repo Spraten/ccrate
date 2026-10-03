@@ -3,7 +3,7 @@ import hashlib,json
 from uuid import uuid4
 from ledger import Conflict,uuid,timestamp
 
-KINDS=('create_location','create_asset','create_template','report_problem')
+KINDS=('create_location','create_asset','create_template','report_problem','print_label','review_condition','complete_maintenance','create_type','print_badge')
 
 
 class NativeJobs:

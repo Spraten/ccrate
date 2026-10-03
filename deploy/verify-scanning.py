@@ -3,16 +3,11 @@ r=pathlib.Path('/home/user/Desktop/inventory-system')
 sys.path.insert(0,str(r/'work/hardware/python'))
 from playwright.sync_api import sync_playwright
 import qrcode
-for entry in pathlib.Path('/proc').iterdir():
-    if not entry.name.isdigit():continue
+subprocess.run(['systemctl','--user','restart','homebox-companion.service'],check=True)
+for attempt in range(40):
     try:
-        args=(entry/'cmdline').read_bytes().split(b'\0')
-        if args[0].endswith(b'python3') and (b'deploy/kiosk-server.py' in args or str(r/'deploy/kiosk-server.py').encode() in args):
-            os.kill(int(entry.name),signal.SIGTERM)
-    except (OSError,IndexError):pass
-time.sleep(.5)
-subprocess.Popen(['python3',str(r/'deploy/kiosk-server.py')],cwd=r,stdout=(r/'work/kiosk-server.log').open('ab'),stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,start_new_session=True)
-time.sleep(.5)
+        urllib.request.urlopen('http://127.0.0.1:17749/',timeout=1).close();break
+    except OSError:time.sleep(.25)
 base='http://127.0.0.1:17749'
 items=json.load(urllib.request.urlopen(base+'/api/inventory',timeout=15))
 asset=next(e for e in items if e['name']=='Demo Drone 001')

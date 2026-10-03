@@ -2,6 +2,7 @@
 import hashlib
 from conditions import condition,condition_note,set_condition,checkout_blocker
 from ledger import Conflict,uuid
+from kits import validate_return
 
 RETURN_STATES=('Needs Attention','Maintenance','Quarantined','Broken')
 
@@ -29,7 +30,7 @@ def normalize_targets(targets):
     return sorted(result,key=lambda t:t['entity_id'])
 
 
-def confirm_return(client,ledger,group,actor,targets,request_key,session_valid):
+def confirm_return(client,ledger,group,actor,targets,request_key,session_valid,verified=None,kit_versions=None):
     group,actor,key=uuid(group),uuid(actor),uuid(request_key)
     targets=normalize_targets(targets);assets=[t['entity_id'] for t in targets]
     members=client.call('/api/v1/groups/members')
@@ -42,9 +43,9 @@ def confirm_return(client,ledger,group,actor,targets,request_key,session_valid):
         if prior['status']=='completed':return result(prior['id'],len(assets))
         if prior['status']=='pending':ledger.review(prior['id'],'Interrupted return requires explicit Admin review')
         raise Conflict('This return needs Admin recovery; do not start another transaction')
-    steps=[]
+    steps=[];entities=[]
     for target in targets:
-        entity=client.entity(target['entity_id'])
+        entity=client.entity(target['entity_id']);entities.append(entity)
         if entity.get('entityType',{}).get('isLocation') or entity.get('quantity')!=1:
             raise ValueError('Return individually tracked equipment only')
         destination=target['destination_id'] or parent_id(entity)
@@ -62,6 +63,7 @@ def confirm_return(client,ledger,group,actor,targets,request_key,session_valid):
             'parent_before':parent_id(entity),'parent_after':destination,
             'note_before_hash':note_hash(condition_note(entity)),'note_after':target['note']})
     if not session_valid():raise Conflict('Session ended; scan your badge again')
+    validate_return(client,entities,ledger.custody(group),verified,kit_versions)
     operation=ledger.begin(group,actor,'return',assets,key,context={'steps':steps},intent=targets)
     try:
         apply_steps(client,ledger,operation['id'],steps)

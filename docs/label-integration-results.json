@@ -1,0 +1,12 @@
+{
+  "native_qr_preview_decoded": true,
+  "touch_preview": true,
+  "printer_completed_one_label": true,
+  "same_request_did_not_reprint": true,
+  "stock_mm": [
+    40,
+    30
+  ],
+  "browser_errors": [],
+  "physical_legibility": "Awaiting user inspection; protocol completion is not a visual quality check"
+}

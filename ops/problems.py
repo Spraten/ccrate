@@ -1,6 +1,7 @@
 """Journaled native condition and scheduled maintenance issue reporting."""
 from datetime import datetime,timezone
 from ledger import uuid,Conflict
+from attachments import photo_bytes,ensure_photo
 from conditions import condition,condition_note,set_condition
 from setup_native import text
 STATES=('Needs Attention','Broken','Maintenance','Quarantined')
@@ -10,6 +11,7 @@ def submit_problem(client,jobs,group,actor,key,data):
     if job['status']=='completed':return {'id':job['id'],'status':'completed','entity_id':job['result_id']}
     if job['status']!='prepared':raise Conflict('Problem report needs Admin recovery; do not submit another copy')
     try:
+        if data.get('photo'):photo_bytes(data['photo'])
         entity=client.entity(uuid(data.get('entity_id')))
         if entity.get('entityType',{}).get('isLocation') or entity.get('archived'):raise ValueError('Choose active equipment')
         state=data.get('state','Needs Attention')
@@ -41,6 +43,7 @@ def finish_problem(client,jobs,group,job_id,start=False):
         entry=client.call('/api/v1/entities/'+entity['id']+'/maintenance','POST',{'name':'Equipment issue: '+c['state'],'description':c['note']+'\n\n'+marker(job),'scheduledDate':c['date'],'completedDate':'','cost':'0'})
         matches=[entry]
     jobs.record(group,job_id,'maintenance_verified',{'maintenance_id':matches[0]['id'],'entity_id':entity['id']})
+    ensure_photo(client,jobs,group,job_id,entity['id'])
     jobs.complete(group,job_id)
     return {'id':job_id,'status':'completed','entity_id':entity['id']}
 def recover_problem(client,jobs,group,job_id,outcome):

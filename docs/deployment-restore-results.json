@@ -1,0 +1,10 @@
+{
+  "complete_backup_restored": true,
+  "runtime_hashes_verified": true,
+  "operational_custody_badges_events_jobs_preserved": true,
+  "native_inventory_locations_members_preserved": true,
+  "attachment_bytes_verified": 1,
+  "isolated_restore_port": 17748,
+  "live_deployment_replaced": false,
+  "external_media_copy": "Still required for SD-card failure protection"
+}

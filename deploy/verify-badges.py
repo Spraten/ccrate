@@ -26,7 +26,7 @@ try:
             assert get('/api/session')['user'] is None
             page.get_by_role('button',name='Admin',exact=True).tap()
             page.get_by_role('button',name='Issue badge: '+member['name'],exact=True).tap()
-            page.get_by_role('img',name='Test badge QR').wait_for()
+            page.get_by_role('img',name='Person badge QR').wait_for()
             page.get_by_role('button',name='Revoke this badge',exact=True).tap()
             page.get_by_role('heading',name='What would you like to do?').wait_for()
             assert not errors,errors

@@ -1,0 +1,11 @@
+{
+  "native_manifest_uuid_references": true,
+  "nested_components_expanded": true,
+  "incomplete_scan_blocked": true,
+  "four_physical_code_routes_verified": true,
+  "touch_atomic_kit_checkout": true,
+  "touch_verified_kit_return": true,
+  "native_shelf_unchanged": true,
+  "browser_errors": [],
+  "physical_scanner": "Native QR routing exercised; actual camera acceptance remains outstanding"
+}

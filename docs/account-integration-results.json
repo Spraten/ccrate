@@ -1,0 +1,9 @@
+{
+  "touch_only_account_creation": true,
+  "native_group_membership_verified": true,
+  "native_login_works": true,
+  "password_masked": true,
+  "single_use_invitation_cleaned": true,
+  "companion_password_storage": false,
+  "browser_errors": []
+}

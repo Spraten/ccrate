@@ -13,10 +13,12 @@ class Session:
         self.last_activity = 0
         self.generation = 0
         self.instance = str(uuid4())
+        self.scanned = set()
 
     def start(self, user):
         with self.lock:
             self.user = user
+            self.scanned.clear()
             self.last_activity = self.clock()
             self.generation += 1
             return self.generation
@@ -25,6 +27,7 @@ class Session:
         with self.lock:
             if expected is None or expected == self.generation:
                 self.user = None
+                self.scanned.clear()
                 self.generation += 1
 
     def current(self, activity=False):
@@ -35,6 +38,7 @@ class Session:
         now = self.clock()
         if self.user and now - self.last_activity >= self.timeout:
             self.user = None
+            self.scanned.clear()
             self.generation += 1
         if self.user and activity:
             self.last_activity = now
@@ -43,3 +47,11 @@ class Session:
     def snapshot(self):
         with self.lock:
             return self._current(), self.generation
+
+    def record_scan(self,entity_id):
+        with self.lock:
+            if self._current():self.scanned.add(entity_id)
+
+    def scans(self,generation):
+        with self.lock:
+            return set(self.scanned) if self._current() and generation==self.generation else set()

@@ -14,7 +14,7 @@ name='Condition proof '+str(uuid4())[:8]
 asset=client.call('/api/v1/entities','POST',{'name':name,'description':'Disposable synthetic integration asset','quantity':1,'entityTypeId':item_type['id'],'parentId':'9b7f1f98-42f6-4ea5-aaf3-079b4d825499'})
 base='http://127.0.0.1:17749'
 def post(state):
-    request=urllib.request.Request(base+'/condition',data=json.dumps({'entity_id':asset['id'],'state':state}).encode(),headers={'Content-Type':'application/json','Origin':base})
+    request=urllib.request.Request(base+'/condition',data=json.dumps({'entity_id':asset['id'],'state':state,'request_key':str(uuid4())}).encode(),headers={'Content-Type':'application/json','Origin':base})
     return json.load(urllib.request.urlopen(request,timeout=15))
 try:
     assert condition(client.entity(asset['id']))=='Unreviewed'
