@@ -3,7 +3,8 @@
 import hashlib,json,os,pathlib,sqlite3,subprocess,sys,tarfile,time,urllib.request
 root=pathlib.Path('/home/user/Desktop/inventory-system');sys.path.insert(0,str(root/'ops'))
 from homebox import Homebox
-backup=sorted((root/'work/backups').glob('deployment-*.tar.gz'))[-1];target=root/'work/restore-check'/backup.name.removesuffix('.tar.gz');target.mkdir(mode=0o700,parents=True,exist_ok=False)
+from uuid import uuid4
+backup=sorted((root/'work/backups').glob('deployment-*.tar.gz'))[-1];target=root/'work/restore-check'/(backup.name.removesuffix('.tar.gz')+'-'+str(uuid4())[:8]);target.mkdir(mode=0o700,parents=True,exist_ok=False)
 os.umask(0o077)
 with tarfile.open(backup) as archive:archive.extractall(target,filter='data')
 manifest=json.loads((target/'deployment-manifest.json').read_text())
@@ -18,7 +19,7 @@ try:
     for attempt in range(80):
         try:urllib.request.urlopen('http://127.0.0.1:17748/api/v1/status',timeout=1).close();break
         except OSError:time.sleep(.25)
-    restored=Homebox(target,'http://127.0.0.1:17748');live=Homebox(root)
+    restored=Homebox(target,'http://127.0.0.1:17748',timeout=30);live=Homebox(root,timeout=30)
     assert {e['id'] for e in restored.entities()}=={e['id'] for e in live.entities()}
     assert {e['id'] for e in restored.entities(True)}=={e['id'] for e in live.entities(True)}
     assert restored.call('/api/v1/groups/members')==live.call('/api/v1/groups/members')

@@ -6,8 +6,9 @@ from uuid import UUID
 
 
 class Homebox:
-    def __init__(self, root, base='http://127.0.0.1:17745'):
+    def __init__(self, root, base='http://127.0.0.1:17745', timeout=8):
         self.base = base
+        self.timeout = timeout
         self.token = None
         account = json.loads((pathlib.Path(root)/'work/baseline/test-account.json').read_text())
         self.token = self.call('/api/v1/users/login', 'POST', {
@@ -20,7 +21,7 @@ class Homebox:
             headers['Authorization'] = 'Bearer '+self.token
         request = urllib.request.Request(self.base+path, method=method,
             headers=headers, data=json.dumps(data).encode() if data is not None else None)
-        with urllib.request.urlopen(request, timeout=8) as response:
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
             body = response.read()
             return json.loads(body) if body else None
 
