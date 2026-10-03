@@ -11,17 +11,18 @@ Authoritative project: /home/user/Desktop/inventory-system, tracked in Git with 
 - Server-enforced two-minute badge inactivity timeout; touches/scans extend it, background polling does not. Expiry clears session and cart. Confirmation ends the session immediately.
 - Eight approved states use native Equipment condition field and native archive flag. Unreviewed is blocked until Admin explicitly marks Ready. Only Ready is eligible. Native update metadata preservation and touch confirmation pass live integration.
 - Individually tracked assets (quantity 1) can be checked out by badge, touch cart or scan and one confirmation. Native membership, condition and custody are revalidated. The ledger completes the cart atomically and idempotently. Native inventory is unchanged; borrower is resolved and displayed separately.
-- 39 unit tests pass. Scanner/touch keyboard, conditions and checkout live Pi Chromium integration tests pass with no browser errors. Results are in corresponding docs/*-integration-results.json files.
+- 51 unit tests pass. Scanner/touch keyboard, conditions, checkout and return live Pi Chromium integration tests pass with no browser errors. Results are in corresponding docs/*-integration-results.json files.
+- Routine return defaults to its current assigned parent; changed conditions/notes and scanned active destinations use journaled native writes. Any current badge holder can return. Admin can finish or safely cancel an interrupted operation; completed history is visible.
 - Homebox cold backup/restore, attachment bytes and API-key continuity verified. Recovery helpers use correct relative storage prefix. External backup media and full deployment recovery remain incomplete.
 
-## Current decision needed
+## Current phase
 
-May any badge holder return another person's equipment, or must it be the borrower? A clickable question is open. Routine return defaults to assigned shelf; a location scan is needed only for a different destination.
+Return, history and recovery are implemented. Workshop map is next. User delegated recommended choices; no pending question blocks development.
 
 ## Remaining work from the original plan
 
-Live return and alternate-destination mutation/recovery; return condition workflow; Admin unresolved-operation recovery; native user setup; badge/asset/location label design and printing; kits and nested contents; maps and navigation; offline product catalog and enrollment; problem reports and maintenance; activity/history views; consistent companion backup and restore; runtime services/startup/offline hardening; production credentials/Admin access; bulk quantities; physical scanner/printer and user acceptance of the integrated workflows.
+native user setup; badge/asset/location label design and printing; kits and nested contents; maps and navigation; offline product catalog and enrollment; problem reports and maintenance; activity/history views; consistent companion backup and restore; runtime services/startup/offline hardening; production credentials/Admin access; bulk quantities; physical scanner/printer and user acceptance of the integrated workflows.
 
 ## Limits
 
-The current account and assets are synthetic. Two checkout proof assets remain archived to preserve native references in operational history. No real equipment has been checked out by these tests. Trashed retains an asset record. The return UI is still a preview. Native condition updates perform read/modify/PUT; concurrent edits made directly in Homebox cannot be made atomic with companion updates by this API. Production concurrency policy and configuration require later review.
+The current account and assets are synthetic. Checkout and return proof assets remain archived to preserve native references in operational history. No real equipment has been checked out by these tests. Trashed retains an asset record. The return UI is live for synthetic individual assets. It keeps custody through uncertain native outcomes until Admin recovery verifies the saved plan. Native condition updates perform read/modify/PUT; concurrent edits made directly in Homebox cannot be made atomic with companion updates by this API. Production concurrency policy and configuration require later review.

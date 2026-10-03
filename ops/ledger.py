@@ -9,10 +9,13 @@ def timestamp():return datetime.now(timezone.utc).isoformat()
 def uuid(value):return str(UUID(str(value)))
 
 class Ledger:
+    SCHEMA_VERSION=1
     def __init__(self,path):
         self.path=pathlib.Path(path)
         self.path.parent.mkdir(parents=True,exist_ok=True)
         with self.connection() as db:
+            version=db.execute('PRAGMA user_version').fetchone()[0]
+            if version>self.SCHEMA_VERSION:raise ValueError('Operational database is newer than this application')
             db.executescript('''
             CREATE TABLE IF NOT EXISTS operations(
               id TEXT PRIMARY KEY, group_id TEXT NOT NULL, actor_id TEXT NOT NULL,
@@ -34,6 +37,12 @@ class Ledger:
               group_id TEXT NOT NULL,entity_id TEXT NOT NULL,actor_id TEXT NOT NULL,
               operation_id TEXT NOT NULL REFERENCES operations(id),PRIMARY KEY(group_id,entity_id));
             ''')
+            if version==0:
+                db.executescript('''BEGIN IMMEDIATE;
+                CREATE TABLE IF NOT EXISTS operation_context(
+                  operation_id TEXT PRIMARY KEY REFERENCES operations(id),payload TEXT NOT NULL);
+                PRAGMA user_version=1;
+                COMMIT;''')
     @contextmanager
     def connection(self):
         db=sqlite3.connect(self.path,timeout=5,isolation_level=None)
@@ -50,13 +59,13 @@ class Ledger:
     def event(self,db,op,kind,detail=None):
         db.execute('INSERT INTO events(operation_id,kind,detail,created_at) VALUES(?,?,?,?)',
             (op,kind,json.dumps(detail or {},sort_keys=True),timestamp()))
-    def begin(self,group,actor,action,assets,request_key):
+    def begin(self,group,actor,action,assets,request_key,context=None,intent=None):
         group,actor,key=uuid(group),uuid(actor),uuid(request_key)
         assets=[uuid(a) for a in assets]
         if not assets or len(assets)!=len(set(assets)):raise ValueError('A nonempty set of distinct assets is required')
         assets.sort()
         if action not in ('check_out','return'):raise ValueError('Unsupported operation')
-        digest=hashlib.sha256(json.dumps([group,actor,action,assets],separators=(',',':')).encode()).hexdigest()
+        digest=self.request_digest(group,actor,action,assets,intent)
         with self.transaction() as db:
             prior=db.execute('SELECT * FROM operations WHERE group_id=? AND request_key=?',(group,key)).fetchone()
             if prior:
@@ -71,7 +80,9 @@ class Ledger:
             op=str(uuid4())
             db.execute('INSERT INTO operations VALUES(?,?,?,?,?,?,?,?)',(op,group,actor,action,key,digest,'pending',timestamp()))
             db.executemany('INSERT INTO operation_assets VALUES(?,?)',[(op,a) for a in assets])
-            self.event(db,op,'requested')
+            if context is not None:
+                db.execute('INSERT INTO operation_context VALUES(?,?)',(op,json.dumps(context,sort_keys=True)))
+            self.event(db,op,'requested',{'intent':intent} if intent is not None else None)
             return dict(db.execute('SELECT * FROM operations WHERE id=?',(op,)).fetchone())
     def complete(self,op):
         op=uuid(op)
@@ -114,3 +125,43 @@ class Ledger:
         group=uuid(group)
         with self.connection() as db:
             return [dict(r) for r in db.execute('SELECT * FROM custody WHERE group_id=?',(group,))]
+
+    @staticmethod
+    def request_digest(group,actor,action,assets,intent=None):
+        payload=[uuid(group),uuid(actor),action,sorted(uuid(a) for a in assets)]
+        if intent is not None:payload.append(intent)
+        return hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+    def request(self,group,key):
+        with self.connection() as db:
+            row=db.execute('SELECT * FROM operations WHERE group_id=? AND request_key=?',(uuid(group),uuid(key))).fetchone()
+            return dict(row) if row else None
+
+    def detail(self,group,op):
+        with self.connection() as db:
+            row=db.execute('SELECT * FROM operations WHERE group_id=? AND id=?',(uuid(group),uuid(op))).fetchone()
+            if not row:raise ValueError('Unknown operation')
+            result=dict(row)
+            result['assets']=[r[0] for r in db.execute('SELECT entity_id FROM operation_assets WHERE operation_id=? ORDER BY entity_id',(result['id'],))]
+            context=db.execute('SELECT payload FROM operation_context WHERE operation_id=?',(result['id'],)).fetchone()
+            result['context']=json.loads(context[0]) if context else None
+            result['events']=[dict(e) for e in db.execute('SELECT sequence,kind,detail,created_at FROM events WHERE operation_id=? ORDER BY sequence',(result['id'],))]
+            for event in result['events']:event['detail']=json.loads(event['detail'])
+            return result
+
+    def record(self,op,kind,detail):
+        with self.transaction() as db:
+            row=db.execute('SELECT status FROM operations WHERE id=?',(uuid(op),)).fetchone()
+            if not row or row['status'] not in ('pending','review'):raise Conflict('Operation is not awaiting completion')
+            self.event(db,uuid(op),kind,detail)
+
+    def history(self,group,entity=None,limit=100):
+        with self.connection() as db:
+            query='SELECT o.id,o.actor_id,o.action,o.status,o.created_at FROM operations o WHERE o.group_id=?'
+            args=[uuid(group)]
+            if entity:
+                query+=' AND EXISTS(SELECT 1 FROM operation_assets a WHERE a.operation_id=o.id AND a.entity_id=?)';args.append(uuid(entity))
+            query+=' ORDER BY o.created_at DESC LIMIT ?';args.append(min(max(int(limit),1),100))
+            result=[dict(r) for r in db.execute(query,args)]
+            for row in result:row['assets']=[r[0] for r in db.execute('SELECT entity_id FROM operation_assets WHERE operation_id=?',(row['id'],))]
+            return result

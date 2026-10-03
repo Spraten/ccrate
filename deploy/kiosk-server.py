@@ -15,6 +15,7 @@ import zxingcpp, qrcode
 from urllib.parse import urlsplit, parse_qs
 from homebox import Homebox
 from checkout import confirm_checkout
+from returns import confirm_return, recover, RETURN_STATES
 from ledger import Conflict
 from conditions import STATES, condition, checkout_blocker, set_condition
 BASE='http://127.0.0.1:17745'
@@ -57,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm'):
+        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -70,6 +71,20 @@ class Handler(BaseHTTPRequestHandler):
                         codes=[c.text for c in zxingcpp.read_barcodes(frame)]
                     self.reply_json(200,{'codes':codes});return
                 data=json.loads(raw)
+                if self.path=='/recovery/resolve':
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
+                        result=recover(client,ledger,native['defaultGroupId'],data.get('id'),data.get('outcome'))
+                    self.reply_json(200,result);return
+                if self.path=='/return/confirm':
+                    actor=session.current()
+                    if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
+                        result=confirm_return(client,ledger,native['defaultGroupId'],actor,data.get('targets'),data.get('request_key'),lambda:session.current()==actor)
+                        session.end()
+                    self.reply_json(200,result);return
                 if self.path=='/checkout/confirm':
                     actor=session.current()
                     if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
@@ -139,11 +154,40 @@ class Handler(BaseHTTPRequestHandler):
             try:os.kill(pid,signal.SIGTERM)
             except ProcessLookupError:pass
     def do_GET(self):
+        if self.path=='/api/session' and session.current() is None:
+            self.reply_json(200,{'user':None});return
+        if urlsplit(self.path).path=='/api/history':
+            try:
+                group,members=native_context();names={m['id']:m['name'] for m in members}
+                entity_id=parse_qs(urlsplit(self.path).query).get('entity',[None])[0]
+                rows=ledger.history(group,entity_id)
+                for row in rows:row['actor']=names.get(row['actor_id'],'Former Homebox member')
+                self.reply_json(200,rows)
+            except (ValueError,KeyError):self.reply_json(400,{'error':'Invalid history request'})
+            except OSError:self.reply_json(503,{'error':'Homebox unavailable'})
+            return
+        if self.path=='/api/recovery':
+            if not OPEN_ADMIN:self.send_error(403);return
+            try:
+                client=Homebox(ROOT);group=client.call('/api/v1/users/self')['item']['defaultGroupId'];rows=[]
+                for record in ledger.unresolved():
+                    if record['group_id']!=group:continue
+                    detail=ledger.detail(group,record['id']);detail.pop('request_hash',None);detail.pop('request_key',None)
+                    detail['native_assets']=[]
+                    for entity_id in detail['assets']:
+                        try:
+                            entity=client.entity(entity_id)
+                            detail['native_assets'].append({'id':entity_id,'name':entity['name'],'condition':condition(entity),'parent':(entity.get('parent') or {}).get('name','Unassigned')})
+                        except OSError:detail['native_assets'].append({'id':entity_id,'name':entity_id,'error':'Native asset unavailable'})
+                    rows.append(detail)
+                self.reply_json(200,rows)
+            except (OSError,ValueError,KeyError):self.reply_json(503,{'error':'Recovery data unavailable'})
+            return
         if urlsplit(self.path).path=='/api/entity':
             try:
                 entity_id=parse_qs(urlsplit(self.path).query).get('id',[''])[0]
                 entity=Homebox(ROOT).entity(entity_id)
-                self.reply_json(200,{'entity':entity,'condition':condition(entity),'states':STATES,'blocker':checkout_blocker(entity)} )
+                self.reply_json(200,{'entity':entity,'condition':condition(entity),'states':STATES,'return_states':RETURN_STATES,'blocker':checkout_blocker(entity)} )
             except (ValueError,KeyError):self.reply_json(400,{'error':'Invalid asset'})
             except OSError:self.reply_json(503,{'error':'Homebox unavailable'})
             return
@@ -166,9 +210,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json(200,data)
             except (OSError,ValueError,KeyError):self.reply_json(503,{'error':'Homebox unavailable'})
             return
-        elif self.path=='/api/inventory':
+        elif self.path in ('/api/inventory','/api/locations'):
             try:
-                with lock:body=json.dumps(inventory()).encode()
+                with lock:body=json.dumps(inventory(self.path=='/api/locations')).encode()
                 code=200
             except (OSError,ValueError,KeyError):body=b'{"error":"Homebox unavailable"}';code=503
             mime='application/json'

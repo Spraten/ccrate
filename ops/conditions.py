@@ -2,6 +2,7 @@
 import copy
 
 FIELD = 'Equipment condition'
+NOTE_FIELD = 'Equipment condition note'
 STATES = ('Ready', 'Needs Attention', 'Maintenance', 'Quarantined',
           'Archived', 'Retired', 'Broken', 'Trashed')
 
@@ -49,10 +50,22 @@ def update_payload(entity, state):
     return payload
 
 
-def set_condition(client, entity_id, state):
+def set_condition(client, entity_id, state, note=None):
     before = client.entity(entity_id)
-    client.call('/api/v1/entities/'+before['id'], 'PUT', update_payload(before, state))
+    payload=update_payload(before,state)
+    if note is not None:
+        if not isinstance(note,str) or len(note)>1000:raise ValueError('Condition note must be at most 1000 characters')
+        matches=[f for f in payload['fields'] if f.get('name')==NOTE_FIELD]
+        if len(matches)>1 or (matches and matches[0].get('type')!='text'):raise ValueError('Condition note field requires review in Homebox')
+        field=matches[0] if matches else {'name':NOTE_FIELD,'type':'text'}
+        field['textValue']=note
+        if not matches:payload['fields'].append(field)
+    client.call('/api/v1/entities/'+before['id'], 'PUT', payload)
     after = client.entity(entity_id)
     if condition(after) != state:
         raise ValueError('Homebox did not confirm the requested condition; review the asset')
+    if note is not None and condition_note(after)!=note:raise ValueError('Homebox did not confirm the condition note')
     return after
+
+def condition_note(entity):
+    return next((f.get('textValue','') for f in entity.get('fields',[]) if f.get('name')==NOTE_FIELD and f.get('type')=='text'),'')

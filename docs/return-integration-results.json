@@ -1,0 +1,14 @@
+{
+  "touch_unchanged_return": true,
+  "assigned_shelf_default": true,
+  "unchanged_native_record_preserved": true,
+  "changed_condition_note_touch_input": true,
+  "different_destination_scan": true,
+  "native_metadata_preserved": true,
+  "idempotent_return": true,
+  "session_ends": true,
+  "lost_native_response_retains_custody": true,
+  "admin_recovery_finishes_without_duplicate_move": true,
+  "asset_history_visible": true,
+  "browser_errors": []
+}

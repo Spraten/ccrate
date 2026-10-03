@@ -128,3 +128,24 @@ Date: 2026-10-02. User requested Archived, Retired, Broken and Trashed in additi
 ## DEC 017 Existing Asset Review
 
 Date: 2026-10-02. User chose Admin review before checkout. Missing, malformed, unknown or duplicate condition fields resolve to Unreviewed and remain blocked. No automatic Ready initialization. The reversible native text field is named Equipment condition. Native archived=true always blocks checkout. Explicit Admin confirmation is required to change a state.
+
+
+## DEC 018 Recommended Choices Delegation
+
+Date: 2026-10-02. User cannot reliably see question cards and explicitly instructed: "if you need approval just choose whatever you recommended". Use recommended choices for outstanding and ensuing project decisions, explain them in progress updates, and record them here. This supersedes the handoff's repeated decision/checkpoint stops. Continue within the original project scope; request only information or physical actions that cannot be inferred. Revisit: user can change any choice.
+
+## DEC 019 Return By Any Native Badge Holder
+
+Date: 2026-10-02. Options: any current member; borrower only. Recommended option accepted under DEC 018. A current Homebox group member can return a colleague's equipment; the operation records the actual returner's native UUID and the previous checkout remains in history.
+
+## DEC 020 Return Condition and Recovery
+
+Date: 2026-10-02. Recommendation under DEC 018: unchanged condition and assigned parent are the fast path. Changed return conditions are Needs Attention, Broken, Maintenance or Quarantined, with an optional native note. Normal return cannot mark blocked equipment Ready or retire/trash it; Admin reviews those transitions. No automatic physical relocation for an issue; a user can scan an explicit active native location. Any unresolved native write keeps custody and requires Admin recovery. Cancellation is allowed only if native values remain unchanged. Finish verifies target values and completes the existing ledger operation.
+
+## Operational Schema Version 1
+
+An additive operation_context table stores return intent snapshots (native IDs, before/after condition, before/after parent, previous-note hash and reported note) for recovery. No inventory catalog or people profiles are copied. SQLite user_version is now 1; newer schema versions are rejected. A consistent integrity-checked pre-migration SQLite backup was saved in work/backups. Legacy custody and idempotency behavior are covered by migration tests. Revisit: future migrations must be explicit and backed up.
+
+## DEC 021 Workshop Map Storage and Editor
+
+Date: 2026-10-02. Options: companion map tables; native custom fields; native layout attachment. Recommendation under DEC 018: native location custom fields for room geometry and object placement, keeping links, labels and layout within Homebox backup/export. Start with a simple touchscreen grid and button-based positioning; the versioned geometry includes dimensions and rotation for later editing. Do not invent the physical room layout: Admin places native locations on the map. Native inventory locations remain intact when a visual object is removed.
