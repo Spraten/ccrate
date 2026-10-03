@@ -21,7 +21,7 @@ class Homebox:
             headers['Authorization'] = 'Bearer '+self.token
         request = urllib.request.Request(self.base+path, method=method,
             headers=headers, data=json.dumps(data).encode() if data is not None else None)
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+        with urllib.request.urlopen(request, timeout=max(30,self.timeout) if path=='/api/v1/users/login' else self.timeout) as response:
             body = response.read()
             return json.loads(body) if body else None
 

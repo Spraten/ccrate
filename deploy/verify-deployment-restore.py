@@ -16,7 +16,7 @@ with contextlib.closing(sqlite3.connect(target/'work/ops/ledger.db')) as restore
     assert restored.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
     for table in ['operations','custody','events','badges','native_jobs','native_job_events']:
         assert restored.execute('SELECT COUNT(*) FROM '+table).fetchone()==live.execute('SELECT COUNT(*) FROM '+table).fetchone(),table
-run=target/'work/baseline';env=dict(os.environ,HBOX_WEB_HOST='127.0.0.1',HBOX_WEB_PORT='17748',HBOX_STORAGE_PREFIX_PATH='data',HBOX_DATABASE_SQLITE_PATH=str(run/'data/homebox.db')+'?_pragma=journal_mode=WAL&_fk=1&_time_format=sqlite',HBOX_AUTH_API_KEY_PEPPER=(run/'pepper').read_text(),HBOX_OPTIONS_GITHUB_RELEASE_CHECK='false',HBOX_OPTIONS_ALLOW_ANALYTICS='false')
+run=target/'work/baseline';env=dict(os.environ,HBOX_WEB_HOST='127.0.0.1',HBOX_WEB_PORT='17748',HBOX_WEB_WRITE_TIMEOUT='60s',HBOX_STORAGE_PREFIX_PATH='data',HBOX_DATABASE_SQLITE_PATH=str(run/'data/homebox.db')+'?_pragma=busy_timeout=999&_pragma=journal_mode=WAL&_fk=1&_time_format=sqlite',HBOX_AUTH_API_KEY_PEPPER=(run/'pepper').read_text(),HBOX_OPTIONS_GITHUB_RELEASE_CHECK='false',HBOX_OPTIONS_ALLOW_ANALYTICS='false')
 proc=subprocess.Popen([str(target/'work/homebox-bin/homebox')],cwd=run,env=env,stdout=(target/'restore.log').open('ab'),stderr=subprocess.STDOUT)
 try:
     for attempt in range(80):
@@ -35,3 +35,4 @@ try:
     result={'complete_backup_restored':True,'runtime_hashes_verified':True,'operational_custody_badges_events_jobs_preserved':True,'native_inventory_locations_members_preserved':True,'attachment_bytes_verified':verified,'isolated_restore_port':17748,'live_deployment_replaced':False,'external_media_copy':'Still required for SD-card failure protection'}
     (root/'docs/deployment-restore-results.json').write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))
 finally:proc.terminate();proc.wait(timeout=15)
+
