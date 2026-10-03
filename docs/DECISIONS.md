@@ -55,3 +55,18 @@ See the architecture proposal for options, tradeoffs and visible effects. Do not
 - Disable release checks and analytics in the baseline. Production configuration remains undecided.
 
 Later decisions will be asked when relevant: badge versus PIN, session timeout, return destination, kit verification, condition/availability vocabulary, map interaction, asset display codes, permanent QR namespace, labels, backups and retention.
+
+
+## DEC 005 Kiosk Home Layout
+
+- Date: 2026-10-02.
+- Question: six direct task buttons or three main buttons plus More?
+- Options: six buttons; three plus More.
+- User choice: six large buttons, with smaller Admin entry.
+- Consequence: Check Out, Return, Find Item, Browse Stock, Report Problem and Add Equipment are directly accessible. Workflow rules remain undecided.
+- Revisit: yes, during shell review.
+
+## Prototype engineering assumptions
+
+- Plain locally served HTML/CSS/JavaScript and Python standard-library HTTP server for a disposable loopback shell. No production runtime choice or deployment policy implied.
+- Synthetic baseline account used only server-side for read-only inventory views. No production session, identity or inactivity policy implemented.

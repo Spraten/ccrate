@@ -1,0 +1,29 @@
+{
+  "created": [
+    "Demo Workshop",
+    "Demo Drone Cage",
+    "Demo Shelf A1",
+    "Demo Shelf A2",
+    "Demo Shelf B1",
+    "Demo Shelf B2",
+    "Demo Charging Station",
+    "Demo Maintenance",
+    "Demo Quarantine",
+    "Demo Drone 001",
+    "Demo Controller 001",
+    "Demo Battery 001",
+    "Demo Battery 002",
+    "Demo Radio 001",
+    "Demo Repair Tool 001"
+  ],
+  "entity_count": 27,
+  "restore_entity_match": true,
+  "baseline_restarted": true,
+  "backup_folder": "/home/user/Desktop/inventory-system/work/backups/20261002-203039",
+  "restore_port": 17748,
+  "backup_method": "Graceful stop, full storage copy plus API-key pepper, restart, isolated restore API comparison",
+  "limitations": [
+    "Synthetic data only; attachment and API-key persistence recovery not yet exercised",
+    "Local backup is not protection against SD-card failure"
+  ]
+}
