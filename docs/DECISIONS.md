@@ -79,3 +79,12 @@ Date: 2026-10-02. Options: badge only; badge plus PIN. User chose badge only. No
 ## DEC 007 Camera Activation
 
 Date: 2026-10-02. Options: Scan button; always-on camera. User chose Scan button. Camera starts on demand and stops on cancel or resolved inventory entity. No always-on capture. Revisit after user testing.
+
+
+## DEC 008 Native Badge Identity
+
+Date: 2026-10-02. Options: Homebox accounts; borrower records. User chose Homebox accounts, one native identity per person. Companion badge identification references current Homebox group members; it does not create a separate people directory. Badge issuance and revocation design follow separately. Revisit: yes.
+
+## DEC 009 Operational Event Ledger
+
+Date: 2026-10-02. Options: limited ledger; native fields with reduced history/recovery; defer. User approved a small SQLite companion event ledger for checkout/return accountability. It references native entity/user UUIDs and stores operational intent, outcomes and recovery state. Homebox remains inventory authority; no copied asset catalog or upstream database writes. This approval does not authorize unrelated catalog/map/badge storage. Revisit: yes, with migration/backup impact reviewed.
