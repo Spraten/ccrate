@@ -26,3 +26,7 @@ Local-only proof UI: deploy/hardware-proof-server.py, port 17746. Camera test: d
 4. Review hardware checkpoint before implementing workflows or choosing permanent deployment/permissions.
 
 Homebox remains unmodified. No additional inventory database or checkout implementation has been introduced.
+
+## Follow-up, October 2 evening
+
+User confirmed the single test label printed clearly. A subsequent probe confirmed printer idle with no reported errors and 220 labels remaining. After webcam reconnection, its capture node changed to video1; diagnostics now use the persistent USB by-id link instead of assuming video0. Fresh capture succeeded (640 by 480, 20,432 bytes), and the five-second stream delivered 50 frames at approximately 9.8 FPS. The test UI status endpoint reports camera present. Old frames are no longer counted after failed captures; UI distinguishes disconnected camera and incorrect browser origin. Browser preview and physical QR result await user confirmation.

@@ -1,8 +1,10 @@
 {
+  "camera_present": true,
+  "device": "/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB_2.0_Camera_SN0001-video-index0",
   "synthetic_qr_decode": true,
   "capture": {
     "exit_code": 0,
-    "seconds": 1.63,
+    "seconds": 1.46,
     "output": ""
   },
   "frame": {
@@ -10,11 +12,11 @@
       640,
       480
     ],
-    "bytes": 16143
+    "bytes": 20432
   },
   "stream": {
     "exit_code": 0,
-    "seconds": 6.55,
-    "output": "Input #0, video4linux2,v4l2, from '/dev/video0':\n  Duration: N/A, start: 4334.581177, bitrate: N/A\n  Stream #0:0: Video: mjpeg (Baseline), yuvj422p(pc, bt470bg/unknown/unknown), 640x480, 10 fps, 10 tbr, 1000k tbn\nStream mapping:\n  Stream #0:0 -> #0:0 (mjpeg (native) -> wrapped_avframe (native))\nPress [q] to stop, [?] for help\nOutput #0, null, to 'pipe:':\n  Metadata:\n    encoder         : Lavf61.7.103\n  Stream #0:0: Video: wrapped_avframe, yuvj422p(pc, bt470bg/unknown/unknown, progressive), 640x480, q=2-31, 200 kb/s, 10 fps, 10 tbn\n      Metadata:\n        encoder         : Lavc61.19.101 wrapped_avframe\nframe=    5 fps=0.0 q=-0.0 size=N/A time=00:00:00.50 bitrate=N/A speed=   1x    \nframe=   10 fps= 10 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=0.999x    \nframe=   15 fps= 10 q=-0.0 size=N/A time=00:00:01.50 bitrate=N/A speed=0.999x    \nframe=   20 fps= 10 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=0.998x    \nframe=   26 fps= 10 q=-0.0 size=N/A time=00:00:02.60 bitrate=N/A speed=1.04x    \nframe=   30 fps= 10 q=-0.0 size=N/A time=00:00:03.00 bitrate=N/A speed=0.999x    \nframe=   35 fps= 10 q=-0.0 size=N/A time=00:00:03.50 bitrate=N/A speed=0.999x    \nframe=   41 fps= 10 q=-0.0 size=N/A time=00:00:04.10 bitrate=N/A speed=1.02x    \nframe=   45 fps= 10 q=-0.0 size=N/A time=00:00:04.50 bitrate=N/A speed=0.999x    \n[out#0/null @ 0x55848560c0] video:21KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nframe=   50 fps=9.8 q=-0.0 Lsize=N/A time=00:00:05.00 bitrate=N/A speed=0.98x    \nbench: utime=0.127s stime=0.037s rtime=5.104s\nbench: maxrss=68016KiB\n"
+    "seconds": 6.4,
+    "output": "Input #0, video4linux2,v4l2, from '/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB_2.0_Camera_SN0001-video-index0':\n  Duration: N/A, start: 6462.844387, bitrate: N/A\n  Stream #0:0: Video: mjpeg (Baseline), yuvj422p(pc, bt470bg/unknown/unknown), 640x480, 10 fps, 10 tbr, 1000k tbn\nStream mapping:\n  Stream #0:0 -> #0:0 (mjpeg (native) -> wrapped_avframe (native))\nPress [q] to stop, [?] for help\nOutput #0, null, to 'pipe:':\n  Metadata:\n    encoder         : Lavf61.7.103\n  Stream #0:0: Video: wrapped_avframe, yuvj422p(pc, bt470bg/unknown/unknown, progressive), 640x480, q=2-31, 200 kb/s, 10 fps, 10 tbn\n      Metadata:\n        encoder         : Lavc61.19.101 wrapped_avframe\nframe=    5 fps=0.0 q=-0.0 size=N/A time=00:00:00.50 bitrate=N/A speed=   1x    \nframe=   10 fps= 10 q=-0.0 size=N/A time=00:00:01.00 bitrate=N/A speed=   1x    \nframe=   15 fps= 10 q=-0.0 size=N/A time=00:00:01.50 bitrate=N/A speed=   1x    \nframe=   20 fps= 10 q=-0.0 size=N/A time=00:00:02.00 bitrate=N/A speed=   1x    \nframe=   25 fps= 10 q=-0.0 size=N/A time=00:00:02.50 bitrate=N/A speed=   1x    \nframe=   30 fps= 10 q=-0.0 size=N/A time=00:00:03.00 bitrate=N/A speed=   1x    \nframe=   35 fps= 10 q=-0.0 size=N/A time=00:00:03.50 bitrate=N/A speed=   1x    \nframe=   40 fps= 10 q=-0.0 size=N/A time=00:00:04.00 bitrate=N/A speed=   1x    \nframe=   45 fps= 10 q=-0.0 size=N/A time=00:00:04.50 bitrate=N/A speed=   1x    \nframe=   50 fps= 10 q=-0.0 size=N/A time=00:00:05.00 bitrate=N/A speed=   1x    \n[out#0/null @ 0x55baf9c120] video:21KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nframe=   50 fps=9.8 q=-0.0 Lsize=N/A time=00:00:05.00 bitrate=N/A speed=0.979x    \nbench: utime=0.125s stime=0.032s rtime=5.109s\nbench: maxrss=68272KiB\n"
   }
 }

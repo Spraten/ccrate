@@ -44,3 +44,7 @@ SSH recovered; user confirmed address 192.168.1.61. Await webcam reconnect and p
 
 Pi folder `/home/user/Desktop/inventory-system`; source commit `e01dd737238a3fa7e1a6454b37de6c6fc88c86e4`. Baseline process PID, log, pepper and synthetic test credentials live under `work/baseline` with restrictive permissions. This is a test process, not a boot service. Never paste the private test credentials or pepper into reports. `deploy/probe_homebox.py` reproduces the API checks with synthetic assets; each run adds test entities, so use only the isolated test database. The original handoff is preserved at `docs/PROJECT_HANDOFF.md`.
 
+
+# Latest Follow-up
+
+User confirmed clear printer test label; printer returned idle without errors. Webcam reconnected and passes fresh 640 by 480 capture and approximately 10 FPS stream. Persistent USB by-id selection fixes capture-node renumbering. Browser preview and physical QR check remain pending. No additional print sent.
