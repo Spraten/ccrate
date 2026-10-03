@@ -88,3 +88,16 @@ Date: 2026-10-02. Options: Homebox accounts; borrower records. User chose Homebo
 ## DEC 009 Operational Event Ledger
 
 Date: 2026-10-02. Options: limited ledger; native fields with reduced history/recovery; defer. User approved a small SQLite companion event ledger for checkout/return accountability. It references native entity/user UUIDs and stores operational intent, outcomes and recovery state. Homebox remains inventory authority; no copied asset catalog or upstream database writes. This approval does not authorize unrelated catalog/map/badge storage. Revisit: yes, with migration/backup impact reviewed.
+
+
+## DEC 010 Location During Checkout
+
+Date: 2026-10-02. Options: preserve assigned shelf; move to Checked Out with separate home tracking. User chose preserve assigned shelf. Custody is shown separately by the companion; checkout does not modify the native parent/location. Revisit: yes.
+
+## DEC 011 Badge Token Registry
+
+Date: 2026-10-02. Options: hashed random tokens with individual revocation; stateless signed badges. User approved a small badge table in the companion database referencing native Homebox users. No copied names, emails, passwords or profiles. Individual issuance/revocation supported; current group membership checked at resolution. Revisit: yes.
+
+## Reversible prototype badge code
+
+LAB:U:<random token> is used only by the tested badge module. No permanent badge labels issued. Permanent namespace/label contents remain a later review decision.

@@ -38,3 +38,8 @@ Earlier Wi-Fi/USB instability; long-duration hardware reliability unproven. No R
 # Resume
 
 Ethernet 192.168.1.62; Wi-Fi 192.168.1.61. SSH HostKeyAlias=192.168.1.61 verifies the known Pi key over Ethernet. Folder /home/user/Desktop/inventory-system. Private credentials/pepper under restricted work/baseline; never expose them. Artifacts under ignored work/. deploy/start-baseline.py starts only the existing demo; deploy/complete-baseline.py seeds and creates a new backup, so do not rerun unnecessarily. docs/05-scan-integration.md and docs/06-native-accountability-gap.md contain evidence and the storage proposal. Latest recovery evidence in recovery-verification-results.json.
+
+
+# Latest approved work
+
+Native Homebox identity, limited operational ledger, preserved shelf during checkout and hashed badge registry approved. ops/ledger.py and ops/badges.py implemented; 24 total tests pass on Pi (11 ledger, 7 badges, 6 scan). Modules not connected to mutation endpoints. No real custody changes or badges issued. Next gate: Admin authentication choice; then native validation and badge/session UI. Physical integrated camera result still pending. See feature plans 003/004 for exact current scope.
