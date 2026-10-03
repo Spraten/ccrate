@@ -149,3 +149,12 @@ An additive operation_context table stores return intent snapshots (native IDs, 
 ## DEC 021 Workshop Map Storage and Editor
 
 Date: 2026-10-02. Options: companion map tables; native custom fields; native layout attachment. Recommendation under DEC 018: native location custom fields for room geometry and object placement, keeping links, labels and layout within Homebox backup/export. Start with a simple touchscreen grid and button-based positioning; the versioned geometry includes dimensions and rotation for later editing. Do not invent the physical room layout: Admin places native locations on the map. Native inventory locations remain intact when a visual object is removed.
+
+
+## DEC022 - Native catalog and creation safety
+
+2026-10-03. Under delegated judgement, use Homebox templates for offline GTIN product defaults. Create individually tracked assets Unreviewed unless explicitly inspected. Preserve serial/manufacturer/model natively. Temporary native markers plus a durable pending intent prevent blind duplicate creation. Finished intents are purged.
+
+## DEC023 - Native issue records
+
+2026-10-03. Problem reporting requires a badge, blocks checkout with an approved problem condition, preserves assigned shelf and creates a scheduled native maintenance entry. It does not mark repair completed. Uncertain responses require Admin verification and must not cause duplicate maintenance records.

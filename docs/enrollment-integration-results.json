@@ -1,0 +1,11 @@
+{
+  "native_location_created": true,
+  "native_template_catalog": true,
+  "product_scan_prefill": true,
+  "touch_serial_entry": true,
+  "native_manufacturer_model_serial_preserved": true,
+  "unreviewed_by_default": true,
+  "badge_session_ended": true,
+  "temporary_marker_removed": true,
+  "browser_errors": []
+}

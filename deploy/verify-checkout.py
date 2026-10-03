@@ -11,6 +11,7 @@ types=client.call('/api/v1/entity-types');types=types if isinstance(types,list) 
 item_type=next(t for t in types if not t['isLocation'])
 base='http://127.0.0.1:17749'
 def post(path,data):
+    if path in ('/checkout/confirm','/return/confirm'):data=dict(data,session_generation=json.load(urllib.request.urlopen(base+'/api/session'))['generation'],session_instance=json.load(urllib.request.urlopen(base+'/api/session'))['instance'])
     req=urllib.request.Request(base+path,data=json.dumps(data).encode(),headers={'Origin':base,'Content-Type':'application/json'})
     return json.load(urllib.request.urlopen(req,timeout=20))
 assets=[];badge=None;ledger=Ledger(root/'work/ops/ledger.db')
@@ -44,6 +45,7 @@ try:
         repeat=post('/checkout/confirm',requests[0]);assert repeat['status']=='completed' and repeat['count']==2
         for original in before:
             after=client.entity(original['id']);assert after==original,'Checkout must leave all native inventory unchanged'
+        page.evaluate('updateIdentity()')
         page.get_by_role('button',name='Browse Stock',exact=False).tap()
         page.get_by_role('button',name=assets[0]['name'],exact=False).tap()
         page.get_by_text('Checked out by: '+native['name'],exact=True).wait_for()

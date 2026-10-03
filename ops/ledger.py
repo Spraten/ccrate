@@ -9,7 +9,7 @@ def timestamp():return datetime.now(timezone.utc).isoformat()
 def uuid(value):return str(UUID(str(value)))
 
 class Ledger:
-    SCHEMA_VERSION=1
+    SCHEMA_VERSION=2
     def __init__(self,path):
         self.path=pathlib.Path(path)
         self.path.parent.mkdir(parents=True,exist_ok=True)
@@ -43,6 +43,8 @@ class Ledger:
                   operation_id TEXT PRIMARY KEY REFERENCES operations(id),payload TEXT NOT NULL);
                 PRAGMA user_version=1;
                 COMMIT;''')
+            if version<2:
+                db.executescript("BEGIN IMMEDIATE;\n                CREATE TABLE IF NOT EXISTS native_jobs(\n                  id TEXT PRIMARY KEY,group_id TEXT NOT NULL,actor_id TEXT NOT NULL,kind TEXT NOT NULL,\n                  request_key TEXT NOT NULL,request_hash TEXT NOT NULL,\n                  status TEXT NOT NULL CHECK(status IN ('prepared','sent','review','completed','cancelled')),\n                  result_id TEXT,payload TEXT,context TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,\n                  UNIQUE(group_id,request_key));\n                CREATE TABLE IF NOT EXISTS native_job_events(\n                  sequence INTEGER PRIMARY KEY,job_id TEXT NOT NULL REFERENCES native_jobs(id),\n                  kind TEXT NOT NULL,detail TEXT NOT NULL,created_at TEXT NOT NULL);\n                CREATE TRIGGER IF NOT EXISTS no_native_job_event_update BEFORE UPDATE ON native_job_events\n                  BEGIN SELECT RAISE(ABORT,'events are append-only'); END;\n                CREATE TRIGGER IF NOT EXISTS no_native_job_event_delete BEFORE DELETE ON native_job_events\n                  BEGIN SELECT RAISE(ABORT,'events are append-only'); END;\n                PRAGMA user_version=2;COMMIT;")
     @contextmanager
     def connection(self):
         db=sqlite3.connect(self.path,timeout=5,isolation_level=None)

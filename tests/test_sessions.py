@@ -32,6 +32,21 @@ class SessionTests(unittest.TestCase):
         self.session.start('next-user')
         self.assertEqual(self.session.current(), 'next-user')
 
+    def test_old_completion_cannot_end_a_new_badge_session(self):
+        old_user, generation = self.session.snapshot()
+        self.session.start('next-user')
+        self.session.end(generation)
+        self.assertEqual(self.session.current(), 'next-user')
+        self.assertNotEqual(self.session.snapshot(), (old_user, generation))
+
+    def test_same_badge_rescan_starts_a_distinct_session(self):
+        old = self.session.snapshot()
+        self.session.start('native-user')
+        self.assertNotEqual(old, self.session.snapshot())
+
+    def test_restart_has_distinct_instance(self):
+        self.assertNotEqual(Session().instance, self.session.instance)
+
 
 if __name__ == '__main__':
     unittest.main()
