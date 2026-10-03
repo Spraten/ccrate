@@ -6,13 +6,14 @@ os.umask(0o077)
 with (folder/'deployment.lock').open('a') as lock:
     fcntl.flock(lock,fcntl.LOCK_EX)
     stamp=time.strftime('%Y%m%dT%H%M%SZ',time.gmtime());target=folder/('deployment-'+stamp+'.tar.gz');partial=target.with_suffix('.partial')
-    members=['.git','ops','kiosk','deploy','docs','upstream/homebox','work/baseline/data','work/baseline/pepper','work/baseline/test-account.json','work/ops','work/homebox-bin/homebox','work/hardware/python','work/supvan-cups/target/release/examples/kiosk-label']
+    members=['AGENTS.md','.git','ops','kiosk','deploy','docs','upstream/homebox','work/baseline/data','work/baseline/pepper','work/baseline/test-account.json','work/ops','work/homebox-bin/homebox','work/hardware/python','work/supvan-cups/target/release/examples/kiosk-label']
     manifest={'format':1,'created_at':stamp,'commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),'homebox_pin':subprocess.check_output(['git','-C','upstream/homebox','rev-parse','HEAD'],cwd=root,text=True).strip(),'members':members,'sha256':{}}
     stopped=False
     try:
         subprocess.run(['systemctl','--user','stop','homebox-companion.service','homebox-native.service'],check=True);stopped=True
         databases=['work/ops/ledger.db','work/baseline/data/homebox.db']
-        if (root/'work/ops/imports.db').exists():databases.append('work/ops/imports.db')
+        for optional in ('work/ops/imports.db','work/ops/workshop.db'):
+            if (root/optional).exists():databases.append(optional)
         for db in databases:
             with contextlib.closing(sqlite3.connect(root/db)) as connection:
                 checkpoint=connection.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone();assert checkpoint[0]==0,'Database checkpoint was busy';assert connection.execute('PRAGMA integrity_check').fetchone()[0]=='ok'

@@ -29,6 +29,7 @@ from problems import submit_problem,recover_problem
 from setup_native import submit, recover_creation
 from imports import Imports
 from kiosk_processes import kiosk_pids
+from workshop import Workshop,move_location
 from products import catalog,lookup
 from ledger import Conflict
 from conditions import STATES, condition, checkout_blocker, set_condition
@@ -41,6 +42,7 @@ ledger=Ledger(ops_path/'ledger.db')
 badges=Badges(ledger)
 native_jobs=NativeJobs(ledger)
 imports=Imports(ops_path/'imports.db')
+workshop=Workshop(ops_path/'workshop.db')
 session=Session(timeout=120)
 # Explicitly approved temporary setup mode; loopback only.
 OPEN_ADMIN=True
@@ -74,7 +76,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
+        if self.path in ('/workshop/get','/workshop/save','/workshop/move') or self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -87,6 +89,14 @@ class Handler(BaseHTTPRequestHandler):
                         codes=[c.text for c in zxingcpp.read_barcodes(frame)]
                     self.reply_json(200,{'codes':codes});return
                 data=json.loads(raw)
+                if self.path.startswith('/workshop/'):
+                    if self.path!='/workshop/get' and not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId']
+                        if self.path=='/workshop/save':result=workshop.save(client,group,data)
+                        elif self.path=='/workshop/move':result=move_location(client,data);invalidate_stock()
+                        else:result=workshop.snapshot(client,group)
+                    self.reply_json(200,result);return
                 if self.path.startswith('/imports/'):
                     if not OPEN_ADMIN:self.send_error(403);return
                     with lock:
@@ -346,6 +356,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path=='/':
             body=(ROOT/'kiosk/index.html').read_bytes();mime='text/html; charset=utf-8';code=200
+        elif self.path=='/workshop-ui.js':
+            body=(ROOT/'kiosk/workshop-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/import-ui.js':
             body=(ROOT/'kiosk/import-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path in ('/api/members','/api/badges','/api/session','/api/custody'):

@@ -22,6 +22,16 @@ def prepare_location(client,data):
     types=client.call('/api/v1/entity-types')
     location_type=next(t for t in types if t['isLocation'])
     fields=[]
+    if data.get('storage_kind'):
+        from workshop import STORAGE
+        if data['storage_kind'] not in STORAGE:raise ValueError('Unknown storage kind')
+        fields.append({'name':'Storage kind','type':'text','textValue':data['storage_kind']})
+    if data.get('storage_code'):
+        code=text(data['storage_code'],'Storage code',60,True)
+        for summary in client.entities(True):
+            if not summary.get('archived') and (summary.get('parent') or {}).get('id')==parent:
+                if (text_field(client.entity(summary['id']),'Storage code') or '').casefold()==code.casefold():raise Conflict('That parent already contains storage code '+code)
+        fields.append({'name':'Storage code','type':'text','textValue':code})
     if data.get('map_room'):fields.append({'name':ROOM_FIELD,'type':'text','textValue':json.dumps(room_geometry({'width':10,'height':6}),sort_keys=True)})
     return {'path':'/api/v1/entities','create':{'name':name,'description':text(data.get('description',''),'Description',1000),'quantity':0,'entityTypeId':location_type['id'],'parentId':parent},'fields':fields,'metadata':{},'location':True}
 
