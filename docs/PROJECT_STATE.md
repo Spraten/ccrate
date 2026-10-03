@@ -29,3 +29,8 @@ Phase 2 baseline completed; Phase 3 kiosk shell prototype ready for user review,
 # Resume
 
 Ports: Homebox 17745, hardware UI 17746, shell 17749. Demo credentials/pepper are private in restricted work/baseline. Backup/restore artifacts under ignored work/. deploy/complete-baseline.py seeds idempotently but creates a fresh backup each run. deploy/kiosk-server.py serves kiosk/index.html and reads Homebox via API. See 04-homebox-baseline.md for recovery configuration. No boot services installed.
+
+
+# Desktop shortcut
+
+Equipment Terminal.desktop opens the prototype in a dedicated Chromium app window at full screen. deploy/open-kiosk.sh starts the shell server if needed. It does not configure boot startup or restart Homebox.

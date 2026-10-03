@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Equipment Terminal
+Comment=Open the equipment kiosk full-screen
+Exec=/home/user/Desktop/inventory-system/deploy/open-kiosk.sh
+Icon=applications-office
+Terminal=false
+Categories=Office;
+StartupNotify=true
