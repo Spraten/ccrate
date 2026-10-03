@@ -1,0 +1,6 @@
+# Final engineering checks — 3 October 2026
+Core prototype implemented; native Homebox remains unmodified. 90 Pi unit tests passed. Live native API/browser tests cover core workflows. Orderly reboot preserved records, cleared identity, and started both services and fullscreen Chromium. The process-title parser was corrected. Kernel isolation with loopback only verified offline operation; forced process crashes verified recovery and custody retention. Neither a physical power cut nor cable removal was performed. Actual webcam stream was 640 × 480. Touchscreen location label access and private backup confirmation passed; no extra label printed.
+
+Human acceptance still requires physical QR scans, printed label legibility and an uncoached checkout/return walkthrough. Configure real users, inventory and workshop geometry. Admin remains temporarily open by user choice. Test fixtures are synthetic. Consumable/bulk stock remains excluded by original section 75.
+
+Private backups remain on the Pi. Automatic approval review rejected copying credentials and private data to the PC without specific approval; approval is pending and no such copy was made. Public visual report contains no secrets or live badge tokens.

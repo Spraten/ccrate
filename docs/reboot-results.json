@@ -1,0 +1,11 @@
+{
+  "boot_id_changed": true,
+  "native_and_companion_started_at_boot": true,
+  "native_inventory_locations_preserved": true,
+  "operational_counts_preserved": true,
+  "badge_session_cleared": true,
+  "operational_integrity": "ok",
+  "dedicated_kiosk_browser_autostarted": true,
+  "fullscreen_launch_flag": true,
+  "power_loss_test": "Orderly reboot exercised; no physical power cut performed"
+}
