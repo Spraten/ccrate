@@ -2,6 +2,8 @@
   "decoder_native_qr": true,
   "native_asset_resolution": true,
   "browse_search_detail": true,
+  "touchscreen_keyboard_search": true,
+  "keyboard_fits_800x480": true,
   "camera_start_cancel": true,
   "scan_opens_detail": true,
   "touch_exit_cancel": true,

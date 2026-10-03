@@ -30,12 +30,21 @@ with sync_playwright() as p:
     page.goto(base);page.wait_for_load_state('networkidle')
     page.get_by_text('Homebox connected',exact=False).wait_for()
     page.get_by_role('button',name='Browse Stock').click()
-    page.get_by_role('textbox').fill('Demo Drone')
+    page.get_by_role('textbox').tap()
+    for letter in 'DEMO':page.get_by_role('button',name='Key '+letter,exact=True).tap()
+    page.get_by_role('button',name='Space',exact=True).tap()
+    for letter in 'DRONEX':page.get_by_role('button',name='Key '+letter,exact=True).tap()
+    page.get_by_role('button',name='Backspace',exact=True).tap()
+    assert page.get_by_role('textbox').input_value()=='demo drone'
+    bounds=page.get_by_role('button',name='Backspace',exact=True).bounding_box()
+    assert bounds['y']+bounds['height']<=480
+    page.get_by_role('button',name='Show results',exact=True).tap()
+    assert not page.get_by_role('dialog',name='Touchscreen search keyboard').count()
     page.get_by_role('button',name='Demo Drone 001',exact=False).click()
     assert page.get_by_role('heading',name='Demo Drone 001').is_visible()
     page.get_by_role('button',name='← Home').click()
     page.get_by_role('button',name='Scan',exact=True).click()
-    page.get_by_text('Hold a Homebox QR code',exact=False).wait_for()
+    page.get_by_text('Hold your badge or a Homebox QR code',exact=False).wait_for()
     assert page.evaluate('scanStream.getVideoTracks()[0].readyState')=='live'
     page.get_by_role('button',name='Cancel scan').click()
     assert page.evaluate('scanStream===null')
@@ -47,6 +56,6 @@ with sync_playwright() as p:
     page.screenshot(path=str(r/'work/scanner-screen.png'))
     assert not errors,errors
     browser.close()
-result={'decoder_native_qr':True,'native_asset_resolution':True,'browse_search_detail':True,'camera_start_cancel':True,'scan_opens_detail':True,'touch_exit_cancel':True,'browser_errors':errors,'camera_test':'synthetic browser device; physical scan acceptance still required'}
+result={'decoder_native_qr':True,'native_asset_resolution':True,'browse_search_detail':True,'touchscreen_keyboard_search':True,'keyboard_fits_800x480':True,'camera_start_cancel':True,'scan_opens_detail':True,'touch_exit_cancel':True,'browser_errors':errors,'camera_test':'synthetic browser device; physical scan acceptance still required'}
 (r/'docs/scan-integration-results.json').write_text(json.dumps(result,indent=2))
 print(json.dumps(result,indent=2))

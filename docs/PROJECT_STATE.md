@@ -53,3 +53,8 @@ Open Admin temporarily approved and enabled. Live native member listing, test-ba
 ## Session and condition follow-up
 
 Two-minute server-enforced idle expiry is implemented. Browser activity extends sessions; polling does not. All 28 unit tests pass, including expiry boundaries, activity extension and prevention of revival. Live native-user badge issuance, QR decoding, identity, End session and revocation pass without browser errors. Routine returns default to the native assigned shelf. Approved states are Ready, Needs Attention, Maintenance, Quarantined, Archived, Retired, Broken and Trashed; checkout/return remain disabled while their service integration is built. State initialization for existing assets is pending.
+
+
+## Touchscreen search
+
+Find Item and Browse Stock now include an application keyboard with letters, digits, space, hyphen, Clear and Backspace. All keys and Show results fit the 800x480 display. The input uses no system keyboard. Pi Chromium touch tests search for Demo Drone using key taps, correct a typo, open results and verify scanner start/cancel and asset resolution without browser errors. Native condition initialization remains pending user input; checkout/return remain previews.
