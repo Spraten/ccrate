@@ -9,11 +9,19 @@ def unit(name):
 def read_state():
     try:return json.loads(STATE.read_text())
     except (FileNotFoundError,ValueError):return None
+def storage_health(disk):
+    """Warn before local inventory, photo and journal writes run out of space."""
+    if disk.free < 512 * 1024**2:
+        return {'level':'critical','message':'Storage critically low. Ask an administrator to free space before adding photos or creating backups. Preserve inventory and recovery files.'}
+    if disk.free < 2 * 1024**3 or (disk.total and disk.free / disk.total < 0.10):
+        return {'level':'warning','message':'Storage is running low. Plan an approved external backup and have an administrator review old backup files.'}
+    return {'level':'ok','message':None}
+
 def status():
     disk=shutil.disk_usage(ROOT)
     try:printer={'connected':True,**probe()}
     except (OSError,ValueError,subprocess.SubprocessError):printer={'connected':False}
-    return {'homebox':unit('homebox-native.service'),'companion':unit('homebox-companion.service'),'printer':printer,'camera_devices':len(list(pathlib.Path('/dev').glob('video*'))),'free_gb':round(disk.free/1024**3,1),'homebox_version':'0.26.2','backup':read_state(),'private_backups':len(list((ROOT/'work/backups').glob('deployment-*.tar.gz')))}
+    return {'homebox':unit('homebox-native.service'),'companion':unit('homebox-companion.service'),'printer':printer,'camera_devices':len(list(pathlib.Path('/dev').glob('video*'))),'free_gb':round(disk.free/1024**3,1),'storage':storage_health(disk),'homebox_version':'0.26.2','backup':read_state(),'private_backups':len(list((ROOT/'work/backups').glob('deployment-*.tar.gz')))}
 def start_backup(key):
     key=uuid(key);previous=read_state()
     if previous and previous.get('request_key')==key:return previous

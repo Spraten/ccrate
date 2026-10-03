@@ -175,3 +175,7 @@ Date: 2026-10-02. Options: companion map tables; native custom fields; native la
 ## DEC027 - Original scope audit
 
 2026-10-03. Handoff section75 explicitly says not to build consumable inventory and other future possibilities yet. These remain future work, not unfinished core features. All core phases still require their stated evidence and physical acceptance.
+
+## DEC-028 — Storage warning and complete native search
+Date: 3 October 2026. User delegated recommended implementation choices.
+The original recovery plan requires disk warning. System Status warns below 2 GiB free or 10% capacity, with a critical message below 512 MiB. No files are deleted automatically and no operations are silently marked complete. Thresholds are reversible. Search includes native serial, model, manufacturer, category, descriptions and tags, as required by section34. Available means Ready, unarchived, individually tracked quantity1 and without current custody; blocked quantity records remain browsable.

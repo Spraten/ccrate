@@ -1,0 +1,8 @@
+{
+  "native_search_fields_supported": true,
+  "available_excludes_nonindividual_quantity": true,
+  "storage_warning_visible": true,
+  "disconnected_printer_status_visible": true,
+  "missing_camera_manual_fallback_reachable": true,
+  "failure_injection": "Synthetic API/storage and browser media errors; physical hardware not disconnected"
+}
