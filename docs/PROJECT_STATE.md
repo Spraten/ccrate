@@ -48,3 +48,8 @@ Native Homebox identity, limited operational ledger, preserved shelf during chec
 # Badge integration follow-up
 
 Open Admin temporarily approved and enabled. Live native member listing, test-badge issue/revoke, badge identification and touch End session integrated and verified (badge-integration-results.json). Companion DB created at work/ops/ledger.db with private parent directory. No real custody transactions yet. End user session after confirmed transactions approved. Pending choices: idle timeout and return destination default; physical QR acceptance remains pending. Checkout and return buttons still previews.
+
+
+## Session and condition follow-up
+
+Two-minute server-enforced idle expiry is implemented. Browser activity extends sessions; polling does not. All 28 unit tests pass, including expiry boundaries, activity extension and prevention of revival. Live native-user badge issuance, QR decoding, identity, End session and revocation pass without browser errors. Routine returns default to the native assigned shelf. Approved states are Ready, Needs Attention, Maintenance, Quarantined, Archived, Retired, Broken and Trashed; checkout/return remain disabled while their service integration is built. State initialization for existing assets is pending.

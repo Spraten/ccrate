@@ -110,3 +110,16 @@ Date: 2026-10-02. Options: require Homebox login; open Admin during prototype se
 ## DEC 013 Session After Confirmation
 
 Date: 2026-10-02. Options: end after confirmed checkout/return; remain active. User chose end immediately after confirmation. Future transaction completion must clear kiosk identity; manual End session is already available. Idle timeout pending.
+
+
+## DEC 014 Routine Return Destination
+
+Date: 2026-10-02. User chose the assigned Homebox shelf as the default return destination. A location scan is needed only for a different destination. Destination updates will use the native API and recovery journaling; this decision does not duplicate location records.
+
+## DEC 015 Idle Badge Session
+
+Date: 2026-10-02. User chose two minutes of inactivity. Server enforcement uses monotonic time; touches and scans count as activity, background polls do not. Expired sessions cannot be revived by activity. The UI clears the identified person and returns home on expiry. Confirmation still must end the session per DEC 013.
+
+## DEC 016 Equipment States
+
+Date: 2026-10-02. User requested Archived, Retired, Broken and Trashed in addition to Ready, Needs Attention, Maintenance and Quarantined. User clarified that Retired means no longer used and blocked from checkout. Only Ready is checkout eligible. Homebox native archival support and custom fields will be used where appropriate; Trashed preserves a historical record rather than deleting an entity. Existing assets without a recorded state need an explicit initialization policy before checkout.

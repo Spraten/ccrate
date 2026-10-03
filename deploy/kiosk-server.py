@@ -8,6 +8,7 @@ sys.path.insert(0,str(ROOT/'work/hardware/python'))
 sys.path.insert(0,str(ROOT/'ops'))
 from ledger import Ledger
 from badges import Badges
+from sessions import Session
 from scan_codes import normalize
 from PIL import Image
 import zxingcpp, qrcode
@@ -18,7 +19,7 @@ ops_path.mkdir(exist_ok=True,mode=0o700)
 os.chmod(ops_path,0o700)
 ledger=Ledger(ops_path/'ledger.db')
 badges=Badges(ledger)
-session={'user_id':None}
+session=Session(timeout=120)
 # Explicitly approved temporary setup mode; loopback only.
 OPEN_ADMIN=True
 def inventory(locations=False):
@@ -51,7 +52,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end'):
+        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -64,8 +65,11 @@ class Handler(BaseHTTPRequestHandler):
                         codes=[c.text for c in zxingcpp.read_barcodes(frame)]
                     self.reply_json(200,{'codes':codes});return
                 data=json.loads(raw)
+                if self.path=='/session/activity':
+                    self.reply_json(200,{'active':session.current(activity=True) is not None});return
+                if self.path=='/scan':session.current(activity=True)
                 if self.path=='/session/end':
-                    with lock:session['user_id']=None
+                    session.end()
                     self.reply_json(200,{'ended':True});return
                 if self.path in ('/badge/issue','/badge/revoke'):
                     if not OPEN_ADMIN:self.send_error(403);return
@@ -77,14 +81,14 @@ class Handler(BaseHTTPRequestHandler):
                         self.reply_json(200,badge)
                     else:
                         result=badges.revoke(group,data.get('id'))
-                        with lock:session['user_id']=None
+                        session.end()
                         self.reply_json(200,{'revoked':result})
                     return
                 if isinstance(data.get('code'),str) and data['code'].startswith(Badges.PREFIX):
                     group,members=native_context();user=badges.resolve(group,data['code'],[m['id'] for m in members])
                     if user:
                         name=next(m['name'] for m in members if m['id']==user)
-                        with lock:session['user_id']=user
+                        session.start(user)
                         self.reply_json(200,{'kind':'user','user':{'id':user,'name':name}})
                     else:self.reply_json(200,{'kind':'invalid','reason':'Badge unknown, revoked, or no longer a group member'})
                     return
@@ -125,8 +129,8 @@ class Handler(BaseHTTPRequestHandler):
                 elif self.path=='/api/badges':data=badges.list(group) if OPEN_ADMIN else []
                 else:
                     with lock:
-                        member=next((m for m in members if m['id']==session['user_id']),None)
-                        if not member:session['user_id']=None
+                        member=next((m for m in members if m['id']==session.current()),None)
+                        if not member:session.end()
                     data={'user':{'id':member['id'],'name':member['name']} if member else None}
                 self.reply_json(200,data)
             except (OSError,ValueError,KeyError):self.reply_json(503,{'error':'Homebox unavailable'})
