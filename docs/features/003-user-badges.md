@@ -101,3 +101,8 @@ Pending first badge/session test.
 # Definition of Done
 
 Registry foundation tested; full badge workflow remains incomplete.
+
+
+# Integration follow-up
+
+Approved temporary open Admin now lists live Homebox members and issues temporary test badge QR codes. Tokens are displayed only in the issuance response; list does not expose token hashes or raw tokens. Badge scanning identifies the native member, updates the session banner and supports touch End session. Existing badges can be revoked. All integration checks passed against native Homebox and Pi Chromium: generated QR decoding, member identity, touch issuance/revocation, revoked rejection, no credential exposure in list and no JavaScript errors. Evidence: badge-integration-results.json. Two synthetic verification badges were revoked. No permanent badge printed.

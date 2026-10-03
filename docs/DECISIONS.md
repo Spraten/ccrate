@@ -101,3 +101,12 @@ Date: 2026-10-02. Options: hashed random tokens with individual revocation; stat
 ## Reversible prototype badge code
 
 LAB:U:<random token> is used only by the tested badge module. No permanent badge labels issued. Permanent namespace/label contents remain a later review decision.
+
+
+## DEC 012 Temporary Open Administration
+
+Date: 2026-10-02. Options: require Homebox login; open Admin during prototype setup. User chose open Admin temporarily. Issuance/revocation endpoints are loopback-only and same-origin guarded; anyone at the terminal can administer badges during this approved setup mode. Production Admin permissions are still pending. Revisit before deployment.
+
+## DEC 013 Session After Confirmation
+
+Date: 2026-10-02. Options: end after confirmed checkout/return; remain active. User chose end immediately after confirmation. Future transaction completion must clear kiosk identity; manual End session is already available. Idle timeout pending.

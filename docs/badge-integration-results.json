@@ -1,0 +1,10 @@
+{
+  "native_member_badge_issue": true,
+  "qr_decodes": true,
+  "badge_identifies_member": true,
+  "end_session_touch": true,
+  "admin_issue_revoke_touch": true,
+  "revoked_badge_rejected": true,
+  "tokens_not_in_list": true,
+  "browser_errors": []
+}

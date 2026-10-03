@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
 """Loopback read-only prototype using the isolated Homebox demonstration account."""
-import io, json, os, pathlib, signal, sys, threading, urllib.request, urllib.error
+import base64, io, json, os, pathlib, signal, sys, threading, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT=pathlib.Path('/home/user/Desktop/inventory-system')
 sys.path.insert(0,str(ROOT/'kiosk'))
 sys.path.insert(0,str(ROOT/'work/hardware/python'))
+sys.path.insert(0,str(ROOT/'ops'))
+from ledger import Ledger
+from badges import Badges
 from scan_codes import normalize
 from PIL import Image
-import zxingcpp
+import zxingcpp, qrcode
 BASE='http://127.0.0.1:17745'
 lock=threading.Lock()
+ops_path=ROOT/'work/ops'
+ops_path.mkdir(exist_ok=True,mode=0o700)
+os.chmod(ops_path,0o700)
+ledger=Ledger(ops_path/'ledger.db')
+badges=Badges(ledger)
+session={'user_id':None}
+# Explicitly approved temporary setup mode; loopback only.
+OPEN_ADMIN=True
 def inventory(locations=False):
     # Temporary demo account only. Tokens never reach the browser or logs.
     account=json.loads((ROOT/'work/baseline/test-account.json').read_text())
@@ -24,12 +35,23 @@ def inventory(locations=False):
         if len(items)>=data['total'] or not data['items']:break
         page+=1
     return items
+def native_context():
+    account=json.loads((ROOT/'work/baseline/test-account.json').read_text())
+    req=urllib.request.Request(BASE+'/api/v1/users/login',data=json.dumps({'username':account['email'],'password':account['password']}).encode(),headers={'Content-Type':'application/json'})
+    with urllib.request.urlopen(req,timeout=8) as response:token=json.load(response)['token'].removeprefix('Bearer ')
+    def get(path):
+        req=urllib.request.Request(BASE+path,headers={'Authorization':'Bearer '+token})
+        with urllib.request.urlopen(req,timeout=8) as response:return json.load(response)
+    actor=get('/api/v1/users/self')['item']
+    members=get('/api/v1/groups/members')
+    return actor['defaultGroupId'],members
+
 class Handler(BaseHTTPRequestHandler):
     def reply_json(self,code,data):
         body=json.dumps(data).encode()
-        self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+        self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/decode','/scan'):
+        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -41,7 +63,32 @@ class Handler(BaseHTTPRequestHandler):
                         if frame.width>1280 or frame.height>960:self.send_error(413);return
                         codes=[c.text for c in zxingcpp.read_barcodes(frame)]
                     self.reply_json(200,{'codes':codes});return
-                data=json.loads(raw);code=normalize(data.get('code'))
+                data=json.loads(raw)
+                if self.path=='/session/end':
+                    with lock:session['user_id']=None
+                    self.reply_json(200,{'ended':True});return
+                if self.path in ('/badge/issue','/badge/revoke'):
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    group,members=native_context()
+                    if self.path=='/badge/issue':
+                        badge=badges.issue(group,data.get('user_id'),[m['id'] for m in members])
+                        image=io.BytesIO();qrcode.make(badge['code']).save(image,format='PNG')
+                        badge['qr']='data:image/png;base64,'+base64.b64encode(image.getvalue()).decode()
+                        self.reply_json(200,badge)
+                    else:
+                        result=badges.revoke(group,data.get('id'))
+                        with lock:session['user_id']=None
+                        self.reply_json(200,{'revoked':result})
+                    return
+                if isinstance(data.get('code'),str) and data['code'].startswith(Badges.PREFIX):
+                    group,members=native_context();user=badges.resolve(group,data['code'],[m['id'] for m in members])
+                    if user:
+                        name=next(m['name'] for m in members if m['id']==user)
+                        with lock:session['user_id']=user
+                        self.reply_json(200,{'kind':'user','user':{'id':user,'name':name}})
+                    else:self.reply_json(200,{'kind':'invalid','reason':'Badge unknown, revoked, or no longer a group member'})
+                    return
+                code=normalize(data.get('code'))
                 if code['kind'] in ('asset','entity'):
                     with lock:items=inventory()+inventory(True)
                     match=next((e for e in items if ('asset_id' in code and e.get('assetId')==code['asset_id']) or ('entity_id' in code and e['id']==code['entity_id'])),None)
@@ -71,6 +118,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path=='/':
             body=(ROOT/'kiosk/index.html').read_bytes();mime='text/html; charset=utf-8';code=200
+        elif self.path in ('/api/members','/api/badges','/api/session'):
+            try:
+                group,members=native_context()
+                if self.path=='/api/members':data=[{'id':m['id'],'name':m['name']} for m in members]
+                elif self.path=='/api/badges':data=badges.list(group) if OPEN_ADMIN else []
+                else:
+                    with lock:
+                        member=next((m for m in members if m['id']==session['user_id']),None)
+                        if not member:session['user_id']=None
+                    data={'user':{'id':member['id'],'name':member['name']} if member else None}
+                self.reply_json(200,data)
+            except (OSError,ValueError,KeyError):self.reply_json(503,{'error':'Homebox unavailable'})
+            return
         elif self.path=='/api/inventory':
             try:
                 with lock:body=json.dumps(inventory()).encode()
