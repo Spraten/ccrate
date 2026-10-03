@@ -28,6 +28,7 @@ from labels import preview as label_preview,print_label,print_badge,recover_prin
 from problems import submit_problem,recover_problem
 from setup_native import submit, recover_creation
 from imports import Imports
+from kiosk_processes import kiosk_pids
 from products import catalog,lookup
 from ledger import Conflict
 from conditions import STATES, condition, checkout_blocker, set_condition
@@ -233,20 +234,16 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != '/exit' or self.headers.get('Origin') != 'http://127.0.0.1:17749':
             self.send_error(403);return
         profile=str(ROOT/'work/kiosk-browser')
-        targets=[]
-        for entry in pathlib.Path('/proc').iterdir():
-            if not entry.name.isdigit():continue
-            try:
-                args=(entry/'cmdline').read_bytes().split(b'\0')
-                if ('--user-data-dir='+profile).encode() in args and not any(a.startswith(b'--type=') for a in args) and b'chromium' in args[0]:
-                    targets.append(int(entry.name))
-            except (OSError,IndexError):continue
+        targets=kiosk_pids(profile)
         if not targets:
             self.send_error(409);return
         self.send_response(200);self.send_header('Content-Length','0');self.end_headers()
-        for pid in targets:
-            try:os.kill(pid,signal.SIGTERM)
-            except ProcessLookupError:pass
+        self.wfile.flush()
+        def close_window():
+            for pid in targets:
+                try:os.kill(pid,signal.SIGTERM)
+                except ProcessLookupError:pass
+        timer=threading.Timer(0.3,close_window);timer.daemon=True;timer.start()
     def do_GET(self):
         if urlsplit(self.path).path=='/api/file':
             try:
