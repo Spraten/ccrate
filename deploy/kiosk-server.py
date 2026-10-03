@@ -27,6 +27,7 @@ from accounts import create_account
 from labels import preview as label_preview,print_label,print_badge,recover_print,probe as printer_probe
 from problems import submit_problem,recover_problem
 from setup_native import submit, recover_creation
+from imports import Imports
 from products import catalog,lookup
 from ledger import Conflict
 from conditions import STATES, condition, checkout_blocker, set_condition
@@ -38,6 +39,7 @@ os.chmod(ops_path,0o700)
 ledger=Ledger(ops_path/'ledger.db')
 badges=Badges(ledger)
 native_jobs=NativeJobs(ledger)
+imports=Imports(ops_path/'imports.db')
 session=Session(timeout=120)
 # Explicitly approved temporary setup mode; loopback only.
 OPEN_ADMIN=True
@@ -71,7 +73,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
+        if self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -84,6 +86,17 @@ class Handler(BaseHTTPRequestHandler):
                         codes=[c.text for c in zxingcpp.read_barcodes(frame)]
                     self.reply_json(200,{'codes':codes});return
                 data=json.loads(raw)
+                if self.path.startswith('/imports/'):
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId'];action=self.path.rsplit('/',1)[1]
+                        if action=='upload':result=imports.upload(group,session.current() or native['id'],data)
+                        elif action=='list':result=imports.list(group)
+                        elif action=='map':result=imports.map(client,group,data)
+                        elif action=='get':result=imports.sync(client,native_jobs,group,data)
+                        else:result=getattr(imports,action)(client,native_jobs,group,data)
+                        if action=='create':invalidate_stock()
+                    self.reply_json(200,result);return
                 if self.path not in ('/scan','/session/end','/session/activity','/label/preview','/backup/start'):invalidate_stock()
                 if self.path=='/badge/print':
                     if not OPEN_ADMIN:self.send_error(403);return
@@ -336,6 +349,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path=='/':
             body=(ROOT/'kiosk/index.html').read_bytes();mime='text/html; charset=utf-8';code=200
+        elif self.path=='/import-ui.js':
+            body=(ROOT/'kiosk/import-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path in ('/api/members','/api/badges','/api/session','/api/custody'):
             try:
                 snapshot=session.snapshot()

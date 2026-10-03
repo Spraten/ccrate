@@ -2,7 +2,7 @@
 import json,urllib.error
 from ledger import Conflict,uuid
 from attachments import photo_bytes,ensure_photo
-from conditions import FIELD,NOTE_FIELD,condition
+from conditions import FIELD,NOTE_FIELD,condition,STATES
 from native_fields import update_payload,text_field
 from maps import ROOM_FIELD,room_geometry
 from products import GTIN_FIELD,MARKER_FIELD,gtin,lookup,template_update
@@ -62,6 +62,17 @@ def prepare_asset(client,data):
     else:
         result['metadata'].update(manufacturer=text(data.get('manufacturer',''),'Manufacturer'),modelNumber=text(data.get('model',''),'Model'))
         if data.get('gtin'):result['fields'].append({'name':GTIN_FIELD,'type':'text','textValue':gtin(data['gtin'])})
+    if data.get('import_source_key'):
+        key=text(data['import_source_key'],'Import source key',64,True)
+        if len(key)!=64 or any(c not in '0123456789abcdef' for c in key):raise ValueError('Invalid import identity')
+        for summary in client.entities():
+            if text_field(client.entity(summary['id']),'Import source key')==key:raise Conflict('This source item is already in Homebox')
+        for field,value in (('Import source key',key),('Import source',text(data.get('import_source',''),'Import source',120,True)),('Import external ID',text(data.get('import_external_id',''),'External ID')),('Import original condition',text(data.get('import_source_condition',''),'Original condition'))):
+            if value:result['fields'].append({'name':field,'type':'text','textValue':value})
+        state=data.get('import_condition','Unreviewed')
+        if state not in ('Unreviewed',*STATES):raise ValueError('Unknown import condition')
+        if state=='Ready' and data.get('reviewed') is not True:raise ValueError('Inspect equipment before marking it Ready')
+        result['initial_state']=state
     return result
 
 
@@ -157,14 +168,16 @@ def perform_creation(client,jobs,group,key,start=False):
             else:payload['fields'].append(desired)
         if not plan['location']:
             state=condition(entity)
-            if state not in ('Unreviewed','Ready'):raise Conflict('Equipment condition changed during enrollment; use Admin review')
+            if state not in ('Unreviewed','Ready',plan.get('initial_state')):raise Conflict('Equipment condition changed during enrollment; use Admin review')
             payload['fields']=[f for f in payload['fields'] if f.get('name') not in (FIELD,NOTE_FIELD)]
-            if plan['reviewed']:payload['fields'].append({'name':FIELD,'type':'text','textValue':'Ready'})
+            desired_state=plan.get('initial_state','Ready' if plan['reviewed'] else 'Unreviewed')
+            if desired_state!='Unreviewed':payload['fields'].append({'name':FIELD,'type':'text','textValue':desired_state})
+            if desired_state=='Archived':payload['archived']=True
         client.call('/api/v1/entities/'+entity['id'],'PUT',payload)
         verified=client.entity(entity['id'])
         for name,value in plan['metadata'].items():
             if verified.get(name,'')!=value:raise Conflict('Native enrollment metadata was not confirmed')
-        if not plan['location'] and condition(verified)!=('Ready' if plan['reviewed'] else 'Unreviewed'):raise Conflict('Native enrollment condition was not confirmed')
+        if not plan['location'] and condition(verified)!=plan.get('initial_state','Ready' if plan['reviewed'] else 'Unreviewed'):raise Conflict('Native enrollment condition was not confirmed')
         for desired in plan['fields']:
             if text_field(verified,desired['name'])!=desired['textValue']:raise Conflict('Native creation field was not confirmed')
         # Result ID is durable before removing the temporary native marker.
