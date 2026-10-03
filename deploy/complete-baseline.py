@@ -34,7 +34,7 @@ def entities(base, token, locations):
 def launch(folder, port):
     data = folder / 'data'
     env = dict(os.environ, HBOX_WEB_HOST='127.0.0.1', HBOX_WEB_PORT=str(port),
-        HBOX_STORAGE_PREFIX_PATH=str(data),
+        HBOX_STORAGE_PREFIX_PATH='data',
         HBOX_DATABASE_SQLITE_PATH=str(data/'homebox.db')+'?_pragma=busy_timeout=999&_pragma=journal_mode=WAL&_fk=1&_time_format=sqlite',
         HBOX_AUTH_API_KEY_PEPPER=(RUN/'pepper').read_text(),
         HBOX_OPTIONS_GITHUB_RELEASE_CHECK='false', HBOX_OPTIONS_ALLOW_ANALYTICS='false')

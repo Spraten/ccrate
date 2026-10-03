@@ -33,3 +33,10 @@ Result: all 27 entity IDs matched; baseline restarted successfully. Evidence: ba
 Port 17749 serves the approved six-button shell. Find Item and Browse Stock show native Homebox items, search by name/asset number/location, and open item summaries. Other task buttons show explicit workflow previews; no inventory mutation is enabled. Admin is a prototype information view and Homebox link, not a production permission boundary. Session identity, inactivity policy, scanner indicator behavior and operational workflows remain pending design decisions.
 
 Start manually with python3 deploy/kiosk-server.py from the project folder. The service binds loopback and uses no external runtime assets. Source: kiosk/index.html and deploy/kiosk-server.py.
+
+
+## Attachment recovery follow-up
+
+The original absolute HBOX_STORAGE_PREFIX_PATH caused blob keys to resolve under a nested runtime path. Entity-only restore checks did not detect this. The configuration now uses storage prefix data relative to each Homebox process working directory; the SQLite path remains explicit. Existing synthetic attachment bytes and attributes were preserved before copying them into work/baseline/data. Original nested files remain preserved under work/backups/storage-prefix-original-* and their original location.
+
+Verified with deploy/verify-recovery.py: native group member lookup, synthetic multipart attachment upload/download, complete cold storage copy, exact attachment hash after restore and API-key continuity using the preserved pepper. Temporary verification key revoked; restore instance stopped and original baseline restarted. Evidence: recovery-verification-results.json. Previous attachment/API-key limitations in the first report are superseded by this test. Independent backup media and abrupt power-loss recovery remain unverified.

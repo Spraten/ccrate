@@ -45,3 +45,8 @@ Scan infrastructure started: native Homebox /a/{asset_id} normalization and GTIN
 Ethernet active at 192.168.1.62; use known host key alias 192.168.1.61 when connecting. Wi-Fi remains 192.168.1.61. Reboot completed. Desktop launcher now restarts existing Homebox baseline before opening shell; it never creates accounts or seeds data. Scanner integrated and live tests passed: real decoder/native asset resolution plus Pi Chromium with synthetic camera. Evidence docs/scan-integration-results.json. Physical camera scan acceptance is pending; demo QR in work/demo-drone-qr.png. Full-screen app reopened; camera permission scoped to loopback port 17749.
 
 Badge-only and Scan-button behaviors approved. User choice pending: Homebox accounts versus borrower records. Production custody/history persistence remains unapproved. No inventory mutation workflows enabled.
+
+
+# Recovery follow-up
+
+Native group member lookup verified. Attachment/API-key restore verification now passed. Fixed relative blob storage prefix in all baseline launch helpers; preserved original synthetic blobs and attrs. No Homebox source modification. Awaiting user decisions on badge identity model and limited operational ledger, plus physical camera scan acceptance. No ledger implemented.

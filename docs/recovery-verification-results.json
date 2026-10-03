@@ -1,0 +1,10 @@
+{
+  "native_members_lookup": true,
+  "member_count": 1,
+  "attachment_upload_download": true,
+  "restored_attachment_sha256": "20dd9c213f13a4f257416b671d2b84516fe3611732e6c7c47b6a38351b910254",
+  "api_key_works_after_restore": true,
+  "temporary_key_revoked": true,
+  "baseline_restarted": true,
+  "backup_folder": "/home/user/Desktop/inventory-system/work/backups/20261002-210845-attachments"
+}

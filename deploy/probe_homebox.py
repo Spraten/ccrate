@@ -14,7 +14,7 @@ if not pepper.exists():
     pepper.write_text(secrets.token_urlsafe(48))
     os.chmod(pepper, 0o600)
 env = dict(os.environ, HBOX_WEB_HOST='127.0.0.1', HBOX_WEB_PORT='17745',
-           HBOX_STORAGE_PREFIX_PATH=str(run / 'data'),
+           HBOX_STORAGE_PREFIX_PATH='data',
            HBOX_DATABASE_SQLITE_PATH=str(run / 'data/homebox.db')+'?_pragma=busy_timeout=999&_pragma=journal_mode=WAL&_fk=1&_time_format=sqlite',
            HBOX_AUTH_API_KEY_PEPPER=pepper.read_text(), HBOX_OPTIONS_GITHUB_RELEASE_CHECK='false',
            HBOX_OPTIONS_ALLOW_ANALYTICS='false', HBOX_LOG_LEVEL='info')
