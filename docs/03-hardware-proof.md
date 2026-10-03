@@ -30,3 +30,8 @@ Homebox remains unmodified. No additional inventory database or checkout impleme
 ## Follow-up, October 2 evening
 
 User confirmed the single test label printed clearly. A subsequent probe confirmed printer idle with no reported errors and 220 labels remaining. After webcam reconnection, its capture node changed to video1; diagnostics now use the persistent USB by-id link instead of assuming video0. Fresh capture succeeded (640 by 480, 20,432 bytes), and the five-second stream delivered 50 frames at approximately 9.8 FPS. The test UI status endpoint reports camera present. Old frames are no longer counted after failed captures; UI distinguishes disconnected camera and incorrect browser origin. Browser preview and physical QR result await user confirmation.
+
+
+## Hardware checkpoint accepted
+
+On October 2 the user confirmed: "all test are good". Browser settings confirm 640 by 480 at 10 FPS. Touch and clear print accepted; camera/QR acceptance is user-reported. The recorded scans array remains empty, so a physical decoder result was not captured in telemetry. Earlier camera_error is historical. Long-duration stability and reboot recovery remain future checks.

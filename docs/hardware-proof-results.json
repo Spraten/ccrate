@@ -10,11 +10,25 @@
   "touch_event_types": [
     "mouse"
   ],
-  "camera": null,
+  "camera": {
+    "aspectRatio": 1.3333333333333333,
+    "deviceId": "d11eca0da9a2a4faaaaca7964e6438436d43cb563a8566432485b20f2ff09976",
+    "frameRate": 10,
+    "groupId": "dbf83fac7bf43abe9afde0d626611dad25759d692c7c80aa80e0c90fac224525",
+    "height": 480,
+    "resizeMode": "none",
+    "width": 640
+  },
   "scans": [],
   "camera_error": {
     "type": "camera_error",
     "name": "NotFoundError",
     "message": "Requested device not found"
+  },
+  "user_acceptance": {
+    "date": "2026-10-02",
+    "statement": "all test are good",
+    "status": "accepted",
+    "note": "User confirms hardware tests. Physical QR acceptance is user-reported; scans array currently contains no decoder result."
   }
 }
