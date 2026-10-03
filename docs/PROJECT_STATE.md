@@ -1,52 +1,40 @@
 # Current Phase
 
-Phase 2 baseline completed; Phase 3 kiosk shell prototype ready for user review, 2026-10-02.
+Scanner integration complete technically; physical camera acceptance pending. Badge and checkout implementation await user decisions, 2026-10-02.
 
 # Working
 
-- Hardware checkpoint accepted by user.
-- Unmodified Homebox v0.26.2 on loopback 17745; pinned submodule.
-- Nine demo locations and six demo assets created through native API.
-- Cold storage backup restored on separate loopback instance; all 27 entity IDs match. Restore instance stopped; original baseline restarted.
-- Approved six-button shell on loopback 17749, shown in Pi Chromium.
-- Live read-only inventory search, browse and item summaries. Browser DOM reports Homebox connected with eight item entities, including older recon assets.
-- Source and reports on Pi desktop in /home/user/Desktop/inventory-system.
+- Pi desktop project, pinned unmodified Homebox v0.26.2 submodule.
+- Homebox loopback 17745, hardware diagnostic 17746, kiosk 17749.
+- Approved six-button home, touch Desktop exit, full-screen desktop shortcut.
+- Shortcut starts existing baseline after reboot without registering or seeding data.
+- Native read-only search/browse/details and on-demand camera scanner.
+- Real QR decoding/native asset resolution passed; Pi browser tests passed with a synthetic camera and no JavaScript errors.
+- Nine demo locations and six demo assets; 27 total entities including previous recon data.
+- Native group member lookup verified.
+- Cold backup restore verifies entity identities, attachment bytes and API-key continuity. Relative blob storage prefix fixed; original synthetic files preserved.
 
-# Decisions Waiting
+# Confirmed Decisions
 
-- User shell review before scanning infrastructure.
-- Identity, timeout, QR routing/labels and production deployment policies remain undecided.
-- Companion interaction layer and six-button layout approved; extra inventory database not approved.
+- Unmodified Homebox with companion interaction layer; native inventory authority.
+- Six large home buttons.
+- Badge only, no PIN, for prototype.
+- Scan button; camera stops on cancel or resolved item.
 
-# Known Problems / Limits
+# Required User Decisions
 
-- Previous intermittent SSH/webcam USB failures; long-duration reliability unproven.
-- Physical QR acceptance user-reported; no decoded scan recorded in diagnostic telemetry.
-- Shell workflow previews do not change inventory. Session and scanner policies are pending.
-- Backup test does not yet cover attachments/API-key continuity or independent media.
-- No RTC, offline timekeeping unresolved.
+- Badge people: Homebox accounts or borrower records.
+- Checkout persistence: limited event ledger, native fields with reduced accountability scope, or defer.
+- Physical scanner acceptance still awaiting user result.
+
+# Not Implemented
+
+Badge enrollment/session, custody operations, condition workflow, kits, map, catalog, enrollment/label workflow, administration/permissions, independent backup media, final deployment and offline/recovery/user acceptance remain in original plan. No ledger or duplicate inventory database created. Future product decisions will be asked at the relevant phase.
+
+# Known Limits
+
+Earlier Wi-Fi/USB instability; long-duration hardware reliability unproven. No RTC. Source/API schema drift. Offline timekeeping unresolved. No boot services installed. Independent media and abrupt power loss recovery untested.
 
 # Resume
 
-Ports: Homebox 17745, hardware UI 17746, shell 17749. Demo credentials/pepper are private in restricted work/baseline. Backup/restore artifacts under ignored work/. deploy/complete-baseline.py seeds idempotently but creates a fresh backup each run. deploy/kiosk-server.py serves kiosk/index.html and reads Homebox via API. See 04-homebox-baseline.md for recovery configuration. No boot services installed.
-
-
-# Desktop shortcut
-
-Equipment Terminal.desktop opens the prototype in a dedicated Chromium app window at full screen. deploy/open-kiosk.sh starts the shell server if needed. It does not configure boot startup or restart Homebox.
-
-Touch-only exit: Desktop button with large confirmation controls closes only the dedicated kiosk browser. Reopen using desktop shortcut. No keyboard required.
-
-Scan infrastructure started: native Homebox /a/{asset_id} normalization and GTIN checksum validation, six unit tests passed. Scanned URLs are parsed as identifiers and never navigated. Camera integration and badge namespace remain pending.
-
-
-# Current follow-up
-
-Ethernet active at 192.168.1.62; use known host key alias 192.168.1.61 when connecting. Wi-Fi remains 192.168.1.61. Reboot completed. Desktop launcher now restarts existing Homebox baseline before opening shell; it never creates accounts or seeds data. Scanner integrated and live tests passed: real decoder/native asset resolution plus Pi Chromium with synthetic camera. Evidence docs/scan-integration-results.json. Physical camera scan acceptance is pending; demo QR in work/demo-drone-qr.png. Full-screen app reopened; camera permission scoped to loopback port 17749.
-
-Badge-only and Scan-button behaviors approved. User choice pending: Homebox accounts versus borrower records. Production custody/history persistence remains unapproved. No inventory mutation workflows enabled.
-
-
-# Recovery follow-up
-
-Native group member lookup verified. Attachment/API-key restore verification now passed. Fixed relative blob storage prefix in all baseline launch helpers; preserved original synthetic blobs and attrs. No Homebox source modification. Awaiting user decisions on badge identity model and limited operational ledger, plus physical camera scan acceptance. No ledger implemented.
+Ethernet 192.168.1.62; Wi-Fi 192.168.1.61. SSH HostKeyAlias=192.168.1.61 verifies the known Pi key over Ethernet. Folder /home/user/Desktop/inventory-system. Private credentials/pepper under restricted work/baseline; never expose them. Artifacts under ignored work/. deploy/start-baseline.py starts only the existing demo; deploy/complete-baseline.py seeds and creates a new backup, so do not rerun unnecessarily. docs/05-scan-integration.md and docs/06-native-accountability-gap.md contain evidence and the storage proposal. Latest recovery evidence in recovery-verification-results.json.
