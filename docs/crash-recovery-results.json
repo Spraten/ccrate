@@ -1,0 +1,11 @@
+{
+  "companion_sigkill_auto_restart": true,
+  "completed_custody_survived_crash": true,
+  "badge_ram_session_cleared": true,
+  "homebox_sigkill_auto_restart": true,
+  "native_inventory_ids_preserved": true,
+  "full_service_restart": true,
+  "corrupt_transaction_rejected_without_journal_write": true,
+  "operational_integrity": "ok",
+  "abrupt_power_loss": "Not physically performed; process crashes were exercised"
+}

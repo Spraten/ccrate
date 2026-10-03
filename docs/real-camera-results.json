@@ -1,0 +1,9 @@
+{
+  "physical_camera_stream_started": true,
+  "video_frame_ready": true,
+  "width": 640,
+  "height": 480,
+  "cancel_stopped_stream": true,
+  "frames_saved": false,
+  "physical_qr_in_front_of_camera": "Still needs user placement and scan acceptance"
+}

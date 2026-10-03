@@ -1,0 +1,16 @@
+{
+  "network_interfaces": [
+    "lo"
+  ],
+  "native_and_companion_start_without_network": true,
+  "native_authentication": true,
+  "checkout_return": true,
+  "native_inventory_catalog_map": true,
+  "qr_label_preview": true,
+  "touch_browser": true,
+  "camera_start_cancel_synthetic": true,
+  "external_browser_requests": [],
+  "browser_errors": [],
+  "live_deployment_mutated": false,
+  "physical_cable_disconnection": "Not performed; kernel network namespace had no Ethernet or Wi-Fi interface"
+}

@@ -1,0 +1,57 @@
+{
+  "format": 1,
+  "platform": "Linux-6.18.50+rpt-rpi-v8-aarch64-with-glibc2.41",
+  "os_release": "PRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"13\"\nVERSION=\"13 (trixie)\"\nVERSION_CODENAME=trixie\nDEBIAN_VERSION_FULL=13.7\nID=debian\nHOME_URL=\"https://www.debian.org/\"\nSUPPORT_URL=\"https://www.debian.org/support\"\nBUG_REPORT_URL=\"https://bugs.debian.org/\"\n",
+  "python": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
+  "sqlite": "3.46.1",
+  "chromium": "Chromium 152.0.7977.82 built on Debian GNU/Linux 13 (trixie)",
+  "homebox_version": "0.26.2",
+  "homebox_pin": "e01dd737238a3fa7e1a6454b37de6c6fc88c86e4",
+  "printer_source_pin": "9fd7af09580c3e710202e5471e77e0b88db0e3bb",
+  "project_commit": "95468830262c508b577868e6c2ba7a259b65d5a2",
+  "operational_schema": 2,
+  "native_field_formats": {
+    "map": 1,
+    "kit": 1
+  },
+  "python_dependencies": [
+    {
+      "name": "greenlet",
+      "version": "3.5.6"
+    },
+    {
+      "name": "pillow",
+      "version": "12.3.0"
+    },
+    {
+      "name": "playwright",
+      "version": "1.63.0"
+    },
+    {
+      "name": "pyee",
+      "version": "13.0.1"
+    },
+    {
+      "name": "qrcode",
+      "version": "8.2"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0"
+    },
+    {
+      "name": "websocket-client",
+      "version": "1.9.2"
+    },
+    {
+      "name": "zxing-cpp",
+      "version": "3.1.1"
+    }
+  ],
+  "binary_sha256": {
+    "work/homebox-bin/homebox": "a2d5ba729dcdd28f91cd64a3825823e28c821f08f4e3b8bdc366c13bfce5d32e",
+    "work/supvan-cups/target/release/examples/kiosk-label": "d97a2168b6e6a7daedecccdf2a22b40f66b5ff7406d58a01ccfcccac77e36b15"
+  },
+  "system_packages": "chromium\t1:152.0.7977.82-1~deb13u1+rpt2\nlibc6:arm64\t2.41-12+rpt1+deb13u4\nliblzma5:arm64\t5.8.1-1+deb13u1\nlibnss3:arm64\t2:3.110-1+deb13u4\nlibstdc++6:arm64\t14.2.0-19\npython3\t3.13.5-1",
+  "offline_runtime_in_backup": true
+}
