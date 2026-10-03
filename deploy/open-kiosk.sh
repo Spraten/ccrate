@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 ROOT=/home/user/Desktop/inventory-system
+# Keep the UI available to show connection failure if Homebox cannot start.
+python3 "$ROOT/deploy/start-baseline.py" >"$ROOT/work/baseline-startup.log" 2>&1 || true
 if ! curl --silent --fail --max-time 2 http://127.0.0.1:17749/ >/dev/null; then
     nohup python3 "$ROOT/deploy/kiosk-server.py" >"$ROOT/work/kiosk-server.log" 2>&1 </dev/null &
     for attempt in 1 2 3 4 5; do

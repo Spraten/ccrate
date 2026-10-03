@@ -70,3 +70,12 @@ Later decisions will be asked when relevant: badge versus PIN, session timeout, 
 
 - Plain locally served HTML/CSS/JavaScript and Python standard-library HTTP server for a disposable loopback shell. No production runtime choice or deployment policy implied.
 - Synthetic baseline account used only server-side for read-only inventory views. No production session, identity or inactivity policy implemented.
+
+
+## DEC 006 Prototype Badge Authentication
+
+Date: 2026-10-02. Options: badge only; badge plus PIN. User chose badge only. No PIN step in prototype. Badge identity source and issuance remain pending. Revisit before production.
+
+## DEC 007 Camera Activation
+
+Date: 2026-10-02. Options: Scan button; always-on camera. User chose Scan button. Camera starts on demand and stops on cancel or resolved inventory entity. No always-on capture. Revisit after user testing.

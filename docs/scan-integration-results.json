@@ -1,0 +1,10 @@
+{
+  "decoder_native_qr": true,
+  "native_asset_resolution": true,
+  "browse_search_detail": true,
+  "camera_start_cancel": true,
+  "scan_opens_detail": true,
+  "touch_exit_cancel": true,
+  "browser_errors": [],
+  "camera_test": "synthetic browser device; physical scan acceptance still required"
+}
