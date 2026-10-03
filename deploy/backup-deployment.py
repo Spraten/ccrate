@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cold, private, complete offline deployment backup with restart in finally."""
-import fcntl,hashlib,json,os,pathlib,sqlite3,subprocess,tarfile,time
+import contextlib,fcntl,hashlib,json,os,pathlib,sqlite3,subprocess,tarfile,time
 root=pathlib.Path('/home/user/Desktop/inventory-system');folder=root/'work/backups';folder.mkdir(mode=0o700,exist_ok=True)
 os.umask(0o077)
 with (folder/'deployment.lock').open('a') as lock:
@@ -12,12 +12,12 @@ with (folder/'deployment.lock').open('a') as lock:
     try:
         subprocess.run(['systemctl','--user','stop','homebox-companion.service','homebox-native.service'],check=True);stopped=True
         for db in ['work/ops/ledger.db','work/baseline/data/homebox.db']:
-            with sqlite3.connect(root/db) as connection:
-                connection.execute('PRAGMA wal_checkpoint(TRUNCATE)');assert connection.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+            with contextlib.closing(sqlite3.connect(root/db)) as connection:
+                checkpoint=connection.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone();assert checkpoint[0]==0,'Database checkpoint was busy';assert connection.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
         for name in ['work/ops/ledger.db','work/baseline/data/homebox.db','work/homebox-bin/homebox','work/supvan-cups/target/release/examples/kiosk-label']:
             manifest['sha256'][name]=hashlib.sha256((root/name).read_bytes()).hexdigest()
         with tarfile.open(partial,'w:gz',compresslevel=1) as archive:
-            for name in members:archive.add(root/name,arcname=name)
+            for name in members:archive.add(root/name,arcname=name,filter=lambda entry: None if entry.name in ('work/ops/ledger.db-shm','work/baseline/data/homebox.db-shm') else entry)
             body=json.dumps(manifest,indent=2).encode();info=tarfile.TarInfo('deployment-manifest.json');info.size=len(body);info.mode=0o600
             import io
             archive.addfile(info,io.BytesIO(body))

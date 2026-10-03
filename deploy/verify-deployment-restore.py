@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Restore a complete backup to a private sandbox; never replace live files."""
-import hashlib,json,os,pathlib,sqlite3,subprocess,sys,tarfile,time,urllib.request
+import contextlib,hashlib,json,os,pathlib,sqlite3,subprocess,sys,tarfile,time,urllib.request
 root=pathlib.Path('/home/user/Desktop/inventory-system');sys.path.insert(0,str(root/'ops'))
 from homebox import Homebox
 from uuid import uuid4
 backup=sorted((root/'work/backups').glob('deployment-*.tar.gz'))[-1];target=root/'work/restore-check'/(backup.name.removesuffix('.tar.gz')+'-'+str(uuid4())[:8]);target.mkdir(mode=0o700,parents=True,exist_ok=False)
 os.umask(0o077)
 with tarfile.open(backup) as archive:archive.extractall(target,filter='data')
+# SQLite regenerates shared-memory indexes; they are not portable recovery data.
+for db in [target/'work/ops/ledger.db',target/'work/baseline/data/homebox.db']:
+    pathlib.Path(str(db)+'-shm').unlink(missing_ok=True)
 manifest=json.loads((target/'deployment-manifest.json').read_text())
 for name,digest in manifest['sha256'].items():assert hashlib.sha256((target/name).read_bytes()).hexdigest()==digest,name
-with sqlite3.connect(target/'work/ops/ledger.db') as restored,sqlite3.connect(root/'work/ops/ledger.db') as live:
+with contextlib.closing(sqlite3.connect(target/'work/ops/ledger.db')) as restored,contextlib.closing(sqlite3.connect(root/'work/ops/ledger.db')) as live:
     assert restored.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
     for table in ['operations','custody','events','badges','native_jobs','native_job_events']:
         assert restored.execute('SELECT COUNT(*) FROM '+table).fetchone()==live.execute('SELECT COUNT(*) FROM '+table).fetchone(),table
