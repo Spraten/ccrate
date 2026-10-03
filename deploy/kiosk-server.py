@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Loopback read-only prototype using the isolated Homebox demonstration account."""
-import json, pathlib, threading, urllib.request, urllib.error
+import json, os, pathlib, signal, threading, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT=pathlib.Path('/home/user/Desktop/inventory-system')
 BASE='http://127.0.0.1:17745'
@@ -20,6 +20,24 @@ def inventory():
         page+=1
     return items
 class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != '/exit' or self.headers.get('Origin') != 'http://127.0.0.1:17749':
+            self.send_error(403);return
+        profile=str(ROOT/'work/kiosk-browser')
+        targets=[]
+        for entry in pathlib.Path('/proc').iterdir():
+            if not entry.name.isdigit():continue
+            try:
+                args=(entry/'cmdline').read_bytes().split(b'\0')
+                if ('--user-data-dir='+profile).encode() in args and not any(a.startswith(b'--type=') for a in args) and b'chromium' in args[0]:
+                    targets.append(int(entry.name))
+            except (OSError,IndexError):continue
+        if not targets:
+            self.send_error(409);return
+        self.send_response(200);self.send_header('Content-Length','0');self.end_headers()
+        for pid in targets:
+            try:os.kill(pid,signal.SIGTERM)
+            except ProcessLookupError:pass
     def do_GET(self):
         if self.path=='/':
             body=(ROOT/'kiosk/index.html').read_bytes();mime='text/html; charset=utf-8';code=200

@@ -34,3 +34,5 @@ Ports: Homebox 17745, hardware UI 17746, shell 17749. Demo credentials/pepper ar
 # Desktop shortcut
 
 Equipment Terminal.desktop opens the prototype in a dedicated Chromium app window at full screen. deploy/open-kiosk.sh starts the shell server if needed. It does not configure boot startup or restart Homebox.
+
+Touch-only exit: Desktop button with large confirmation controls closes only the dedicated kiosk browser. Reopen using desktop shortcut. No keyboard required.
