@@ -1,6 +1,6 @@
 # Feature
 
-Operational ledger foundation
+Badge checkout and operational ledger
 
 # Problem
 
@@ -28,19 +28,19 @@ Python standard library SQLite and local dependencies only. No network service r
 
 # Upgrade / Migration Considerations
 
-Initial schema only; schema migrations must be explicit before deployment.
+Initial operational schema is unchanged by this integration. Condition is a native Homebox text field; native archive flag takes precedence. Explicit migrations are required for future schema changes.
 
 # Rollback Plan
 
-Modules are not connected to production workflow endpoints; revert project commit. Preserve any future operational data before rollback.
+Prototype checkout endpoints are connected to the isolated demonstration account. Preserve work/ops/ledger.db and its WAL in a consistent backup before rollback. Restore source from Git without deleting operational history. Production account configuration remains pending.
 
 # User Experience
 
-Workflow UI pending admin/session decisions. Shelf stays in Homebox; companion shows custody separately.
+Badge identification, touchscreen cart selection or scanning, removal and one confirmation. Shelf stays in Homebox; item detail resolves the borrower from native group membership. Session ends immediately after success and expires after two idle minutes.
 
 # Proposed Behavior
 
-Journal intent, reserve assets, complete custody/cart atomically, retain unresolved operations and reconcile explicitly.
+Revalidate native group membership and each selected asset at confirmation, require Ready and quantity 1, journal intent, reserve assets and complete custody/cart atomically. Repeated request keys are idempotent. Keep unresolved operations reserved for explicit reconciliation.
 
 # Scope
 
@@ -48,11 +48,11 @@ Operational UUID references, intent/outcome events, current custody projection, 
 
 # Out of Scope
 
-Copied inventory, badge UI, condition policy, cart UI or automatic external-write reconciliation.
+Copied inventory, changes to upstream Homebox, bulk quantity checkout and automatic external-write reconciliation. Return service and different-destination recovery are subsequent work.
 
 # User Decisions
 
-DEC 009 limited ledger and DEC 010 preserve shelf approved. Admin and session behavior pending.
+DEC 008-017 approve native identities, operational ledger, preserved shelf, badge registry, open setup Admin, session end after confirmation, default return shelf, two-minute idle timeout, eight conditions and review-before-Ready.
 
 # Data Model
 
@@ -60,11 +60,11 @@ operations, operation_assets, append-only events and custody projection. Actor/g
 
 # API Changes
 
-None to Homebox; workflow endpoints not enabled yet.
+No upstream API changes. Companion POST /checkout/confirm, GET /api/custody, GET /api/entity and POST /condition use supported Homebox APIs and the approved ledger. Confirmation requires an active badge session; same-origin guards apply to mutations.
 
 # UI Changes
 
-None yet.
+Checkout cart, Scan badge/equipment, touch selection/removal, confirmation, borrower display, condition review/confirmation and touchscreen search keyboard.
 
 # Security Considerations
 
@@ -88,7 +88,7 @@ Implement foundation, verify concurrency/crash persistence, connect native valid
 
 # Integration Tests
 
-No operational endpoint integration yet.
+Live Pi/Homebox integration passes: badge required, unreviewed cart rejected, two-asset touchscreen checkout, repeated confirmation idempotent, native inventory unchanged, borrower visible and session cleared. See docs/checkout-integration-results.json. Synthetic test assets are archived after cleanup; test custody was returned through the ledger API, not the incomplete return UI.
 
 # Hardware Tests
 
@@ -96,8 +96,8 @@ No real checkout yet.
 
 # User Acceptance Tests
 
-Pending badge/admin choices and checkout UI.
+Physical integrated scanner and actual user workflow acceptance remain pending. Browser tests use touch events on native Pi Chromium.
 
 # Definition of Done
 
-Foundation tested. Full checkout is incomplete until native validation, badge/session/UI and recovery integration pass.
+Basic individually tracked asset checkout is implemented and integration-tested. Full plan remains incomplete: live return, alternative destination journaling/reconciliation, Admin recovery UI, bulk quantities, physical workflow acceptance, kits and deployment hardening are outstanding.

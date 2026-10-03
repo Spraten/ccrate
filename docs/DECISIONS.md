@@ -123,3 +123,8 @@ Date: 2026-10-02. User chose two minutes of inactivity. Server enforcement uses 
 ## DEC 016 Equipment States
 
 Date: 2026-10-02. User requested Archived, Retired, Broken and Trashed in addition to Ready, Needs Attention, Maintenance and Quarantined. User clarified that Retired means no longer used and blocked from checkout. Only Ready is checkout eligible. Homebox native archival support and custom fields will be used where appropriate; Trashed preserves a historical record rather than deleting an entity. Existing assets without a recorded state need an explicit initialization policy before checkout.
+
+
+## DEC 017 Existing Asset Review
+
+Date: 2026-10-02. User chose Admin review before checkout. Missing, malformed, unknown or duplicate condition fields resolve to Unreviewed and remain blocked. No automatic Ready initialization. The reversible native text field is named Equipment condition. Native archived=true always blocks checkout. Explicit Admin confirmation is required to change a state.

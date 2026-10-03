@@ -12,6 +12,11 @@ from sessions import Session
 from scan_codes import normalize
 from PIL import Image
 import zxingcpp, qrcode
+from urllib.parse import urlsplit, parse_qs
+from homebox import Homebox
+from checkout import confirm_checkout
+from ledger import Conflict
+from conditions import STATES, condition, checkout_blocker, set_condition
 BASE='http://127.0.0.1:17745'
 lock=threading.Lock()
 ops_path=ROOT/'work/ops'
@@ -30,7 +35,7 @@ def inventory(locations=False):
     items=[]
     page=1
     while True:
-        req=urllib.request.Request(BASE+f'/api/v1/entities?page={page}&pageSize=100&isLocation={str(locations).lower()}',headers={'Authorization':'Bearer '+token})
+        req=urllib.request.Request(BASE+f'/api/v1/entities?page={page}&pageSize=100&includeArchived=true&isLocation={str(locations).lower()}',headers={'Authorization':'Bearer '+token})
         with urllib.request.urlopen(req,timeout=8) as response:data=json.load(response)
         items.extend(data['items'])
         if len(items)>=data['total'] or not data['items']:break
@@ -52,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity'):
+        if self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -65,6 +70,18 @@ class Handler(BaseHTTPRequestHandler):
                         codes=[c.text for c in zxingcpp.read_barcodes(frame)]
                     self.reply_json(200,{'codes':codes});return
                 data=json.loads(raw)
+                if self.path=='/checkout/confirm':
+                    actor=session.current()
+                    if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
+                        result=confirm_checkout(client,ledger,native['defaultGroupId'],actor,data.get('assets',[]),data.get('request_key'),lambda:session.current()==actor)
+                        session.end()
+                    self.reply_json(200,result);return
+                if self.path=='/condition':
+                    if not OPEN_ADMIN:self.send_error(403);return
+                    with lock:entity=set_condition(Homebox(ROOT),data.get('entity_id'),data.get('state'))
+                    self.reply_json(200,{'entity':entity,'condition':condition(entity),'blocker':checkout_blocker(entity)});return
                 if self.path=='/session/activity':
                     self.reply_json(200,{'active':session.current(activity=True) is not None});return
                 if self.path=='/scan':session.current(activity=True)
@@ -99,7 +116,9 @@ class Handler(BaseHTTPRequestHandler):
                     if match:code['entity']=match
                     else:code={'kind':'unknown','reason':'This code is not in this Homebox inventory'}
                 self.reply_json(200,code)
-            except (ValueError,TypeError,AttributeError,OSError,KeyError):self.reply_json(400,{'kind':'invalid','reason':'Could not read the scan'})
+            except Conflict as error:self.reply_json(409,{'error':str(error),'reason':str(error)})
+            except (ValueError,TypeError,AttributeError,KeyError) as error:self.reply_json(400,{'kind':'invalid','error':str(error),'reason':str(error)})
+            except OSError:self.reply_json(503,{'error':'Homebox unavailable; no confirmation received','reason':'Homebox unavailable; try again'})
             return
 
         if self.path != '/exit' or self.headers.get('Origin') != 'http://127.0.0.1:17749':
@@ -120,12 +139,24 @@ class Handler(BaseHTTPRequestHandler):
             try:os.kill(pid,signal.SIGTERM)
             except ProcessLookupError:pass
     def do_GET(self):
+        if urlsplit(self.path).path=='/api/entity':
+            try:
+                entity_id=parse_qs(urlsplit(self.path).query).get('id',[''])[0]
+                entity=Homebox(ROOT).entity(entity_id)
+                self.reply_json(200,{'entity':entity,'condition':condition(entity),'states':STATES,'blocker':checkout_blocker(entity)} )
+            except (ValueError,KeyError):self.reply_json(400,{'error':'Invalid asset'})
+            except OSError:self.reply_json(503,{'error':'Homebox unavailable'})
+            return
         if self.path=='/':
             body=(ROOT/'kiosk/index.html').read_bytes();mime='text/html; charset=utf-8';code=200
-        elif self.path in ('/api/members','/api/badges','/api/session'):
+        elif self.path in ('/api/members','/api/badges','/api/session','/api/custody'):
             try:
                 group,members=native_context()
                 if self.path=='/api/members':data=[{'id':m['id'],'name':m['name']} for m in members]
+                elif self.path=='/api/custody':
+                    data=ledger.custody(group)
+                    names={m['id']:m['name'] for m in members}
+                    for row in data:row['borrower']=names.get(row['actor_id'],'Former Homebox member')
                 elif self.path=='/api/badges':data=badges.list(group) if OPEN_ADMIN else []
                 else:
                     with lock:

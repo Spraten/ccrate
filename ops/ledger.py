@@ -109,3 +109,8 @@ class Ledger:
                 db.execute("UPDATE operations SET status='cancelled' WHERE id=?",(op,));self.event(db,op,'cancelled')
     def unresolved(self):
         with self.connection() as db:return [dict(r) for r in db.execute("SELECT * FROM operations WHERE status IN ('pending','review') ORDER BY created_at")]
+
+    def custody(self,group):
+        group=uuid(group)
+        with self.connection() as db:
+            return [dict(r) for r in db.execute('SELECT * FROM custody WHERE group_id=?',(group,))]

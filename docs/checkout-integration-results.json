@@ -1,0 +1,11 @@
+{
+  "badge_required": true,
+  "unreviewed_cart_rejected": true,
+  "two_asset_touch_checkout": true,
+  "repeat_confirmation_idempotent": true,
+  "native_inventory_unchanged": true,
+  "borrower_visible": true,
+  "session_ends_after_confirmation": true,
+  "browser_errors": [],
+  "cleanup": "Synthetic custody returned through tested ledger API; live return UI not yet implemented"
+}

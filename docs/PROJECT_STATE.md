@@ -1,60 +1,27 @@
-# Current Phase
+# Project state
 
-Scanner integration complete technically; physical camera acceptance pending. Badge and checkout implementation await user decisions, 2026-10-02.
+Authoritative project: /home/user/Desktop/inventory-system, tracked in Git with pinned unmodified Homebox v0.26.2 submodule. Ethernet SSH uses 192.168.1.62. Kiosk is loopback 17749; isolated Homebox demonstration instance is loopback 17745. This is a prototype, not the completed deployment.
 
-# Working
+## Verified
 
-- Pi desktop project, pinned unmodified Homebox v0.26.2 submodule.
-- Homebox loopback 17745, hardware diagnostic 17746, kiosk 17749.
-- Approved six-button home, touch Desktop exit, full-screen desktop shortcut.
-- Shortcut starts existing baseline after reboot without registering or seeding data.
-- Native read-only search/browse/details and on-demand camera scanner.
-- Real QR decoding/native asset resolution passed; Pi browser tests passed with a synthetic camera and no JavaScript errors.
-- Nine demo locations and six demo assets; 27 total entities including previous recon data.
-- Native group member lookup verified.
-- Cold backup restore verifies entity identities, attachment bytes and API-key continuity. Relative blob storage prefix fixed; original synthetic files preserved.
+- Git clone and source are on the Pi desktop; fullscreen Equipment Terminal shortcut and touch Desktop exit are installed.
+- Original printer and camera hardware tests accepted by user. On-demand camera QR decoding and browser start/cancel are integrated; physical integrated scanning acceptance remains unverified.
+- Native inventory reads, Find Item, Browse Stock, touch search keyboard, asset details and native shelf display.
+- Native Homebox accounts identify badge holders. Approved hashed random-token registry supports issuance and revocation. Open setup Admin is explicitly approved temporarily.
+- Server-enforced two-minute badge inactivity timeout; touches/scans extend it, background polling does not. Expiry clears session and cart. Confirmation ends the session immediately.
+- Eight approved states use native Equipment condition field and native archive flag. Unreviewed is blocked until Admin explicitly marks Ready. Only Ready is eligible. Native update metadata preservation and touch confirmation pass live integration.
+- Individually tracked assets (quantity 1) can be checked out by badge, touch cart or scan and one confirmation. Native membership, condition and custody are revalidated. The ledger completes the cart atomically and idempotently. Native inventory is unchanged; borrower is resolved and displayed separately.
+- 39 unit tests pass. Scanner/touch keyboard, conditions and checkout live Pi Chromium integration tests pass with no browser errors. Results are in corresponding docs/*-integration-results.json files.
+- Homebox cold backup/restore, attachment bytes and API-key continuity verified. Recovery helpers use correct relative storage prefix. External backup media and full deployment recovery remain incomplete.
 
-# Confirmed Decisions
+## Current decision needed
 
-- Unmodified Homebox with companion interaction layer; native inventory authority.
-- Six large home buttons.
-- Badge only, no PIN, for prototype.
-- Scan button; camera stops on cancel or resolved item.
+May any badge holder return another person's equipment, or must it be the borrower? A clickable question is open. Routine return defaults to assigned shelf; a location scan is needed only for a different destination.
 
-# Required User Decisions
+## Remaining work from the original plan
 
-- Badge people: Homebox accounts or borrower records.
-- Checkout persistence: limited event ledger, native fields with reduced accountability scope, or defer.
-- Physical scanner acceptance still awaiting user result.
+Live return and alternate-destination mutation/recovery; return condition workflow; Admin unresolved-operation recovery; native user setup; badge/asset/location label design and printing; kits and nested contents; maps and navigation; offline product catalog and enrollment; problem reports and maintenance; activity/history views; consistent companion backup and restore; runtime services/startup/offline hardening; production credentials/Admin access; bulk quantities; physical scanner/printer and user acceptance of the integrated workflows.
 
-# Not Implemented
+## Limits
 
-Badge enrollment/session, custody operations, condition workflow, kits, map, catalog, enrollment/label workflow, administration/permissions, independent backup media, final deployment and offline/recovery/user acceptance remain in original plan. No ledger or duplicate inventory database created. Future product decisions will be asked at the relevant phase.
-
-# Known Limits
-
-Earlier Wi-Fi/USB instability; long-duration hardware reliability unproven. No RTC. Source/API schema drift. Offline timekeeping unresolved. No boot services installed. Independent media and abrupt power loss recovery untested.
-
-# Resume
-
-Ethernet 192.168.1.62; Wi-Fi 192.168.1.61. SSH HostKeyAlias=192.168.1.61 verifies the known Pi key over Ethernet. Folder /home/user/Desktop/inventory-system. Private credentials/pepper under restricted work/baseline; never expose them. Artifacts under ignored work/. deploy/start-baseline.py starts only the existing demo; deploy/complete-baseline.py seeds and creates a new backup, so do not rerun unnecessarily. docs/05-scan-integration.md and docs/06-native-accountability-gap.md contain evidence and the storage proposal. Latest recovery evidence in recovery-verification-results.json.
-
-
-# Latest approved work
-
-Native Homebox identity, limited operational ledger, preserved shelf during checkout and hashed badge registry approved. ops/ledger.py and ops/badges.py implemented; 24 total tests pass on Pi (11 ledger, 7 badges, 6 scan). Modules not connected to mutation endpoints. No real custody changes or badges issued. Next gate: Admin authentication choice; then native validation and badge/session UI. Physical integrated camera result still pending. See feature plans 003/004 for exact current scope.
-
-
-# Badge integration follow-up
-
-Open Admin temporarily approved and enabled. Live native member listing, test-badge issue/revoke, badge identification and touch End session integrated and verified (badge-integration-results.json). Companion DB created at work/ops/ledger.db with private parent directory. No real custody transactions yet. End user session after confirmed transactions approved. Pending choices: idle timeout and return destination default; physical QR acceptance remains pending. Checkout and return buttons still previews.
-
-
-## Session and condition follow-up
-
-Two-minute server-enforced idle expiry is implemented. Browser activity extends sessions; polling does not. All 28 unit tests pass, including expiry boundaries, activity extension and prevention of revival. Live native-user badge issuance, QR decoding, identity, End session and revocation pass without browser errors. Routine returns default to the native assigned shelf. Approved states are Ready, Needs Attention, Maintenance, Quarantined, Archived, Retired, Broken and Trashed; checkout/return remain disabled while their service integration is built. State initialization for existing assets is pending.
-
-
-## Touchscreen search
-
-Find Item and Browse Stock now include an application keyboard with letters, digits, space, hyphen, Clear and Backspace. All keys and Show results fit the 800x480 display. The input uses no system keyboard. Pi Chromium touch tests search for Demo Drone using key taps, correct a typo, open results and verify scanner start/cancel and asset resolution without browser errors. Native condition initialization remains pending user input; checkout/return remain previews.
+The current account and assets are synthetic. Two checkout proof assets remain archived to preserve native references in operational history. No real equipment has been checked out by these tests. Trashed retains an asset record. The return UI is still a preview. Native condition updates perform read/modify/PUT; concurrent edits made directly in Homebox cannot be made atomic with companion updates by this API. Production concurrency policy and configuration require later review.

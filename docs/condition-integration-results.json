@@ -1,0 +1,9 @@
+{
+  "native_states_roundtrip": true,
+  "archived_visible_in_inventory": true,
+  "metadata_preserved": true,
+  "unreviewed_blocked": true,
+  "only_ready_checkout_eligible": true,
+  "touch_review_requires_confirmation": true,
+  "browser_errors": []
+}
