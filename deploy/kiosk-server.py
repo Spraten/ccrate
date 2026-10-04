@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Loopback Homebox companion using the isolated native demonstration account."""
+"""Loopback Homebox companion with browser-owned badge sessions."""
 import base64, io, json, os, pathlib, signal, sys, threading, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT=pathlib.Path('/home/user/Desktop/inventory-system')
@@ -8,7 +8,7 @@ sys.path.insert(0,str(ROOT/'work/hardware/python'))
 sys.path.insert(0,str(ROOT/'ops'))
 from ledger import Ledger
 from badges import Badges
-from sessions import Session
+from sessions import Sessions
 from scan_codes import normalize
 from PIL import Image
 import zxingcpp, qrcode
@@ -43,11 +43,11 @@ badges=Badges(ledger)
 native_jobs=NativeJobs(ledger)
 imports=Imports(ops_path/'imports.db')
 workshop=Workshop(ops_path/'workshop.db')
-session=Session(timeout=120)
+sessions=Sessions()
 # Explicitly approved temporary setup mode; loopback only.
 OPEN_ADMIN=True
 def inventory(locations=False):
-    # Temporary demo account only. Tokens never reach the browser or logs.
+    # Native service credentials stay on the Pi. Tokens never reach the browser or logs.
     account=json.loads((ROOT/'work/baseline/test-account.json').read_text())
     req=urllib.request.Request(BASE+'/api/v1/users/login',data=json.dumps({'username':account['email'],'password':account['password']}).encode(),headers={'Content-Type':'application/json'})
     with urllib.request.urlopen(req,timeout=8) as response:token=json.load(response)['token'].removeprefix('Bearer ')
@@ -71,12 +71,34 @@ def native_context():
     members=get('/api/v1/groups/members')
     return actor['defaultGroupId'],members
 
+def camera_state():
+    import subprocess
+    devices=sorted(pathlib.Path('/dev/v4l/by-id').glob('*C920*-video-index0'))
+    if not devices:return {'supported':False}
+    device=str(devices[0])
+    try:
+        result=subprocess.run(['v4l2-ctl','-d',device,'--get-ctrl=focus_absolute,focus_automatic_continuous'],check=True,capture_output=True,text=True,timeout=3)
+        values={line.split(':')[0].strip():int(line.split(':')[1]) for line in result.stdout.splitlines() if ':' in line}
+        return {'supported':True,'device':device,'value':values['focus_absolute'],'mode':'auto' if values['focus_automatic_continuous'] else 'manual'}
+    except (subprocess.SubprocessError,KeyError,ValueError,OSError):return {'supported':False}
+
 class Handler(BaseHTTPRequestHandler):
+    @property
+    def session(self):
+        from uuid import UUID
+        client = self.headers.get('X-Homebox-Client', 'legacy')
+        if client != 'legacy':
+            client = str(UUID(client))
+        if not hasattr(self,'_owned_session'):self._owned_session=sessions.get(client)
+        return self._owned_session
+
     def reply_json(self,code,data):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/workshop/get','/workshop/save','/workshop/move') or self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/camera/focus','/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
+        try:self.session
+        except ValueError as error:self.reply_json(400,{'error':str(error)});return
+        if self.path in ('/workshop/get','/workshop/save','/workshop/move') or self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/scan/cancel','/operation/status','/camera/focus','/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -94,14 +116,17 @@ class Handler(BaseHTTPRequestHandler):
                 data=json.loads(raw)
                 if self.path=='/camera/focus':
                     import subprocess
-                    device='/dev/video0'
-                    if 'C920' not in pathlib.Path('/sys/class/video4linux/video0/name').read_text():raise ValueError('Pi C920 camera not found')
+                    camera=camera_state()
+                    if not camera['supported']:raise ValueError('Pi C920 focus controls unavailable')
+                    device=camera['device']
                     mode=data.get('mode')
                     if mode not in ('auto','manual'):raise ValueError('Unknown focus mode')
                     value=data.get('value',150)
                     if mode=='manual' and (type(value) is not int or value<0 or value>250 or value%5):raise ValueError('Focus must be 0 to 250 in steps of 5')
-                    subprocess.run(['v4l2-ctl','-d',device,'--set-ctrl=focus_automatic_continuous='+('1' if mode=='auto' else '0')],check=True,capture_output=True,timeout=5)
-                    if mode=='manual':subprocess.run(['v4l2-ctl','-d',device,'--set-ctrl=focus_absolute='+str(value)],check=True,capture_output=True,timeout=5)
+                    try:
+                        subprocess.run(['v4l2-ctl','-d',device,'--set-ctrl=focus_automatic_continuous='+('1' if mode=='auto' else '0')],check=True,capture_output=True,timeout=5)
+                        if mode=='manual':subprocess.run(['v4l2-ctl','-d',device,'--set-ctrl=focus_absolute='+str(value)],check=True,capture_output=True,timeout=5)
+                    except (subprocess.SubprocessError,OSError):raise ValueError('Camera focus could not be changed. Reconnect the webcam and retry.')
                     self.reply_json(200,{'mode':mode,'value':value});return
                 if self.path.startswith('/workshop/'):
                     if self.path!='/workshop/get' and not OPEN_ADMIN:self.send_error(403);return
@@ -115,7 +140,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not OPEN_ADMIN:self.send_error(403);return
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId'];action=self.path.rsplit('/',1)[1]
-                        if action=='upload':result=imports.upload(group,session.current() or native['id'],data)
+                        if action=='upload':result=imports.upload(group,self.session.current() or native['id'],data)
                         elif action=='list':result=imports.list(group)
                         elif action=='map':result=imports.map(client,group,data)
                         elif action=='get':result=imports.sync(client,native_jobs,group,data)
@@ -126,17 +151,17 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/badge/print':
                     if not OPEN_ADMIN:self.send_error(403);return
                     with lock:
-                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=print_badge(client,badges,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),data.get('badge_id'),data.get('code'))
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=print_badge(client,badges,native_jobs,native['defaultGroupId'],self.session.current() or native['id'],data.get('request_key'),data.get('badge_id'),data.get('code'))
                     self.reply_json(200,result);return
                 if self.path=='/categories/create':
                     if not OPEN_ADMIN:self.send_error(403);return
                     with lock:
-                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=create_category(client,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),data.get('input',{}))
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=create_category(client,native_jobs,native['defaultGroupId'],self.session.current() or native['id'],data.get('request_key'),data.get('input',{}))
                     self.reply_json(200,result);return
                 if self.path=='/maintenance/complete':
                     if not OPEN_ADMIN:self.send_error(403);return
                     with lock:
-                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=submit_review(client,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),data,'complete_maintenance')
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=submit_review(client,native_jobs,native['defaultGroupId'],self.session.current() or native['id'],data.get('request_key'),data,'complete_maintenance')
                     self.reply_json(200,result);return
                 if self.path=='/kit/save':
                     if not OPEN_ADMIN:self.send_error(403);return
@@ -157,21 +182,21 @@ class Handler(BaseHTTPRequestHandler):
                     if not OPEN_ADMIN:self.send_error(403);return
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
-                        result=label_preview(client,data.get('entity_id')) if self.path=='/label/preview' else print_label(client,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),data.get('entity_id'))
+                        result=label_preview(client,data.get('entity_id')) if self.path=='/label/preview' else print_label(client,native_jobs,native['defaultGroupId'],self.session.current() or native['id'],data.get('request_key'),data.get('entity_id'))
                     self.reply_json(200,result);return
                 if self.path in ('/locations/create','/catalog/create','/enroll/confirm','/problem/confirm'):
                     if self.path not in ('/enroll/confirm','/problem/confirm') and not OPEN_ADMIN:self.send_error(403);return
-                    actor,generation=session.snapshot()
+                    actor,generation=self.session.snapshot()
                     if self.path in ('/enroll/confirm','/problem/confirm'):
                         if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
-                        if data.get('session_generation')!=generation or data.get('session_instance')!=session.instance:raise Conflict('Badge session changed; review your selection again')
+                        if data.get('session_generation')!=generation or data.get('session_instance')!=self.session.instance:raise Conflict('Badge session changed; review your selection again')
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId']
                         if actor and actor not in {m['id'] for m in client.call('/api/v1/groups/members')}:raise Conflict('Badge holder is no longer a member')
                         kind={'/locations/create':'create_location','/catalog/create':'create_template','/enroll/confirm':'create_asset','/problem/confirm':'report_problem'}[self.path]
-                        if self.path in ('/enroll/confirm','/problem/confirm') and session.snapshot()!=(actor,generation):raise Conflict('Session ended; scan your badge again')
+                        if self.path in ('/enroll/confirm','/problem/confirm') and self.session.snapshot()!=(actor,generation):raise Conflict('Session ended; scan your badge again')
                         result=submit_problem(client,native_jobs,group,actor,data.get('request_key'),data.get('input',{})) if kind=='report_problem' else submit(client,native_jobs,group,actor or native['id'],kind,data.get('request_key'),data.get('input',{}))
-                        if self.path in ('/enroll/confirm','/problem/confirm'):session.end(generation)
+                        if self.path in ('/enroll/confirm','/problem/confirm'):self.session.end(generation)
                     self.reply_json(200,result);return
                 if self.path in ('/map/room','/map/object','/map/remove'):
                     if not OPEN_ADMIN:self.send_error(403);return
@@ -193,33 +218,44 @@ class Handler(BaseHTTPRequestHandler):
                         else:result=recover(client,ledger,group,data.get('id'),data.get('outcome'))
                     self.reply_json(200,result);return
                 if self.path=='/return/confirm':
-                    actor,generation=session.snapshot()
+                    actor,generation=self.session.snapshot()
                     if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
-                    if data.get('session_generation')!=generation or data.get('session_instance')!=session.instance:raise Conflict('Badge session changed; review your selection again')
+                    if data.get('session_generation')!=generation or data.get('session_instance')!=self.session.instance:raise Conflict('Badge session changed; review your selection again')
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
-                        result=confirm_return(client,ledger,native['defaultGroupId'],actor,data.get('targets'),data.get('request_key'),lambda:session.snapshot()==(actor,generation),session.scans(generation),data.get('kit_versions'))
-                        session.end(generation)
+                        result=confirm_return(client,ledger,native['defaultGroupId'],actor,data.get('targets'),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'))
+                        self.session.end(generation)
                     self.reply_json(200,result);return
                 if self.path=='/checkout/confirm':
-                    actor,generation=session.snapshot()
+                    actor,generation=self.session.snapshot()
                     if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
-                    if data.get('session_generation')!=generation or data.get('session_instance')!=session.instance:raise Conflict('Badge session changed; review your selection again')
+                    if data.get('session_generation')!=generation or data.get('session_instance')!=self.session.instance:raise Conflict('Badge session changed; review your selection again')
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
-                        result=confirm_checkout(client,ledger,native['defaultGroupId'],actor,data.get('assets',[]),data.get('request_key'),lambda:session.snapshot()==(actor,generation),session.scans(generation),data.get('kit_versions'))
-                        session.end(generation)
+                        result=confirm_checkout(client,ledger,native['defaultGroupId'],actor,data.get('assets',[]),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'))
+                        self.session.end(generation)
                     self.reply_json(200,result);return
                 if self.path=='/condition':
                     if not OPEN_ADMIN:self.send_error(403);return
                     with lock:
-                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=submit_review(client,native_jobs,native['defaultGroupId'],session.current() or native['id'],data.get('request_key'),{'entity_id':data.get('entity_id'),'state':data.get('state')});entity=client.entity(result['entity_id'])
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];result=submit_review(client,native_jobs,native['defaultGroupId'],self.session.current() or native['id'],data.get('request_key'),{'entity_id':data.get('entity_id'),'state':data.get('state')});entity=client.entity(result['entity_id'])
                     self.reply_json(200,{'entity':entity,'condition':condition(entity),'blocker':checkout_blocker(entity)});return
                 if self.path=='/session/activity':
-                    self.reply_json(200,{'active':session.current(activity=True) is not None});return
-                if self.path=='/scan':session.current(activity=True)
+                    self.reply_json(200,{'active':self.session.current(activity=True) is not None});return
+                if self.path=='/operation/status':
+                    from ledger import uuid
+                    group,_=native_context()
+                    # Wait for an in-flight writer before deciding a key made no change.
+                    with lock:prior=ledger.request(group,uuid(data.get('request_key')))
+                    self.reply_json(200,{'status':prior['status'] if prior else 'not_started',
+                                         'id':prior['id'] if prior else None});return
+                if self.path=='/scan/cancel':
+                    from ledger import uuid
+                    self.session.cancel_scan(uuid(data.get('scan_token')))
+                    self.reply_json(200,{'cancelled':True});return
+                if self.path=='/scan':self.session.current(activity=True)
                 if self.path=='/session/end':
-                    if not data.get('expected_instance') or data.get('expected_instance')==session.instance:session.end(data.get('expected_generation'))
+                    if not data.get('expected_instance') or data.get('expected_instance')==self.session.instance:self.session.end(data.get('expected_generation'))
                     self.reply_json(200,{'ended':True});return
                 if self.path in ('/badge/issue','/badge/revoke'):
                     if not OPEN_ADMIN:self.send_error(403);return
@@ -231,15 +267,21 @@ class Handler(BaseHTTPRequestHandler):
                         self.reply_json(200,badge)
                     else:
                         result=badges.revoke(group,data.get('id'))
-                        session.end()
+                        # Revocation ends every terminal session for this badge holder.
+                        for badge in badges.list(group):
+                            if badge['id']==data.get('id'):sessions.revoke_user(badge['user_id'])
                         self.reply_json(200,{'revoked':result})
                     return
                 if isinstance(data.get('code'),str) and data['code'].startswith(Badges.PREFIX):
                     group,members=native_context();user=badges.resolve(group,data['code'],[m['id'] for m in members])
                     if user:
                         name=next(m['name'] for m in members if m['id']==user)
-                        generation=session.start(user)
-                        self.reply_json(200,{'kind':'user','user':{'id':user,'name':name},'generation':generation,'instance':session.instance})
+                        from ledger import uuid
+                        token=uuid(data['scan_token']) if data.get('scan_token') else None
+                        generation=self.session.start(user,token)
+                        if generation is None:
+                            self.reply_json(200,{'kind':'cancelled'});return
+                        self.reply_json(200,{'kind':'user','user':{'id':user,'name':name},'generation':generation,'instance':self.session.instance})
                     else:self.reply_json(200,{'kind':'invalid','reason':'Badge unknown, revoked, or no longer a group member'})
                     return
                 code=normalize(data.get('code'))
@@ -247,7 +289,7 @@ class Handler(BaseHTTPRequestHandler):
                     with lock:items=inventory()+inventory(True)
                     match=next((e for e in items if ('asset_id' in code and e.get('assetId')==code['asset_id']) or ('entity_id' in code and e['id']==code['entity_id'])),None)
                     if match:
-                        code['entity']=match;session.record_scan(match['id'])
+                        code['entity']=match;self.session.record_scan(match['id'])
                     else:code={'kind':'unknown','reason':'This code is not in this Homebox inventory'}
                 self.reply_json(200,code)
             except Conflict as error:self.reply_json(409,{'error':str(error),'reason':str(error)})
@@ -255,7 +297,7 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:self.reply_json(503,{'error':'Homebox unavailable; no confirmation received','reason':'Homebox unavailable; try again'})
             return
 
-        if self.path != '/exit' or self.headers.get('Origin') != 'http://127.0.0.1:17749':
+        if self.headers.get('X-Homebox-Client-Mode') == 'editor' or self.path != '/exit' or self.headers.get('Origin') != 'http://127.0.0.1:17749':
             self.send_error(403);return
         profile=str(ROOT/'work/kiosk-browser')
         targets=kiosk_pids(profile)
@@ -269,6 +311,11 @@ class Handler(BaseHTTPRequestHandler):
                 except ProcessLookupError:pass
         timer=threading.Timer(0.3,close_window);timer.daemon=True;timer.start()
     def do_GET(self):
+        if self.path.startswith('/api/'):
+            try:self.session
+            except ValueError as error:self.reply_json(400,{'error':str(error)});return
+        if self.path=='/api/camera':
+            self.reply_json(200,camera_state());return
         if urlsplit(self.path).path=='/api/file':
             try:
                 from ledger import uuid
@@ -300,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if urlsplit(self.path).path=='/api/kit':
             try:
-                data=kit_manifest(Homebox(ROOT),parse_qs(urlsplit(self.path).query).get('id',[None])[0]);data['verified']=list(session.scans(session.snapshot()[1]));self.reply_json(200,data)
+                data=kit_manifest(Homebox(ROOT),parse_qs(urlsplit(self.path).query).get('id',[None])[0]);data['verified']=list(self.session.scans(self.session.snapshot()[1]));self.reply_json(200,data)
             except (ValueError,OSError):self.reply_json(400,{'error':'Kit manifest or native equipment needs review'})
             return
         if self.path=='/api/system':
@@ -323,8 +370,8 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,TypeError,KeyError):self.reply_json(400,{'error':'Map or location needs review'})
             except OSError:self.reply_json(503,{'error':'Homebox map unavailable'})
             return
-        if self.path=='/api/session' and session.current() is None:
-            self.reply_json(200,{'user':None,'generation':session.snapshot()[1],'instance':session.instance});return
+        if self.path=='/api/session' and self.session.current() is None:
+            self.reply_json(200,{'user':None,'generation':self.session.snapshot()[1],'instance':self.session.instance});return
         if urlsplit(self.path).path=='/api/history':
             try:
                 group,members=native_context();names={m['id']:m['name'] for m in members}
@@ -368,17 +415,19 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,KeyError):self.reply_json(400,{'error':'Invalid asset'})
             except OSError:self.reply_json(503,{'error':'Homebox unavailable'})
             return
-        if self.path=='/':
+        if urlsplit(self.path).path=='/':
             body=(ROOT/'kiosk/index.html').read_bytes();mime='text/html; charset=utf-8';code=200
         elif self.path=='/checkout-ui.js':
             body=(ROOT/'kiosk/checkout-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/workshop-ui.js':
             body=(ROOT/'kiosk/workshop-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
+        elif self.path in ('/workflow-ui.js','/return-ui.js'):
+            body=(ROOT/'kiosk'/self.path.lstrip('/')).read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/import-ui.js':
             body=(ROOT/'kiosk/import-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path in ('/api/members','/api/badges','/api/session','/api/custody'):
             try:
-                snapshot=session.snapshot()
+                snapshot=self.session.snapshot()
                 group,members=native_context()
                 if self.path=='/api/members':data=[{'id':m['id'],'name':m['name']} for m in members]
                 elif self.path=='/api/custody':
@@ -389,8 +438,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     with lock:
                         member=next((m for m in members if m['id']==snapshot[0]),None)
-                        if not member:session.end(snapshot[1])
-                    data={'user':{'id':member['id'],'name':member['name']} if member else None,'generation':snapshot[1],'instance':session.instance}
+                        if not member:self.session.end(snapshot[1])
+                    data={'user':{'id':member['id'],'name':member['name']} if member else None,'generation':snapshot[1],'instance':self.session.instance}
                 self.reply_json(200,data)
             except (OSError,ValueError,KeyError):self.reply_json(503,{'error':'Homebox unavailable'})
             return

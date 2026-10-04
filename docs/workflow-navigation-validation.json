@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-04",
+  "unit_tests": 122,
+  "http_tests": 6,
+  "browser": {
+    "fixture_only": true,
+    "live_writes": 0,
+    "passed": 35,
+    "scenarios": [
+      "Checkout scan \u2192 review \u2192 Back \u2192 confirm \u2192 Done",
+      "Known rejection allows cart correction",
+      "Uncertain confirmation exposes recovery without blind retry",
+      "Manual Back cancels late badge response",
+      "Badge change clears old cart and task",
+      "Global navigation guards drafts and clears hidden scan modes",
+      "Return condition, shelf, review, Back, confirmation and receipt",
+      "Search \u2192 detail \u2192 history/files \u2192 Back retains query",
+      "CSV Previous/Next/summary retain edits; explicit save persists",
+      "Laptop manual keyboard, invalid-code recovery and local disconnect",
+      "Touch keyboard close keeps edits; leaving offers keep/discard",
+      "Slow history response cannot replace Home",
+      "Pending confirmation prevents conflicting navigation",
+      "Enrollment, Admin form rejection, Back and workshop view controls",
+      "Duplicate and wrong-type scans cannot add invalid checkout items",
+      "Blocked asset stays out of cart; picker has a return path",
+      "Expired identity ends task and clears selected items",
+      "Camera permission failure offers Cancel and manual entry",
+      "Label preview failure retains a working Back path",
+      "Back from an edited Admin form requires explicit discard",
+      "Rejected return allows correction and removal",
+      "Unknown return can open recovery, Back and reconcile completion",
+      "Empty stock has a usable return to Home",
+      "Kit cancel, verification and use preserve the cart workflow",
+      "Problem report review/Back retains note; rejection permits correction",
+      "Enrollment review/Back retains draft and handles rejection",
+      "Location and product forms have correction and Back after rejection",
+      "Backup review can be canceled without starting a backup",
+      "Touch kiosk keeps native browser links out of the routine flow",
+      "Network failure during manual entry keeps Back usable",
+      "Uncertain outcome cannot be discarded; recovery remains within touch viewport",
+      "Photo camera failure can be canceled back to the draft",
+      "Delayed recovery status cannot replace a newer route",
+      "Maintenance rejection permits correction or Cancel",
+      "Long form keeps Back visible while scrolling to its action"
+    ]
+  },
+  "live_smoke": {
+    "live_navigation_passed": 10,
+    "steps": [
+      "Check Out and Home",
+      "Return and Home",
+      "Find Item and Home",
+      "Browse Stock and Home",
+      "Workshop and Home",
+      "Add Equipment and Home",
+      "Manual entry Back",
+      "Admin, System, Recovery and Back",
+      "Live Storage and Home",
+      "Separate editor client and local disconnect"
+    ],
+    "inventory_mutations": 0,
+    "custody_mutations": 0,
+    "prints": 0,
+    "page_errors": []
+  },
+  "review": {
+    "unresolved_P1_P2_findings": 0,
+    "corrected_during_review": [
+      "late recovery-status response",
+      "workshop editor stale response",
+      "maintenance rejection control"
+    ],
+    "scope": "code review and fixture interactions; physical QR/print completion was not repeated"
+  },
+  "native_homebox_modified": false
+}
