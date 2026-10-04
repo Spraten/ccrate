@@ -165,5 +165,12 @@ class Ledger:
                 query+=' AND EXISTS(SELECT 1 FROM operation_assets a WHERE a.operation_id=o.id AND a.entity_id=?)';args.append(uuid(entity))
             query+=' ORDER BY o.created_at DESC LIMIT ?';args.append(min(max(int(limit),1),100))
             result=[dict(r) for r in db.execute(query,args)]
-            for row in result:row['assets']=[r[0] for r in db.execute('SELECT entity_id FROM operation_assets WHERE operation_id=?',(row['id'],))]
+            for row in result:
+                row['assets']=[r[0] for r in db.execute('SELECT entity_id FROM operation_assets WHERE operation_id=?',(row['id'],))]
+                row['return_notes']=[]
+                if row['action']=='return' and row['status']=='completed':
+                    context=db.execute('SELECT payload FROM operation_context WHERE operation_id=?',(row['id'],)).fetchone()
+                    payload=json.loads(context[0]) if context else {}
+                    completed=db.execute("SELECT created_at FROM events WHERE operation_id=? AND kind='completed' ORDER BY sequence LIMIT 1",(row['id'],)).fetchone()
+                    row['return_notes']=[dict(n,author=payload.get('note_author','Homebox member'),created_at=completed[0] if completed else row['created_at']) for n in payload.get('return_notes',[]) if not entity or n['entity_id']==uuid(entity)]
             return result

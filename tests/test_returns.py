@@ -1,7 +1,7 @@
 import copy,pathlib,tempfile,unittest
 from uuid import uuid4
 from ledger import Ledger,Conflict
-from returns import confirm_return,recover
+from returns import confirm_return,recover,normalize_targets
 
 
 class Client:
@@ -78,5 +78,40 @@ class Tests(unittest.TestCase):
         self.client.entities[self.asset]['fields'][0]['textValue']='Retired'
         with self.assertRaises(Conflict):recover(self.client,self.ledger,self.group,op['id'],'complete')
 
+
+class NoteTests(Tests):
+    def test_note_without_condition_preserves_native_and_retries_once(self):
+        before=self.client.entity(self.asset);key=str(uuid4())
+        result=self.confirm(key=key,target={'return_note':' Was dirty, returned clean '})
+        self.assertEqual(result,self.confirm(key=key,target={'return_note':'Was dirty, returned clean'}))
+        self.assertEqual(before,self.client.entity(self.asset));self.assertFalse(self.client.writes)
+        row=self.ledger.history(self.group,self.asset)[0]
+        self.assertEqual(row['return_notes'][0]['text'],'Was dirty, returned clean')
+        events=self.ledger.detail(self.group,result['id'])['events']
+        self.assertEqual(row['return_notes'][0]['created_at'],next(e['created_at'] for e in events if e['kind']=='completed'))
+        with self.assertRaises(Conflict):self.confirm(key=key,target={'return_note':'Different note'})
+    def test_empty_note_preserves_legacy_intent_and_invalid_notes_rejected(self):
+        plain=normalize_targets([{'entity_id':self.asset}])
+        self.assertEqual(plain,normalize_targets([{'entity_id':self.asset,'return_note':'  '}]))
+        for note in (123,'x'*1001):
+            with self.assertRaises(ValueError):normalize_targets([{'entity_id':self.asset,'return_note':note}])
+    def test_recovery_publishes_note_only_when_completed(self):
+        self.client.fail_patch=True
+        with self.assertRaises(Conflict):self.confirm(target={'destination_id':self.other,'return_note':'Cleaned'})
+        self.assertEqual(self.ledger.history(self.group,self.asset)[0]['return_notes'],[])
+        op=self.ledger.unresolved()[0];self.client.fail_patch=False
+        recover(self.client,self.ledger,self.group,op['id'],'complete')
+        self.assertEqual(self.ledger.history(self.group,self.asset)[0]['return_notes'][0]['text'],'Cleaned')
+    def test_cancel_does_not_publish_note(self):
+        self.client.fail_put=True
+        with self.assertRaises(Conflict):self.confirm(target={'condition':'Broken','return_note':'Inspection'})
+        op=self.ledger.unresolved()[0];recover(self.client,self.ledger,self.group,op['id'],'cancel')
+        self.assertEqual(self.ledger.history(self.group,self.asset)[0]['return_notes'],[])
+    def test_author_snapshot_and_entity_filter(self):
+        original=self.client.call
+        self.client.call=lambda path,method='GET',data=None: [{'id':self.returner,'name':'Andreas'}] if path=='/api/v1/groups/members' else original(path,method,data)
+        self.confirm(target={'return_note':'Clean'})
+        self.assertEqual(self.ledger.history(self.group,self.asset)[0]['return_notes'][0]['author'],'Andreas')
+        self.assertEqual(self.ledger.history(self.group,self.other),[])
 
 if __name__=='__main__':unittest.main()

@@ -101,6 +101,23 @@ with sync_playwright() as pw:
  def returning(p,s,*_):
   s['held']=True;start(p,'Return');p.evaluate("routeScan('TOOL')");p.get_by_role('button',name='Condition',exact=True).tap();p.get_by_role('button',name='Broken',exact=True).tap();p.get_by_role('button',name='Condition',exact=True).tap();p.get_by_role('button',name='Back',exact=True).first.tap();p.get_by_role('button',name='Shelf',exact=True).tap();p.get_by_role('button',name='Keep assigned shelf',exact=True).tap();p.get_by_role('button',name='Review return',exact=True).tap();p.screenshot(path=str(OUTPUT/'return-review.png'));assert p.evaluate('returnCart[0].condition')=='Broken';p.get_by_role('button',name='Back to items',exact=True).tap();p.get_by_role('button',name='Review return',exact=True).tap();s['confirmation']='success';p.get_by_role('button',name='Confirm return',exact=True).tap();p.get_by_role('heading',name='Return complete',exact=True).wait_for();p.get_by_role('button',name='Done',exact=True).tap()
  check('Return condition, shelf, review, Back, confirmation and receipt',returning)
+ def note_flow(p,s,pending,requests,reply):
+  s['held']=True;start(p,'Return');p.evaluate("routeScan('TOOL')")
+  p.get_by_role('button',name='Add note',exact=True).tap()
+  p.get_by_label('Note',exact=True).tap();p.get_by_role('button',name='Key A',exact=True).tap();p.get_by_role('button',name='Done',exact=True).tap()
+  p.get_by_role('button',name='Save note',exact=True).tap()
+  assert p.evaluate('returnCart[0].return_note')=='a'
+  p.get_by_role('button',name='Edit note',exact=True).tap();p.get_by_role('button',name='Cancel',exact=True).tap()
+  p.get_by_role('button',name='Review return',exact=True).tap();p.get_by_text('Return note: a',exact=True).wait_for()
+  s['confirmation']='success';p.get_by_role('button',name='Confirm return',exact=True).tap();p.get_by_role('heading',name='Return complete',exact=True).wait_for()
+  assert next(data for path,data,_ in requests if path=='/return/confirm')['targets'][0]['return_note']=='a'
+ check('Touch return note saves, cancels edit, reviews and submits without condition change',note_flow)
+ def note_history(p,s,pending,requests,reply):
+  s['delay']='/api/history';p.evaluate('void showHistory()');p.wait_for_timeout(80)
+  reply(pending['/api/history'],[{'action':'return','status':'completed','actor':'Andreas','created_at':'2026-10-04T22:43:00Z','assets':[],'return_notes':[{'text':'Was dirty, returned clean','author':'Andreas','created_at':'2026-10-04T22:43:00Z'}]}])
+  p.get_by_text('Was dirty, returned clean',exact=True).wait_for();p.get_by_text('Andreas · 10/04/2026, 18:43 EDT',exact=True).wait_for()
+ check('Return note history displays author and Eastern daylight time',note_history)
+
  def search(p,s,*_):
   p.locator('[data-action="Find Item"]').tap();p.get_by_role('button',name=TOOL['name']+' 000-002 · Fixture shelf · Ready',exact=False).wait_for();p.evaluate("let f=document.querySelector('input[aria-label=\"Search equipment or location\"]');f.value='drill';f.oninput()");p.locator('#results button').tap();p.get_by_role('button',name='Activity history',exact=True).tap();p.get_by_role('button',name='Back',exact=True).tap();p.get_by_role('button',name='Photos & files',exact=True).tap();p.get_by_role('button',name='Back',exact=True).tap();p.get_by_role('button',name='Back',exact=True).tap();assert p.locator('input').input_value()=='drill'
  check('Search → detail → history/files → Back retains query',search)

@@ -26,6 +26,10 @@ def normalize_targets(targets):
             if state is None:raise ValueError('Select a changed condition before adding an issue note')
         result.append({'entity_id':uuid(target.get('entity_id')),'condition':state,
             'destination_id':uuid(target['destination_id']) if target.get('destination_id') else None,'note':note})
+        return_note=target.get('return_note')
+        if return_note is not None:
+            if not isinstance(return_note,str) or len(return_note)>1000:raise ValueError('Return note must be at most 1000 characters')
+            if return_note.strip():result[-1]['return_note']=return_note.strip()
     if len({t['entity_id'] for t in result})!=len(result):raise ValueError('Asset selected more than once')
     return sorted(result,key=lambda t:t['entity_id'])
 
@@ -64,7 +68,12 @@ def confirm_return(client,ledger,group,actor,targets,request_key,session_valid,v
             'note_before_hash':note_hash(condition_note(entity)),'note_after':target['note']})
     if not session_valid():raise Conflict('Session ended; scan your badge again')
     validate_return(client,entities,ledger.custody(group),verified,kit_versions)
-    operation=ledger.begin(group,actor,'return',assets,key,context={'steps':steps},intent=targets)
+    context={'steps':steps}
+    notes=[{'entity_id':t['entity_id'],'text':t['return_note']} for t in targets if t.get('return_note')]
+    if notes:
+        context['return_notes']=notes
+        context['note_author']=next((m.get('name') or 'Homebox member' for m in members if m['id']==actor),'Homebox member')
+    operation=ledger.begin(group,actor,'return',assets,key,context=context,intent=targets)
     try:
         apply_steps(client,ledger,operation['id'],steps)
         ledger.complete(operation['id'])
