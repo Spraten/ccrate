@@ -1,0 +1,15 @@
+{
+  "chapters": 23,
+  "screenshots": 13,
+  "image_loads": "passed",
+  "anchor_links": "passed",
+  "audience_filter": "passed",
+  "image_zoom_and_escape": "passed",
+  "widths_checked": [
+    1280,
+    800,
+    390
+  ],
+  "print_style": "passed",
+  "page_errors": []
+}
