@@ -76,7 +76,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if self.path in ('/workshop/get','/workshop/save','/workshop/move') or self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
+        if self.path in ('/workshop/get','/workshop/save','/workshop/move') or self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/camera/focus','/decode','/scan','/badge/issue','/badge/revoke','/session/end','/session/activity','/condition','/checkout/confirm','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/accounts/create','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print'):
             if self.headers.get('Origin') != 'http://127.0.0.1:17749':self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -86,9 +86,23 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/decode':
                     with Image.open(io.BytesIO(raw)) as frame:
                         if frame.width>1280 or frame.height>960:self.send_error(413);return
-                        codes=[c.text for c in zxingcpp.read_barcodes(frame)]
-                    self.reply_json(200,{'codes':codes});return
+                        found=zxingcpp.read_barcodes(frame)
+                        codes=[c.text for c in found]
+                        detections=[{'code':c.text,'corners':[[p.x,p.y] for p in (c.position.top_left,c.position.top_right,c.position.bottom_right,c.position.bottom_left)]} for c in found]
+                        width,height=frame.size
+                    self.reply_json(200,{'codes':codes,'detections':detections,'width':width,'height':height});return
                 data=json.loads(raw)
+                if self.path=='/camera/focus':
+                    import subprocess
+                    device='/dev/video0'
+                    if 'C920' not in pathlib.Path('/sys/class/video4linux/video0/name').read_text():raise ValueError('Pi C920 camera not found')
+                    mode=data.get('mode')
+                    if mode not in ('auto','manual'):raise ValueError('Unknown focus mode')
+                    value=data.get('value',150)
+                    if mode=='manual' and (type(value) is not int or value<0 or value>250 or value%5):raise ValueError('Focus must be 0 to 250 in steps of 5')
+                    subprocess.run(['v4l2-ctl','-d',device,'--set-ctrl=focus_automatic_continuous='+('1' if mode=='auto' else '0')],check=True,capture_output=True,timeout=5)
+                    if mode=='manual':subprocess.run(['v4l2-ctl','-d',device,'--set-ctrl=focus_absolute='+str(value)],check=True,capture_output=True,timeout=5)
+                    self.reply_json(200,{'mode':mode,'value':value});return
                 if self.path.startswith('/workshop/'):
                     if self.path!='/workshop/get' and not OPEN_ADMIN:self.send_error(403);return
                     with lock:
