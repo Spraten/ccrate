@@ -370,6 +370,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path=='/':
             body=(ROOT/'kiosk/index.html').read_bytes();mime='text/html; charset=utf-8';code=200
+        elif self.path=='/checkout-ui.js':
+            body=(ROOT/'kiosk/checkout-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/workshop-ui.js':
             body=(ROOT/'kiosk/workshop-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/import-ui.js':
