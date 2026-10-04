@@ -29,9 +29,11 @@ with sync_playwright() as pw:
         else:reply(route,{'error':'Unexpected fixture route '+path},400)
     for pattern in ['**/api/**','**/scan','**/session/activity','**/checkout/confirm']:page.route(pattern,api)
     page.goto('http://127.0.0.1:17749');page.locator('[data-action="Check Out"]').tap();assert page.get_by_role('button',name='Scan my badge',exact=True).is_visible();assert page.get_by_role('button',name='Confirm checkout',exact=True).count()==0
+    page.get_by_role('button',name='Enter badge code',exact=True).tap();keyboard=page.get_by_role('dialog',name='Touchscreen search keyboard');assert keyboard.is_visible();keyboard.get_by_role('button',name='Back',exact=True).tap();assert page.get_by_role('button',name='Scan my badge',exact=True).is_visible();assert not page.evaluate('identified')
     page.evaluate("routeScan('BADGE')");assert page.get_by_role('button',name='Scan equipment',exact=True).is_visible()
     page.evaluate("routeScan('TOOL')");assert page.get_by_text('Your equipment (1)',exact=True).is_visible();assert page.get_by_text('Added: TEST – QR Tool',exact=True).is_visible();assert page.get_by_role('button',name='Confirm checkout',exact=True).count()==0
     review=page.get_by_role('button',name='Review checkout',exact=True);assert review.is_enabled();box=review.bounding_box();assert box['y']+box['height']<=480
+    page.get_by_role('button',name='Enter item code',exact=True).tap();page.get_by_role('dialog',name='Touchscreen search keyboard').get_by_role('button',name='Back',exact=True).tap();assert page.evaluate('checkoutCart.length')==1;assert page.get_by_text('Your equipment (1)',exact=True).is_visible()
     page.screenshot(path=str(root/'work/checkout-redesign-cart.png'))
     page.evaluate("routeScan('TOOL')");assert page.evaluate('checkoutCart.length')==1
     page.evaluate("routeScan('BLOCKED')");assert page.get_by_text('TEST – Broken Tool: Broken equipment cannot be checked out',exact=True).is_visible();assert review.is_enabled();assert page.evaluate('checkoutCart.length')==1
