@@ -1,6 +1,6 @@
 # Laptop editing
 
-Open **Workshop Editor** on the laptop desktop. Keep its connection window open while editing; press Enter there to disconnect after saving. The launcher uses the laptop's existing authorized SSH key, with host verification and encrypted forwarding. The companion and Homebox remain bound to loopback on the Pi.
+Open **Workshop Editor** on the laptop desktop. Keep its connection window open while editing; press Enter there to disconnect after saving. The launcher uses the laptop's existing authorized SSH key, with host verification and encrypted forwarding. The companion remains bound to loopback. Homebox now accepts direct authenticated network access on port 17745; open http://PI_ADDRESS:17745 from another device on the same network. Use Connection Info on the Pi desktop for its current address.
 
 ## Direct cable
 

@@ -53,18 +53,16 @@ def show():
     if native:
         print('\nOn this Pi, you can connect via:\n  http://127.0.0.1:17745\n  Sign in with your Homebox email and password.')
     if native and network:
-        print('\nOn your configured Windows laptop:')
-        print('  1. Join the same Wi-Fi or connect the direct laptop cable.')
-        print('  2. Open Workshop Editor; keep its connection window open.')
-        print('  3. Open http://127.0.0.1:17745 in the laptop browser.')
-        print('  If the shortcut cannot find this Pi, run its script with:')
-        for _,address in network:print(f'    .\\Open-Workshop.ps1 -PiAddress {address}')
-        print('\nOther computers with authorized SSH access can connect via:')
-        address=next((a for _,a in network if a!='10.77.0.1'),network[0][1])
-        print(f'  ssh -N -L 127.0.0.1:17745:127.0.0.1:17745 user@{address}')
-        print('  Keep that terminal open; browse to http://127.0.0.1:17745.')
-        print('\nThe laptop must have authorized SSH access. Homebox is not directly')
-        print('available at the Pi IP:17745; the tunnel supplies the laptop address.')
+        print('\nFrom a laptop, phone, or tablet on the same network:')
+        for interface,address in network:
+            label='Direct Ethernet cable' if address=='10.77.0.1' else 'Same Wi-Fi/network'
+            print(f'  {label}: http://{address}:17745')
+        print('  Open the matching URL in your browser. No script or SSH tunnel is needed.')
+        print('  Sign in with your own Homebox email and password.')
+        print('  Use Refresh in your browser after edits to see current inventory.')
+        print('\nIf the page does not load, check that both devices are on the same')
+        print('network. Guest Wi-Fi may block device-to-device connections.')
+        print('\nWorkshop Editor still supplies the companion through its existing tunnel.')
     if not native or not companion:
         print('\nA service is not ready. Refresh once; if it still fails, ask the')
         print('maintainer to inspect the service. Do not repeat uncertain transactions.')
