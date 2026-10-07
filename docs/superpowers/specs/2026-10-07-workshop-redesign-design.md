@@ -1,6 +1,6 @@
 # Workshop redesign: design for written review
 
-Status: proposed design, October 7, 2026. The user accepted all eight feature candidates and requested implementation planning. This records the concrete design for review; approval of the feature list is not approval of these design decisions or product execution.
+Status: design basis for implementation planning, October 7, 2026. The user accepted all eight feature candidates, received this written design, then selected subagent-driven development. The selected execution method is preserved; the detailed implementation plans must be reviewed before product execution. Proposed defaults remain explicit below and in the stage designs so the user can correct them during that review.
 
 ## Intended outcome
 
@@ -10,11 +10,11 @@ Success means an unfamiliar user can search or scan an item, follow its complete
 
 ## Scope and sequence
 
-| Stage | Features | Review document |
-| --- | --- | --- |
-| 1. Connected map and storage | Search/scan to map; rack front view; setup checklist; location photos; equipment status; clear destination guidance | [Map and storage design](2026-10-07-workshop-map-storage-design.md) |
-| 2. Multiple room plans | Named plans and optional native room links; explicit selection among representations; preservation of existing layouts | [Multiple room design](2026-10-07-workshop-rooms-design.md) |
-| 3. Guided shelf checks | Scan observations; discrepancy review; resumable drafts and completed history | [Shelf check design](2026-10-07-workshop-shelf-checks-design.md) |
+| Stage | Features | Design | Implementation plan |
+| --- | --- | --- | --- |
+| 1. Connected map and storage | Search/scan to map; rack front view; setup checklist; location photos; equipment status; clear destination guidance | [Map and storage design](2026-10-07-workshop-map-storage-design.md) | [Map and storage plan](../plans/2026-10-07-workshop-map-storage.md) |
+| 2. Multiple room plans | Named plans and optional native room links; explicit selection among representations; preservation of existing layouts | [Multiple room design](2026-10-07-workshop-rooms-design.md) | [Multiple room plan](../plans/2026-10-07-workshop-rooms.md) |
+| 3. Guided shelf checks | Scan observations; discrepancy review; resumable drafts and completed history | [Shelf check design](2026-10-07-workshop-shelf-checks-design.md) | [Shelf check plan](../plans/2026-10-07-workshop-shelf-checks.md) |
 
 Stage 1 is usable with the current single layout. Stage 2 depends on Stage 1's location resolution and selection contract. Stage 3 depends on Stage 1's scoped inventory view and works with or without Stage 2. Each stage gets its own implementation plan and independently testable deliverable. Preserve the existing queue: approved user-management/release fixes, label editor, then workshop implementation. This request authorizes workshop design work now; it does not reorder product execution or authorize deployment.
 
@@ -39,4 +39,4 @@ Stage 1 is usable with the current single layout. Stage 2 depends on Stage 1's l
 
 ## Review and next step
 
-Review the three linked designs as one feature set, including the proposed defaults for shelf order, multiple representations, photo management and shelf-check scope. After written-design approval, write the three implementation plans with exact interfaces, files, fixture checks and task gates. Review those plans before product execution using the project's existing sequential Luna/Sol workflow.
+Review the three linked plans as one feature set alongside their designs, including the proposed defaults for shelf order, multiple representations, photo management and shelf-check scope. The user selected subagent-driven development; do not ask them to select an execution method again. After written-plan review, use the project's sequential Luna Medium implementation and Sol High task reviews in an isolated snapshot, preserving the earlier queue and separate deployment approval.
