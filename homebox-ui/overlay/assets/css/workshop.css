@@ -76,15 +76,19 @@
 
 /* Workshop map: an uncluttered drafting surface with native-theme chrome. */
 .workshop-native .room-planner{--planner-paper:hsl(var(--background));--planner-panel:hsl(var(--card));container-type:inline-size;color:hsl(var(--foreground))}
-.workshop-native .planner-page-title{margin-bottom:.55rem}
-.workshop-native .planner-toolbar{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;margin:0 0 .55rem;padding:.4rem .5rem;border:1px solid hsl(var(--border));border-radius:var(--radius);background:hsl(var(--card))}
+.workshop-native .planner-page-title{align-items:center;margin:0 0 .35rem}
+.workshop-native .planner-page-title>div{display:flex;align-items:baseline;gap:.75rem;flex-wrap:wrap}
+.workshop-native .planner-page-title h1{font-size:1.5rem;line-height:1.2;margin:0}
+.workshop-native .planner-page-title p{font-size:.78rem;line-height:1.3;margin:0;color:hsl(var(--muted-foreground))}
+.workshop-native .planner-toolbar{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap;margin:0 0 .25rem;padding:.25rem .4rem;border:1px solid hsl(var(--border));border-radius:var(--radius);background:hsl(var(--card))}
 .workshop-native .planner-room-picker{display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:600}
-.workshop-native .planner-room-picker select{min-width:9rem;height:2.15rem;padding:.3rem .5rem;font-size:.8rem}
+.workshop-native .planner-room-picker select{min-width:9rem;height:1.9rem;padding:.2rem .45rem;font-size:.78rem}
 .workshop-native .planner-modes{display:flex;gap:.1rem;padding:.12rem;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px)}
-.workshop-native .planner-modes button,.workshop-native .planner-toolbar>button{min-height:2.15rem;padding:.3rem .6rem;font-size:.8rem}
+.workshop-native .planner-modes button,.workshop-native .planner-toolbar>button{min-height:1.9rem;padding:.2rem .5rem;font-size:.76rem}
 .workshop-native .planner-modes button{border:0}
 .workshop-native .planner-modes .active{background:hsl(var(--primary));color:hsl(var(--primary-foreground))}
 .workshop-native .planner-save-state{margin-left:auto;font-size:.75rem;font-weight:600;white-space:nowrap}
+.workshop-native .room-planner.is-clean-browse .planner-save-button{display:none}
 .workshop-native .planner-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(14rem,17rem);align-items:stretch;gap:.55rem}
 .workshop-native .room-planner.is-editing .planner-workspace{grid-template-columns:minmax(10.5rem,12rem) minmax(0,1fr) minmax(14rem,16rem)}
 .workshop-native .planner-palette,.workshop-native .planner-canvas-panel,.workshop-native .planner-inspector{min-width:0;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background:var(--planner-panel);padding:.65rem}
@@ -102,12 +106,12 @@
 .workshop-native .planner-storage{margin-top:.7rem;border-top:1px solid hsl(var(--border));padding-top:.65rem;font-size:.78rem}
 .workshop-native .planner-storage summary,.workshop-native .planner-coverage summary{cursor:pointer;font-weight:600;padding:.25rem 0}
 .workshop-native .planner-canvas-panel{min-width:0}
-.workshop-native .planner-canvas-title{font-size:.86rem;font-weight:700;color:hsl(var(--muted-foreground));margin:.05rem 0 .35rem}
-.workshop-native .planner-canvas-tools{display:flex;align-items:center;gap:.25rem;flex-wrap:wrap;padding:.15rem 0 .45rem}
-.workshop-native .planner-canvas-tools button{min-height:2rem;padding:.25rem .5rem;font-size:.75rem}
-.workshop-native .planner-canvas-tools label{display:inline-flex;align-items:center;gap:.15rem;font-size:.75rem;white-space:nowrap}
+.workshop-native .planner-canvas-title{font-size:.78rem;font-weight:700;color:hsl(var(--muted-foreground));margin:0 0 .2rem}
+.workshop-native .planner-canvas-tools{display:flex;align-items:center;gap:.2rem;flex-wrap:wrap;padding:0 0 .25rem}
+.workshop-native .planner-canvas-tools button{min-height:1.7rem;padding:.15rem .4rem;font-size:.69rem}
+.workshop-native .planner-canvas-tools label{display:inline-flex;align-items:center;gap:.1rem;font-size:.68rem;white-space:nowrap}
 .workshop-native .planner-zoom-readout{margin-left:auto;font-size:.75rem;color:hsl(var(--muted-foreground))}
-.workshop-native .planner-canvas-frame{height:clamp(28rem,64vh,48rem);min-height:24rem;overflow:hidden;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background-color:var(--planner-paper);background-image:linear-gradient(hsl(var(--border) / .28) 1px,transparent 1px),linear-gradient(90deg,hsl(var(--border) / .28) 1px,transparent 1px),linear-gradient(hsl(var(--border) / .14) 1px,transparent 1px),linear-gradient(90deg,hsl(var(--border) / .14) 1px,transparent 1px);background-size:80px 80px,80px 80px,16px 16px,16px 16px;touch-action:none}
+.workshop-native .planner-canvas-frame{height:clamp(22rem,calc(100vh - 19rem),48rem);min-height:22rem;overflow:hidden;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background-color:var(--planner-paper);background-image:linear-gradient(hsl(var(--border) / .28) 1px,transparent 1px),linear-gradient(90deg,hsl(var(--border) / .28) 1px,transparent 1px),linear-gradient(hsl(var(--border) / .14) 1px,transparent 1px),linear-gradient(90deg,hsl(var(--border) / .14) 1px,transparent 1px);background-size:80px 80px,80px 80px,16px 16px,16px 16px;touch-action:none}
 .workshop-native .planner-svg{display:block;width:100%;height:100%;touch-action:none;outline:none;color:hsl(var(--foreground))}
 .workshop-native .planner-svg [data-workshop-drawing]{cursor:grab;touch-action:none}
 .workshop-native .planner-svg [data-workshop-drawing]:active{cursor:grabbing}
@@ -128,9 +132,9 @@
 .workshop-native .planner-inspector ol{padding-left:1.25rem}
 .workshop-native .planner-geometry{display:grid;grid-template-columns:1fr 1fr;gap:.35rem}
 .workshop-native .planner-coverage{margin-top:.65rem;border:1px solid hsl(var(--border));border-radius:var(--radius);padding:.5rem .75rem;color:hsl(var(--muted-foreground));font-size:.82rem}
-.workshop-native .planner-quick-search{max-width:46rem;margin:-.2rem 0 .7rem}
-.workshop-native .planner-quick-search>.field{display:block;margin:0;font-size:.85rem;font-weight:600}
-.workshop-native .planner-quick-search input{display:block;width:min(100%,42rem);margin-top:.3rem}
+.workshop-native .planner-quick-search{position:relative;max-width:46rem;margin:0 0 .35rem}
+.workshop-native .planner-quick-search>.field{display:flex;align-items:center;gap:.45rem;margin:0;font-size:.72rem;font-weight:600;color:hsl(var(--muted-foreground));white-space:nowrap}
+.workshop-native .planner-quick-search input{display:block;width:min(100%,34rem);height:1.9rem;margin:0;padding:.25rem .5rem;font-size:.78rem}
 .workshop-native .planner-search-results:empty{display:none}
 .workshop-native .planner-search-results:not(:empty){max-height:13rem;overflow:auto;margin-top:.35rem;padding:.25rem .5rem;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background:hsl(var(--card))}
 .workshop-native .planner-search-results .search-result button{width:100%;justify-content:flex-start;text-align:left;white-space:normal}
