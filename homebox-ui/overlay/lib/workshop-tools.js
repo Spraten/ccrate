@@ -363,7 +363,6 @@ function paintPlannerCanvas(room, canvas) {
       role: 'button', tabindex: 0, 'aria-label': 'Select ' + object.name,
     });
     const shape = svgNode('g', { transform: `rotate(${object.rotation} ${object.width / 2} ${object.height / 2})` });
-    const quarterTurn=object.rotation%180!==0,visualWidth=quarterTurn?object.height:object.width,visualHeight=quarterTurn?object.width:object.height,visualX=(object.width-visualWidth)/2,visualY=(object.height-visualHeight)/2;
     const rect = svgNode('rect', { rx: .08,
       fill: attentionOverlay ? 'hsl(var(--destructive))' : object.color||defaultFill, 'fill-opacity':String(object.opacity??1),
       stroke: object.id === layoutSelected ? 'hsl(var(--primary))' : silhouette==='structure'?'#202B33':'#52616A',
@@ -375,7 +374,9 @@ function paintPlannerCanvas(room, canvas) {
       'dominant-baseline': 'middle', 'font-size': .3,
       fill: '#233C57',
     }, object.name);
+    const details=svgNode('g',{'pointer-events':'none'});
     const setFootprint = () => {
+      const quarterTurn=object.rotation%180!==0,visualWidth=quarterTurn?object.height:object.width,visualHeight=quarterTurn?object.width:object.height,visualX=(object.width-visualWidth)/2,visualY=(object.height-visualHeight)/2;
       const labelWidth = Math.max(.01, visualWidth - .04);
       rect.setAttribute('x', String(visualX));
       rect.setAttribute('y', String(visualY));
@@ -388,20 +389,21 @@ function paintPlannerCanvas(room, canvas) {
       text.setAttribute('y', String(object.height / 2));
       group.dataset.x = String(object.x); group.dataset.y = String(object.y);
       group.dataset.width = String(object.width); group.dataset.height = String(object.height);
+      details.replaceChildren();
+      if(silhouette==='shelf'){
+        const inset=Math.min(.12,visualWidth*.08),yStep=visualHeight/4;
+        details.append(svgNode('path',{d:`M ${visualX+inset} ${visualY} V ${visualY+visualHeight} M ${visualX+visualWidth-inset} ${visualY} V ${visualY+visualHeight} M ${visualX} ${visualY+yStep} H ${visualX+visualWidth} M ${visualX} ${visualY+yStep*2} H ${visualX+visualWidth} M ${visualX} ${visualY+yStep*3} H ${visualX+visualWidth}`,fill:'none',stroke:'#65747A','stroke-width':Math.min(.07,visualHeight*.035),'data-footprint-detail':'true'}));
+      }else if(silhouette==='table'){
+        const leg=Math.min(.2,visualWidth*.12,visualHeight*.2),inset=leg*.55;
+        for(const [x,y] of [[visualX+inset,visualY+inset],[visualX+visualWidth-inset-leg,visualY+inset],[visualX+inset,visualY+visualHeight-inset-leg],[visualX+visualWidth-inset-leg,visualY+visualHeight-inset-leg]])details.append(svgNode('rect',{x,y,width:leg,height:leg,rx:.025,fill:'#6F5742','data-footprint-detail':'true'}));
+        details.append(svgNode('path',{d:`M ${visualX} ${visualY+visualHeight*.22} H ${visualX+visualWidth} M ${visualX} ${visualY+visualHeight*.3} H ${visualX+visualWidth}`,stroke:'#A87549','stroke-width':.04,'data-footprint-detail':'true'}));
+      }else if(silhouette==='storage'){
+        details.append(svgNode('rect',{x:visualX+visualWidth*.12,y:visualY+visualHeight*.12,width:visualWidth*.76,height:visualHeight*.76,rx:.06,fill:'none',stroke:'#D8E9FA','stroke-width':Math.min(.09,visualHeight*.08),'data-footprint-detail':'true'}));
+      }else if(silhouette==='machine'){
+        details.append(svgNode('rect',{x:visualX+visualWidth*.55,y:visualY+visualHeight*.2,width:visualWidth*.32,height:visualHeight*.5,rx:.05,fill:'#53616B',stroke:'#D3D9DC','stroke-width':.04,'data-footprint-detail':'true'}));
+      }
     };
-    shape.append(rect);
-    if(silhouette==='shelf'){
-      const inset=Math.min(.12,visualWidth*.08),yStep=visualHeight/4;
-      shape.append(svgNode('path',{d:`M ${visualX+inset} ${visualY} V ${visualY+visualHeight} M ${visualX+visualWidth-inset} ${visualY} V ${visualY+visualHeight} M ${visualX} ${visualY+yStep} H ${visualX+visualWidth} M ${visualX} ${visualY+yStep*2} H ${visualX+visualWidth} M ${visualX} ${visualY+yStep*3} H ${visualX+visualWidth}`,fill:'none',stroke:'#65747A','stroke-width':Math.min(.07,visualHeight*.035),'pointer-events':'none','data-footprint-detail':'true'}));
-    }else if(silhouette==='table'){
-      const leg=Math.min(.2,visualWidth*.12,visualHeight*.2),inset=leg*.55;
-      for(const [x,y] of [[visualX+inset,visualY+inset],[visualX+visualWidth-inset-leg,visualY+inset],[visualX+inset,visualY+visualHeight-inset-leg],[visualX+visualWidth-inset-leg,visualY+visualHeight-inset-leg]])shape.append(svgNode('rect',{x,y,width:leg,height:leg,rx:.025,fill:'#6F5742','pointer-events':'none','data-footprint-detail':'true'}));
-      shape.append(svgNode('path',{d:`M ${visualX} ${visualY+visualHeight*.22} H ${visualX+visualWidth} M ${visualX} ${visualY+visualHeight*.3} H ${visualX+visualWidth}`,stroke:'#A87549','stroke-width':.04,'pointer-events':'none','data-footprint-detail':'true'}));
-    }else if(silhouette==='storage'){
-      shape.append(svgNode('rect',{x:visualX+visualWidth*.12,y:visualY+visualHeight*.12,width:visualWidth*.76,height:visualHeight*.76,rx:.06,fill:'none',stroke:'#D8E9FA','stroke-width':Math.min(.09,visualHeight*.08),'pointer-events':'none','data-footprint-detail':'true'}));
-    }else if(silhouette==='machine'){
-      shape.append(svgNode('rect',{x:visualX+visualWidth*.55,y:visualY+visualHeight*.2,width:visualWidth*.32,height:visualHeight*.5,rx:.05,fill:'#53616B',stroke:'#D3D9DC','stroke-width':.04,'pointer-events':'none','data-footprint-detail':'true'}));
-    }
+    shape.append(rect,details);
     if(object.layer==='above'||object.layer==='below')shape.append(svgNode('rect',{x:0,y:0,width:object.width,height:object.height,fill:`url(#planner-stripe-${object.layer})`,'pointer-events':'none'}));shape.append(text);setFootprint();
     group.append(shape);
     if (object.id === layoutSelected && manager() && browseMode === 'edit') {

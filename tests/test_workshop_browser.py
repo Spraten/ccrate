@@ -412,6 +412,50 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertTrue(bounds and all(row['inside'] for row in bounds),bounds)
         self.assertEqual(self.errors,[])
 
+    def test_resizing_updates_material_details_before_pointer_up(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        rect=self.page.locator('[data-workshop-drawing] rect[data-object-shape]')
+        before=rect.bounding_box()
+        handle=self.page.get_by_role('button',name='Resize drawing handle')
+        box=handle.bounding_box()
+        self.page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2)
+        self.page.mouse.down()
+        self.page.mouse.move(box['x']+box['width']/2+60,box['y']+box['height']/2+30)
+        after=rect.bounding_box()
+        self.assertGreater(after['width'],before['width']+20)
+        self.assertGreater(after['height'],before['height']+10)
+        details=self.page.locator('[data-workshop-drawing] [data-footprint-detail]')
+        first_detail=details.first.bounding_box()
+        self.assertAlmostEqual(first_detail['width'],after['width'],delta=8)
+        self.assertAlmostEqual(first_detail['height'],after['height'],delta=8)
+        for detail in details.all():
+            detail_box=detail.bounding_box()
+            self.assertGreaterEqual(detail_box['x'],after['x']-5)
+            self.assertLessEqual(detail_box['x']+detail_box['width'],after['x']+after['width']+5)
+            self.assertGreaterEqual(detail_box['y'],after['y']-5)
+            self.assertLessEqual(detail_box['y']+detail_box['height'],after['y']+after['height']+5)
+        self.page.mouse.up()
+        self.assertEqual(self.errors,[])
+
+    def test_small_map_stacks_open_palette_and_inspector(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        self.install_rooms4_plan(document)
+        self.page.set_viewport_size({'width':375,'height':800})
+        workspace=self.page.locator('.planner-workspace')
+        self.page.get_by_role('button',name='Objects',exact=True).click()
+        self.page.get_by_role('button',name='Details',exact=True).click()
+        state=workspace.evaluate('''el=>({width:el.clientWidth,scrollWidth:el.scrollWidth,columns:getComputedStyle(el).gridTemplateColumns,palette:getComputedStyle(el.querySelector('.planner-palette')).display,inspector:getComputedStyle(el.querySelector('.planner-inspector')).display,paletteColumn:getComputedStyle(el.querySelector('.planner-palette')).gridColumnStart,inspectorColumn:getComputedStyle(el.querySelector('.planner-inspector')).gridColumnStart})''')
+        self.assertLessEqual(state['scrollWidth'],state['width']+1,state)
+        self.assertEqual(len(state['columns'].split()),1,state)
+        self.assertEqual((state['palette'],state['inspector']),('block','block'),state)
+        self.assertEqual((state['paletteColumn'],state['inspectorColumn']),('1','1'),state)
+        self.assertEqual(self.errors,[])
+
     def test_planner_geometry_fields_commit_before_apply(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         document={'version':2,'rooms':[{'id':room,'location_id':LOCATION,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[{'id':DRAWING,'name':'Rack','kind':'Rack','x':3.75,'y':2,'width':3,'height':2,'rotation':0,'location_id':LOCATION}]}]}
