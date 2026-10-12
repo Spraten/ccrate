@@ -3,7 +3,7 @@
   "upstream_commit": "eb118cc05b169c554066d823c44dc179aa3b96bb",
   "upstream_license": "MIT",
   "source_path": "packages/editor/src",
-  "patches": ["patches/0001-offline-fonts.patch"],
+  "patches": ["patches/0001-offline-fonts.patch", "patches/0002-label-editor-controls.patch"],
   "font": {
     "family": "DejaVu Sans",
     "file": "public/fonts/DejaVuSans.ttf",

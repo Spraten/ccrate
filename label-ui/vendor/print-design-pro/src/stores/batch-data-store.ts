@@ -17,6 +17,8 @@ export const useBatchDataStore = defineStore('pp-batch-data', () => {
   const fileName = ref<string | null>(null)
   /** null = preview the document's sample values; otherwise a row index. */
   const activeRowIndex = ref<number | null>(null)
+  /** Host-provided native item values for the live canvas only. */
+  const previewOverrides = ref<Record<string, string> | null>(null)
   /** Pre-flight results for the loaded rows - non-empty blocks batch jobs. */
   const barcodeFailures = ref<BatchBarcodeFailure[]>([])
 
@@ -31,7 +33,12 @@ export const useBatchDataStore = defineStore('pp-batch-data', () => {
   const previewData = computed<Record<string, string>>(() => ({
     ...doc.document.variables,
     ...(activeRow.value ?? {}),
+    ...(previewOverrides.value ?? {}),
   }))
+
+  function setPreviewOverrides(values: Record<string, string> | null): void {
+    previewOverrides.value = values ? { ...values } : null
+  }
 
   function setCsv(newHeaders: string[], newRows: Array<Record<string, string>>, name: string): void {
     headers.value = newHeaders
@@ -110,6 +117,7 @@ export const useBatchDataStore = defineStore('pp-batch-data', () => {
     hasRows,
     activeRow,
     previewData,
+    setPreviewOverrides,
     setCsv,
     clear,
     stepPreview,

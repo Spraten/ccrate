@@ -5,11 +5,34 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { addElementCommand } from '../../core/commands/element-commands'
 import { createRect, createText } from '../../core/element-factories'
 import { useDocumentStore } from '../../stores/document-store'
+import { useBatchDataStore } from '../../stores/batch-data-store'
 import { useHistoryStore } from '../../stores/history-store'
 import { useSelectionStore } from '../../stores/selection-store'
 import ColorField from '../shell/panel-controls/ColorField.vue'
 import NumberField from '../shell/panel-controls/NumberField.vue'
 import PropertiesPanel from '../shell/PropertiesPanel.vue'
+
+describe('selected item preview data', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('overrides only the canvas preview and survives document and batch resets', () => {
+    const doc = useDocumentStore()
+    const batch = useBatchDataStore()
+    const savedVariables = { ...doc.document.variables }
+
+    batch.setPreviewOverrides({ item_name: 'Native item', asset_code: 'C-42', item_path: '/item/44444444-4444-4444-8444-444444444444' })
+    expect(batch.previewData).toMatchObject({ item_name: 'Native item', asset_code: 'C-42', item_path: '/item/44444444-4444-4444-8444-444444444444' })
+    expect(doc.document.variables).toEqual(savedVariables)
+
+    batch.setCsv(['item_name'], [{ item_name: 'CSV row' }], 'items.csv')
+    batch.clear()
+    expect(batch.previewData).toMatchObject({ item_name: 'Native item', asset_code: 'C-42' })
+    expect(doc.document.variables).toEqual(savedVariables)
+
+    batch.setPreviewOverrides(null)
+    expect(batch.previewData).toEqual(savedVariables)
+  })
+})
 
 describe('numberField', () => {
   it('commits parsed value on enter, resyncs draft from modelValue', async () => {

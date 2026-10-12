@@ -90,7 +90,7 @@ function zoomStep(direction: 1 | -1): void {
       >
         {{ doc.document.name || t('topbar.untitled') }}
       </button>
-      <div class="pp:flex pp:items-center pp:gap-1 pp:whitespace-nowrap pp:text-[11px] pp:text-app-ok">
+      <div data-pp-save-state class="pp:flex pp:items-center pp:gap-1 pp:whitespace-nowrap pp:text-[11px] pp:text-app-ok">
         <span class="pp:inline-block pp:h-1.5 pp:w-1.5 pp:rounded-full pp:bg-app-ok" />
         {{ saving ? t('topbar.saving') : t('topbar.autosaved') }}
       </div>
