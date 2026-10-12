@@ -49,6 +49,12 @@ const items = computed(() => (props.workspace?.items || []).filter(item =>
   `${item.name} ${item.assetId || ""}`.toLowerCase().includes(search.value.toLowerCase()),
 ).slice(0, 100));
 const selected = (id: string) => props.workspace?.selectedIds.includes(id) || false;
+const selectedEquipment = computed(() => {
+  const workspace = props.workspace;
+  if (!workspace) return undefined;
+  const selectedId = workspace.selectedIds[0];
+  return workspace.items.find(item => item.id === selectedId);
+});
 const canReview = computed(() => !!props.workspace && props.workspace.selectedIds.length > 0 && props.workspace.selectedIds.length <= REVIEW_LIMIT && !!props.workspace.templateId && !props.workspace.busy);
 const selectedTemplate = computed(() => props.workspace?.templates.find(template => template.id === props.workspace?.templateId));
 const canCompose = computed(() => {
@@ -103,7 +109,7 @@ function designerClosed() {
       </div>
       <section v-if="designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
         <p class="mb-3 text-sm text-muted-foreground">Edit a reusable design for this collection. Draft previews do not create reviewed labels or start a print.</p>
-        <LabelDesigner ref="designerRef" :selected-item="workspace.items.find(item => item.id === workspace.selectedIds[0])" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @busy="workspace.actions.designerBusy" />
+        <LabelDesigner ref="designerRef" :selected-item="selectedEquipment" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @busy="workspace.actions.designerBusy" />
       </section>
 
       <div v-if="!designerOpen" class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,.9fr)]">
