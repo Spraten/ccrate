@@ -171,18 +171,18 @@ def navigation_frontend():
     ["loans", "Loans & notes"], ["map", "Workshop & storage"],
     ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
   ]);
-  const nav = computed(() => [
-    baseNav[0],
-    { ...baseNav[3], id: 1, name: computed(() => "Inventory") },
+  const nav = computed<typeof baseNav>(() => [
+    baseNav[0]!,
+    { ...baseNav[3]!, id: 1, name: computed(() => "Inventory") },
     { id: 8, icon: MdiWrench, name: computed(() => "Workshop"), to: "/workshop/map", active: computed(() => route.path === "/workshop/map") },
     { id: 9, icon: MdiTagMultiple, name: computed(() => "Label"), to: "/workshop/labels", active: computed(() => route.path === "/workshop/labels") },
-    { ...baseNav[7], id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
+    { ...baseNav[7]!, id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
     {
       id: 11, icon: MdiFileDocumentMultiple, name: computed(() => "More"), to: "",
       active: computed(() => false),
       collapsible: [
-        ...baseNav.slice(1, 3), baseNav[4], baseNav[5], baseNav[6],
-        ...baseNav[7].collapsible!.filter(item => item.to !== "/collection/members"),
+        ...baseNav.slice(1, 3), baseNav[4]!, baseNav[5]!, baseNav[6]!,
+        ...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members"),
         ...workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels").map(([id, name], index) => ({ id: 80 + index, name: computed(() => name!), to: `/workshop/${id}`, active: computed(() => route.path === `/workshop/${id}`) })),
         { id: 90, name: computed(() => "Equipment Terminal"), to: terminalURL.value, active: computed(() => false) },
         { id: 91, name: computed(() => t("menu.scanner")), to: "", active: computed(() => false), action: openScanner },

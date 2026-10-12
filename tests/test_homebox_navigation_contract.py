@@ -37,8 +37,9 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn('<SidebarInset class="md:order-first min-h-dvh', self.output)
 
     def test_primary_entries_point_to_homebox_and_workshop_routes(self):
-        self.assertLess(self.output.index("baseNav[0],"), self.output.index('name: computed(() => "Inventory")'))
-        self.assertIn('{ ...baseNav[3], id: 1, name: computed(() => "Inventory") }', self.output)
+        self.assertIn('computed<typeof baseNav>(() => [', self.output)
+        self.assertLess(self.output.index("baseNav[0]!,"), self.output.index('name: computed(() => "Inventory")'))
+        self.assertIn('{ ...baseNav[3]!, id: 1, name: computed(() => "Inventory") }', self.output)
         self.assertIn('name: computed(() => "Workshop"), to: "/workshop/map"', self.output)
         self.assertIn('name: computed(() => "Label"), to: "/workshop/labels"', self.output)
         self.assertIn('name: computed(() => "Users"), to: "/collection/members"', self.output)
@@ -51,7 +52,7 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn('<SidebarMenuLink v-else', self.output)
         self.assertIn('...nav.value.filter(v => v.name.value !== "More").map', self.output)
         self.assertNotIn('name: computed(() => "More"), to: "/home"', self.output)
-        self.assertIn('...baseNav[7].collapsible!.filter(item => item.to !== "/collection/members")', self.output)
+        self.assertIn('...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members")', self.output)
         self.assertIn('to: terminalURL.value', self.output)
         self.assertIn('action: openScanner', self.output)
         self.assertNotIn('<!-- makes scanner accessible easily if using legacy header -->', self.output)
