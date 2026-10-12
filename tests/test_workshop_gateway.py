@@ -1,8 +1,11 @@
 """Gateway boundaries with isolated HTTP services and temporary static files."""
 import http.client
 import importlib.util
+import base64
+import hashlib
 import json
 import pathlib
+import socket
 import tempfile
 import threading
 import unittest
@@ -23,10 +26,11 @@ class Native(BaseHTTPRequestHandler):
     def serve(self):
         body = self.rfile.read(int(self.headers.get('Content-Length', '0')))
         self.hits.append((self.path, dict(self.headers), body))
-        self.send_response(200)
+        self.send_response(401 if self.path == '/api/v1/ws/events' else 200)
         self.send_header('Set-Cookie', 'hb.auth.token=fixture; Path=/; HttpOnly')
         self.send_header('Set-Cookie', 'hb.auth.remember=fixture; Path=/; HttpOnly')
-        payload = b'<html><body>native inventory</body></html>' if self.path == '/home' else body or b'native'
+        payload = (b'<html><body>native inventory</body></html>' if self.path == '/home' else
+                   b'native sign-in required' if self.path == '/api/v1/ws/events' else body or b'native')
         if self.path == '/home':
             self.send_header('Content-Type', 'text/html')
             self.send_header('ETag', 'old-html')
@@ -40,6 +44,52 @@ class Native(BaseHTTPRequestHandler):
 
 class Companion(Native):
     hits = []
+
+
+class NativeWebSocket:
+    def __init__(self):
+        self.server = socket.socket()
+        self.server.bind(('127.0.0.1', 0))
+        self.server.listen()
+        self.port = self.server.getsockname()[1]
+        self.closed = threading.Event()
+        self.ready = threading.Event()
+        self.request = None
+        self.frame = None
+        self.error = None
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
+
+    def serve(self):
+        try:
+            client, _ = self.server.accept()
+            with client:
+                client.settimeout(3)
+                request = b''
+                while b'\r\n\r\n' not in request:
+                    request += client.recv(4096)
+                header = request.split(b'\r\n\r\n', 1)[0].decode('latin-1')
+                self.request = dict(line.split(': ', 1) for line in header.split('\r\n')[1:])
+                key = self.request['Sec-WebSocket-Key']
+                accept = base64.b64encode(hashlib.sha1(
+                    (key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest())
+                # Keep the first server frame in the same TCP write as the 101 headers.
+                client.sendall(b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n'
+                               b'Connection: Upgrade\r\nSec-WebSocket-Accept: ' + accept +
+                               b'\r\n\r\n\x81\x01S')
+                self.ready.set()
+                frame = b''
+                while len(frame) < 7:
+                    frame += client.recv(7 - len(frame))
+                self.frame = frame
+                client.sendall(b'\x81\x01R')
+                while client.recv(4096):
+                    pass
+        except Exception as error:
+            self.error = error
+        finally:
+            self.closed.set()
+            self.server.close()
 
 
 class GatewayTests(unittest.TestCase):
@@ -89,9 +139,74 @@ class GatewayTests(unittest.TestCase):
 
     def test_cross_origin_and_untrusted_host_never_reach_backend(self):
         count = len(Companion.hits)
-        self.assertEqual(self.call('/workshop-api/badges/issue', 'POST', b'{}', {'Origin': 'http://attacker.invalid'})[0], 403)
-        self.assertEqual(self.call('/workshop-api/context', headers={'Host': 'attacker.invalid:' + str(gateway.PORT)})[0], 421)
+        self.assertEqual(self.call('/workshop-api/badges/issue', 'POST', b'{}', {
+            'Origin': 'http://attacker.invalid', 'Connection': 'close'})[0], 403)
+        self.assertEqual(self.call('/workshop-api/context', headers={
+            'Host': 'attacker.invalid:' + str(gateway.PORT), 'Connection': 'close'})[0], 421)
         self.assertEqual(len(Companion.hits), count)
+
+    def test_websocket_rejects_foreign_hosts_and_companion_upgrades(self):
+        count = len(Companion.hits)
+        headers = {'Host': 'attacker.invalid:' + str(gateway.PORT), 'Connection': 'Upgrade',
+                   'Upgrade': 'websocket', 'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
+                   'Sec-WebSocket-Version': '13', 'Origin': 'http://attacker.invalid'}
+        self.assertEqual(self.call('/api/v1/ws/events', headers=headers)[0], 421)
+        headers['Host'] = '127.0.0.1:' + str(gateway.PORT)
+        self.assertEqual(self.call('/api/v1/ws/events', headers=headers)[0], 403)
+        headers['Origin'] = 'http://' + headers['Host']
+        self.assertEqual(self.call('/workshop-api/context', headers=headers)[0], 400)
+        self.assertEqual(len(Companion.hits), count)
+
+    def test_native_websocket_preserves_handshake_frames_and_closes_on_disconnect(self):
+        native = NativeWebSocket()
+        old_port = gateway.NATIVE_PORT
+        gateway.NATIVE_PORT = native.port
+        client = socket.create_connection(('127.0.0.1', self.server.server_port), timeout=3)
+        client.settimeout(3)
+        stream = client.makefile('rb')
+        key = base64.b64encode(b'0123456789abcdef').decode()
+        try:
+            client.sendall((f'GET /api/v1/ws/events HTTP/1.1\r\nHost: 127.0.0.1:{gateway.PORT}\r\n'
+                            f'Origin: http://127.0.0.1:{gateway.PORT}\r\nCookie: hb.auth.token=fixture\r\n'
+                            'Connection: keep-alive, Upgrade\r\nUpgrade: websocket\r\n'
+                            f'Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n').encode())
+            status = stream.readline()
+            response_headers = {}
+            while True:
+                line = stream.readline()
+                if line == b'\r\n':
+                    break
+                name, value = line.decode('latin-1').split(':', 1)
+                response_headers[name.lower()] = value.strip()
+            self.assertIn(b' 101 ', status)
+            self.assertEqual(response_headers['upgrade'], 'websocket')
+            self.assertIn('upgrade', response_headers['connection'].lower())
+            self.assertEqual(response_headers['sec-websocket-accept'], base64.b64encode(
+                hashlib.sha1((key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest()).decode())
+            self.assertEqual(stream.read(3), b'\x81\x01S')
+            self.assertTrue(native.ready.wait(1), native.error)
+            self.assertEqual(native.request['Cookie'], 'hb.auth.token=fixture')
+            self.assertEqual(native.request['Origin'], f'http://127.0.0.1:{gateway.PORT}')
+            self.assertEqual(native.request['Host'], f'127.0.0.1:{gateway.PORT}')
+            self.assertEqual(native.request['Upgrade'], 'websocket')
+            self.assertIn('upgrade', native.request['Connection'].lower())
+            mask = b'\x01\x02\x03\x04'
+            client.sendall(b'\x81\x81' + mask + bytes([ord('C') ^ mask[0]]))
+            self.assertEqual(stream.read(3), b'\x81\x01R')
+            self.assertEqual(native.frame, b'\x81\x81' + mask + bytes([ord('C') ^ mask[0]]))
+        finally:
+            stream.close()
+            client.close()
+            gateway.NATIVE_PORT = old_port
+        self.assertTrue(native.closed.wait(2), native.error)
+
+    def test_native_websocket_forwards_non_upgrade_responses(self):
+        status, _, body = self.call('/api/v1/ws/events', headers={
+            'Origin': 'http://127.0.0.1:' + str(gateway.PORT), 'Cookie': 'hb.auth.token=fixture',
+            'Connection': 'Upgrade', 'Upgrade': 'websocket',
+            'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==', 'Sec-WebSocket-Version': '13'})
+        self.assertEqual((status, body), (401, b'native sign-in required'))
+        self.assertEqual(Native.hits[-1][1]['Cookie'], 'hb.auth.token=fixture')
 
     def test_same_origin_write_and_native_upload_bytes(self):
         self.assertEqual(self.call('/workshop-api/return', 'POST', b'{}', {'Origin': 'http://127.0.0.1:' + str(gateway.PORT)})[0], 200)

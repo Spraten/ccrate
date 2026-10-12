@@ -1,0 +1,41 @@
+services:
+  ccrate-local-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:17745:17745"
+      - "127.0.0.1:17749:17749"
+    environment:
+      WORKSHOP_LOCAL_TEST: "1"
+      WORKSHOP_ROOT: /data
+      WORKSHOP_CODE_ROOT: /app
+      HOMEBOX_UI_ROOT: /app/public
+      WORKSHOP_LABEL_ASSET_ROOT: /app/label-ui
+      WORKSHOP_NODE: /usr/bin/node
+      WORKSHOP_NATIVE_BASE: http://127.0.0.1:17747
+      WORKSHOP_GATEWAY_HOST: 0.0.0.0
+      WORKSHOP_COMPANION_HOST: 0.0.0.0
+      HOMEBOX_HOST: 127.0.0.1
+      HOMEBOX_PORT: "17747"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ccrate_local_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "/app/deploy/local-test.py", "--healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+volumes:
+  ccrate_local_data:

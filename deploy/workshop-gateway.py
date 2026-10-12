@@ -3,14 +3,18 @@
 
 The native app remains at URL root. The local touchscreen API is never exposed.
 """
+import base64
+import binascii
 import http.client
 import ipaddress
 import json
 import mimetypes
 import os
 import pathlib
+import socket
 import stat
 import tempfile
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 import sys
@@ -97,10 +101,37 @@ class Handler(BaseHTTPRequestHandler):
         self.send_bytes(status, json.dumps({'error': text}).encode())
 
     def dispatch(self):
+        connection_tokens = {value.strip().lower() for value in self.headers.get('Connection', '').split(',')}
+        websocket = (self.headers.get('Upgrade') or 'upgrade' in connection_tokens
+                     or self.headers.get('Sec-WebSocket-Key'))
         if not valid_host(self.headers.get('Host', '')):
+            if websocket:
+                self.close_connection = True
             self.error(421, 'Use the Pi network address or localhost with the Workshop port.')
             return
         path = urlsplit(self.path).path
+        if websocket:
+            if (path != '/api/v1/ws/events' or self.command != 'GET'
+                    or self.headers.get('Upgrade', '').lower() != 'websocket'
+                    or 'upgrade' not in connection_tokens
+                    or self.headers.get('Sec-WebSocket-Version') != '13'):
+                self.close_connection = True
+                self.error(400, 'Only the native events WebSocket is available.')
+                return
+            key = self.headers.get('Sec-WebSocket-Key', '')
+            try:
+                if len(base64.b64decode(key, validate=True)) != 16:
+                    raise ValueError
+            except (binascii.Error, ValueError):
+                self.close_connection = True
+                self.error(400, 'Invalid WebSocket handshake.')
+                return
+            if self.headers.get('Origin') != 'http://' + self.headers['Host']:
+                self.close_connection = True
+                self.error(403, 'Open Workshop on this Pi address before connecting.')
+                return
+            self.websocket_proxy(connection_tokens)
+            return
         if path == '/sw.js':
             self.send_bytes(200, WORKER, 'application/javascript', {'Service-Worker-Allowed': '/'})
             return
@@ -182,6 +213,86 @@ class Handler(BaseHTTPRequestHandler):
             if not self.close_connection:
                 self.error(503, 'The Pi service is unavailable. Your submitted change may need inspection in Recovery; do not repeat it automatically.')
         finally:
+            if connection:
+                connection.close()
+
+    def websocket_proxy(self, connection_tokens):
+        connection = None
+        response = None
+        try:
+            headers = {key: value for key, value in self.headers.items()
+                       if key.lower() not in HOP_HEADERS and key.lower() not in connection_tokens
+                       and not key.lower().startswith(('x-forwarded-', 'x-workshop-gateway'))}
+            headers.update({'Connection': 'Upgrade', 'Upgrade': 'websocket',
+                            'Accept-Encoding': 'identity'})
+            connection = http.client.HTTPConnection('127.0.0.1', NATIVE_PORT, timeout=75)
+            connection.request('GET', self.path, headers=headers)
+            response = connection.getresponse()
+            if response.status != 101:
+                self.send_response(response.status)
+                for key, value in response.getheaders():
+                    if key.lower() not in HOP_HEADERS:
+                        self.send_header(key, value)
+                self.send_header('Connection', 'close')
+                self.end_headers()
+                self.close_connection = True
+                while True:
+                    chunk = response.read(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                return
+            upstream = connection.sock
+            if (response.getheader('Upgrade', '').lower() != 'websocket'
+                    or 'upgrade' not in {value.strip().lower() for value in
+                                         response.getheader('Connection', '').split(',')}
+                    or upstream is None or response.fp is None):
+                self.close_connection = True
+                self.error(502, 'The native service returned an invalid WebSocket handshake.')
+                return
+            self.send_response_only(101)
+            for key, value in response.getheaders():
+                if key.lower() not in HOP_HEADERS or key.lower() in ('connection', 'upgrade'):
+                    self.send_header(key, value)
+            self.end_headers()
+            self.close_connection = True
+            self.connection.settimeout(None)
+            upstream.settimeout(None)
+            stop = threading.Event()
+
+            def relay(read, write):
+                try:
+                    while not stop.is_set():
+                        chunk = read()
+                        if not chunk:
+                            break
+                        write.sendall(chunk)
+                except OSError:
+                    pass
+                finally:
+                    stop.set()
+                    for sock in (self.connection, upstream):
+                        try:
+                            sock.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+
+            up = threading.Thread(target=relay,
+                                  args=(lambda: response.fp.read1(65536), self.connection))
+            down = threading.Thread(target=relay,
+                                    args=(lambda: self.connection.recv(65536), upstream))
+            up.start()
+            down.start()
+            up.join()
+            down.join()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except (ValueError, OSError, http.client.HTTPException):
+            if not self.close_connection:
+                self.error(503, 'The Pi service is unavailable. Your submitted change may need inspection in Recovery; do not repeat it automatically.')
+        finally:
+            if response:
+                response.close()
             if connection:
                 connection.close()
 

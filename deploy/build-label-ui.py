@@ -21,7 +21,20 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-root', required=True)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--toolchain-root', type=pathlib.Path,
+                        help='generated toolchain root containing node-path.txt and pnpm/node_modules/.bin/pnpm')
     args = parser.parse_args()
+    node, pnpm = NODE/'node', PNPM
+    if args.toolchain_root:
+        toolchain = args.toolchain_root.resolve()
+        try:
+            node_root = pathlib.Path((toolchain/'node-path.txt').read_text().strip()).resolve()
+            pnpm = toolchain/'pnpm/node_modules/.bin/pnpm'
+        except OSError as error:
+            raise SystemExit(f'Generated toolchain is incomplete: {error}') from error
+        node = node_root/'bin/node'
+        if not node.is_file() or not pnpm.is_file():
+            raise SystemExit('Generated Node or pnpm executable is missing')
     root = pathlib.Path(args.source_root).resolve()
     package = root / 'label-ui'
     out = (root / args.output).resolve() if not pathlib.Path(args.output).is_absolute() else pathlib.Path(args.output).resolve()
@@ -38,9 +51,9 @@ def main():
         raise SystemExit('Vendor manifest does not name the required full upstream pin')
     if (package / 'public/licenses/PRINTDESIGNPRO-MIT.txt').read_bytes() != (package / 'vendor/print-design-pro/LICENSE').read_bytes():
         raise SystemExit('Distributed PrintDesignPro MIT notice differs from the pinned upstream license')
-    env = dict(os.environ, PATH=str(NODE) + os.pathsep + os.environ.get('PATH', ''))
-    subprocess.run([str(PNPM), 'install', '--frozen-lockfile', '--ignore-scripts'], cwd=package, env=env, check=True)
-    subprocess.run([str(PNPM), 'build'], cwd=package, env=env, check=True)
+    env = dict(os.environ, PATH=str(node.parent) + os.pathsep + os.environ.get('PATH', ''))
+    subprocess.run([str(pnpm), 'install', '--frozen-lockfile', '--ignore-scripts'], cwd=package, env=env, check=True)
+    subprocess.run([str(pnpm), 'build'], cwd=package, env=env, check=True)
     if out.exists():
         old_manifest = out / 'manifest.json'
         if not old_manifest.is_file() or json.loads(old_manifest.read_text()).get('builder') != 'deploy/build-label-ui.py':
@@ -51,8 +64,8 @@ def main():
         **json.loads((package / 'vendor-manifest.json').read_text()),
         'builder': 'deploy/build-label-ui.py',
         'upstream_commit': PIN,
-        'node': subprocess.check_output([str(NODE / 'node'), '--version'], text=True).strip(),
-        'pnpm': subprocess.check_output([str(PNPM), '--version'], env=env, text=True).strip(),
+        'node': subprocess.check_output([str(node), '--version'], text=True).strip(),
+        'pnpm': subprocess.check_output([str(pnpm), '--version'], env=env, text=True).strip(),
         'dependencies_lock_sha256': sha(package / 'pnpm-lock.yaml'),
         'font_sha256': sha(package / 'public/fonts/DejaVuSans.ttf'),
         'font_license_sha256': sha(package / 'public/fonts/DejaVu-Fonts-Copyright.txt'),

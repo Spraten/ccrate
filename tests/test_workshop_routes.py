@@ -18,7 +18,7 @@ from uuid import uuid4
 from ledger import Ledger
 from native_jobs import NativeJobs
 from workshop import Workshop
-from shelf_checks import ShelfChecks
+from shelf_checks import CheckAccessDenied, ShelfChecks
 from ledger import Conflict
 import desktop_api
 
@@ -96,6 +96,7 @@ class WorkshopRouteTests(unittest.TestCase):
             'same_origin': lambda *_: True, 'OPEN_ADMIN': True, 'lock': threading.Lock(),
             'Homebox': lambda *_: self.native, 'workshop': self.workshop, 'ledger': self.ledger,
             'shelf_checks': self.shelf_checks,
+            'CheckAccessDenied': CheckAccessDenied,
             'native_jobs': self.jobs, 'badges': None, 'imports': None, 'label_layouts': None,
             'LABEL_ASSET_ROOT': self.root, 'session': SessionFixture(self.member),
             'ApiError': desktop_api.ApiError,

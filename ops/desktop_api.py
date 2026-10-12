@@ -772,6 +772,8 @@ def post_action(route, data, ctx, deps, address):
             ledger.event(db, record['id'], 'desktop_recovery_resolved', {'actor_id': actor, 'outcome': data['outcome']})
         return result
     if route == 'backup/start':
+        if os.environ.get('WORKSHOP_LOCAL_TEST') == '1':
+            raise ValueError('Backup is unavailable in local test; no external backup destination is configured')
         return once(ctx, deps, route, data, lambda: native_op('system_status', 'start_backup', data.get('request_key')))
     raise ApiError(404, 'Unknown Workshop action.')
 

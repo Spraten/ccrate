@@ -19,4 +19,4 @@ A fresh private local backup passed archive readback and integrity checks for fi
 
 Evidence is in `work/item-log-notes-isolation/`: `verification.json`, `coordinator-release-receipt.json`, `coordinator-release-apply-receipt.json`, `coordinator-cold-capture-receipt.json` and the referenced unit/build/GUI/compatibility logs. Exact accepted raw plan SHA-256 is `2951011346f252c4f0a8f5f9c5ca397e9155391dbfef92c5bbd454fb13f4bdab`; its canonical transaction digest is distinct.
 
-Earlier failed fixture attempts are preserved and superseded by the final passing receipts. Physical readability, scanning and user acceptance remain as documented in PROJECT_STATE.md. Maps, rooms/shelf checks and member/profile work are still queued.
+Earlier fixture attempts were superseded by the recorded verification. Physical readability, scanning and user acceptance have not been tested.

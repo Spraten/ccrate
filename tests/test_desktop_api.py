@@ -189,6 +189,16 @@ class DesktopTests(unittest.TestCase):
         self.assertNotIn('alpha', json.dumps(result)); self.assertNotIn('password', json.dumps(result))
         self.assertTrue(all(call[0] == 'alpha' for call in self.native_calls))
 
+    def test_local_backup_rejection_does_not_create_request_or_recovery_state(self):
+        with patch.dict('os.environ', {'WORKSHOP_LOCAL_TEST': '1', 'WORKSHOP_ROOT': str(self.root)}):
+            response = self.request('backup/start', {'request_key': ident()})
+        self.assertEqual(response.status, 400)
+        with self.ledger.connection() as db:
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            self.assertNotIn('desktop_requests', tables)
+        self.assertEqual(self.request('recovery').result, [])
+        self.assertFalse((self.root/'work/backup-status.json').exists())
+
     def test_missing_expired_and_fake_session_cookie_do_not_authenticate(self):
         for cookie in (None, 'hb.auth.session=true', 'hb.auth.token=expired; hb.auth.remember=true'):
             self.assertEqual(self.request('equipment', headers={'Cookie': cookie}).status, 401)
