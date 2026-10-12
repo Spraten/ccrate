@@ -204,8 +204,7 @@ def shell_frontend():
     end = source.index(selector, start) + len(selector)
     source = source[:start] + '''<SidebarHeader class="items-stretch gap-2 p-3">
           <NuxtLink to="/home" aria-label="C-Crate home" class="flex h-10 w-full items-center gap-3 rounded-md px-2 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-            <AppLogo aria-hidden="true" class="size-7 shrink-0" />
-            <span class="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">C-Crate</span>
+            <AppLogo aria-hidden="true" class="h-7 w-auto max-w-full shrink-0 group-data-[collapsible=icon]:size-7" />
           </NuxtLink>
 
           <CollectionSelector />'''+source[end:]
