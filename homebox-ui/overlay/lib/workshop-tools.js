@@ -1,7 +1,7 @@
 import { mountLabelDesigner, exportReviewedPaper } from "./label-editor.js";
 const labelQueues = new Map();
 // Established workshop workflows hosted by C-Crate's native layout.
-export function mountWorkshopTools(root, initialPage, workshop, navigate, notify, /** @type {{entityId:string|null,drawingId:string|null,roomId:string|null}} */ initialSelection={entityId:null,drawingId:null,roomId:null}, labelWorkspaceChanged=()=>{}) {
+export function mountWorkshopTools(root, initialPage, workshop, navigate, notify, /** @type {{entityId:string|null,drawingId:string|null,roomId:string|null}} */ initialSelection={entityId:null,drawingId:null,roomId:null}, /** @type {(workspace:any,status?:string)=>any} */ labelWorkspaceChanged=(workspace)=>workspace) {
 let disposed=false;
 const listeners=[];
 function listen(name, fn){window.addEventListener(name,fn);listeners.push([name,fn]);}
