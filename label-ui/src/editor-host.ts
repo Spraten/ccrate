@@ -144,7 +144,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       }
       const previewDraft = async () => {
         const version = draftPreview.begin()
-        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        const opener = window.document.activeElement instanceof HTMLElement ? window.document.activeElement : null
         const data = selectedItem.value ? { mode: 'item_draft', entity_id: selectedItem.value, profile: profile.value, document: snapshot() } : { mode: 'synthetic', profile: profile.value, document: snapshot(), sample: { item_name: sampleName.value, asset_code: sampleCode.value } }
         const result = await invoke('labels/preview', data)
         if (!draftPreview.accepts(version, disposed)) return
@@ -190,7 +190,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
 .label-host-paper-size{align-self:center;padding:8px 10px;border-radius:6px;background:var(--pp-color-brand-soft);color:var(--pp-color-brand-700);font-size:.875rem;font-weight:600;white-space:nowrap}
 .label-host-message{min-height:1.5em}
 .label-host-selected-item{align-self:center;padding:8px 10px;color:var(--pp-color-app-text2);font-size:.875rem}
-.label-preview-dialog{box-sizing:border-box;width:min(720px,calc(100vw - 24px));max-width:none;max-height:calc(100vh - 24px);margin:auto;padding:12px;overflow:auto;border:1px solid var(--pp-color-app-border2);border-radius:10px;background:var(--pp-color-app-panel);color:var(--pp-color-app-text);box-shadow:0 18px 50px rgb(15 23 42 / .3)}
+.label-preview-dialog{position:fixed;inset:0;box-sizing:border-box;width:min(720px,calc(100vw - 24px));max-width:none;max-height:calc(100vh - 24px);margin:auto;padding:12px;overflow:auto;border:1px solid var(--pp-color-app-border2);border-radius:10px;background:var(--pp-color-app-panel);color:var(--pp-color-app-text);box-shadow:0 18px 50px rgb(15 23 42 / .3)}
 .label-preview-dialog::backdrop{background:rgb(15 23 42 / .55)}
 .label-preview-dialog header{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .label-preview-dialog h2{margin:0;font-size:1.125rem}
