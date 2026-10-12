@@ -169,6 +169,14 @@ class LabelLayoutTests(unittest.TestCase):
         self.store.resolve_review(self.group,response['review_id'])
         self.assertIsNone(self.store.review(self.group,self.actor,response['review_id']))
 
+    def test_item_review_exposes_custom_letter_label_dimensions(self):
+        letter=document();letter['page'].update(widthMm=210,heightMm=297)
+        saved=self.store.save(self.group,self.actor,{'revision':0,'name':'Letter','profile':'letter','document':letter,'request_key':'letter-save'})
+        self.store.renderer=lambda doc,profile:{'png':b'canonical-png','width':709,'height':1003,'sha256':'c'*64,'warnings':[]}
+        response=self.store.preview(FakeClient(),self.group,self.actor,{'mode':'item','entity_id':'44444444-4444-4444-8444-444444444444','template_id':saved['id'],'template_revision':saved['revision']})
+        self.assertEqual(response['profile'],'letter')
+        self.assertEqual(response['label_mm'],[210,297])
+
     def test_review_expiry_retains_attached_tickets_and_survives_restart(self):
         self.store.renderer=lambda doc,profile:{'png':b'canonical-png','width':320,'height':224,'sha256':'b'*64,'warnings':[]}
         data={'mode':'item','entity_id':'44444444-4444-4444-8444-444444444444','template_id':'starter:supvan:left','template_revision':0}

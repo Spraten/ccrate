@@ -387,7 +387,7 @@ class LabelLayouts:
                     _remaining(deadline)
                     review_id=str(uuid4());metadata={'profile':profile,'label_mm':[prepared[len(responses)][3]['page']['widthMm'],prepared[len(responses)][3]['page']['heightMm']],'dpi':203.2 if profile=='supvan' else 300,'width':image['width'],'height':image['height'],'sha256':image['sha256'],'template_id':template['id'],'template_revision':template['revision'],'template_hash':_digest(template['document']),'item_id':_uuid(entity['id']),'item_updated_at':updated,'warnings':warnings+image.get('warnings',[])}
                     db.execute('INSERT INTO reviews(id,group_id,actor_id,created,metadata,png) VALUES(?,?,?,?,?,?)',(review_id,group,actor,time.time(),_canonical(metadata),image['png']))
-                    responses.append({**self._response(image,profile,metadata['warnings']),'review_id':review_id,'item_updated_at':updated,'template_id':template['id'],'template_revision':template['revision']})
+                    responses.append({**self._response(image,profile,metadata['warnings']),'label_mm':metadata['label_mm'],'review_id':review_id,'item_updated_at':updated,'template_id':template['id'],'template_revision':template['revision']})
             return {'reviews':responses} if len(responses)>1 or data.get('entity_ids') is not None else responses[0]
         finally:self._lock.release()
 
