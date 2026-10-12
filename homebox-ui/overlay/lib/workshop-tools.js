@@ -381,6 +381,7 @@ function paintPlannerCanvas(room, canvas) {
     }, object.name);
     const captionBacking=svgNode('rect',{x:0,y:0,width:0,height:0,rx:.08,fill:attentionOverlay?'hsl(var(--destructive))':'hsl(var(--background))','pointer-events':'none','data-workshop-caption-backdrop':'true'});
     const preset=plannerArtworkForDrawing(object),artwork=preset?svgNode('image',{preserveAspectRatio:'xMidYMid meet','pointer-events':'none','data-workshop-artwork':preset.id,href:preset.asset}):null;
+    const layerStripe=object.layer==='above'||object.layer==='below'?svgNode('rect',{fill:`url(#planner-stripe-${object.layer})`,'pointer-events':'none','data-workshop-layer-stripe':object.layer}):null;
     const details=svgNode('g',{'pointer-events':'none'}),linkMarker=svgNode('circle',{cx:object.width-.18,cy:.18,r:.085,fill:object.location_id?'#2E78AD':'hsl(var(--background))',stroke:object.location_id?'#1D5C8A':'#718087','stroke-width':.04,'data-link-indicator':object.location_id?'linked':'drawing-only','pointer-events':'none'});
     const setFootprint = () => {
       const quarterTurn=object.rotation%180!==0,visualWidth=quarterTurn?object.height:object.width,visualHeight=quarterTurn?object.width:object.height,visualX=(object.width-visualWidth)/2,visualY=(object.height-visualHeight)/2;
@@ -389,6 +390,7 @@ function paintPlannerCanvas(room, canvas) {
       rect.setAttribute('width', String(visualWidth));
       rect.setAttribute('height', String(visualHeight));
       if(artwork){artwork.setAttribute('x',String(visualX));artwork.setAttribute('y',String(visualY));artwork.setAttribute('width',String(visualWidth));artwork.setAttribute('height',String(visualHeight));artwork.setAttribute('opacity',String(object.opacity??1))}
+      if(layerStripe){layerStripe.setAttribute('x',String(visualX));layerStripe.setAttribute('y',String(visualY));layerStripe.setAttribute('width',String(visualWidth));layerStripe.setAttribute('height',String(visualHeight))}
       text.setAttribute('x', String(object.width / 2));
       text.setAttribute('y', String(object.height / 2));
       const matrix=plan.getScreenCTM(),screenScale=matrix?Math.min(Math.hypot(matrix.a,matrix.b),Math.hypot(matrix.c,matrix.d)):1;
@@ -418,7 +420,7 @@ function paintPlannerCanvas(room, canvas) {
     };
     captionRefreshers.push(()=>setFootprint());
     shape.append(rect,details);
-    if(artwork){artwork.onerror=()=>artwork.remove();shape.append(artwork)}if(object.layer==='above'||object.layer==='below')shape.append(svgNode('rect',{x:0,y:0,width:object.width,height:object.height,fill:`url(#planner-stripe-${object.layer})`,'pointer-events':'none'}));
+    if(artwork){artwork.onerror=()=>artwork.remove();shape.append(artwork)}if(layerStripe)shape.append(layerStripe);
     group.append(shape,captionBacking,text,linkMarker);
     setFootprint();
     if (object.id === layoutSelected && manager() && browseMode === 'edit') {

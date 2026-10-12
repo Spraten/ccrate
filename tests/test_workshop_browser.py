@@ -510,15 +510,24 @@ class WorkshopBrowserTests(unittest.TestCase):
 
     def test_rotated_catalog_artwork_stays_within_visual_footprint(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-        drawing={'id':DRAWING,'name':'Wall cabinet','kind':'Cabinet','x':2,'y':3,'width':3,'height':1,'rotation':90,'location_id':LOCATION}
+        drawing={'id':DRAWING,'name':'Wall cabinet','kind':'Cabinet','x':2,'y':3,'width':3,'height':1,'rotation':90,'layer':'above','location_id':LOCATION}
         document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
         self.install_rooms4_plan(document,selected_drawing=DRAWING,types=['Cabinet'])
-        measured=self.page.locator('[data-workshop-artwork]').evaluate('''image=>{const a=image.getBoundingClientRect(),r=image.parentElement.querySelector('rect[data-object-shape]').getBoundingClientRect();return {image:{left:a.left,right:a.right,top:a.top,bottom:a.bottom},rect:{left:r.left,right:r.right,top:r.top,bottom:r.bottom},opacity:image.getAttribute('opacity')}}''')
-        for edge in ['left','top']:
-            self.assertGreaterEqual(measured['image'][edge],measured['rect'][edge]-1,measured)
-        for edge in ['right','bottom']:
-            self.assertLessEqual(measured['image'][edge],measured['rect'][edge]+1,measured)
+        measured=self.page.locator('[data-workshop-artwork]').evaluate('''image=>{const bounds=node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}};return {image:bounds(image),stripe:bounds(image.parentElement.querySelector('[data-workshop-layer-stripe]')),rect:bounds(image.parentElement.querySelector('rect[data-object-shape]')),opacity:image.getAttribute('opacity')}}''')
+        for shape in ['image','stripe']:
+            for edge in ['left','right','top','bottom']:
+                self.assertAlmostEqual(measured[shape][edge],measured['rect'][edge],delta=1,msg=repr(measured))
         self.assertEqual(measured['opacity'],'1')
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        handle=self.page.get_by_role('button',name='Resize drawing handle')
+        box=handle.bounding_box()
+        self.page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2)
+        self.page.mouse.down()
+        self.page.mouse.move(box['x']+box['width']/2+60,box['y']+box['height']/2+35)
+        self.page.mouse.up()
+        resized=self.page.locator('[data-workshop-layer-stripe]').evaluate('''stripe=>{const bounds=node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}};return {stripe:bounds(stripe),rect:bounds(stripe.parentElement.querySelector('rect[data-object-shape]'))}}''')
+        for edge in ['left','right','top','bottom']:
+            self.assertAlmostEqual(resized['stripe'][edge],resized['rect'][edge],delta=1,msg=repr(resized))
         self.assertEqual(self.errors,[])
 
     def test_rotated_shelf_details_stay_inside_the_plan_footprint(self):
