@@ -187,6 +187,8 @@ class WorkshopLayoutTests(unittest.TestCase):
         search.fill('')
         self.assertTrue(base_cabinet.is_visible(), 'Clearing search restores same-category presets.')
         self.assertTrue(bins.is_visible(), 'Clearing search restores unmatched categories.')
+        self.assertTrue(search.evaluate("el=>el.nextElementSibling?.matches('.planner-presets')"),
+                        'The catalog follows search in semantic DOM order.')
 
         contrast_target = self.page.locator('.planner-preset-card').first
         contrast_target.evaluate("el=>el.style.transition='none'")
@@ -218,6 +220,19 @@ class WorkshopLayoutTests(unittest.TestCase):
         self.assertTrue(self.page.get_by_label('Workshop inspector').is_visible())
         self.assertTrue(self.page.get_by_role('button', name='Pan right', exact=True).is_visible())
         self.assertTrue(self.page.get_by_role('button', name='Fit room', exact=True).is_visible())
+        search = self.page.get_by_label('Search objects')
+        self.assertTrue(search.evaluate("el=>el.nextElementSibling?.matches('.planner-presets')"),
+                        'Narrow palette keeps the catalog immediately after search.')
+        search.focus()
+        for _ in range(4):
+            self.page.keyboard.press('Tab')
+            focused = self.page.locator(':focus')
+            if focused.evaluate("el=>el.matches('.planner-preset-card')"):
+                break
+            self.assertFalse(focused.evaluate("el=>el.matches('.planner-object')"),
+                             'Native legacy buttons do not precede the catalog in keyboard order.')
+        self.assertTrue(focused.evaluate("el=>el.matches('.planner-preset-card')"),
+                        'Keyboard reaches a catalog card directly after the search controls.')
         self.assert_no_horizontal_overflow()
         self.page.screenshot(path=str(proof_dir / 'after-200pct-640x450.png'), full_page=True)
         self.assertEqual(self.errors, [])
