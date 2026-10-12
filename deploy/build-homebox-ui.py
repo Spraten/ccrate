@@ -150,6 +150,50 @@ def nest_frontend():
     target.write_text(text)
 
 
+def navigation_frontend():
+    replace('layouts/default.vue', '      <Sidebar collapsible="icon">', '      <Sidebar side="right" class="md:order-last" collapsible="icon">')
+    replace('layouts/default.vue', '<Collapsible v-else default-open', '<Collapsible v-else :default-open="n.name.value !== \'More\'"')
+    replace('layouts/default.vue', '    collapsible?: {\n      active: ComputedRef<boolean>;', '    collapsible?: {\n      action?: () => void;\n      active: ComputedRef<boolean>;')
+    replace('layouts/default.vue', '<SidebarMenuLink\n                            :href="c.to"', '<SidebarMenuLink v-if="!c.action"\n                            :href="c.to"')
+    replace('layouts/default.vue', '                          </SidebarMenuLink>\n                        </SidebarMenuSubItem>', '                          </SidebarMenuLink>\n                          <SidebarMenuButton v-else @click.prevent="c.action?.()"><span>{{ c.name.value }}</span></SidebarMenuButton>\n                        </SidebarMenuSubItem>')
+    layout = BUILD/'layouts/default.vue'
+    source = layout.read_text()
+    start = source.index('              <!-- makes scanner accessible easily if using legacy header -->')
+    end = source.index('              </SidebarMenuItem>', start) + len('              </SidebarMenuItem>\n')
+    layout.write_text(source[:start] + source[end:])
+    replace('layouts/default.vue', 'const nav: {', 'const baseNav: {')
+    replace('layouts/default.vue', '  const quickMenuActions = reactive([', '''  const workshop = useWorkshop();
+  const { selectedId: workshopGroup } = useCollections();
+  const workshopLinks = computed(() => [
+    ["loans", "Loans & notes"], ["map", "Workshop & storage"],
+    ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
+  ]);
+  const nav = computed(() => [
+    baseNav[0],
+    { ...baseNav[3], id: 1, name: computed(() => "Inventory") },
+    { id: 8, icon: MdiWrench, name: computed(() => "Workshop"), to: "/workshop/map", active: computed(() => route.path === "/workshop/map") },
+    { id: 9, icon: MdiTagMultiple, name: computed(() => "Label"), to: "/workshop/labels", active: computed(() => route.path === "/workshop/labels") },
+    { ...baseNav[7], id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
+    {
+      id: 11, icon: MdiFileDocumentMultiple, name: computed(() => "More"), to: "/home",
+      active: computed(() => false),
+      collapsible: [
+        ...baseNav.slice(1, 3), baseNav[4], baseNav[5], baseNav[6],
+        ...baseNav[7].collapsible!.filter(item => item.to !== "/collection/members"),
+        ...workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels").map(([id, name], index) => ({ id: 80 + index, name: computed(() => name!), to: `/workshop/${id}`, active: computed(() => route.path === `/workshop/${id}`) })),
+        { id: 90, name: computed(() => "Equipment Terminal"), to: terminalURL.value, active: computed(() => false) },
+        { id: 91, name: computed(() => t("menu.scanner")), to: "", active: computed(() => false), action: openScanner },
+      ],
+    },
+  ]);
+  watch([workshopGroup, () => useAuthContext().user?.id], () => { workshop.context.value = null; workshop.refresh().catch(() => {}); }, { immediate: true });
+
+  const quickMenuActions = computed(() => [''')
+    replace('layouts/default.vue', '...nav.map(v => ({', '...nav.value.map(v => ({')
+    target = BUILD/'layouts/default.vue'
+    target.write_text(target.read_text().replace('text: computed(() => v.name.value),', 'text: v.name.value,'))
+
+
 def prepare():
     shutil.copytree(UPSTREAM_ROOT/'upstream/homebox/frontend', BUILD, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('node_modules', '.nuxt', '.output'))
@@ -166,26 +210,7 @@ def prepare():
     replace('pages/home/index.vue', '  import BaseCard from', '  import CheckedOutItems from "@/components/Workshop/CheckedOutItems.vue";\n  import BaseCard from')
     replace('pages/home/index.vue', '      <section>\n        <Subtitle> {{ $t("home.recently_added") }}', '      <CheckedOutItems />\n\n      <section>\n        <Subtitle> {{ $t("home.recently_added") }}')
     # Native sidebar and quick menu, with manager-only entries hidden for members.
-    replace('layouts/default.vue', 'const nav: {', 'const baseNav: {')
-    replace('layouts/default.vue', '  const quickMenuActions = reactive([', '''  const workshop = useWorkshop();
-  const { selectedId: workshopGroup } = useCollections();
-  const workshopLinks = computed(() => [
-    ["loans", "Loans & notes"], ["map", "Workshop & storage"],
-    ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
-  ]);
-  const nav = computed(() => [...baseNav, {
-    id: 8, icon: MdiWrench, name: computed(() => "Workshop"), to: "/workshop/loans",
-    active: computed(() => route.path.startsWith("/workshop/")),
-    collapsible: workshopLinks.value.map(([id, name], index) => ({ id: 80 + index, name: computed(() => name!), to: `/workshop/${id}`, active: computed(() => route.path === `/workshop/${id}`) })),
-  }]);
-  watch([workshopGroup, () => useAuthContext().user?.id], () => { workshop.context.value = null; workshop.refresh().catch(() => {}); }, { immediate: true });
-
-  const quickMenuActions = computed(() => [''')
-    replace('layouts/default.vue', '...nav.map(v => ({', '...nav.value.map(v => ({')
-    target = BUILD/'layouts/default.vue'
-    target.write_text(target.read_text().replace('text: computed(() => v.name.value),', 'text: v.name.value,'))
-    replace('layouts/default.vue', '        <SidebarFooter>', '''        <SidebarFooter>
-          <SidebarMenuLink :href="terminalURL" tooltip="Equipment Terminal"><MdiQrcodeScan /><span>Equipment Terminal</span></SidebarMenuLink>''')
+    navigation_frontend()
     replace('layouts/default.vue', '  const search = ref("");', '''  const terminalHeader = ref(false);
   let desktopHeaderMedia: MediaQueryList | null = null;
   const updateDesktopHeader = () => { terminalHeader.value = desktopHeaderMedia?.matches || false; };
