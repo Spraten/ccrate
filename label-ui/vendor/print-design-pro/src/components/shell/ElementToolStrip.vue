@@ -2,7 +2,8 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useEditorI18n } from '../../composables/use-editor-i18n'
 import { ImageTooLargeError, pickImageFile, readImage } from '../../composables/use-image-picker'
-import { addElementCommand } from '../../core/commands/element-commands'
+import { addElementCommand, updateElementsCommand } from '../../core/commands/element-commands'
+import { fitElementToPage } from '../../core/element-placement.js'
 import {
   createBarcode,
   createCircle,
@@ -32,8 +33,8 @@ const TOOLS = [
   { key: 'line', glyph: '—', labelKey: 'palette.line', create: createLine },
   { key: 'circle', glyph: '◯', labelKey: 'palette.circle', create: createCircle },
   { key: 'text', glyph: 'Aa', labelKey: 'palette.text', create: createText },
-  { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: createQr },
-  { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: createBarcode },
+  { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: (place: { centerXMm: number, centerYMm: number }) => createQr(place, '{{item_path}}') },
+  { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: (place: { centerXMm: number, centerYMm: number }) => createBarcode(place, '{{asset_code}}') },
   { key: 'table', glyph: '⊞', labelKey: 'palette.table', create: createTable },
 ] as const
 
@@ -97,8 +98,19 @@ function addShape(kind: ShapeKind): void {
   addElement(place => createShape(place, kind))
 }
 
+function addItemQr(): void {
+  const existing = doc.elements.find(element => element.type === 'qr')
+  if (existing) {
+    if (!existing.visible)
+      history.dispatch(updateElementsCommand(doc, [{ id: existing.id, patch: { visible: true } }], 'Show item QR'))
+    selection.select(existing.id)
+    return
+  }
+  addElement(place => createQr(place, '{{item_path}}'))
+}
+
 function addElement(create: (place: { centerXMm: number, centerYMm: number }) => TemplateElement): void {
-  const element = create({ centerXMm: doc.page.widthMm / 2, centerYMm: doc.page.heightMm / 2 })
+  const element = fitElementToPage(create({ centerXMm: doc.page.widthMm / 2, centerYMm: doc.page.heightMm / 2 }), doc.page, doc.elements)
   history.dispatch(addElementCommand(doc, element))
   selection.select(element.id)
 }
@@ -112,12 +124,12 @@ async function addImage(): Promise<void> {
     if (!file)
       return
     const { src, aspectRatio } = await readImage(file)
-    const element = createImage(
+    const element = fitElementToPage(createImage(
       { centerXMm: doc.page.widthMm / 2, centerYMm: doc.page.heightMm / 2 },
       src,
       aspectRatio,
       Math.min(80, doc.page.widthMm * 0.6),
-    )
+    ), doc.page, doc.elements)
     history.dispatch(addElementCommand(doc, element))
     selection.select(element.id)
   }
@@ -141,7 +153,7 @@ async function addImage(): Promise<void> {
       :title="t(tool.labelKey)"
       class="pp:flex pp:h-[42px] pp:w-[46px] pp:shrink-0 pp:cursor-pointer pp:flex-col pp:items-center pp:justify-center pp:gap-0.5 pp:rounded-lg pp:text-app-text2 pp:hover:bg-brand-soft pp:hover:text-brand-500"
       :data-pp-palette-tile="tool.key"
-      @click="addElement(tool.create)"
+      @click="tool.key === 'qr' ? addItemQr() : addElement(tool.create)"
     >
       <span class="pp:font-uimono pp:text-[15px] pp:font-medium pp:leading-none">{{ tool.glyph }}</span>
       <span class="pp:text-[9px] pp:font-medium">{{ t(tool.labelKey) }}</span>

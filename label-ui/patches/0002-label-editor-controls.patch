@@ -1,0 +1,228 @@
+diff --git a/packages/editor/src/components/__tests__/shell-components.spec.ts b/packages/editor/src/components/__tests__/shell-components.spec.ts
+index 06385ff..00c46d5 100644
+--- a/packages/editor/src/components/__tests__/shell-components.spec.ts
++++ b/packages/editor/src/components/__tests__/shell-components.spec.ts
+@@ -5,12 +5,35 @@ import { beforeEach, describe, expect, it } from 'vitest'
+ import { addElementCommand } from '../../core/commands/element-commands'
+ import { createRect, createText } from '../../core/element-factories'
+ import { useDocumentStore } from '../../stores/document-store'
++import { useBatchDataStore } from '../../stores/batch-data-store'
+ import { useHistoryStore } from '../../stores/history-store'
+ import { useSelectionStore } from '../../stores/selection-store'
+ import ColorField from '../shell/panel-controls/ColorField.vue'
+ import NumberField from '../shell/panel-controls/NumberField.vue'
+ import PropertiesPanel from '../shell/PropertiesPanel.vue'
+ 
++describe('selected item preview data', () => {
++  beforeEach(() => setActivePinia(createPinia()))
++
++  it('overrides only the canvas preview and survives document and batch resets', () => {
++    const doc = useDocumentStore()
++    const batch = useBatchDataStore()
++    const savedVariables = { ...doc.document.variables }
++
++    batch.setPreviewOverrides({ item_name: 'Native item', asset_code: 'C-42', item_path: '/item/44444444-4444-4444-8444-444444444444' })
++    expect(batch.previewData).toMatchObject({ item_name: 'Native item', asset_code: 'C-42', item_path: '/item/44444444-4444-4444-8444-444444444444' })
++    expect(doc.document.variables).toEqual(savedVariables)
++
++    batch.setCsv(['item_name'], [{ item_name: 'CSV row' }], 'items.csv')
++    batch.clear()
++    expect(batch.previewData).toMatchObject({ item_name: 'Native item', asset_code: 'C-42' })
++    expect(doc.document.variables).toEqual(savedVariables)
++
++    batch.setPreviewOverrides(null)
++    expect(batch.previewData).toEqual(savedVariables)
++  })
++})
++
+ describe('numberField', () => {
+   it('commits parsed value on enter, resyncs draft from modelValue', async () => {
+     const wrapper = mount(NumberField, {
+diff --git a/packages/editor/src/components/shell/EditorTopBar.vue b/packages/editor/src/components/shell/EditorTopBar.vue
+index 1c633bd..72fa997 100644
+--- a/packages/editor/src/components/shell/EditorTopBar.vue
++++ b/packages/editor/src/components/shell/EditorTopBar.vue
+@@ -90,7 +90,7 @@ function zoomStep(direction: 1 | -1): void {
+       >
+         {{ doc.document.name || t('topbar.untitled') }}
+       </button>
+-      <div class="pp:flex pp:items-center pp:gap-1 pp:whitespace-nowrap pp:text-[11px] pp:text-app-ok">
++      <div data-pp-save-state class="pp:flex pp:items-center pp:gap-1 pp:whitespace-nowrap pp:text-[11px] pp:text-app-ok">
+         <span class="pp:inline-block pp:h-1.5 pp:w-1.5 pp:rounded-full pp:bg-app-ok" />
+         {{ saving ? t('topbar.saving') : t('topbar.autosaved') }}
+       </div>
+diff --git a/packages/editor/src/components/shell/ElementToolStrip.vue b/packages/editor/src/components/shell/ElementToolStrip.vue
+index fee9758..4ebdb51 100644
+--- a/packages/editor/src/components/shell/ElementToolStrip.vue
++++ b/packages/editor/src/components/shell/ElementToolStrip.vue
+@@ -2,7 +2,8 @@
+ import { onBeforeUnmount, onMounted, ref } from 'vue'
+ import { useEditorI18n } from '../../composables/use-editor-i18n'
+ import { ImageTooLargeError, pickImageFile, readImage } from '../../composables/use-image-picker'
+-import { addElementCommand } from '../../core/commands/element-commands'
++import { addElementCommand, updateElementsCommand } from '../../core/commands/element-commands'
++import { fitElementToPage } from '../../core/element-placement.js'
+ import {
+   createBarcode,
+   createCircle,
+@@ -32,8 +33,8 @@ const TOOLS = [
+   { key: 'line', glyph: '—', labelKey: 'palette.line', create: createLine },
+   { key: 'circle', glyph: '◯', labelKey: 'palette.circle', create: createCircle },
+   { key: 'text', glyph: 'Aa', labelKey: 'palette.text', create: createText },
+-  { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: createQr },
+-  { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: createBarcode },
++  { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: (place: { centerXMm: number, centerYMm: number }) => createQr(place, '{{item_path}}') },
++  { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: (place: { centerXMm: number, centerYMm: number }) => createBarcode(place, '{{asset_code}}') },
+   { key: 'table', glyph: '⊞', labelKey: 'palette.table', create: createTable },
+ ] as const
+ 
+@@ -97,8 +98,19 @@ function addShape(kind: ShapeKind): void {
+   addElement(place => createShape(place, kind))
+ }
+ 
++function addItemQr(): void {
++  const existing = doc.elements.find(element => element.type === 'qr')
++  if (existing) {
++    if (!existing.visible)
++      history.dispatch(updateElementsCommand(doc, [{ id: existing.id, patch: { visible: true } }], 'Show item QR'))
++    selection.select(existing.id)
++    return
++  }
++  addElement(place => createQr(place, '{{item_path}}'))
++}
++
+ function addElement(create: (place: { centerXMm: number, centerYMm: number }) => TemplateElement): void {
+-  const element = create({ centerXMm: doc.page.widthMm / 2, centerYMm: doc.page.heightMm / 2 })
++  const element = fitElementToPage(create({ centerXMm: doc.page.widthMm / 2, centerYMm: doc.page.heightMm / 2 }), doc.page, doc.elements)
+   history.dispatch(addElementCommand(doc, element))
+   selection.select(element.id)
+ }
+@@ -112,12 +124,12 @@ async function addImage(): Promise<void> {
+     if (!file)
+       return
+     const { src, aspectRatio } = await readImage(file)
+-    const element = createImage(
++    const element = fitElementToPage(createImage(
+       { centerXMm: doc.page.widthMm / 2, centerYMm: doc.page.heightMm / 2 },
+       src,
+       aspectRatio,
+       Math.min(80, doc.page.widthMm * 0.6),
+-    )
++    ), doc.page, doc.elements)
+     history.dispatch(addElementCommand(doc, element))
+     selection.select(element.id)
+   }
+@@ -141,7 +153,7 @@ async function addImage(): Promise<void> {
+       :title="t(tool.labelKey)"
+       class="pp:flex pp:h-[42px] pp:w-[46px] pp:shrink-0 pp:cursor-pointer pp:flex-col pp:items-center pp:justify-center pp:gap-0.5 pp:rounded-lg pp:text-app-text2 pp:hover:bg-brand-soft pp:hover:text-brand-500"
+       :data-pp-palette-tile="tool.key"
+-      @click="addElement(tool.create)"
++      @click="tool.key === 'qr' ? addItemQr() : addElement(tool.create)"
+     >
+       <span class="pp:font-uimono pp:text-[15px] pp:font-medium pp:leading-none">{{ tool.glyph }}</span>
+       <span class="pp:text-[9px] pp:font-medium">{{ t(tool.labelKey) }}</span>
+diff --git a/packages/editor/src/core/element-placement.js b/packages/editor/src/core/element-placement.js
+new file mode 100644
+index 0000000..5cf5148
+--- /dev/null
++++ b/packages/editor/src/core/element-placement.js
+@@ -0,0 +1,64 @@
++export function fitElementToPage(element, page, existing = []) {
++  const scale = Math.min(1, page.widthMm / element.widthMm, page.heightMm / element.heightMm)
++  const widthMm = Number((element.widthMm * scale).toFixed(3))
++  const heightMm = Number((element.heightMm * scale).toFixed(3))
++  const fitted = {
++    ...element,
++    xMm: Number((element.xMm + (element.widthMm - widthMm) / 2).toFixed(3)),
++    yMm: Number((element.yMm + (element.heightMm - heightMm) / 2).toFixed(3)),
++    widthMm,
++    heightMm,
++  }
++  const occupied = existing.filter(other => other.visible !== false).map(bounds)
++  if (!occupied.length)
++    return fitted
++
++  const minWidth = fitted.type === 'text' ? Math.min(fitted.widthMm, 8) : Math.min(fitted.widthMm, 5)
++  const minHeight = fitted.type === 'text'
++    ? Math.min(fitted.heightMm, fitted.fontSizePt * 25.4 / 72 * 1.2)
++    : Math.min(fitted.heightMm, 5)
++  if (fitted.type === 'text') {
++    for (let height = fitted.heightMm; height >= minHeight; height -= 1) for (let width = fitted.widthMm; width >= minWidth; width -= 1) {
++      const spot = findSpot(width, height, page, occupied)
++      if (spot)
++        return { ...fitted, ...spot, widthMm: width, heightMm: height }
++    }
++  } else {
++    const minScale = Math.min(minWidth / fitted.widthMm, minHeight / fitted.heightMm)
++    for (let scale = 1; scale >= minScale; scale -= 0.05) {
++      const width = Number((fitted.widthMm * scale).toFixed(3))
++      const height = Number((fitted.heightMm * scale).toFixed(3))
++      const spot = findSpot(width, height, page, occupied)
++      if (spot)
++        return { ...fitted, ...spot, widthMm: width, heightMm: height }
++    }
++  }
++  return fitted
++}
++
++function bounds(element) {
++  const radians = (element.rotation || 0) * Math.PI / 180
++  const width = Math.abs(element.widthMm * Math.cos(radians)) + Math.abs(element.heightMm * Math.sin(radians))
++  const height = Math.abs(element.widthMm * Math.sin(radians)) + Math.abs(element.heightMm * Math.cos(radians))
++  return { left: element.xMm - (width - element.widthMm) / 2, top: element.yMm - (height - element.heightMm) / 2, right: element.xMm + (width + element.widthMm) / 2, bottom: element.yMm + (height + element.heightMm) / 2 }
++}
++
++function findSpot(width, height, page, occupied) {
++  const xs = new Set([0, page.widthMm - width])
++  const ys = new Set([0, page.heightMm - height])
++  for (const box of occupied) {
++    xs.add(box.right); xs.add(box.left - width)
++    ys.add(box.bottom); ys.add(box.top - height)
++  }
++  let best = null, bestDistance = Infinity
++  for (const xMm of xs) for (const yMm of ys) {
++    if (xMm < 0 || yMm < 0 || xMm + width > page.widthMm || yMm + height > page.heightMm)
++      continue
++    const candidate = { left: xMm, top: yMm, right: xMm + width, bottom: yMm + height }
++    if (occupied.some(box => candidate.left < box.right && candidate.right > box.left && candidate.top < box.bottom && candidate.bottom > box.top))
++      continue
++    const distance = Math.hypot(xMm + width / 2 - page.widthMm / 2, yMm + height / 2 - page.heightMm / 2)
++    if (distance < bestDistance) { best = { xMm, yMm }; bestDistance = distance }
++  }
++  return best
++}
+diff --git a/packages/editor/src/stores/batch-data-store.ts b/packages/editor/src/stores/batch-data-store.ts
+index a406610..f2a5bd4 100644
+--- a/packages/editor/src/stores/batch-data-store.ts
++++ b/packages/editor/src/stores/batch-data-store.ts
+@@ -17,6 +17,8 @@ export const useBatchDataStore = defineStore('pp-batch-data', () => {
+   const fileName = ref<string | null>(null)
+   /** null = preview the document's sample values; otherwise a row index. */
+   const activeRowIndex = ref<number | null>(null)
++  /** Host-provided native item values for the live canvas only. */
++  const previewOverrides = ref<Record<string, string> | null>(null)
+   /** Pre-flight results for the loaded rows - non-empty blocks batch jobs. */
+   const barcodeFailures = ref<BatchBarcodeFailure[]>([])
+ 
+@@ -31,8 +33,13 @@ export const useBatchDataStore = defineStore('pp-batch-data', () => {
+   const previewData = computed<Record<string, string>>(() => ({
+     ...doc.document.variables,
+     ...(activeRow.value ?? {}),
++    ...(previewOverrides.value ?? {}),
+   }))
+ 
++  function setPreviewOverrides(values: Record<string, string> | null): void {
++    previewOverrides.value = values ? { ...values } : null
++  }
++
+   function setCsv(newHeaders: string[], newRows: Array<Record<string, string>>, name: string): void {
+     headers.value = newHeaders
+     rows.value = newRows
+@@ -110,6 +117,7 @@ export const useBatchDataStore = defineStore('pp-batch-data', () => {
+     hasRows,
+     activeRow,
+     previewData,
++    setPreviewOverrides,
+     setCsv,
+     clear,
+     stepPreview,

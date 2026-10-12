@@ -28,7 +28,11 @@ class LabelGeneratorContractTests(unittest.TestCase):
         self.assertIn('workspace.printedReviewIds.includes(reviewId)', workflow)
         self.assertIn('labelWorkspaceChanged(null', workflow)
         self.assertIn("if (action !== \"labels/templates/save\")", (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text())
-        self.assertIn("!templates.value.some((t: any) => t.id === k)", (ROOT / 'label-ui/src/editor-host.ts').read_text())
+        editor = (ROOT / 'label-ui/src/editor-host.ts').read_text()
+        self.assertIn("'Blank design'", editor)
+        self.assertIn("Paper size: ${document.value.page.widthMm} × ${document.value.page.heightMm} mm", editor)
+        self.assertIn("label: 'Starter designs'", editor)
+        self.assertIn("templateProfile(t) === profile.value", editor)
 
     def test_reference_license_and_attribution_are_retained(self):
         license_file = ROOT / 'homebox-ui/HOMESORTSTUFF-LICENSE.txt'
