@@ -117,7 +117,7 @@ function designerClosed() {
           <Input id="label-equipment-search" v-model="search" type="search" placeholder="Search name or asset code" />
           <div class="mt-3 max-h-64 overflow-auto rounded-md border">
             <label v-for="item in items" :key="item.id" class="flex cursor-pointer items-center gap-3 border-b px-3 py-2 last:border-0 hover:bg-muted/50">
-              <input class="h-4 w-4 accent-primary" type="checkbox" :checked="selected(item.id)" @change="toggleItem(item.id, ($event.target as HTMLInputElement).checked)" />
+              <input class="h-4 w-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50" type="checkbox" :checked="selected(item.id)" :disabled="!selected(item.id) && workspace.selectedIds.length >= REVIEW_LIMIT" @change="toggleItem(item.id, ($event.target as HTMLInputElement).checked)" />
               <span class="min-w-0"><span class="block truncate font-medium">{{ item.name }}</span><span class="text-xs text-muted-foreground">{{ item.assetId || 'No asset code' }}</span></span>
             </label>
             <p v-if="!items.length" class="p-3 text-sm text-muted-foreground">No current equipment matches.</p>
