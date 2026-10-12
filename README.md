@@ -30,6 +30,19 @@ docker compose exec ccrate-local-test cat /data/work/baseline/test-account.json
 
 The stack preserves local test data across rebuilds and restarts. Do not use `docker compose down -v` unless you intend to remove that test data. Backups and physical printer or camera access are unavailable in this local test container. To inspect startup or shutdown, use `docker compose logs ccrate-local-test`.
 
+### Updating an existing Pi installation
+
+The unified interface is on `main`. From the Pi's repository, update the source and pinned submodule:
+
+```sh
+git fetch origin
+git switch main
+git pull --ff-only origin main
+git submodule update --init --recursive
+```
+
+Pulling source does not update the running interface. The configured Pi services launch the sealed release selected by `work/application-current`, including that release's compiled `public` frontend and label assets. The footer's `0.26.2-caci.2` identifies the backend; it does not identify the frontend revision.
+
 The configured Pi builds use the pinned Go, Node.js and pnpm toolchains under `work/toolchains`:
 
 ```sh
@@ -39,6 +52,8 @@ python3 deploy/build-label-ui.py --source-root . --output work/label-ui-build
 ```
 
 The backend builder uses the selected native UI at `work/homebox-ui-current`. The UI and label builders stage output under `work/`; they do not select or deploy a release. See [C-Crate release notes](docs/C_CRATE_RELEASE.md), [label layouts](docs/LABEL_LAYOUTS.md), and the [native UI build notes](homebox-ui/README.md) for their prerequisites.
+
+Activation must package the matching frontend, label assets, gateway and companion code with `deploy/release_bundle.py`, then select the release through its backup and compatibility checks. This repository does not currently provide a complete Pi update command. `deploy/run-release.py` launches an already selected release; `deploy/stage-label-release.py` only stages a candidate. Restarting the existing services alone will keep serving the selected release.
 
 ## Tests and operational safeguards
 
