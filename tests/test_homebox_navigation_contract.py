@@ -65,8 +65,10 @@ class HomeboxNavigationContractTests(unittest.TestCase):
 
     def test_compact_chrome_keeps_native_account_and_collection_controls(self):
         self.assertIn('aria-label="C-Crate home"', self.output)
-        self.assertIn('<AppLogo aria-hidden="true" class="h-7 w-auto max-w-full shrink-0 group-data-[collapsible=icon]:size-7" />', self.output)
+        self.assertIn('<AppLogo aria-hidden="true" class="size-7 shrink-0" />', self.output)
         self.assertNotIn('group-data-[collapsible=icon]:hidden">C-Crate</span>', self.output)
+        builder = (ROOT / "deploy/build-homebox-ui.py").read_text()
+        self.assertIn('text-base font-bold group-data-[collapsible=icon]:hidden">C-Crate</span>', builder)
         self.assertIn('<CollectionSelector />', self.output)
         self.assertIn('data-testid="logout-button"', self.output)
         self.assertIn('hotkey="Shortcut: Ctrl+`"', self.output)

@@ -48,7 +48,7 @@ def brand_frontend():
     (BUILD/'components/App/Logo.vue').write_text('<template>\n'+logo+'</template>\n')
     shutil.copytree(ROOT/'kiosk/branding', BUILD/'public', dirs_exist_ok=True)
     replace('pages/index.vue', '            HomeB\n            <AppLogo class="-mb-4 w-12" />\n            x', '<AppLogo aria-hidden="true" class="mr-3 size-14 shrink-0" /><span>C-Crate</span>')
-    replace('layouts/default.vue', '          </NuxtLink>\n\n          <CollectionSelector />', '            <span class="block text-center text-base font-bold">C-Crate</span>\n          </NuxtLink>\n\n          <CollectionSelector />')
+    replace('layouts/default.vue', '          </NuxtLink>\n\n          <CollectionSelector />', '            <span class="block text-center text-base font-bold group-data-[collapsible=icon]:hidden">C-Crate</span>\n          </NuxtLink>\n\n          <CollectionSelector />')
 
 
 def item_log_frontend():
@@ -204,7 +204,7 @@ def shell_frontend():
     end = source.index(selector, start) + len(selector)
     source = source[:start] + '''<SidebarHeader class="items-stretch gap-2 p-3">
           <NuxtLink to="/home" aria-label="C-Crate home" class="flex h-10 w-full items-center gap-3 rounded-md px-2 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-            <AppLogo aria-hidden="true" class="h-7 w-auto max-w-full shrink-0 group-data-[collapsible=icon]:size-7" />
+            <AppLogo aria-hidden="true" class="size-7 shrink-0" />
           </NuxtLink>
 
           <CollectionSelector />'''+source[end:]
