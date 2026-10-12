@@ -594,6 +594,58 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
         self.assertEqual(self.errors,[])
 
+    def test_tiny_drag_jitter_preserves_geometry_with_snap_on_and_off(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2.12,'y':3.13,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        snap=self.page.get_by_role('checkbox',name='Snap to quarter-foot grid')
+        for enabled in (False,True):
+            if snap.is_checked()!=enabled:
+                snap.click()
+            group=self.page.locator('[data-workshop-drawing]')
+            box=group.bounding_box()
+            scale=self.page.locator('.planner-svg').evaluate('svg=>Math.hypot(svg.getScreenCTM().a,svg.getScreenCTM().b)')
+            start={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
+            self.page.mouse.move(start['x'],start['y'])
+            self.page.mouse.down()
+            self.page.mouse.move(start['x']+scale*.02,start['y'])
+            self.page.mouse.up()
+            self.assertAlmostEqual(float(self.page.locator('[data-workshop-drawing]').get_attribute('data-x')),2.12,places=2,
+                                   msg='Sub-threshold jitter must not silently change geometry (snap '+str(enabled)+').')
+            self.assertAlmostEqual(float(self.page.locator('[data-workshop-drawing]').get_attribute('data-y')),3.13,places=2)
+            self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+            self.assertFalse(self.page.get_by_role('button',name='Save all room changes').is_enabled())
+        self.assertEqual(self.errors,[])
+
+    def test_drag_history_survives_switching_rooms(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        other_room='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]},{'id':other_room,'location_id':None,'name':'Annex','width':12,'height':16,'unit':'ft','approximate':False,'objects':[]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        box=self.page.locator('[data-workshop-drawing]').bounding_box()
+        start={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+40,start['y']+25)
+        self.page.mouse.up()
+        moved=float(self.page.locator('[data-workshop-drawing]').get_attribute('data-x'))
+        self.assertGreater(moved,2)
+        self.assertTrue(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.evaluate("roomId=>window.instance.selectRoom(roomId)",other_room)
+        self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.evaluate("roomId=>window.instance.selectRoom(roomId)",room)
+        self.assertTrue(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.get_by_role('button',name='Undo',exact=True).click()
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-x'),'2')
+        self.assertTrue(self.page.get_by_role('button',name='Redo',exact=True).is_enabled())
+        self.page.get_by_role('button',name='Redo',exact=True).click()
+        self.assertEqual(float(self.page.locator('[data-workshop-drawing]').get_attribute('data-x')),moved)
+        self.assertEqual(self.errors,[])
+
     def test_resizing_updates_material_details_before_pointer_up(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
