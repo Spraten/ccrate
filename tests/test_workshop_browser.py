@@ -376,6 +376,57 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertEqual(self.errors,[])
 
 
+    def test_workshop_map_starts_blank_and_palette_creates_only_selected_drawing(self):
+        self.install_rooms4_plan({'version':2,'rooms':[]})
+        self.page.get_by_role('button',name='Create room',exact=True).click()
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').count(),0)
+        self.assertEqual(self.page.get_by_label('Room title').input_value(),'New room')
+        palette=self.page.get_by_role('region',name='Object palette')
+        self.assertTrue(palette.get_by_role('button',name='Rack',exact=True).count())
+        self.assertTrue(palette.locator('.planner-object-icon').count())
+        search=palette.get_by_label('Search objects')
+        search.fill('bin')
+        self.assertTrue(palette.get_by_role('button',name='Bin',exact=True).is_visible())
+        self.assertEqual(palette.get_by_role('button',name='Rack',exact=True,include_hidden=True).evaluate('(el)=>getComputedStyle(el).display'),'none')
+        self.assertEqual(palette.get_by_role('button',name='Rack',exact=True).count(),0)
+        search.fill('')
+        palette.get_by_role('button',name='Bin',exact=True).click()
+        self.page.locator('.planner-svg').click(position={'x':500,'y':450})
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').count(),1)
+        self.page.get_by_role('button',name='Save all room changes').click()
+        saved=self.page.evaluate('window.writes.at(-1)[1].document')
+        self.assertEqual(len(saved['rooms']),1)
+        self.assertEqual([item['kind'] for item in saved['rooms'][0]['objects']],['Bin'])
+        self.assertEqual(self.errors,[])
+
+    def test_rotated_shelf_details_stay_inside_the_plan_footprint(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':6,'height':1.25,'rotation':90,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        bounds=self.page.locator('[data-workshop-drawing] rect[data-object-shape]').evaluate('''rect => {
+          const box=el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}};
+          const footprint=box(rect),details=[...rect.parentElement.querySelectorAll('[data-footprint-detail]')].map(box);
+          return details.map(detail=>({inside:detail.left>=footprint.left-5&&detail.right<=footprint.right+5&&detail.top>=footprint.top-5&&detail.bottom<=footprint.bottom+5,detail,footprint}));
+        }''')
+        self.assertTrue(bounds and all(row['inside'] for row in bounds),bounds)
+        self.assertEqual(self.errors,[])
+
+    def test_planner_geometry_fields_commit_before_apply(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':LOCATION,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[{'id':DRAWING,'name':'Rack','kind':'Rack','x':3.75,'y':2,'width':3,'height':2,'rotation':0,'location_id':LOCATION}]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        for label,value in [('Drawing caption','Shelf A1'),('Position X in feet','1'),('Position Y in feet','1'),('Drawing width in feet','6'),('Drawing depth in feet','1.25')]:
+            self.page.get_by_label(label).fill(value)
+        self.page.get_by_role('button',name='Apply geometry',exact=True).click()
+        for label,value in [('Drawing caption','Shelf A1'),('Position X in feet','1'),('Position Y in feet','1'),('Drawing width in feet','6'),('Drawing depth in feet','1.25')]:
+            self.assertEqual(self.page.get_by_label(label).input_value(),value,label)
+        self.page.get_by_role('button',name='Save all room changes').click()
+        saved=self.page.evaluate('window.writes.at(-1)[1].document.rooms[0].objects[0]')
+        self.assertEqual((saved['name'],saved['x'],saved['y'],saved['width'],saved['height']),('Shelf A1',1,1,6,1.25))
+        self.assertEqual(self.errors,[])
+
     def test_native_rename_refresh_keeps_geometry_and_updates_paths(self):
         self.page.get_by_role('button', name='Edit layout').click()
         self.page.get_by_role('button', name='Room settings').click()
