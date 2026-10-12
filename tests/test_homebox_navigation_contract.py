@@ -18,7 +18,7 @@ LAYOUT = UPSTREAM / "frontend/layouts/default.vue"
 @unittest.skipUnless(LAYOUT.is_file(), "Homebox submodule is unavailable; supply the pinned source path")
 class HomeboxNavigationContractTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(dir=ROOT)
+        self.temp = tempfile.TemporaryDirectory()
         self.build = pathlib.Path(self.temp.name)
         target = self.build / "layouts/default.vue"
         target.parent.mkdir(parents=True)
