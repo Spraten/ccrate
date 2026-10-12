@@ -399,6 +399,47 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertEqual([item['kind'] for item in saved['rooms'][0]['objects']],['Bin'])
         self.assertEqual(self.errors,[])
 
+    def test_map_browse_hides_palette_and_machine_presets_keep_native_kind(self):
+        self.page.set_viewport_size({'width':1277,'height':718})
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawings=[
+            {'id':DRAWING,'name':'A very long shelf caption','kind':'Rack','x':1,'y':1,'width':3,'height':2,'rotation':0,'location_id':LOCATION},
+            {'id':RACK,'name':'Unlinked bench','kind':'Misc','x':6,'y':1,'width':3,'height':2,'rotation':0,'location_id':None},
+        ]
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':drawings}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        palette=self.page.locator('.planner-palette')
+        self.assertEqual(palette.evaluate('(el)=>getComputedStyle(el).display'),'none')
+        self.assertEqual(self.page.get_by_role('button',name='Objects',exact=True).count(),0)
+        self.assertEqual(self.page.locator('[data-workshop-drawing="'+DRAWING+'"]').get_attribute('data-link-status'),'linked')
+        self.assertEqual(self.page.locator('[data-workshop-drawing="'+RACK+'"]').get_attribute('data-link-status'),'drawing-only')
+        self.assertEqual(self.page.locator('[data-workshop-drawing="'+DRAWING+'"] [data-link-indicator]').get_attribute('data-link-indicator'),'linked')
+        self.assertEqual(self.page.locator('[data-workshop-drawing="'+RACK+'"] [data-link-indicator]').get_attribute('data-link-indicator'),'drawing-only')
+        self.assertTrue(self.page.get_by_text('Linked to native storage',exact=True).is_visible())
+        self.assertTrue(self.page.get_by_text('Drawing only',exact=True).is_visible())
+        caption=self.page.locator('[data-workshop-drawing="'+DRAWING+'"] text')
+        self.assertIsNone(caption.get_attribute('textLength'))
+        self.assertIsNone(caption.get_attribute('lengthAdjust'))
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.assertEqual(palette.evaluate('(el)=>getComputedStyle(el).display'),'block')
+        desktop=self.page.locator('.planner-workspace')
+        desktop_state=desktop.evaluate('''el=>({width:el.clientWidth,scrollWidth:el.scrollWidth,columns:getComputedStyle(el).gridTemplateColumns})''')
+        self.assertEqual(len(desktop_state['columns'].split()),3,desktop_state)
+        self.assertLessEqual(desktop_state['scrollWidth'],desktop_state['width']+1,desktop_state)
+        self.assertFalse(self.page.get_by_role('button',name='Objects',exact=True).is_visible())
+        palette.get_by_role('button',name='3D Printer',exact=True).click()
+        self.page.locator('.planner-svg').click(position={'x':200,'y':200})
+        created=self.page.locator('[data-workshop-drawing].is-selected')
+        self.assertEqual(created.locator('rect[data-object-shape]').get_attribute('data-object-shape'),'machine')
+        save=self.page.get_by_role('button',name='Save all room changes')
+        self.assertTrue(save.is_enabled(),self.page.locator('#view').inner_text())
+        save.click()
+        self.page.wait_for_timeout(100)
+        self.assertTrue(self.page.evaluate('window.writes.length'),self.page.locator('#view').inner_text())
+        saved=self.page.evaluate('window.writes.at(-1)[1].document.rooms[0].objects.at(-1)')
+        self.assertEqual((saved['kind'],saved['name']),('Misc','3D Printer'))
+        self.assertEqual(self.errors,[])
+
     def test_rotated_shelf_details_stay_inside_the_plan_footprint(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':6,'height':1.25,'rotation':90,'location_id':None}
@@ -447,6 +488,7 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.install_rooms4_plan(document)
         self.page.set_viewport_size({'width':375,'height':800})
         workspace=self.page.locator('.planner-workspace')
+        self.page.get_by_role('button',name='Edit',exact=True).click()
         self.page.get_by_role('button',name='Objects',exact=True).click()
         self.page.get_by_role('button',name='Details',exact=True).click()
         state=workspace.evaluate('''el=>({width:el.clientWidth,scrollWidth:el.scrollWidth,columns:getComputedStyle(el).gridTemplateColumns,palette:getComputedStyle(el.querySelector('.planner-palette')).display,inspector:getComputedStyle(el.querySelector('.planner-inspector')).display,paletteColumn:getComputedStyle(el.querySelector('.planner-palette')).gridColumnStart,inspectorColumn:getComputedStyle(el.querySelector('.planner-inspector')).gridColumnStart})''')

@@ -74,42 +74,59 @@
 .workshop-native .search-result button{white-space:normal;overflow-wrap:anywhere}
 .workshop-native .workshop-status-scope{margin:.75rem 0}
 
-/* Room planner: the drawing is the primary workspace, with native-theme controls. */
-.workshop-native .room-planner{--planner-ink:#233C57;--planner-paper:#F7FAFC;--planner-linked:#DCE9F3;--planner-attention:#B56D15;color:hsl(var(--foreground))}
-.workshop-native .planner-toolbar{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin:-.35rem 0 .85rem;padding:.65rem .75rem;border:1px solid hsl(var(--border));border-radius:var(--radius);background:hsl(var(--card))}
-.workshop-native .planner-room-picker{display:flex;align-items:center;gap:.45rem;font-size:.875rem;font-weight:600}
-.workshop-native .planner-room-picker select{min-width:13rem}
-.workshop-native .planner-modes{display:flex;gap:.25rem;padding:.2rem;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px)}
-.workshop-native .planner-modes button{min-height:2.25rem;padding:.35rem .75rem;border:0}
+/* Workshop map: an uncluttered drafting surface with native-theme chrome. */
+.workshop-native .room-planner{--planner-paper:hsl(var(--background));--planner-panel:hsl(var(--card));container-type:inline-size;color:hsl(var(--foreground))}
+.workshop-native .planner-page-title{margin-bottom:.55rem}
+.workshop-native .planner-toolbar{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;margin:0 0 .55rem;padding:.4rem .5rem;border:1px solid hsl(var(--border));border-radius:var(--radius);background:hsl(var(--card))}
+.workshop-native .planner-room-picker{display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:600}
+.workshop-native .planner-room-picker select{min-width:9rem;height:2.15rem;padding:.3rem .5rem;font-size:.8rem}
+.workshop-native .planner-modes{display:flex;gap:.1rem;padding:.12rem;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px)}
+.workshop-native .planner-modes button,.workshop-native .planner-toolbar>button{min-height:2.15rem;padding:.3rem .6rem;font-size:.8rem}
+.workshop-native .planner-modes button{border:0}
 .workshop-native .planner-modes .active{background:hsl(var(--primary));color:hsl(var(--primary-foreground))}
-.workshop-native .planner-save-state{margin-left:auto;font-size:.8rem;font-weight:600;white-space:nowrap}
-.workshop-native .planner-workspace{display:grid;grid-template-columns:minmax(12rem,15rem) minmax(24rem,1fr) minmax(17rem,21rem);align-items:start;gap:.8rem}
-.workshop-native .planner-palette,.workshop-native .planner-canvas-panel,.workshop-native .planner-inspector{min-width:0;border:1px solid hsl(var(--border));border-radius:var(--radius);background:hsl(var(--card));padding:.8rem}
+.workshop-native .planner-save-state{margin-left:auto;font-size:.75rem;font-weight:600;white-space:nowrap}
+.workshop-native .planner-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(14rem,17rem);align-items:stretch;gap:.55rem}
+.workshop-native .room-planner.is-editing .planner-workspace{grid-template-columns:minmax(10.5rem,12rem) minmax(0,1fr) minmax(14rem,16rem)}
+.workshop-native .planner-palette,.workshop-native .planner-canvas-panel,.workshop-native .planner-inspector{min-width:0;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background:var(--planner-panel);padding:.65rem}
+.workshop-native .room-planner:not(.is-editing) .planner-palette{display:none}
 .workshop-native .planner-palette{max-height:72vh;overflow:auto}
-.workshop-native .planner-palette h2,.workshop-native .planner-inspector h2{font-size:1rem;margin:0 0 .5rem}
-.workshop-native .planner-palette>button{width:100%;justify-content:flex-start;margin:.15rem 0}
-.workshop-native .planner-palette>button.active{border-color:hsl(var(--primary));background:hsl(var(--accent))}
-.workshop-native .planner-storage{margin-top:.7rem;border-top:1px solid hsl(var(--border));padding-top:.65rem}
+.workshop-native .planner-palette h2,.workshop-native .planner-inspector h2{font-size:.92rem;margin:0 0 .4rem}
+.workshop-native .planner-palette>input[type=search]{box-sizing:border-box;width:100%;height:2.15rem;margin:0 0 .4rem;font-size:.8rem}
+.workshop-native .planner-object-group{border-top:1px solid hsl(var(--border));padding:.25rem 0}
+.workshop-native .planner-object-group>summary{cursor:pointer;font-size:.78rem;font-weight:600;color:hsl(var(--muted-foreground));padding:.15rem .15rem .25rem}
+.workshop-native .planner-palette .planner-object{display:flex;width:100%;min-height:2.5rem;justify-content:flex-start;gap:.45rem;margin:.12rem 0;padding:.25rem .35rem;border-color:transparent;background:transparent;text-align:left;font-size:.79rem}
+.workshop-native .planner-palette .planner-object[hidden]{display:none}
+.workshop-native .planner-palette .planner-object:hover,.workshop-native .planner-palette .planner-object.active{border-color:hsl(var(--primary) / .5);background:hsl(var(--accent));color:hsl(var(--accent-foreground))}
+.workshop-native .planner-object-icon{display:block;flex:0 0 3.25rem;width:3.25rem;height:2.15rem}
+.workshop-native .planner-palette>.sub{font-size:.72rem;line-height:1.4;margin:.45rem .15rem}
+.workshop-native .planner-storage{margin-top:.7rem;border-top:1px solid hsl(var(--border));padding-top:.65rem;font-size:.78rem}
 .workshop-native .planner-storage summary,.workshop-native .planner-coverage summary{cursor:pointer;font-weight:600;padding:.25rem 0}
-.workshop-native .planner-canvas-panel{background:linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted) / .2));box-shadow:0 2px 12px rgb(35 60 87 / .08)}
-.workshop-native .planner-canvas-title{font-weight:700;color:var(--planner-ink);margin:.05rem 0 .45rem}
-.workshop-native .planner-canvas-tools{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;padding:.3rem 0 .6rem}
-.workshop-native .planner-canvas-tools button{min-height:2.25rem;padding:.35rem .65rem;font-size:.8rem}
-.workshop-native .planner-canvas-tools label{display:inline-flex;align-items:center;gap:.15rem;font-size:.78rem;white-space:nowrap}
-.workshop-native .planner-canvas-frame{height:clamp(25rem,56vh,42rem);min-height:22rem;overflow:hidden;border:1px solid #CBD5DF;border-radius:calc(var(--radius) - 2px);background-color:var(--planner-paper);background-image:linear-gradient(#233c5708 1px,transparent 1px),linear-gradient(90deg,#233c5708 1px,transparent 1px);background-size:24px 24px;touch-action:none}
-.workshop-native .planner-svg{display:block;width:100%;height:100%;touch-action:none;outline:none}
+.workshop-native .planner-canvas-panel{min-width:0}
+.workshop-native .planner-canvas-title{font-size:.86rem;font-weight:700;color:hsl(var(--muted-foreground));margin:.05rem 0 .35rem}
+.workshop-native .planner-canvas-tools{display:flex;align-items:center;gap:.25rem;flex-wrap:wrap;padding:.15rem 0 .45rem}
+.workshop-native .planner-canvas-tools button{min-height:2rem;padding:.25rem .5rem;font-size:.75rem}
+.workshop-native .planner-canvas-tools label{display:inline-flex;align-items:center;gap:.15rem;font-size:.75rem;white-space:nowrap}
+.workshop-native .planner-zoom-readout{margin-left:auto;font-size:.75rem;color:hsl(var(--muted-foreground))}
+.workshop-native .planner-canvas-frame{height:clamp(28rem,64vh,48rem);min-height:24rem;overflow:hidden;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background-color:var(--planner-paper);background-image:linear-gradient(hsl(var(--border) / .28) 1px,transparent 1px),linear-gradient(90deg,hsl(var(--border) / .28) 1px,transparent 1px),linear-gradient(hsl(var(--border) / .14) 1px,transparent 1px),linear-gradient(90deg,hsl(var(--border) / .14) 1px,transparent 1px);background-size:80px 80px,80px 80px,16px 16px,16px 16px;touch-action:none}
+.workshop-native .planner-svg{display:block;width:100%;height:100%;touch-action:none;outline:none;color:hsl(var(--foreground))}
 .workshop-native .planner-svg [data-workshop-drawing]{cursor:grab;touch-action:none}
 .workshop-native .planner-svg [data-workshop-drawing]:active{cursor:grabbing}
 .workshop-native .planner-svg [data-resize-handle]{cursor:nwse-resize}
 .workshop-native .planner-svg [role=button]:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:3px}
-.workshop-native .planner-legend{font-size:.75rem;color:hsl(var(--muted-foreground));margin:.45rem 0 0}
+.workshop-native .planner-svg [data-object-shape]{filter:drop-shadow(0 .035rem .025rem #26394335)}
+.workshop-native .planner-svg [data-workshop-drawing].is-selected [data-object-shape]{filter:drop-shadow(0 .05rem .05rem #233c5755)}
+.workshop-native .planner-legend{display:flex;align-items:center;gap:.85rem;flex-wrap:wrap;font-size:.72rem;color:hsl(var(--muted-foreground));margin:.4rem 0 0}
+.workshop-native .planner-key{display:inline-flex;align-items:center;gap:.3rem}
+.workshop-native .planner-key-dot{width:.62rem;height:.62rem;border:1px solid hsl(var(--muted-foreground));border-radius:50%;background:hsl(var(--background))}
+.workshop-native .planner-key-linked .planner-key-dot{background:#2E78AD;border-color:#1D5C8A}
+.workshop-native .planner-unit-note{margin-left:auto}
 .workshop-native .planner-inspector{max-height:72vh;overflow:auto;overflow-wrap:anywhere}
-.workshop-native .planner-inspector .field{margin:.45rem 0}
-.workshop-native .planner-inspector .field input,.workshop-native .planner-inspector .field select{width:100%;display:block;margin-top:.2rem}
-.workshop-native .planner-geometry{display:grid;grid-template-columns:1fr 1fr;gap:.35rem}
-.workshop-native .planner-inspector button{margin:.2rem .2rem .2rem 0}
-.workshop-native .planner-inspector [role=region],.workshop-native .planner-inspector [role=group]{border-top:1px solid hsl(var(--border));padding-top:.5rem;margin-top:.5rem}
+.workshop-native .planner-inspector .field{font-size:.76rem;margin:.35rem 0}
+.workshop-native .planner-inspector .field input,.workshop-native .planner-inspector .field select{box-sizing:border-box;width:100%;height:2.15rem;display:block;margin-top:.2rem;padding:.35rem .5rem;font-size:.8rem}
+.workshop-native .planner-inspector button{min-height:2.15rem;margin:.2rem .2rem .2rem 0;padding:.35rem .55rem;font-size:.78rem}
+.workshop-native .planner-inspector [role=region],.workshop-native .planner-inspector [role=group]{border-top:1px solid hsl(var(--border));padding-top:.4rem;margin-top:.4rem}
 .workshop-native .planner-inspector ol{padding-left:1.25rem}
+.workshop-native .planner-geometry{display:grid;grid-template-columns:1fr 1fr;gap:.35rem}
 .workshop-native .planner-coverage{margin-top:.65rem;border:1px solid hsl(var(--border));border-radius:var(--radius);padding:.5rem .75rem;color:hsl(var(--muted-foreground));font-size:.82rem}
 .workshop-native .planner-quick-search{max-width:46rem;margin:-.2rem 0 .7rem}
 .workshop-native .planner-quick-search>.field{display:block;margin:0;font-size:.85rem;font-weight:600}
@@ -117,52 +134,6 @@
 .workshop-native .planner-search-results:empty{display:none}
 .workshop-native .planner-search-results:not(:empty){max-height:13rem;overflow:auto;margin-top:.35rem;padding:.25rem .5rem;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background:hsl(var(--card))}
 .workshop-native .planner-search-results .search-result button{width:100%;justify-content:flex-start;text-align:left;white-space:normal}
-@media(max-width:1100px){.workshop-native .planner-workspace{grid-template-columns:minmax(0,1fr) minmax(15rem,.72fr)}.workshop-native .planner-canvas-panel{grid-column:1/-1;grid-row:1}.workshop-native .planner-palette,.workshop-native .planner-inspector{display:none;max-height:none}.workshop-native .room-planner.show-tools .planner-palette{display:block;grid-column:1}.workshop-native .room-planner.show-inspector .planner-inspector{display:block;grid-column:2}.workshop-native .planner-canvas-frame{height:clamp(22rem,52vh,38rem)}}
-@media(max-width:1100px){.workshop-native .planner-room-picker{box-sizing:border-box;flex:1 1 100%;min-width:0;width:100%}.workshop-native .planner-room-picker select{box-sizing:border-box;flex:1 1 0;width:0;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis}}
-@media(max-width:700px){.workshop-native .planner-toolbar{align-items:stretch}.workshop-native .planner-room-picker{flex:1;min-width:100%}.workshop-native .planner-room-picker select{flex:1;min-width:0}.workshop-native .planner-save-state{margin-left:0}.workshop-native .planner-workspace{grid-template-columns:minmax(0,1fr)}.workshop-native .planner-canvas-panel{grid-column:1}.workshop-native .planner-palette,.workshop-native .planner-inspector,.workshop-native .room-planner.show-tools .planner-palette,.workshop-native .room-planner.show-inspector .planner-inspector{grid-column:1}.workshop-native .planner-canvas-frame{height:clamp(19rem,50vh,32rem);min-height:18rem}.workshop-native .planner-geometry{grid-template-columns:1fr 1fr}}
-
-/* Workshop map: a drafting surface with materials keyed to the existing drawing kind. */
-.workshop-native .room-planner{--planner-paper:#F2F4F0;--planner-ink:#263943;--planner-line:#D4DBD8}
-.workshop-native .room-planner>.title{margin-bottom:.65rem}
-.workshop-native .planner-toolbar{gap:.35rem;margin:0 0 .55rem;padding:.4rem .5rem;border-radius:.45rem;background:#F8FAF8}
-.workshop-native .planner-room-picker{font-size:.82rem}
-.workshop-native .planner-room-picker select{min-width:9rem}
-.workshop-native .planner-modes{gap:.1rem;padding:.12rem}
-.workshop-native .planner-modes button,.workshop-native .planner-toolbar>button{min-height:2.2rem;padding:.3rem .65rem;font-size:.82rem}
-.workshop-native .planner-save-state{font-size:.75rem}
-.workshop-native .planner-new-room{border-color:#3E5963}
-.workshop-native .planner-workspace{grid-template-columns:minmax(11rem,13.5rem) minmax(24rem,1fr) minmax(15rem,18rem);align-items:stretch;gap:.55rem}
-.workshop-native .planner-palette,.workshop-native .planner-canvas-panel,.workshop-native .planner-inspector{border-color:#CDD5D2;border-radius:.45rem;padding:.6rem;background:#FAFBF9;box-shadow:0 1px 3px #2639430c}
-.workshop-native .planner-palette{max-height:72vh;overflow:auto}
-.workshop-native .planner-palette h2,.workshop-native .planner-inspector h2{font-size:.92rem;margin:0 0 .4rem}
-.workshop-native .planner-palette>input[type=search]{box-sizing:border-box;width:100%;height:2.15rem;margin:0 0 .4rem;border-color:#C9D2CF;font-size:.8rem}
-.workshop-native .planner-object-group{border-top:1px solid #E0E5E2;padding:.25rem 0}
-.workshop-native .planner-object-group>summary{cursor:pointer;font-size:.78rem;font-weight:650;color:#47585D;padding:.15rem .15rem .25rem}
-.workshop-native .planner-palette .planner-object{display:flex;width:100%;min-height:2.5rem;justify-content:flex-start;gap:.45rem;margin:.12rem 0;padding:.25rem .35rem;border-color:transparent;background:transparent;text-align:left;font-size:.79rem}
-.workshop-native .planner-palette .planner-object:hover,.workshop-native .planner-palette .planner-object.active{border-color:#9BB4BB;background:#EAF0EF;color:#233C45}
-.workshop-native .planner-object-icon{display:block;flex:0 0 3.25rem;width:3.25rem;height:2.15rem}
-.workshop-native .planner-palette>.sub{font-size:.72rem;line-height:1.4;margin:.45rem .15rem}
-.workshop-native .planner-storage{font-size:.78rem}
-.workshop-native .planner-canvas-panel{min-width:0;background:#FAFBF9}
-.workshop-native .planner-canvas-title{font-size:.86rem;color:#43575D}
-.workshop-native .planner-canvas-tools{gap:.25rem;padding:.15rem 0 .45rem}
-.workshop-native .planner-canvas-tools button{min-height:2rem;padding:.25rem .5rem;font-size:.75rem}
-.workshop-native .planner-zoom-readout{margin-left:auto;font-size:.75rem;color:#506168}
-.workshop-native .planner-canvas-frame{height:clamp(28rem,64vh,48rem);min-height:26rem;border-color:#BEC8C6;border-radius:.3rem;background-color:var(--planner-paper);background-image:linear-gradient(#52636b12 1px,transparent 1px),linear-gradient(90deg,#52636b12 1px,transparent 1px),linear-gradient(#52636b09 1px,transparent 1px),linear-gradient(90deg,#52636b09 1px,transparent 1px);background-size:100px 100px,100px 100px,20px 20px,20px 20px}
-.workshop-native .planner-svg{color:#263943}
-.workshop-native .planner-svg [data-workshop-drawing] rect[data-object-shape]{filter:drop-shadow(0 .035rem .025rem #26394335)}
-.workshop-native .planner-svg [data-workshop-drawing].is-selected rect[data-object-shape]{filter:drop-shadow(0 .05rem .05rem #233c5755)}
-.workshop-native .planner-legend{font-size:.72rem;margin:.35rem 0 0}
-.workshop-native .planner-inspector{max-height:72vh;padding:.75rem;overflow:auto}
-.workshop-native .planner-inspector .field{font-size:.76rem;margin:.35rem 0}
-.workshop-native .planner-inspector .field input,.workshop-native .planner-inspector .field select{height:2.15rem;padding:.35rem .5rem;font-size:.8rem}
-.workshop-native .planner-inspector button{min-height:2.15rem;padding:.35rem .55rem;font-size:.78rem}
-.workshop-native .planner-inspector [role=region],.workshop-native .planner-inspector [role=group]{padding-top:.4rem;margin-top:.4rem}
-@media(min-width:901px){.workshop-native .planner-workspace{grid-template-columns:minmax(11rem,13.5rem) minmax(24rem,1fr) minmax(15rem,18rem)}.workshop-native .planner-palette,.workshop-native .planner-inspector{display:block;max-height:72vh}.workshop-native .planner-canvas-panel{grid-column:auto;grid-row:auto}}
-@media(max-width:900px){.workshop-native .planner-workspace{grid-template-columns:minmax(0,1fr) minmax(14rem,.7fr)}.workshop-native .planner-canvas-panel{grid-column:1/-1;grid-row:1}.workshop-native .planner-palette,.workshop-native .planner-inspector{display:none;max-height:none}.workshop-native .room-planner.show-tools .planner-palette{display:block;grid-column:1}.workshop-native .room-planner.show-inspector .planner-inspector{display:block;grid-column:2}.workshop-native .planner-canvas-frame{height:clamp(22rem,55vh,40rem)}}
-@media(max-width:700px){.workshop-native .planner-toolbar{align-items:center}.workshop-native .planner-workspace{grid-template-columns:minmax(0,1fr)}.workshop-native .planner-canvas-panel,.workshop-native .planner-palette,.workshop-native .planner-inspector,.workshop-native .room-planner.show-tools .planner-palette,.workshop-native .room-planner.show-inspector .planner-inspector{grid-column:1}.workshop-native .planner-canvas-frame{height:clamp(19rem,50vh,32rem);min-height:18rem}}
-.workshop-native .room-planner{container-type:inline-size}
-.workshop-native .planner-palette .planner-object[hidden]{display:none}
-@container (min-width:900px){.workshop-native .planner-workspace{grid-template-columns:minmax(10rem,12rem) minmax(19rem,1fr) minmax(14rem,16rem)}.workshop-native .planner-palette,.workshop-native .planner-inspector{display:block;max-height:72vh}.workshop-native .planner-canvas-panel{grid-column:auto;grid-row:auto}}
-@container (max-width:899px){.workshop-native .planner-workspace{grid-template-columns:minmax(0,1fr) minmax(14rem,.7fr)}.workshop-native .planner-canvas-panel{grid-column:1/-1;grid-row:1}.workshop-native .planner-palette,.workshop-native .planner-inspector{display:none;max-height:none}.workshop-native .room-planner.show-tools .planner-palette{display:block;grid-column:1}.workshop-native .room-planner.show-inspector .planner-inspector{display:block;grid-column:2}}
-@container (max-width:700px){.workshop-native .planner-workspace{grid-template-columns:minmax(0,1fr)}.workshop-native .planner-canvas-panel,.workshop-native .planner-palette,.workshop-native .planner-inspector,.workshop-native .room-planner.show-tools .planner-palette,.workshop-native .room-planner.show-inspector .planner-inspector{grid-column:1}}
+@container (min-width:900px){.workshop-native .planner-panel-toggle{display:none}}
+@container (max-width:899px){.workshop-native .planner-workspace,.workshop-native .room-planner.is-editing .planner-workspace{grid-template-columns:minmax(0,1fr) minmax(14rem,.7fr)}.workshop-native .planner-canvas-panel{grid-column:1/-1;grid-row:1}.workshop-native .planner-palette,.workshop-native .planner-inspector{display:none;max-height:none}.workshop-native .room-planner.is-editing.show-tools .planner-palette{display:block;grid-column:1}.workshop-native .room-planner.show-inspector .planner-inspector{display:block;grid-column:2}.workshop-native .planner-canvas-frame{height:clamp(22rem,55vh,40rem)}}
+@container (max-width:700px){.workshop-native .planner-workspace,.workshop-native .room-planner.is-editing .planner-workspace{grid-template-columns:minmax(0,1fr)}.workshop-native .planner-canvas-panel,.workshop-native .planner-palette,.workshop-native .planner-inspector,.workshop-native .room-planner.is-editing.show-tools .planner-palette,.workshop-native .room-planner.show-inspector .planner-inspector{grid-column:1}.workshop-native .planner-canvas-frame{height:clamp(19rem,50vh,32rem);min-height:18rem}}
