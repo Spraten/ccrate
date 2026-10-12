@@ -73,8 +73,14 @@ def view(entity_id=None):
 class WorkshopBrowserTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text().replace('import { mountLabelDesigner, exportReviewedPaper } from "./label-editor.js";\n', 'const mountLabelDesigner=()=>{}; const exportReviewedPaper=()=>{};\n').replace('export function mountWorkshopTools', 'function mountWorkshopTools')
-        cls.source += '\nwindow.mountWorkshopTools=mountWorkshopTools;'
+        catalog = (ROOT / 'homebox-ui/overlay/lib/workshop-object-catalog.js').read_text()
+        catalog = catalog.replace('export const workshopObjectPresets', 'const workshopObjectPresets').replace('export function workshopPresetForDrawing', 'function workshopPresetForDrawing')
+        cls.source = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text().replace(
+            'import { mountLabelDesigner, exportReviewedPaper } from "./label-editor.js";\n',
+            catalog + '\nconst mountLabelDesigner=()=>{}; const exportReviewedPaper=()=>{};\n')
+        cls.source = cls.source.replace('import { workshopObjectPresets, workshopPresetForDrawing } from "./workshop-object-catalog.js";\n', '')
+        cls.source = cls.source.replace('export function mountWorkshopTools', 'function mountWorkshopTools')
+        cls.source += '\nwindow.mountWorkshopTools=mountWorkshopTools;window.workshopObjectPresets=workshopObjectPresets;window.workshopPresetForDrawing=workshopPresetForDrawing;'
         cls.css = (ROOT / 'homebox-ui/overlay/assets/css/workshop.css').read_text()
 
     @classmethod
@@ -96,6 +102,7 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.fixture=RemoteShelfFixture(os.environ.get('SHELF_CHECKS_FIXTURE_URL'))
         html = '''<!doctype html><meta charset="utf-8"><main id="root" class="workshop-native"><div id="view" tabindex="-1"></div><dialog id="dialog" aria-labelledby="dialog-title"><div><h2 id="dialog-title"></h2><button id="dialog-close">Close</button></div><div id="dialog-body"></div></dialog></main>'''
         self.context.route('https://fixture.invalid/**', lambda route: route.fulfill(status=200, content_type='text/html', body=html))
+        self.context.route('https://fixture.invalid/workshop/objects/**', self._catalog_asset)
         png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8XQAAAAASUVORK5CYII=')
         self.context.route('https://fixture.invalid/api/v1/entities/**', lambda route: route.fulfill(status=200, content_type='image/png', body=png))
         self.page.goto('https://fixture.invalid/workshop/map', wait_until='domcontentloaded', timeout=2500)
@@ -107,12 +114,20 @@ class WorkshopBrowserTests(unittest.TestCase):
             const context={value:{user:{id:'user-1',name:'Tester'},group:{id:'group-1',name:'Storage Room'},manager:true,identity:'identity-1'}}; window.fixtureContext=context;
             const layout={revision:7,layout:{name:'Old drawing name',width:14,height:20,unit:'ft',approximate:false,objects:[{id:'33333333-3333-4333-8333-333333333333',name:'Old drawing name',kind:'Rack',x:0,y:0,width:3,height:2,location_id:'11111111-1111-4111-8111-111111111111'}]},locations:[{id:'11111111-1111-4111-8111-111111111111',name:'the Cage',parent_id:null,kind:'Rack',code:'1',updated_at:'v1'}],parents:[{id:'11111111-1111-4111-8111-111111111111',name:'the Cage',parent_id:null,kind:'Rack',code:'1',isLocation:true},{id:'22222222-2222-4222-8222-222222222222',name:'Camera',parent_id:'55555555-5555-4555-8555-555555555555',isLocation:false}],counts:{},types:['Rack'],storage_types:['Rack']};
             const locationView=''' + json.dumps(view(LOCATION)) + '''; const itemView=''' + json.dumps(view(ITEM)) + '''; const nestedView=structuredClone(itemView); nestedView.contents=[{id:'22222222-2222-4222-8222-222222222222',name:'Camera',assetId:'CAM-9',condition:'Ready',checkout_blocker:null,checked_out:true,parent:{id:'55555555-5555-4555-8555-555555555555'}}];nestedView.counts={assigned:1,checked_out:1,available:0,needs_attention:0}; window.fixtureViews={locationView,itemView,nestedView}; window.fixtureLayout=layout;
-             window.writes=[]; window.navigate=[]; window.apiCalls=[]; window.failViewOnce=false; const pendingStorageKey=()=>`workshop-pending:${window.fixtureContext.value.group.id}:${window.fixtureContext.value.user.id}`;window.fixtureWorkshop={context,refresh:async()=>window.fixtureContext.value,pending:()=>JSON.parse(localStorage.getItem(pendingStorageKey())||'[]'),forget:key=>{const rows=JSON.parse(localStorage.getItem(pendingStorageKey())||'[]');localStorage.setItem(pendingStorageKey(),JSON.stringify(rows.filter(row=>row.key!==key)))},request:async(path,data,identity)=>{window.apiCalls.push([path,data,identity]); const route=path.split('?')[0]; if(route==='workshop'){if(window.deferWorkshopRefresh){window.workshopRefreshStarted=true;await new Promise(resolve=>window.releaseWorkshopRefresh=resolve);window.deferWorkshopRefresh=false;}return structuredClone(window.fixtureLayout);} if(route==='equipment')return structuredClone(window.fixtureSearchEquipment||[{id:'22222222-2222-4222-8222-222222222222',name:'Camera',assetId:'CAM-9',serialNumber:'SN-9',manufacturer:'Northwind',parent:{id:'55555555-5555-4555-8555-555555555555'}}]); if(route==='locations')return structuredClone(window.fixtureSearchLocations||window.fixtureLayout.locations); if(route==='entity')return {entity:{id:'22222222-2222-4222-8222-222222222222',name:'Camera',assetId:'CAM-9',parent:{id:'55555555-5555-4555-8555-555555555555'}},condition:'Ready',blocker:null}; if(route==='loans')return [{entity_id:'22222222-2222-4222-8222-222222222222',borrower:'Private Borrower'}]; if(route==='workshop/view'){if(window.failViewOnce){window.failViewOnce=false;throw new Error('fixture read failure')} if(path.includes('22222222-2222-4222-8222-222222222222'))return structuredClone(path.includes('nested=1')?window.fixtureViews.nestedView:window.fixtureViews.itemView);return structuredClone(window.fixtureViews.locationView);} if(route==='workshop/resolve')return data.code==='UNKNOWN-MFR'?{kind:'unknown',entity_id:null,candidates:[],message:'No unique native record found.'}:{kind:'entity',entity_id:'22222222-2222-4222-8222-222222222222',candidates:[]}; if(route==='recovery')return []; if(route==='operation/status'){const status=window.fixtureOperationStatus||'not_started';return status==='not_started'?{status}:{id:'job-1',status,action:window.fixtureOperationAction||'workshop_shelf_order',native_job:true,...(window.fixtureOperationResult?{result:window.fixtureOperationResult}:{})};} return {};},write:async(path,data,label,subject)=>{window.writes.push([path,data]);if(path==='workshop/save'){window.layoutSaveStarted=true;window.layoutSaveCount=(window.layoutSaveCount||0)+1;if(window.fixtureForceSaveConflict){const error=new Error('fixture revision conflict');error.status=409;throw error;}if(window.deferLayoutSave)await new Promise(resolve=>window.releaseLayoutSave=resolve);const result={revision:data.revision+1,layout:structuredClone(data.layout)};window.fixtureOperationAction='workshop/save';window.fixtureOperationResult={schema_version:2,revision:result.revision,document:structuredClone(data.document)};window.fixtureOperationAction='workshop/save';window.fixtureOperationResult={schema_version:2,revision:result.revision,document:structuredClone(data.document)};window.fixtureLayout.revision=result.revision;window.fixtureLayout.layout=structuredClone(data.layout);window.fixtureLayout.document=structuredClone(data.document);if(window.fixtureLoseSaveResponse)throw new Error('fixture lost save response');return result;}const storageKey='workshop-pending:group-1:user-1';if(path==='workshop/shelf-order'){const rows=JSON.parse(localStorage.getItem(storageKey)||'[]');rows.push({key:data.request_key,path,label,subject,at:'2026-10-07T12:00:00Z'});localStorage.setItem(storageKey,JSON.stringify(rows));if(window.loseOrderResponse)throw new Error('fixture lost response');localStorage.setItem(storageKey,JSON.stringify(rows.filter(row=>row.key!==data.request_key)));}return {id:'order-1',status:'completed',entity_id:data.entity_id};}};window.fixtureNavigate=path=>window.navigate.push(path);window.fixtureNotify=()=>{};window.fixtureSelection={entityId:'11111111-1111-4111-8111-111111111111',drawingId:'33333333-3333-4333-8333-333333333333'};window.mountFixture=()=>window.mountWorkshopTools(document.querySelector('#root'),'workshop',window.fixtureWorkshop,window.fixtureNavigate,window.fixtureNotify,window.fixtureSelection);window.instance=window.mountFixture();
+             window.writes=[]; window.navigate=[]; window.apiCalls=[]; window.failViewOnce=false; const pendingStorageKey=()=>`workshop-pending:${window.fixtureContext.value.group.id}:${window.fixtureContext.value.user.id}`;window.fixtureWorkshop={context,refresh:async()=>window.fixtureContext.value,pending:()=>JSON.parse(localStorage.getItem(pendingStorageKey())||'[]'),forget:key=>{const rows=JSON.parse(localStorage.getItem(pendingStorageKey())||'[]');localStorage.setItem(pendingStorageKey(),JSON.stringify(rows.filter(row=>row.key!==key)))},request:async(path,data,identity)=>{window.apiCalls.push([path,data,identity]); const route=path.split('?')[0]; if(route==='workshop'){if(window.deferWorkshopRefresh){window.workshopRefreshStarted=true;await new Promise(resolve=>window.releaseWorkshopRefresh=resolve);window.deferWorkshopRefresh=false;}return structuredClone(window.fixtureLayout);} if(route==='equipment')return structuredClone(window.fixtureSearchEquipment||[{id:'22222222-2222-4222-8222-222222222222',name:'Camera',assetId:'CAM-9',serialNumber:'SN-9',manufacturer:'Northwind',parent:{id:'55555555-5555-4555-8555-555555555555'}}]); if(route==='locations')return structuredClone(window.fixtureSearchLocations||window.fixtureLayout.locations); if(route==='entity')return {entity:{id:'22222222-2222-4222-8222-222222222222',name:'Camera',assetId:'CAM-9',parent:{id:'55555555-5555-4555-8555-555555555555'}},condition:'Ready',blocker:null}; if(route==='loans')return [{entity_id:'22222222-2222-4222-8222-222222222222',borrower:'Private Borrower'}]; if(route==='workshop/view'){if(window.failViewOnce){window.failViewOnce=false;throw new Error('fixture read failure')} if(path.includes('22222222-2222-4222-8222-222222222222'))return structuredClone(path.includes('nested=1')?window.fixtureViews.nestedView:window.fixtureViews.itemView);return structuredClone(window.fixtureViews.locationView);} if(route==='workshop/resolve')return data.code==='UNKNOWN-MFR'?{kind:'unknown',entity_id:null,candidates:[],message:'No unique native record found.'}:{kind:'entity',entity_id:'22222222-2222-4222-8222-222222222222',candidates:[]}; if(route==='recovery')return []; if(route==='operation/status'){const status=window.fixtureOperationStatus||'not_started';return status==='not_started'?{status}:{id:'job-1',status,action:window.fixtureOperationAction||'workshop_shelf_order',native_job:true,...(window.fixtureOperationResult?{result:window.fixtureOperationResult}:{})};} return {};},write:async(path,data,label,subject)=>{window.writes.push([path,data]);if(path==='workshop/save'){window.layoutSaveStarted=true;window.layoutSaveCount=(window.layoutSaveCount||0)+1;if(window.fixtureForceSaveConflict){const error=new Error('fixture revision conflict');error.status=409;throw error;}if(window.deferLayoutSave)await new Promise(resolve=>window.releaseLayoutSave=resolve);const result={revision:data.revision+1,layout:structuredClone(data.layout)};window.fixtureOperationAction='workshop/save';window.fixtureOperationResult={schema_version:2,revision:result.revision,document:structuredClone(data.document)};window.fixtureOperationAction='workshop/save';window.fixtureOperationResult={schema_version:2,revision:result.revision,document:structuredClone(data.document)};window.fixtureLayout.revision=result.revision;window.fixtureLayout.layout=structuredClone(data.layout);window.fixtureLayout.document=structuredClone(data.document);if(window.fixtureLoseSaveResponse)throw new Error('fixture lost save response');return result;}const storageKey='workshop-pending:group-1:user-1';if(path==='workshop/shelf-order'){const rows=JSON.parse(localStorage.getItem(storageKey)||'[]');rows.push({key:data.request_key,path,label,subject,at:'2026-10-07T12:00:00Z'});localStorage.setItem(storageKey,JSON.stringify(rows));if(window.loseOrderResponse)throw new Error('fixture lost response');localStorage.setItem(storageKey,JSON.stringify(rows.filter(row=>row.key!==data.request_key)));}return {id:'order-1',status:'completed',entity_id:data.entity_id};}};window.fixtureNavigate=path=>window.navigate.push(path);window.fixtureNotifications=[];window.fixtureNotify=text=>window.fixtureNotifications.push(text);window.fixtureSelection={entityId:'11111111-1111-4111-8111-111111111111',drawingId:'33333333-3333-4333-8333-333333333333'};window.mountFixture=()=>window.mountWorkshopTools(document.querySelector('#root'),'workshop',window.fixtureWorkshop,window.fixtureNavigate,window.fixtureNotify,window.fixtureSelection);window.instance=window.mountFixture();
         '''
         self.page.evaluate(init)
         self.page.wait_for_timeout(250)
         if not self.page.locator('#workshop-content, .room-planner').count():
             self.fail('The real Workshop host did not render: ' + repr(self.errors) + ' body=' + self.page.locator('body').inner_text() + ' instance=' + str(self.page.evaluate('typeof window.instance')))
+
+    def _catalog_asset(self, route):
+        name=urlsplit(route.request.url).path.rsplit('/',1)[-1]
+        asset=ROOT/'homebox-ui/overlay/public/workshop/objects'/name
+        if not asset.is_file():
+            route.abort()
+            return
+        route.fulfill(status=200,content_type='image/svg+xml',body=asset.read_text(encoding='utf-8'))
 
     def test_desktop_dirty_refresh_and_identity(self):
         self.page.get_by_role('button', name='Edit layout').click()
@@ -457,6 +472,55 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertEqual((saved['kind'],saved['name']),('Misc','3D Printer'))
         self.assertEqual(self.errors,[])
 
+    def test_catalog_search_place_undo_and_named_cabinet_fallback(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        cabinet_id='66666666-6666-4666-8666-666666666666'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[{'id':cabinet_id,'name':'Cabinet 1','kind':'Cabinet','x':1,'y':1,'width':3,'height':2,'rotation':0,'opacity':.55,'layer':'above','location_id':LOCATION}]}]}
+        self.install_rooms4_plan(document,selected_drawing=cabinet_id,types=['Rack','Cabinet','Table','Workbench'])
+        existing=self.page.locator('[data-workshop-drawing="'+cabinet_id+'"]')
+        self.assertTrue(existing.locator('[data-workshop-artwork]').count())
+        self.assertEqual(existing.locator('[data-workshop-artwork]').get_attribute('opacity'),'0.55')
+        self.assertGreater(existing.locator('[data-workshop-artwork]').evaluate('(image)=>image.parentElement.children.length-1'),existing.locator('[data-workshop-artwork]').evaluate('(image)=>[...image.parentElement.children].indexOf(image)'))
+        self.assertEqual(existing.get_attribute('data-link-status'),'linked')
+        self.assertIn('Cabinet 1',existing.get_attribute('aria-label'))
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        search=self.page.get_by_role('searchbox',name='Search objects')
+        search.fill('wall cabinet')
+        preset=self.page.locator('.planner-preset-card[data-preset-id="wall-cabinet"]')
+        self.assertTrue(preset.is_visible())
+        preset.click()
+        self.page.locator('.planner-svg').click(position={'x':300,'y':260})
+        created=self.page.locator('[data-workshop-drawing].is-selected')
+        self.assertEqual(created.locator('[data-workshop-artwork]').get_attribute('data-workshop-artwork'),'wall-cabinet')
+        self.assertEqual(created.get_attribute('data-link-status'),'drawing-only')
+        self.assertEqual((created.get_attribute('data-width'),created.get_attribute('data-height')),('3','1'))
+        self.assertEqual(self.page.evaluate('window.writes.length'),0,'Placing a catalog drawing must not create or link native storage.')
+        self.assertTrue(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.get_by_role('button',name='Undo',exact=True).click()
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').count(),1)
+        search.fill('wall cabinet')
+        preset=self.page.locator('.planner-preset-card[data-preset-id="wall-cabinet"]')
+        preset.click()
+        self.page.locator('.planner-svg').focus()
+        self.page.keyboard.press('Escape')
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').count(),1)
+        self.assertIn('Placement canceled.',self.page.evaluate('window.fixtureNotifications.join("\\n")'))
+        self.assertEqual(self.page.evaluate('window.writes.length'),0)
+        self.assertEqual(self.errors,[])
+
+    def test_rotated_catalog_artwork_stays_within_visual_footprint(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Wall cabinet','kind':'Cabinet','x':2,'y':3,'width':3,'height':1,'rotation':90,'location_id':LOCATION}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING,types=['Cabinet'])
+        measured=self.page.locator('[data-workshop-artwork]').evaluate('''image=>{const a=image.getBoundingClientRect(),r=image.parentElement.querySelector('rect[data-object-shape]').getBoundingClientRect();return {image:{left:a.left,right:a.right,top:a.top,bottom:a.bottom},rect:{left:r.left,right:r.right,top:r.top,bottom:r.bottom},opacity:image.getAttribute('opacity')}}''')
+        for edge in ['left','top']:
+            self.assertGreaterEqual(measured['image'][edge],measured['rect'][edge]-1,measured)
+        for edge in ['right','bottom']:
+            self.assertLessEqual(measured['image'][edge],measured['rect'][edge]+1,measured)
+        self.assertEqual(measured['opacity'],'1')
+        self.assertEqual(self.errors,[])
+
     def test_rotated_shelf_details_stay_inside_the_plan_footprint(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':6,'height':1.25,'rotation':90,'location_id':None}
@@ -468,6 +532,66 @@ class WorkshopBrowserTests(unittest.TestCase):
           return details.map(detail=>({inside:detail.left>=footprint.left-5&&detail.right<=footprint.right+5&&detail.top>=footprint.top-5&&detail.bottom<=footprint.bottom+5,detail,footprint}));
         }''')
         self.assertTrue(bounds and all(row['inside'] for row in bounds),bounds)
+        self.assertEqual(self.errors,[])
+
+    def test_rotated_caption_stays_readable_and_unrotated(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Wire rack','kind':'Misc','x':2,'y':3,'width':6,'height':1.25,'rotation':90,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        caption=self.page.locator('[data-workshop-drawing] text')
+        transform=caption.evaluate('''el=>{const m=el.getScreenCTM();return {a:m.a,b:m.b,c:m.c,d:m.d,parent:el.parentElement.getAttribute('transform')}}''')
+        self.assertAlmostEqual(transform['b'],0,delta=.001, msg='Artwork rotation must not rotate caption glyphs: '+repr(transform))
+        self.assertAlmostEqual(transform['c'],0,delta=.001, msg='Artwork rotation must not rotate caption glyphs: '+repr(transform))
+
+    def test_quarter_turn_caption_uses_horizontal_drawing_width(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Long caption for a wide workbench drawing','kind':'Workbench','x':2,'y':3,'width':8,'height':1.25,'rotation':90,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING,types=['Workbench'])
+        caption=self.page.locator('[data-workshop-drawing] text')
+        shown=caption.text_content()
+        transform=caption.evaluate('''el=>{const m=el.getScreenCTM();return {a:m.a,b:m.b,c:m.c,d:m.d,size:parseFloat(getComputedStyle(el).fontSize)*Math.hypot(m.a,m.b),bounds:el.getBoundingClientRect().width}}''')
+        self.assertTrue(shown.startswith('Long caption'),shown)
+        self.assertAlmostEqual(transform['b'],0,delta=.001, msg='The label stays horizontal after a quarter-turn.')
+        self.assertGreaterEqual(transform['size'],11)
+        self.assertEqual(self.errors,[])
+
+    def test_drag_back_to_origin_does_not_create_history(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        box=self.page.locator('[data-workshop-drawing]').bounding_box()
+        start={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+40,start['y']+25)
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.up()
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-x'),'2')
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-y'),'3')
+        self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled(),
+                         'A gesture that returns to its start must not add a no-op history entry.')
+
+    def test_pointer_cancel_restores_drawing_without_history(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        group=self.page.locator('[data-workshop-drawing]')
+        box=group.bounding_box()
+        start={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+40,start['y']+25)
+        self.page.locator('.planner-svg').evaluate('''svg=>svg.querySelector('[data-workshop-drawing]').dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:1,pointerType:'mouse'}))''')
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-x'),'2')
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-y'),'3')
+        self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
         self.assertEqual(self.errors,[])
 
     def test_resizing_updates_material_details_before_pointer_up(self):
@@ -1065,16 +1189,16 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertNotIn('--destructive',item_fills[2])
         self.assertEqual(self.errors, [])
 
-    def install_rooms4_plan(self, document, revision=7, *, selected_drawing=None):
-        self.page.evaluate("""({document,revision,selectedDrawing}) => {
+    def install_rooms4_plan(self, document, revision=7, *, selected_drawing=None, types=None):
+        self.page.evaluate("""({document,revision,selectedDrawing,types}) => {
           const room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
           window.fixtureLayout={revision,document,layout:null,
             locations:[{id:'11111111-1111-4111-8111-111111111111',name:'the Cage',parent_id:null,kind:'Rack',code:'1',updated_at:'v1'}],
             parents:[{id:'11111111-1111-4111-8111-111111111111',name:'the Cage',parent_id:null,kind:'Rack',code:'1',isLocation:true}],
-            counts:{},types:['Rack'],storage_types:['Rack']};
+            counts:{},types:types||['Rack'],storage_types:['Rack']};
           window.fixtureSelection={entityId:selectedDrawing?'11111111-1111-4111-8111-111111111111':null,drawingId:selectedDrawing,roomId:room};
           window.instance.dispose(); window.instance=window.mountFixture();
-        }""", {'document': document, 'revision': revision, 'selectedDrawing': selected_drawing})
+        }""", {'document': document, 'revision': revision, 'selectedDrawing': selected_drawing, 'types': types})
         self.page.locator('.planner-svg').wait_for(state='visible')
 
     def test_rooms4_clean_refresh_clears_only_stale_room_history(self):
