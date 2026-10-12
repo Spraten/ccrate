@@ -71,9 +71,22 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       const doc = useDocumentStore(), history = useHistoryStore(), selection = useSelectionStore(), viewport = useViewportStore(), batchData = useBatchDataStore()
       const document = ref(starter('supvan')), revision = ref(0), profile = ref<Profile>('supvan'), selectedId = ref<string | null>('starter:supvan:left')
       const templates = ref<any[]>([]), message = ref(''), preview = ref<any>(null), sampleName = ref('Sample item'), sampleCode = ref(''), selectedItem = ref('')
+      const previewDialog = ref<HTMLDialogElement | null>(null)
       let baseline = ''
+      let previewOpener: HTMLElement | null = null
       const draftPreview = createDraftPreviewGuard()
       const snapshot = () => cloneJson(doc.document)
+      const finishPreview = () => {
+        preview.value = null
+        const opener = previewOpener
+        previewOpener = null
+        if (opener?.isConnected)
+          queueMicrotask(() => opener.focus())
+      }
+      const closePreview = () => {
+        if (previewDialog.value?.open) previewDialog.value.close()
+        else finishPreview()
+      }
       let fitVersion = 0
       const fitToPage = (page: TemplateDocument['page']) => {
         const version = ++fitVersion
@@ -84,7 +97,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         }))
       }
       const changed = () => {
-        draftPreview.invalidate(); preview.value = null
+        draftPreview.invalidate(); closePreview()
         const current = snapshot(); dirty = JSON.stringify(current) !== baseline
         bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } }); bridge.changed?.(current)
       }
@@ -92,7 +105,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       const placementWarning = () => notify('This element overlaps existing artwork. It is selected; move it to a clear area before saving.')
       const load = (value: TemplateDocument, id: string | null = null) => {
         document.value = cloneJson(value); openTemplate(document.value, { document: doc, history, selection });
-        selectedId.value = id; if (!id) revision.value = 0; baseline = JSON.stringify(snapshot()); dirty = false; draftPreview.invalidate(); preview.value = null; bridge.dirty?.(false); send({ type: 'dirty', data: { dirty: false } }); fitToPage(document.value.page)
+        selectedId.value = id; if (!id) revision.value = 0; baseline = JSON.stringify(snapshot()); dirty = false; draftPreview.invalidate(); closePreview(); bridge.dirty?.(false); send({ type: 'dirty', data: { dirty: false } }); fitToPage(document.value.page)
       }
       applyBridgeContext = (context: any) => {
         applyHostTheme(context?.theme)
@@ -100,7 +113,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         const nextId = typeof item?.entity_id === 'string' ? item.entity_id : ''
         const nextName = typeof item?.name === 'string' ? item.name : 'Sample item'
         const nextCode = typeof item?.asset_code === 'string' ? item.asset_code : ''
-        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value) { draftPreview.invalidate(); preview.value = null }
+        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value) { draftPreview.invalidate(); closePreview() }
         selectedItem.value = nextId; sampleName.value = nextName; sampleCode.value = nextCode
         batchData.setPreviewOverrides(nextId ? { item_name: nextName, asset_code: nextCode, item_path: `/item/${nextId}` } : null)
       }
@@ -131,10 +144,15 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       }
       const previewDraft = async () => {
         const version = draftPreview.begin()
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
         const data = selectedItem.value ? { mode: 'item_draft', entity_id: selectedItem.value, profile: profile.value, document: snapshot() } : { mode: 'synthetic', profile: profile.value, document: snapshot(), sample: { item_name: sampleName.value, asset_code: sampleCode.value } }
         const result = await invoke('labels/preview', data)
         if (!draftPreview.accepts(version, disposed)) return
+        previewOpener = opener
         preview.value = result; notify('Draft preview ready. It is not saved or printable.')
+        await nextTick()
+        if (preview.value && draftPreview.accepts(version, disposed) && !previewDialog.value?.open)
+          previewDialog.value?.showModal()
       }
       const buttons = () => h('div', { class: 'label-host-toolbar' }, [
         h('label', ['Label size ', h('select', { value: profile.value, onChange: (e: Event) => { if (dirty && !window.confirm('Discard unsaved label design changes?')) { (e.target as HTMLSelectElement).value = profile.value; return } profile.value = (e.target as HTMLSelectElement).value as Profile; load(starter(profile.value), `starter:${profile.value}:left`) } }, [h('option', { value: 'supvan' }, 'SUPVAN · 40 × 28 mm'), h('option', { value: 'letter' }, 'Letter · 60 × 40 mm')])]),
@@ -155,7 +173,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       watch(() => history.editVersion, changed, { flush: 'sync' })
       onMounted(() => { window.addEventListener('pp-element-placement-warning', placementWarning); load(starter('supvan'), 'starter:supvan:left'); baseline = JSON.stringify(snapshot()); void loadList().catch((e: Error) => notify(e.message)); send({ type: 'ready', data: { nonce } }) })
       onBeforeUnmount(() => { window.removeEventListener('pp-element-placement-warning', placementWarning); if (dirty) bridge.dirty?.(true) })
-      return () => h('div', { class: 'label-host' }, [buttons(), h('p', { role: 'status', class: 'label-host-message' }, message.value), h('div', { class: 'label-host-editor' }, [h(PrintDesigner, { modelValue: document.value, 'onUpdate:modelValue': (next: TemplateDocument) => { const unchanged = isSameDocumentSnapshot(next, snapshot()); document.value = next; if (!unchanged) changed() } })]), preview.value ? h('section', { class: 'label-preview' }, [h('h2', 'Draft preview'), h('img', { src: preview.value.image, alt: 'Draft label preview' }), h('button', { onClick: () => preview.value = null }, 'Close preview')]) : null])
+      return () => h('div', { class: 'label-host' }, [buttons(), h('p', { role: 'status', class: 'label-host-message' }, message.value), h('div', { class: 'label-host-editor' }, [h(PrintDesigner, { modelValue: document.value, 'onUpdate:modelValue': (next: TemplateDocument) => { const unchanged = isSameDocumentSnapshot(next, snapshot()); document.value = next; if (!unchanged) changed() } })]), preview.value ? h('dialog', { ref: previewDialog, class: 'label-preview-dialog', 'aria-labelledby': 'label-preview-title', onClose: finishPreview }, [h('header', [h('h2', { id: 'label-preview-title' }, 'Draft preview'), h('button', { type: 'button', autofocus: true, onClick: closePreview }, 'Close preview')]), h('img', { src: preview.value.image, alt: 'Rendered draft label preview' })]) : null])
     },
   }))
   const exportGuard = document.createElement('style'); exportGuard.textContent = `:root,:root[data-theme="dark"]{--pp-color-app-bg:#f5f7f5;--pp-color-app-panel:#fff;--pp-color-app-inset:#edf1ee;--pp-color-app-border:#d9e1db;--pp-color-app-border2:#b8c7bb;--pp-color-app-desk:#e9eee9;--pp-color-app-text:#1c2b21;--pp-color-app-text2:#53645a;--pp-color-app-text3:#87958b;--pp-color-brand-500:#36704f;--pp-color-brand-600:#285d40;--pp-color-brand-soft:#e7f0e9;--pp-color-brand-soft2:#d5e5d9;--pp-color-brand-50:#e7f0e9;--pp-color-brand-100:#d5e5d9;--pp-color-brand-700:#244f37;--pp-color-app-ok:#36704f;--pp-color-app-ok-soft:#e7f0e9}
@@ -172,7 +190,13 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
 .label-host-paper-size{align-self:center;padding:8px 10px;border-radius:6px;background:var(--pp-color-brand-soft);color:var(--pp-color-brand-700);font-size:.875rem;font-weight:600;white-space:nowrap}
 .label-host-message{min-height:1.5em}
 .label-host-selected-item{align-self:center;padding:8px 10px;color:var(--pp-color-app-text2);font-size:.875rem}
-.label-preview img{max-width:100%;image-rendering:pixelated}
+.label-preview-dialog{box-sizing:border-box;width:min(720px,calc(100vw - 24px));max-width:none;max-height:calc(100vh - 24px);margin:auto;padding:12px;overflow:auto;border:1px solid var(--pp-color-app-border2);border-radius:10px;background:var(--pp-color-app-panel);color:var(--pp-color-app-text);box-shadow:0 18px 50px rgb(15 23 42 / .3)}
+.label-preview-dialog::backdrop{background:rgb(15 23 42 / .55)}
+.label-preview-dialog header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.label-preview-dialog h2{margin:0;font-size:1.125rem}
+.label-preview-dialog button{min-height:40px;padding:6px 12px;border:1px solid var(--pp-color-app-border2);border-radius:6px;background:var(--pp-color-app-panel);color:var(--pp-color-app-text);font:inherit}
+.label-preview-dialog button:focus-visible{outline:2px solid var(--pp-color-brand-500);outline-offset:2px}
+.label-preview-dialog img{display:block;max-width:100%;max-height:min(70vh,calc(100vh - 100px),560px);width:auto;height:auto;object-fit:contain;margin:8px auto 0}
 @media(max-width:700px){.label-host{height:auto;min-height:100%}.label-host-editor{height:920px;min-height:920px;flex:none;overflow:auto}.label-host-editor [data-pp-designer]{height:auto!important;min-height:880px;grid-template-rows:52px auto}.label-host-editor [data-pp-designer]>div{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto minmax(300px,420px) auto!important}.label-host-editor [data-pp-designer]>div>aside:first-child{display:none}.label-host-editor [data-pp-designer]>div>main{min-height:360px}.label-host-toolbar>*{flex:1 1 135px}}`; document.head.append(exportGuard); app.use(createPinia()); app.mount(container)
   const onMessage = (event: MessageEvent<Message>) => {
     if (disposed || event.origin !== trustedOrigin || event.source !== window.parent || event.data?.channel !== 'label-designer' || event.data.nonce !== nonce) return
