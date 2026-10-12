@@ -1,7 +1,7 @@
 import copy,pathlib,tempfile,unittest
 from uuid import uuid4
 from ledger import Ledger,Conflict
-from returns import confirm_return,recover,normalize_targets
+from returns import confirm_return,recover,normalize_targets,UNIDENTIFIED_ACTOR
 
 
 class Client:
@@ -14,7 +14,7 @@ class Client:
             if self.fail_put:raise OSError('Injected interruption before write')
             payload=copy.deepcopy(data);payload['parent']={'id':payload['parentId']};self.entities[key]=payload
         elif method=='PATCH':
-            self.entities[key]['parent']={'id':data['parentId']}
+            self.entities[key]['parent']=None if data.get('clearParent') else {'id':data['parentId']}
             if self.fail_patch:raise OSError('Injected lost response after write')
         return self.entity(key)
 
@@ -34,6 +34,31 @@ class Tests(unittest.TestCase):
         before=self.client.entity(self.asset);result=self.confirm()
         self.assertEqual(self.ledger.custody(self.group),[]);self.assertEqual(self.client.entity(self.asset),before);self.assertFalse(self.client.writes)
         self.assertEqual(self.ledger.detail(self.group,result['id'])['actor_id'],self.returner)
+    def test_explicit_anonymous_return_preserves_borrower_and_has_honest_audit(self):
+        result=confirm_return(self.client,self.ledger,self.group,None,[{'entity_id':self.asset,'return_note':'Returned by someone without a badge'}],str(uuid4()),lambda:True,anonymous_return=True)
+        detail=self.ledger.detail(self.group,result['id'])
+        self.assertEqual(detail['actor_id'],UNIDENTIFIED_ACTOR)
+        self.assertTrue(detail['context']['anonymous_return'])
+        history=self.ledger.history(self.group,self.asset)
+        self.assertEqual(history[0]['actor'], 'Unidentified returner')
+        self.assertEqual(history[0]['return_notes'][0]['author'], 'Unidentified returner')
+        self.assertEqual(self.ledger.detail(self.group,history[1]['id'])['actor_id'],self.borrower)
+
+    def test_nil_actor_requires_explicit_anonymous_return_and_cannot_check_out(self):
+        with self.assertRaises(ValueError):
+            confirm_return(self.client,self.ledger,self.group,UNIDENTIFIED_ACTOR,[{'entity_id':self.asset}],str(uuid4()),lambda:True)
+        with self.assertRaises(ValueError):
+            self.ledger.begin(self.group,UNIDENTIFIED_ACTOR,'check_out',[str(uuid4())],str(uuid4()))
+
+    def test_anonymous_return_still_requires_verified_kit_scans(self):
+        root,child=str(uuid4()),str(uuid4())
+        self.client.entities[root]=copy.deepcopy(self.client.entities[self.asset]);self.client.entities[root]['id']=root;self.client.entities[root]['name']='Kit';self.client.entities[root]['fields'].append({'name':'Equipment kit manifest','type':'text','textValue':__import__('json').dumps({'version':1,'members':[child]})})
+        self.client.entities[child]=copy.deepcopy(self.client.entities[self.asset]);self.client.entities[child]['id']=child;self.client.entities[child]['name']='Component'
+        for item in (root,child):
+            checkout=self.ledger.begin(self.group,self.borrower,'check_out',[item],str(uuid4()));self.ledger.complete(checkout['id'])
+        with self.assertRaises(Conflict):
+            confirm_return(self.client,self.ledger,self.group,None,[{'entity_id':root},{'entity_id':child}],str(uuid4()),lambda:True,anonymous_return=True)
+        self.assertEqual(len(self.ledger.custody(self.group)),3)
     def test_repeat_return_has_one_operation(self):
         key=str(uuid4());first=self.confirm(key=key);second=self.confirm(key=key);self.assertEqual(first,second)
         with self.ledger.connection() as db:self.assertEqual(db.execute('SELECT count(*) FROM operations').fetchone()[0],2)
@@ -66,10 +91,32 @@ class Tests(unittest.TestCase):
     def test_normal_return_cannot_mark_ready_or_trash(self):
         for state in ('Ready','Trashed','Archived','Retired'):
             with self.assertRaises(ValueError):self.confirm(target={'condition':state})
-    def test_non_location_or_archived_destination_rejected(self):
-        with self.assertRaises(ValueError):self.confirm(target={'destination_id':self.asset})
+    def test_self_or_archived_destination_rejected(self):
+        with self.assertRaises(Conflict):self.confirm(target={'destination_id':self.asset})
         self.client.entities[self.other]['archived']=True
         with self.assertRaises(Conflict):self.confirm(target={'destination_id':self.other})
+    def test_return_into_item_and_clear_parent_preserve_history(self):
+        self.client.entities[self.other]['entityType']['isLocation']=False
+        self.confirm(target={'destination_id':self.other})
+        self.assertEqual(self.client.entity(self.asset)['parent']['id'],self.other)
+        checkout=self.ledger.begin(self.group,self.borrower,'check_out',[self.asset],str(uuid4()));self.ledger.complete(checkout['id'])
+        self.confirm(target={'clear_destination':True})
+        self.assertIsNone(self.client.entity(self.asset)['parent'])
+        self.assertEqual(self.client.entity(self.asset)['serialNumber'],'preserve')
+        checkout=self.ledger.begin(self.group,self.borrower,'check_out',[self.asset],str(uuid4()));self.ledger.complete(checkout['id'])
+        self.confirm()  # An unassigned item can be returned without forcing a parent.
+        plain=normalize_targets([{'entity_id':self.asset}])
+        self.assertEqual(plain,normalize_targets([{'entity_id':self.asset,'clear_destination':False}]))
+        self.client.entities[self.other]['parent']={'id':self.asset}
+        with self.assertRaises(Conflict):self.confirm(target={'destination_id':self.other})
+    def test_interrupted_clear_retains_custody_and_recovers_once(self):
+        self.client.fail_patch=True
+        with self.assertRaises(Conflict):self.confirm(target={'clear_destination':True})
+        operation=self.ledger.unresolved()[0]
+        self.assertEqual(len(self.ledger.custody(self.group)),1)
+        self.client.fail_patch=False;recover(self.client,self.ledger,self.group,operation['id'],'complete')
+        self.assertEqual(self.ledger.custody(self.group),[])
+        self.assertEqual(sum(w[0]=='PATCH' for w in self.client.writes),1)
     def test_recovery_rejects_group_mismatch_and_unexpected_native_change(self):
         self.client.fail_put=True
         with self.assertRaises(Conflict):self.confirm(target={'condition':'Broken'})

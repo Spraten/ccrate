@@ -1,7 +1,8 @@
 """Create native records once, with temporary native markers for recovery."""
 import json,urllib.error
 from ledger import Conflict,uuid
-from attachments import photo_bytes,ensure_photo
+from scan_codes import manufacturer_code,MANUFACTURER_FIELD
+from attachments import validate_photos,ensure_photo
 from conditions import FIELD,NOTE_FIELD,condition,STATES
 from native_fields import update_payload,text_field
 from maps import ROOM_FIELD,room_geometry
@@ -16,9 +17,8 @@ def text(value,name,maximum=255,required=False):
 def prepare_location(client,data):
     name=text(data.get('name',''),'Name',required=True)
     parent=uuid(data['parent_id']) if data.get('parent_id') else None
-    if parent:
-        entity=client.entity(parent)
-        if not entity.get('entityType',{}).get('isLocation') or entity.get('archived'):raise ValueError('Choose an active native parent location')
+    from hierarchy import validate_parent
+    validate_parent(client,parent)
     types=client.call('/api/v1/entity-types')
     location_type=next(t for t in types if t['isLocation'])
     fields=[]
@@ -49,11 +49,11 @@ def prepare_product(client,data):
 
 
 def prepare_asset(client,data):
-    if data.get("photo"):photo_bytes(data["photo"])
+    validate_photos(data)
     name=text(data.get('name',''),'Equipment name',required=True)
     serial=text(data.get('serial',''),'Serial number')
-    destination=client.entity(uuid(data.get('location_id')))
-    if not destination.get('entityType',{}).get('isLocation') or destination.get('archived'):raise ValueError('Scan or choose an active storage location')
+    from hierarchy import validate_parent
+    parent=validate_parent(client,data.get('location_id'))
     types=client.call('/api/v1/entity-types')
     type_id=uuid(data['type_id']) if data.get('type_id') else next(t['id'] for t in types if not t['isLocation'])
     if not any(t['id']==type_id and not t['isLocation'] for t in types):raise ValueError('Choose a native equipment type')
@@ -61,8 +61,13 @@ def prepare_asset(client,data):
         for summary in client.entities():
             entity=client.entity(summary['id'])
             if entity.get('serialNumber')==serial:raise Conflict('This serial number already belongs to '+entity['name'])
-    create={'name':name,'description':text(data.get('description',''),'Description',1000),'quantity':1,'entityTypeId':type_id,'parentId':destination['id']}
+    create={'name':name,'description':text(data.get('description',''),'Description',1000),'quantity':1,'entityTypeId':type_id,'parentId':parent}
     result={'path':'/api/v1/entities','create':create,'fields':[],'metadata':{'serialNumber':serial},'location':False,'reviewed':bool(data.get('reviewed'))}
+    if data.get('manufacturer_code'):
+        code=manufacturer_code(data['manufacturer_code'])
+        for summary in client.entities():
+            if text_field(client.entity(summary['id']),MANUFACTURER_FIELD)==code:raise Conflict('This manufacturer QR code already belongs to another item')
+        result['fields'].append({'name':MANUFACTURER_FIELD,'type':'text','textValue':code})
     if data.get('template_id'):
         template=client.call('/api/v1/templates/'+uuid(data['template_id']))
         if data.get('template_revision') and template['updatedAt']!=data['template_revision']:raise Conflict('Product details changed; look up the barcode again')
@@ -76,7 +81,7 @@ def prepare_asset(client,data):
         key=text(data['import_source_key'],'Import source key',64,True)
         if len(key)!=64 or any(c not in '0123456789abcdef' for c in key):raise ValueError('Invalid import identity')
         for summary in client.entities():
-            if text_field(client.entity(summary['id']),'Import source key')==key:raise Conflict('This source item is already in Homebox')
+            if text_field(client.entity(summary['id']),'Import source key')==key:raise Conflict('This source item is already in C-Crate')
         for field,value in (('Import source key',key),('Import source',text(data.get('import_source',''),'Import source',120,True)),('Import external ID',text(data.get('import_external_id',''),'External ID')),('Import original condition',text(data.get('import_source_condition',''),'Original condition'))):
             if value:result['fields'].append({'name':field,'type':'text','textValue':value})
         state=data.get('import_condition','Unreviewed')
@@ -124,7 +129,7 @@ def find_entity(client,job):
         marker=tags[0]['id'] if tags else None
     if not marker:return None
     found=[e for e in client.entities(locations=job['context']['plan']['location']) if any(t['id']==marker for t in e.get('tags',[]))]
-    if len(found)>1:raise Conflict('More than one native record uses this pending marker; inspect Homebox')
+    if len(found)>1:raise Conflict('More than one native record uses this pending marker; inspect C-Crate')
     return client.entity(found[0]['id']) if found else None
 
 
@@ -144,7 +149,7 @@ def perform_creation(client,jobs,group,key,start=False):
     if plan.get('template'):
         entity=find_template(client,job)
         if entity is None:
-            if not start or job['context'].get('record_post_started'):raise Conflict('No native template was found. Inspect Homebox before cancelling this task')
+            if not start or job['context'].get('record_post_started'):raise Conflict('No native template was found. Inspect C-Crate before cancelling this task')
             body=dict(plan['create']);body['fields']=list(body['fields'])+[{'name':MARKER_FIELD,'type':'text','textValue':job['id']}]
             jobs.context(group,key,record_post_started=True)
             entity=client.call(plan['path'],'POST',body)
@@ -157,7 +162,7 @@ def perform_creation(client,jobs,group,key,start=False):
     else:
         entity=find_entity(client,job)
         if entity is None:
-            if not start or job['context'].get('record_post_started'):raise Conflict('No created native record was found. Inspect Homebox before cancelling this task')
+            if not start or job['context'].get('record_post_started'):raise Conflict('No created native record was found. Inspect C-Crate before cancelling this task')
             marker=client.call('/api/v1/tags','POST',{'name':marker_name(job),'description':'Temporary marker for recoverable kiosk creation','color':'#e5b34a'})
             jobs.context(group,key,marker_id=marker['id'],record_post_started=True)
             body=dict(plan['create']);body['tagIds']=list(body.get('tagIds',[]))+[marker['id']]

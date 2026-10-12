@@ -7,6 +7,7 @@ from uuid import UUID,uuid4
 class Conflict(ValueError):pass
 def timestamp():return datetime.now(timezone.utc).isoformat()
 def uuid(value):return str(UUID(str(value)))
+UNIDENTIFIED_ACTOR='00000000-0000-0000-0000-000000000000'
 
 class Ledger:
     SCHEMA_VERSION=2
@@ -67,6 +68,7 @@ class Ledger:
         if not assets or len(assets)!=len(set(assets)):raise ValueError('A nonempty set of distinct assets is required')
         assets.sort()
         if action not in ('check_out','return'):raise ValueError('Unsupported operation')
+        if actor==UNIDENTIFIED_ACTOR and action!='return':raise ValueError('Unidentified actor is allowed for returns only')
         digest=self.request_digest(group,actor,action,assets,intent)
         with self.transaction() as db:
             prior=db.execute('SELECT * FROM operations WHERE group_id=? AND request_key=?',(group,key)).fetchone()
@@ -166,11 +168,16 @@ class Ledger:
             query+=' ORDER BY o.created_at DESC LIMIT ?';args.append(min(max(int(limit),1),100))
             result=[dict(r) for r in db.execute(query,args)]
             for row in result:
+                row['source']='ledger_operation'
+                completed=db.execute("SELECT created_at FROM events WHERE operation_id=? AND kind='completed' ORDER BY sequence LIMIT 1",(row['id'],)).fetchone()
+                row['confirmed_at']=completed['created_at'] if completed else None
+                row['time_basis']='confirmation' if completed else 'request'
+                if row['actor_id']==UNIDENTIFIED_ACTOR:row['actor']='Unidentified returner'
                 row['assets']=[r[0] for r in db.execute('SELECT entity_id FROM operation_assets WHERE operation_id=?',(row['id'],))]
                 row['return_notes']=[]
                 if row['action']=='return' and row['status']=='completed':
                     context=db.execute('SELECT payload FROM operation_context WHERE operation_id=?',(row['id'],)).fetchone()
                     payload=json.loads(context[0]) if context else {}
                     completed=db.execute("SELECT created_at FROM events WHERE operation_id=? AND kind='completed' ORDER BY sequence LIMIT 1",(row['id'],)).fetchone()
-                    row['return_notes']=[dict(n,author=payload.get('note_author','Homebox member'),created_at=completed[0] if completed else row['created_at']) for n in payload.get('return_notes',[]) if not entity or n['entity_id']==uuid(entity)]
+                    row['return_notes']=[dict(n,author=payload.get('note_author','C-Crate member'),created_at=completed[0] if completed else row['created_at']) for n in payload.get('return_notes',[]) if not entity or n['entity_id']==uuid(entity)]
             return result

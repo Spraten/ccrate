@@ -39,9 +39,9 @@ def update_payload(entity, state):
     payload['tagIds'] = [tag['id'] for tag in entity.get('tags', [])]
     matches = [f for f in payload.get('fields', []) if f.get('name') == FIELD]
     if len(matches) > 1:
-        raise ValueError('Duplicate condition fields require review in Homebox')
+        raise ValueError('Duplicate condition fields require review in C-Crate')
     if matches and matches[0].get('type') != 'text':
-        raise ValueError('Condition field must be text; review it in Homebox')
+        raise ValueError('Condition field must be text; review it in C-Crate')
     field = matches[0] if matches else {'name': FIELD, 'type': 'text'}
     field['textValue'] = state
     if not matches:
@@ -56,15 +56,15 @@ def set_condition(client, entity_id, state, note=None):
     if note is not None:
         if not isinstance(note,str) or len(note)>1000:raise ValueError('Condition note must be at most 1000 characters')
         matches=[f for f in payload['fields'] if f.get('name')==NOTE_FIELD]
-        if len(matches)>1 or (matches and matches[0].get('type')!='text'):raise ValueError('Condition note field requires review in Homebox')
+        if len(matches)>1 or (matches and matches[0].get('type')!='text'):raise ValueError('Condition note field requires review in C-Crate')
         field=matches[0] if matches else {'name':NOTE_FIELD,'type':'text'}
         field['textValue']=note
         if not matches:payload['fields'].append(field)
     client.call('/api/v1/entities/'+before['id'], 'PUT', payload)
     after = client.entity(entity_id)
     if condition(after) != state:
-        raise ValueError('Homebox did not confirm the requested condition; review the asset')
-    if note is not None and condition_note(after)!=note:raise ValueError('Homebox did not confirm the condition note')
+        raise ValueError('C-Crate did not confirm the requested condition; review the asset')
+    if note is not None and condition_note(after)!=note:raise ValueError('C-Crate did not confirm the condition note')
     return after
 
 def condition_note(entity):

@@ -34,7 +34,7 @@ class ImportTests(unittest.TestCase):
         batch=self.batch();self.assertEqual(len(self.client.items),0);self.assertEqual(batch['items'][0]['input']['import_condition'],'Unreviewed');self.assertFalse(batch['items'][0]['errors'])
     def test_duplicate_source_and_serial(self):
         batch=self.batch();d=batch['items'][0]['input'];key=str(uuid4());self.client.items[key]={'id':key,'name':'Existing','serialNumber':'SN1','fields':[{'name':'Import source key','type':'text','textValue':d['import_source_key']}]}
-        batch=self.store.validate(self.client,self.group,batch['id']);self.assertIn('Already in Homebox',batch['items'][0]['errors'][0])
+        batch=self.store.validate(self.client,self.group,batch['id']);self.assertIn('Already in C-Crate',batch['items'][0]['errors'][0])
     def test_duplicate_within_batch_and_skip(self):
         batch=self.batch('Name,Serial,ID\na,same,A\nb,same,B\n');self.assertTrue(batch['items'][1]['errors'])
         batch=self.store.save(self.client,None,self.group,{'id':batch['id'],'index':0,'selected':False,'input':{}});self.assertFalse(batch['items'][1]['errors'])
@@ -42,6 +42,12 @@ class ImportTests(unittest.TestCase):
         batch=self.batch();batch=self.store.save(self.client,None,self.group,{'id':batch['id'],'index':0,'input':{'import_condition':'Ready'}});self.assertTrue(batch['items'][0]['errors'])
         with self.assertRaises(ValueError):prepare_asset(self.client,batch['items'][0]['input'])
         batch=self.store.save(self.client,None,self.group,{'id':batch['id'],'index':0,'input':{'reviewed':True}});self.assertFalse(batch['items'][0]['errors']);self.assertEqual(prepare_asset(self.client,batch['items'][0]['input'])['initial_state'],'Ready')
+    def test_optional_parent_and_item_parent(self):
+        batch=self.batch();batch=self.store.save(self.client,None,self.group,{'id':batch['id'],'index':0,'input':{'location_id':''}})
+        self.assertFalse(batch['items'][0]['errors']);self.assertIsNone(prepare_asset(self.client,batch['items'][0]['input'])['create']['parentId'])
+        box=str(uuid4());self.client.items[box]={'id':box,'name':'Box','quantity':1,'archived':False,'entityType':{'id':self.client.kind,'isLocation':False},'fields':[]}
+        batch=self.store.save(self.client,None,self.group,{'id':batch['id'],'index':0,'input':{'location_id':box}})
+        self.assertFalse(batch['items'][0]['errors']);self.assertEqual(prepare_asset(self.client,batch['items'][0]['input'])['create']['parentId'],box)
     def test_native_provenance_and_condition(self):
         batch=self.batch();d=batch['items'][0]['input'];d['import_condition']='Broken';plan=prepare_asset(self.client,d);self.assertEqual(plan['initial_state'],'Broken');self.assertEqual(plan['metadata']['serialNumber'],'SN1');self.assertEqual(len(plan['fields']),3)
     def test_completed_creation_reconciles_without_post(self):
@@ -58,6 +64,14 @@ class ImportTests(unittest.TestCase):
         with patch.object(self.store,'native_job',return_value={'status':'review'}),patch('imports.print_label') as printer:
             with self.assertRaises(Conflict):self.store.label(self.client,None,self.group,{'id':batch['id'],'index':0})
             printer.assert_not_called()
+    def test_confirming_manager_owns_new_import_print_and_uploader_stays_unchanged(self):
+        batch=self.batch();row=batch['items'][0];row.update(status='created',entity_id=str(uuid4()));self.store.put(self.group,batch)
+        manager=str(uuid4());review=str(uuid4());layouts=object()
+        with patch.object(self.store,'native_job',return_value=None),patch('imports.print_label') as printer:
+            result=self.store.label(self.client,object(),self.group,{'id':batch['id'],'index':0,'review_id':review},actor=manager,layouts=layouts)
+        self.assertEqual(printer.call_args.args[3],manager)
+        self.assertEqual(printer.call_args.kwargs,{'layouts':layouts,'review_id':review,'valid_context':None})
+        self.assertEqual(result['actor'],self.actor)
     def test_reopen_persists_edits(self):
         batch=self.batch();self.store.save(self.client,None,self.group,{'id':batch['id'],'index':0,'input':{'name':'Edited'}})
         other=Imports(self.store.path);self.assertEqual(other.get(self.group,batch['id'])['items'][0]['input']['name'],'Edited')

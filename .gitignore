@@ -1,3 +1,38 @@
 work/
+/program-files/runtime/
 __pycache__/
 *.pyc
+
+# Local credentials and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+**/pepper
+
+# Local databases, journals and backups
+*.db
+!tests/fixtures/**/*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.bak
+*.backup
+*.tar
+*.tar.gz
+*.tgz
+/backups/
+
+# Generated frontend and tool outputs
+node_modules/
+dist/
+/build/
+.nuxt/
+.output/
+.vite/
+coverage/
+*.log

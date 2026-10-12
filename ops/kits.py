@@ -13,7 +13,7 @@ def members(entity):
         ids=[uuid(i) for i in value['members']]
         if not ids or len(ids)>49 or len(set(ids))!=len(ids) or entity['id'] in ids:raise ValueError()
         return ids
-    except (ValueError,KeyError,TypeError):raise ValueError('Kit manifest needs review in Homebox')
+    except (ValueError,KeyError,TypeError):raise ValueError('Kit manifest needs review in C-Crate')
 def manifest(client,entity_id):
     found={};versions={};visiting=set()
     def visit(key):

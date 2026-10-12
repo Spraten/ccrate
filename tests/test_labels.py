@@ -16,9 +16,10 @@ class LabelTests(unittest.TestCase):
             def call(self,*args):return [{'id':owner.user,'name':'Proof person'}]
         self.client=Client()
     def tearDown(self):self.temp.cleanup()
-    def run_print(self,key):
+    def run_print(self,key,reprint=False):
         def send(*args,**kwargs):self.prints.append(kwargs['input']);return SimpleNamespace(stdout=b'{"status":"printed"}')
         with patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':30}),patch.object(labels,'printer_path',return_value='/dev/proof'),patch.object(labels,'font',side_effect=lambda size:ImageFont.load_default(size=size)),patch.object(labels.subprocess,'run',side_effect=send):
+            if reprint:return labels.reprint_badge(self.client,self.badges,self.jobs,self.group,self.user,key,self.badge['id'])
             return labels.print_badge(self.client,self.badges,self.jobs,self.group,self.user,key,self.badge['id'],self.badge['code'])
     def test_badge_raw_token_never_persisted(self):
         self.run_print(str(uuid4()))
@@ -40,3 +41,15 @@ class LabelTests(unittest.TestCase):
         self.assertFalse(self.prints)
     def test_too_small_stock_rejected(self):
         with self.assertRaises(ValueError):labels.render({'id':self.user,'name':'Proof'},width_mm=20,height_mm=20)
+    def test_reprint_keeps_identity_and_does_not_create_a_badge(self):
+        self.run_print(str(uuid4()))
+        key=str(uuid4());self.run_print(key,reprint=True);self.run_print(key,reprint=True)
+        self.assertEqual(len(self.prints),2)
+        self.assertEqual(self.prints[0],self.prints[1])
+        self.assertEqual(len(self.badges.list(self.group)),1)
+    def test_new_reprint_cannot_repeat_an_unconfirmed_initial_print(self):
+        key=str(uuid4())
+        with patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':30}),patch.object(labels,'printer_path',return_value='/dev/proof'),patch.object(labels,'font',side_effect=lambda size:ImageFont.load_default(size=size)),patch.object(labels.subprocess,'run',side_effect=OSError('Lost completion')):
+            with self.assertRaises(Conflict):labels.print_badge(self.client,self.badges,self.jobs,self.group,self.user,key,self.badge['id'],self.badge['code'])
+        with self.assertRaises(Conflict):self.run_print(str(uuid4()),reprint=True)
+        self.assertFalse(self.prints)

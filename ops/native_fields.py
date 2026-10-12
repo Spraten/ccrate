@@ -14,7 +14,7 @@ def update_payload(entity):
 def text_field(entity,name):
     matches=[f for f in entity.get('fields',[]) if f.get('name')==name]
     if not matches:return None
-    if len(matches)!=1 or matches[0].get('type')!='text':raise ValueError(name+' needs review in Homebox')
+    if len(matches)!=1 or matches[0].get('type')!='text':raise ValueError(name+' needs review in C-Crate')
     return matches[0].get('textValue','')
 
 
@@ -31,5 +31,5 @@ def set_text_field(client,entity,name,value):
         if not matches:payload['fields'].append(field)
     client.call('/api/v1/entities/'+entity['id'],'PUT',payload)
     result=client.entity(entity['id'])
-    if text_field(result,name)!=value:raise ValueError('Homebox did not confirm '+name)
+    if text_field(result,name)!=value:raise ValueError('C-Crate did not confirm '+name)
     return result

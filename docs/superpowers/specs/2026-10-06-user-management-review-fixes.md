@@ -1,0 +1,51 @@
+# User-management review fixes: scope and execution brief
+
+**Revised October 7, 2026.** This is the current three-plan set for the six confirmed review findings and the requested Manage profile completion fix; the October 6 filenames are retained to keep one plan set. Planning does not authorize implementation or deployment. The account workflow in `docs/USER_MANAGEMENT.md` remains authoritative; the findings and requested completion behavior supply the requirements without another design approval round.
+
+## Required behavior
+
+1. Terminal badge issuance must use the desktop durable journal. A lost response must never lead to automatic issuance or a second active badge through another click. Issuance and printing remain separate confirmations; unresolved results require inspection in Recovery.
+2. Terminal Manage users must provide the existing native badge reprint/replacement behavior and each person's checked-out count with expandable item details: saved image, original completion date of the current checkout, and elapsed duration. Distinguish duplicate names with the short native UUID. Handle zero loans, unavailable items and absent/broken photos honestly.
+3. A selected release and its rollback must match native binary, native frontend, Terminal frontend and companion Python source/imports. Pin gateway routing/static code with the bundle. Preserve operational data and private runtime paths across selection. Refuse a legacy rollback target without a verified matching source snapshot; never label current source as the matching source of an older binary.
+4. Names must satisfy the native Ent limit of **255 UTF-8 bytes after trimming** before journaling or native storage. Reject empty names and over-limit ASCII, CJK or emoji with a clear validation error, no native mutation, no false Recovery entry. Optional email also respects its native 255-byte limit. Notes retain their existing 1000-character limit.
+5. Native Manage users must warn only for actual unsaved changes on Close, Back, Escape, outside dismissal and route departure. Keeping edits preserves the complete draft; explicit discard performs no write. Busy writes cannot be dismissed. Authentication/collection changes clear all drafts and pending prompts immediately; private old-context data must not remain visible.
+6. `kiosk/member-avatar.js` must normalize landscape, portrait and square pictures without stretching, using a centered square crop rendered to the existing 128×128 JPEG. Both interfaces continue using that one helper. Preserve type/20 MB checks, white background, JPEG quality 0.85, metadata stripping and bitmap cleanup.
+7. Create by name remains usable: confirmed creation may transition once to optional photo/details with `User created.` acknowledgment. **Save profile completes editing:** a confirmed changed update closes the native modal, refreshes Members once and returns focus to that member with `Profile saved.` toast; Terminal returns to Manage users with matching status/focus. An unchanged Save, including immediately after creating a person, finishes with `Profile is up to date.` and performs no update POST or new journal entry: native emits no changed refresh; Terminal may load its list once on return, without an edit/list reload loop or added cache. Keep explicit Done/Close. Successful completion does not invoke the unsaved-discard prompt or reload/flash the edit form. Block double submission, retain one request identity until definitive outcome, preserve drafts/errors on validation/stale failures, and keep uncertain results open/blocked with Recovery. A read-only status check proving completion uses the same successful finish path; sending a request alone never proves success. No-op completion must first reject any unresolved create/update for that person/context. After definitive not_started, explicit correction/retry may keep the unjournaled key; after definitive cancelled, explicit retry needs a fresh key (new UUID for a cancelled create, unchanged user UUID for update). Committed success remains true if subsequent profile/list reads fail: offer the relevant read-only reload, never repeat the mutation. Auth/collection changes clear old drafts/prompts and suppress late success, pending-store cleanup and focus restoration.
+
+## Global constraints (copy into every plan)
+
+- Homebox is the account and inventory authority; use existing native UUIDs, APIs, components and helpers.
+- Name-only profiles remain badge-only with NULL native passwords; existing desktop accounts keep their sign-in behavior.
+- No password/PIN enforcement, role changes, dependencies, speculative authentication or unrelated refactors.
+- Never automatically repeat an uncertain create, save, badge issuance, replacement or print.
+- Never mutate live data, issue/print real badges, read secrets/backups, or restart services during implementation verification.
+- Private credentials, badge keys, databases and backups stay outside release bundles and logs.
+- Preserve the dirty working tree and existing uncommitted features; never reset, stash, delete or replace them with a clean HEAD checkout.
+- One GPT-6 Luna Medium coding worker per task; GPT-6.1 Sol High risk review; fixes, tests and renewed review before the next task. No silent model/workflow fallback.
+- Planning approval is not deployment approval; physical print/disconnect acceptance is a separately authorized gate.
+
+## Order and acceptance
+
+Read all three plans before execution. First prepare an isolated workspace containing the approved current dirty source, and a nonprivate manifest of that source before feature changes. Establish the currently verified `0.26.2-caci.2` baseline's matching bundle before implementation edits can replace it. No snapshot or live verification is performed by this planning task. Baseline preparation must be limited to code/build artifacts and hashes; it must not open credentials, badge stores, operational databases or backups. If provenance does not prove the current code matches the current binary/static artifacts, block future release selection and report the missing evidence; do not reconstruct the absent older `caci.1` companion source.
+
+Execute badge/member parity, then profile fixes, then release/rollback completion, one reviewed task at a time. The common baseline gate precedes every feature edit; release Task 2 must validate the preserved baseline with the same reviewed code/runtime-root adaptations before it becomes a launch-ready rollback target. Unit tests use temporary fixtures; browser/API tests use disposable native databases, fake printer adapters and synthetic images. A passing software suite proves software behavior only. Physical label quality and actual disconnect behavior remain unperformed until separately authorized.
+
+Plans:
+
+- [Profile validation, save completion, draft protection and picture proportions](../plans/2026-10-06-profile-review-fixes.md)
+- [Terminal badge recovery and member parity](../plans/2026-10-06-terminal-member-parity.md)
+- [Matched release selection and rollback](../plans/2026-10-06-matched-release-rollback.md)
+
+## Source-grounded contracts
+
+`ops/accounts.py` calls POST `/api/v1/groups/members` with `{requestKey,name,email}`, and GET/PUT `/api/v1/groups/members/{user_id}/profile`; profile updates carry `updatedAt`. `ops/desktop_api.py` exposes journaled `badges/issue`, `badges/revoke`, `badges/replace`, `badges/reprint`, and enriched `loans`. Terminal currently uses `/badge/issue`, `/badge/revoke`, `/badge/print`, `/api/members`, `/api/badges`, `/api/custody`, `/api/file?entity=…&attachment=…`, `/operation/status` and `/recovery/resolve`. Plans explicitly identify their proposed new local routes; they do not invent native endpoints.
+
+`deploy/build-homebox-ui.py` copies `kiosk/member-avatar.js` into the native build. `MemberItems.vue` and `BadgeActions.vue` define existing desktop parity. `work/publish-users.py` currently performs operational backup/service actions on import and must not be imported or run by fixture tests until refactored behind an entry-point guard. `deploy/kiosk-server.py` also has operational initialization; tests must follow the disposable-root source-loading pattern in `deploy/verify-desktop-integration.py`. `deploy/workshop-gateway.py` proxies Workshop API requests to the companion; it does not independently import `ops`.
+
+The completion defect is source-grounded: `UserManager.vue:save()` emits `changed` then calls `edit(result.id)` for both create and update; `kiosk/users-ui.js:userForm()` similarly calls `userProfile(result.id)` after both normal and status-proven completion. These calls keep/reload the form after a save. `use-workshop.ts:write(path,data,label,subject)` accepts an explicit `request_key`, clears shared `busy` in `finally` before its promise settles, and preserves uncertain entries in the person/context pending store; `request('operation/status',{request_key},identity)` reads the existing journal. `forget(key)` addresses the **current** context's store, so call it only while the captured user/group/identity still match. The Members page is generated by `deploy/build-homebox-ui.py:prepare()` from pinned upstream: its current `@changed="refreshMembers"` triggers member/badge/loan reads and `loadMembers()` records read errors. Plan changes belong in that builder and existing components, not a nonexistent overlay Members page or staged build output.
+
+The coordinator's October 7 rerun of existing `work/recent-review/repro.py` passed with all HTTP intercepted at `fixture.invalid`: Terminal Save remains reachable after confirmed success and accepts subsequent edits. This confirms the completion/reload UX defect; it does not establish duplicate user creation or a JavaScript crash. Product fixes and the proposed completion RED/GREEN regression checks have not been implemented or run by this planning revision.
+
+## Material assumptions for plan review
+
+Centered square cropping intentionally trims edges rather than stretching or adding padding. Names longer than 255 UTF-8 bytes are rejected rather than silently truncated or changing the database schema. Legacy releases without matched Python source cannot be offered as safe automatic rollback targets. These are the minimal implementation choices needed to satisfy the confirmed findings.

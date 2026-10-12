@@ -46,27 +46,30 @@ def show():
             print(f'  {label}: {address} ({interface})')
     else:print('No usable network address. Join Wi-Fi using the Pi network menu, then press Enter here.')
     print('\nChecking applications…',flush=True)
-    native=ensure('homebox-native.service',17745)
+    native=ensure('homebox-native.service',17747)
+    gateway=ensure('homebox-workshop-gateway.service',17745)
+    native=native and gateway
     companion=ensure('homebox-companion.service',17749)
-    print('Homebox: '+('READY' if native else 'NOT RESPONDING'))
+    print('C-Crate: '+('READY' if native else 'NOT RESPONDING'))
     print('Equipment Terminal: '+('READY' if companion else 'NOT RESPONDING'))
     if native:
-        print('\nOn this Pi, you can connect via:\n  http://127.0.0.1:17745\n  Sign in with your Homebox email and password.')
+        print('\nOn this Pi, you can connect via:\n  http://127.0.0.1:17745\n  Sign in with your C-Crate email and password.')
     if native and network:
         print('\nFrom a laptop, phone, or tablet on the same network:')
         for interface,address in network:
             label='Direct Ethernet cable' if address=='10.77.0.1' else 'Same Wi-Fi/network'
             print(f'  {label}: http://{address}:17745')
         print('  Open the matching URL in your browser. No script or SSH tunnel is needed.')
-        print('  Sign in with your own Homebox email and password.')
+        print('  Sign in with your own C-Crate email and password.')
         print('  Use Refresh in your browser after edits to see current inventory.')
         print('\nIf the page does not load, check that both devices are on the same')
         print('network. Guest Wi-Fi may block device-to-device connections.')
-        print('\nWorkshop Editor still supplies the companion through its existing tunnel.')
+        print('\nIn C-Crate, use Collection → Members for badges or the Workshop sidebar for tools.')
+        print('Equipment Terminal is also available on the same address at port 17749.')
     if not native or not companion:
         print('\nA service is not ready. Refresh once; if it still fails, ask the')
         print('maintainer to inspect the service. Do not repeat uncertain transactions.')
-    print('\nLocal Homebox does not require internet. Codex remote access does.')
+    print('\nLocal C-Crate does not require internet. Codex remote access does.')
     print('Connection from outside this network needs separate remote access.')
 
 if __name__=='__main__':

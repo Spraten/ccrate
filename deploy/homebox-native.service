@@ -3,9 +3,10 @@ Description=Native Homebox inventory
 StartLimitIntervalSec=60
 StartLimitBurst=5
 [Service]
+Environment=WORKSHOP_ROOT=/home/user/Desktop/inventory-system HOMEBOX_WEB_HOST=127.0.0.1 HOMEBOX_WEB_PORT=17747
 Type=simple
 WorkingDirectory=/home/user/Desktop/inventory-system/work/baseline
-ExecStart=/usr/bin/python3 /home/user/Desktop/inventory-system/deploy/run-homebox.py
+ExecStart=/usr/bin/python3 /home/user/Desktop/inventory-system/work/application-current/deploy/run-release.py native
 Restart=on-failure
 RestartSec=3
 UMask=0077

@@ -22,7 +22,7 @@ def find(client,job):
 def finish_category(client,jobs,group,key,start=False):
     job=jobs.detail(group,key);entity=find(client,job)
     if not entity:
-        if not start or job['context'].get('creation_started'):raise Conflict('No native category found. Inspect Homebox before cancelling')
+        if not start or job['context'].get('creation_started'):raise Conflict('No native category found. Inspect C-Crate before cancelling')
         jobs.context(group,key,creation_started=True);entity=client.call('/api/v1/entity-types','POST',{'name':PREFIX+job['id'],'isLocation':False,'icon':''})
     jobs.bind(group,key,entity['id'])
     if entity['name'] not in (PREFIX+job['id'],job['context']['name']) or entity['isLocation']:raise Conflict('Native category changed outside this creation')

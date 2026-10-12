@@ -60,7 +60,7 @@ class Imports:
         mapping=data.get('mapping',{});headers=batch['headers']
         if not isinstance(mapping,dict) or mapping.get('name') not in headers:raise ValueError('Map the equipment name column')
         if any(k not in FIELDS or v and v not in headers for k,v in mapping.items()):raise ValueError('Unknown CSV column mapping')
-        locations=[e for e in client.entities(True) if not e.get('archived')];types=[t for t in client.call('/api/v1/entity-types') if not t['isLocation']]
+        locations=[e for e in client.entities(True)+client.entities() if not e.get('archived')];types=[t for t in client.call('/api/v1/entity-types') if not t['isLocation']]
         def match(value,choices):
             hits=[c['id'] for c in choices if c['name'].strip().casefold()==value.strip().casefold()]
             return hits[0] if len(hits)==1 else ''
@@ -74,20 +74,21 @@ class Imports:
         batch.pop('raw');batch['mapping']=mapping;self.put(group,batch);return self.validate(client,group,batch['id'])
     def validate(self,client,group,batch_id):
         batch=self.get(group,batch_id);existing=[client.entity(e['id']) for e in client.entities()];serials={e.get('serialNumber'):e for e in existing if e.get('serialNumber')};keys={text_field(e,KEY_FIELD):e for e in existing if text_field(e,KEY_FIELD)}
-        location_ids={e['id'] for e in client.entities(True) if not e.get('archived')};type_ids={t['id'] for t in client.call('/api/v1/entity-types') if not t['isLocation']};seen_keys=set();seen_serials=set()
+        location_ids={e['id'] for e in client.entities(True)+client.entities() if not e.get('archived')};type_ids={t['id'] for t in client.call('/api/v1/entity-types') if not t['isLocation']};seen_keys=set();seen_serials=set()
         for row in batch['items']:
             d=row['input'];errors=[];duplicate=keys.get(d['import_source_key']) or serials.get(d['serial'])
             if not d['name'].strip():errors.append('Equipment name is required')
             for k in ('name','serial','manufacturer','model','import_external_id','import_source_condition'):
                 if len(d[k])>255:errors.append(k+' exceeds 255 characters')
             if len(d['description'])>1000:errors.append('Description exceeds 1000 characters')
-            if d['location_id'] not in location_ids:errors.append('Choose an existing active location')
+            if d['location_id'] and d['location_id'] not in location_ids:errors.append('Choose an existing active item or location')
+            if not d['location_id'] and row['status']=='draft' and row['original']['location']:errors.append('Review the unmatched source parent; choose an item, location or top level')
             if d['type_id'] not in type_ids:errors.append('Choose an existing equipment category')
             if d['import_condition']=='Ready' and not d['reviewed']:errors.append('Ready requires explicit inspection confirmation')
             if row['selected'] and row['status']!='created':
                 if d['import_source_key'] in seen_keys:errors.append('Duplicate source identity in this batch; skip one row')
                 if d['serial'] and d['serial'] in seen_serials:errors.append('Duplicate serial in this batch; skip one row')
-                if duplicate and duplicate['id']!=row.get('entity_id'):errors.append('Already in Homebox: '+duplicate['name']+' â€” skip this row')
+                if duplicate and duplicate['id']!=row.get('entity_id'):errors.append('Already in C-Crate: '+duplicate['name']+' â€” skip this row')
             if row['selected']:
                 seen_keys.add(d['import_source_key'])
                 if d['serial']:seen_serials.add(d['serial'])
@@ -96,7 +97,7 @@ class Imports:
     def save(self,client,jobs,group,data):
         from conditions import STATES
         batch=self.get(group,data.get('id'));row=self.row(batch,data)
-        if row['status'] in ('creating','created','review'):raise Conflict('Created or uncertain rows cannot be edited; use Admin recovery or edit in Homebox')
+        if row['status'] in ('creating','created','review'):raise Conflict('Created or uncertain rows cannot be edited; use Admin recovery or edit in C-Crate')
         changes=data.get('input',{})
         for k in ('name','serial','manufacturer','model','description','location_id','type_id'):
             if k in changes:row['input'][k]=text(changes[k],k,1000 if k=='description' else 255)
@@ -132,15 +133,15 @@ class Imports:
         except Exception:
             job=self.native_job(jobs,group,row['create_key']);row.update(status='error' if not job or job['status']=='cancelled' else 'review',error='Creation stopped. Inspect Admin recovery before repeating this item.');self.put(group,batch);raise
         self.put(group,batch);return batch
-    def label(self,client,jobs,group,data):
+    def label(self,client,jobs,group,data,*,actor=None,layouts=None,valid_context=None):
         batch=self.get(group,data.get('id'));row=self.row(batch,data)
         if row['status']!='created':raise Conflict('Create this item before printing its label')
         if row['label_status']=='printed':return batch
         prior=self.native_job(jobs,group,row['label_key'])
         if prior and prior['status']=='completed':row['label_status']='printed';self.put(group,batch);return batch
-        if prior and prior['status'] not in ('prepared','cancelled'):row['label_status']='review';self.put(group,batch);raise Conflict('Inspect the physical output and finish this print in Admin recovery. Do not resend it.')
+        if prior and prior['status']!='cancelled':row['label_status']='review';self.put(group,batch);raise Conflict('Inspect or safely cancel this prepared print in Admin recovery. Do not resend it.')
         if prior and prior['status']=='cancelled':row['label_key']=str(uuid4());self.put(group,batch)
-        try:print_label(client,jobs,group,batch['actor'],row['label_key'],row['entity_id']);row['label_status']='printed';row['error']=None
+        try:print_label(client,jobs,group,actor or batch['actor'],row['label_key'],row['entity_id'],layouts=layouts,review_id=data.get('review_id'),valid_context=valid_context);row['label_status']='printed';row['error']=None
         except Exception:
             job=self.native_job(jobs,group,row['label_key']);row['label_status']='review' if job and job['status']=='review' else 'pending';row['error']='Printing stopped. Check the printer and review any uncertain output.';self.put(group,batch);raise
         self.put(group,batch);return batch

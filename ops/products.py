@@ -32,7 +32,7 @@ def catalog(client):
 def lookup(client,value):
     canonical=gtin(value);products=catalog(client)
     matches=[p for p in products['products'] if p['gtin']==canonical]
-    if len(matches)>1:raise ValueError('Multiple catalog templates use this barcode; review them in Homebox')
+    if len(matches)>1:raise ValueError('Multiple catalog templates use this barcode; review them in C-Crate')
     return {'gtin':canonical,'product':matches[0] if matches else None}
 
 

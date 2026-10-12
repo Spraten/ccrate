@@ -5,9 +5,10 @@ Wants=homebox-native.service
 StartLimitIntervalSec=60
 StartLimitBurst=5
 [Service]
+Environment=WORKSHOP_ROOT=/home/user/Desktop/inventory-system WORKSHOP_NATIVE_BASE=http://127.0.0.1:17747
 Type=simple
 WorkingDirectory=/home/user/Desktop/inventory-system
-ExecStart=/usr/bin/python3 /home/user/Desktop/inventory-system/deploy/kiosk-server.py
+ExecStart=/usr/bin/python3 /home/user/Desktop/inventory-system/work/application-current/deploy/run-release.py companion
 Restart=on-failure
 RestartSec=3
 UMask=0077

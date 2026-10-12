@@ -64,5 +64,13 @@ class Tests(unittest.TestCase):
         self.ledger.reconcile(op['id'],'complete','Verified intended result')
         with self.assertRaises(Conflict):self.ledger.reconcile(op['id'],'complete','Repeated')
         with self.ledger.connection() as db:self.assertEqual(db.execute('SELECT count(*) FROM custody').fetchone()[0],2)
+    def test_history_exposes_first_completion_time_and_request_time_basis(self):
+        op=self.begin(assets=[self.assets[0]])
+        pending=self.ledger.history(self.group,self.assets[0])[0]
+        self.assertEqual((pending['source'],pending['time_basis'],pending['confirmed_at']),('ledger_operation','request',None))
+        self.ledger.complete(op['id'])
+        completed=self.ledger.history(self.group,self.assets[0])[0]
+        self.assertEqual(completed['time_basis'],'confirmation')
+        self.assertIsNotNone(completed['confirmed_at']);self.assertGreaterEqual(completed['confirmed_at'],completed['created_at'])
 
 if __name__=='__main__':unittest.main()

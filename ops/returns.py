@@ -1,8 +1,9 @@
 """Journal native return changes before clearing custody; recover explicitly."""
 import hashlib
 from conditions import condition,condition_note,set_condition,checkout_blocker
-from ledger import Conflict,uuid
+from ledger import Conflict,uuid,UNIDENTIFIED_ACTOR
 from kits import validate_return
+from hierarchy import validate_parent
 
 RETURN_STATES=('Needs Attention','Maintenance','Quarantined','Broken')
 
@@ -26,6 +27,11 @@ def normalize_targets(targets):
             if state is None:raise ValueError('Select a changed condition before adding an issue note')
         result.append({'entity_id':uuid(target.get('entity_id')),'condition':state,
             'destination_id':uuid(target['destination_id']) if target.get('destination_id') else None,'note':note})
+        clear=target.get('clear_destination',False)
+        if not isinstance(clear,bool):raise ValueError('Invalid clear destination choice')
+        if clear:
+            if target.get('destination_id'):raise ValueError('Choose a destination or clear it, not both')
+            result[-1]['clear_destination']=True
         return_note=target.get('return_note')
         if return_note is not None:
             if not isinstance(return_note,str) or len(return_note)>1000:raise ValueError('Return note must be at most 1000 characters')
@@ -34,12 +40,17 @@ def normalize_targets(targets):
     return sorted(result,key=lambda t:t['entity_id'])
 
 
-def confirm_return(client,ledger,group,actor,targets,request_key,session_valid,verified=None,kit_versions=None):
+def confirm_return(client,ledger,group,actor,targets,request_key,session_valid,verified=None,kit_versions=None,anonymous_return=False):
+    if anonymous_return:
+        if actor is not None:raise ValueError('Anonymous return cannot carry a badge identity')
+        actor=UNIDENTIFIED_ACTOR
+    elif actor is None or uuid(actor)==UNIDENTIFIED_ACTOR:
+        raise ValueError('A current badge session is required')
     group,actor,key=uuid(group),uuid(actor),uuid(request_key)
     targets=normalize_targets(targets);assets=[t['entity_id'] for t in targets]
-    members=client.call('/api/v1/groups/members')
-    if actor not in {m['id'] for m in members}:raise Conflict('Badge holder is no longer a Homebox group member')
-    if not session_valid():raise Conflict('Session ended; scan your badge again')
+    members=[] if anonymous_return else client.call('/api/v1/groups/members')
+    if not anonymous_return and actor not in {m['id'] for m in members}:raise Conflict('Badge holder is no longer a C-Crate group member')
+    if not session_valid():raise Conflict('Return context ended; start the return again')
     prior=ledger.request(group,key)
     if prior:
         if prior['request_hash']!=ledger.request_digest(group,actor,'return',assets,targets):
@@ -52,27 +63,23 @@ def confirm_return(client,ledger,group,actor,targets,request_key,session_valid,v
         entity=client.entity(target['entity_id']);entities.append(entity)
         if entity.get('entityType',{}).get('isLocation') or entity.get('quantity')!=1:
             raise ValueError('Return individually tracked equipment only')
-        destination=target['destination_id'] or parent_id(entity)
-        if not destination:raise ValueError(entity['name']+': scan a destination; no assigned location exists')
-        place=client.entity(destination)
-        if place.get('archived'):raise Conflict('Return destination is archived')
-        if target['destination_id'] and not place.get('entityType',{}).get('isLocation'):
-            raise ValueError('Destination must be a native Homebox location')
-        if entity.get('syncChildEntityLocations') and destination!=parent_id(entity):
-            raise Conflict('This container moves child equipment; use the kit workflow')
+        destination=None if target.get('clear_destination') else target['destination_id'] or parent_id(entity)
+        try:validate_parent(client,destination,entity['id'])
+        except ValueError as error:raise Conflict(str(error)) from None
         if entity.get('archived') and target['condition'] is not None:
             raise Conflict('Archived equipment needs Admin review before changing condition')
         steps.append({'entity_id':entity['id'],'condition_before':condition(entity),
             'condition_after':target['condition'] or condition(entity),
             'parent_before':parent_id(entity),'parent_after':destination,
             'note_before_hash':note_hash(condition_note(entity)),'note_after':target['note']})
-    if not session_valid():raise Conflict('Session ended; scan your badge again')
+    if not session_valid():raise Conflict('Return context ended; start the return again')
     validate_return(client,entities,ledger.custody(group),verified,kit_versions)
     context={'steps':steps}
+    if anonymous_return:context['anonymous_return']=True
     notes=[{'entity_id':t['entity_id'],'text':t['return_note']} for t in targets if t.get('return_note')]
     if notes:
         context['return_notes']=notes
-        context['note_author']=next((m.get('name') or 'Homebox member' for m in members if m['id']==actor),'Homebox member')
+        context['note_author']='Unidentified returner' if anonymous_return else next((m.get('name') or 'C-Crate member' for m in members if m['id']==actor),'C-Crate member')
     operation=ledger.begin(group,actor,'return',assets,key,context=context,intent=targets)
     try:
         apply_steps(client,ledger,operation['id'],steps)
@@ -91,9 +98,9 @@ def apply_steps(client,ledger,op,steps):
         entity=client.entity(step['entity_id'])
         current_condition=condition(entity);current_parent=parent_id(entity)
         if current_condition not in (step['condition_before'],step['condition_after']):
-            raise Conflict('Equipment condition changed outside the return; inspect it in Homebox')
+            raise Conflict('Equipment condition changed outside the return; inspect it in C-Crate')
         if current_parent not in (step['parent_before'],step['parent_after']):
-            raise Conflict('Equipment destination changed outside the return; inspect it in Homebox')
+            raise Conflict('Equipment destination changed outside the return; inspect it in C-Crate')
         target_note=step['note_after'];current_note=condition_note(entity)
         if target_note is not None and note_hash(current_note) not in (step['note_before_hash'],note_hash(target_note)):
             raise Conflict('Condition note changed outside this return')
@@ -102,15 +109,15 @@ def apply_steps(client,ledger,op,steps):
             entity=set_condition(client,entity['id'],step['condition_after'],target_note)
             ledger.record(op,'native_condition_verified',{'entity_id':entity['id'],'condition':step['condition_after']})
         if parent_id(entity)!=step['parent_after']:
-            destination=client.entity(step['parent_after'])
-            if not destination.get('entityType',{}).get('isLocation') or destination.get('archived'):
-                raise Conflict('Destination no longer accepts returns')
+            try:validate_parent(client,step['parent_after'],entity['id'])
+            except ValueError as error:raise Conflict(str(error)) from None
             ledger.record(op,'native_destination_started',{'entity_id':entity['id'],'destination_id':step['parent_after']})
-            client.call('/api/v1/entities/'+entity['id'],'PATCH',{'parentId':step['parent_after']})
+            payload={'parentId':step['parent_after']} if step['parent_after'] else {'clearParent':True}
+            client.call('/api/v1/entities/'+entity['id'],'PATCH',payload)
             entity=client.entity(entity['id'])
-            if parent_id(entity)!=step['parent_after']:raise Conflict('Homebox did not confirm destination')
+            if parent_id(entity)!=step['parent_after']:raise Conflict('C-Crate did not confirm destination')
             ledger.record(op,'native_destination_verified',{'entity_id':entity['id'],'destination_id':step['parent_after']})
-        if condition(entity)!=step['condition_after']:raise Conflict('Homebox did not confirm condition')
+        if condition(entity)!=step['condition_after']:raise Conflict('C-Crate did not confirm condition')
 
 
 def recover(client,ledger,group,op,outcome):
@@ -135,7 +142,7 @@ def recover(client,ledger,group,op,outcome):
             for step in steps:
                 entity=client.entity(step['entity_id'])
                 if condition(entity)!=step['condition_before'] or parent_id(entity)!=step['parent_before'] or note_hash(condition_note(entity))!=step['note_before_hash']:
-                    raise Conflict('Native changes already occurred. Finish the return, or restore previous values in Homebox before cancelling')
+                    raise Conflict('Native changes already occurred. Finish the return, or restore previous values in C-Crate before cancelling')
         ledger.reconcile(op,'cancel','Open setup Admin confirmed no return changes and cancelled the incomplete operation')
     else:raise ValueError('Choose complete or cancel')
     return {'id':op,'status':'completed' if outcome=='complete' else 'cancelled'}

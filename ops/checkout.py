@@ -11,7 +11,7 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
         raise ValueError('Select between 1 and 50 distinct assets')
     members=client.call('/api/v1/groups/members')
     if actor not in {m['id'] for m in members}:
-        raise Conflict('Badge holder is no longer a Homebox group member')
+        raise Conflict('Badge holder is no longer a C-Crate group member')
     entities=[]
     for asset in assets:
         entity=client.entity(asset)

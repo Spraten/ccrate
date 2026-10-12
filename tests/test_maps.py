@@ -1,6 +1,6 @@
 import copy,json,unittest
 from uuid import uuid4
-from maps import ROOM_FIELD,OBJECT_FIELD,room_geometry,object_geometry,save_room,save_object,remove_object,list_map
+from maps import ROOM_FIELD,OBJECT_FIELD,room_geometry,object_geometry,save_room,save_object,remove_object,list_map,ancestry
 
 
 class Client:
@@ -30,6 +30,15 @@ class Tests(unittest.TestCase):
         save_object(self.client,self.shelf,self.placement);result=list_map(self.client,self.asset)
         self.assertEqual(result['highlight_id'],self.shelf);self.assertEqual(result['room_id'],self.room);self.assertTrue(result['exact'])
         self.assertEqual([p['name'] for p in result['path']],['Workshop','Shelf','Drone'])
+    def test_deep_mixed_map_path_and_cycle(self):
+        parent=self.shelf
+        for index in range(70):
+            key=str(uuid4());self.client.data[key]={'id':key,'name':'Level '+str(index),'parent':{'id':parent},'entityType':{'isLocation':index%2==0}}
+            parent=key
+        self.client.data[self.asset]['parent']={'id':parent}
+        path=ancestry(self.client,self.client.entity(self.asset));self.assertEqual(len(path),73);self.assertEqual(path[-1]['id'],self.room)
+        self.client.data[self.room]['parent']={'id':self.asset}
+        with self.assertRaises(ValueError):ancestry(self.client,self.client.entity(self.asset))
     def test_remove_visual_object_preserves_native_location(self):
         save_object(self.client,self.shelf,self.placement);remove_object(self.client,self.shelf)
         self.assertIn(self.shelf,self.client.data);self.assertEqual(self.client.entity(self.shelf)['parent']['id'],self.room)

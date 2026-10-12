@@ -1,6 +1,6 @@
 import pathlib,sys,unittest
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'kiosk'))
-from scan_codes import normalize
+from scan_codes import normalize, resolve_serial, resolve_equipment, manufacturer_code, MANUFACTURER_FIELD
 class ScanTests(unittest.TestCase):
     def test_native_asset_url(self):
         self.assertEqual(normalize('http://homebox.local/a/000-013'),{'kind':'asset','asset_id':'000-013'})
@@ -15,4 +15,69 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(normalize('x'*2049)['kind'],'invalid')
     def test_unknown_namespace(self):
         self.assertEqual(normalize('LAB:U:unapproved')['kind'],'invalid')
+class ManufacturerSerialTests(unittest.TestCase):
+    def test_dji_battery_serial(self):
+        self.assertEqual(normalize('093XE5604401ME'),{'kind':'serial','serial':'093XE5604401ME'})
+    def test_alphanumeric_serial(self):
+        self.assertEqual(normalize('  DJI-SERIAL-123  '),{'kind':'serial','serial':'DJI-SERIAL-123'})
+    def test_unsafe_or_unknown_urls_are_not_serials(self):
+        self.assertEqual(normalize('https://example.com/serial')['kind'],'manufacturer')
+        for raw in ['LAB:U:unapproved','SN\x001234','/unknown/1234']:
+            self.assertEqual(normalize(raw)['kind'],'invalid')
+    def test_exact_native_match(self):
+        item={'id':'one','serialNumber':'DJI-SERIAL-123'}
+        self.assertEqual(resolve_serial(normalize('DJI-SERIAL-123'),[item])['entity'],item)
+        self.assertNotIn('entity',resolve_serial(normalize('dji-serial-123'),[item]))
+    def test_unknown_and_duplicate_serials(self):
+        code=normalize('DJI-SERIAL-123')
+        self.assertIn('reason',resolve_serial(code,[]))
+        items=[{'id':str(i),'serialNumber':code['serial']} for i in range(2)]
+        result=resolve_serial(code,items)
+        self.assertTrue(result['ambiguous'])
+        self.assertNotIn('entity',result)
+    def test_locations_cannot_resolve_as_equipment(self):
+        code=normalize('DJI-SERIAL-123')
+        self.assertNotIn('entity',resolve_serial(code,[{'serialNumber':code['serial'],'entityType':{'isLocation':True}}]))
 if __name__=='__main__':unittest.main()
+
+
+class EquipmentCodeTests(unittest.TestCase):
+    def item(self,identifier='one',serial='',code=None,gtin=None,archived=False):
+        fields=[]
+        if code is not None:fields.append({'name':MANUFACTURER_FIELD,'type':'text','textValue':code})
+        if gtin is not None:fields.append({'name':'Product GTIN','type':'text','textValue':gtin})
+        return {'id':identifier,'serialNumber':serial,'fields':fields,'archived':archived}
+    def resolve(self,raw,items):return resolve_equipment(raw,normalize(raw),items)
+    def test_homebox_uuid_and_entity_url(self):
+        identifier='efb41b6f-0386-452b-af21-75da992e9677'
+        for raw in [identifier,'http://homebox/entity/'+identifier]:self.assertEqual(normalize(raw)['entity_id'],identifier)
+    def test_arbitrary_qr_text_is_registered_exactly(self):
+        for raw in ['https://vendor.invalid/device/opaque', '{"part":"battery","batch":42}', 'a']:
+            self.assertEqual(manufacturer_code(raw),raw)
+            self.assertEqual(self.resolve(raw,[self.item(code=raw)])['entity']['id'],'one')
+    def test_url_serial_and_registered_override(self):
+        raw='https://vendor.invalid/device?serial=SERIAL-42&model=ABC'
+        self.assertEqual(self.resolve(raw,[self.item(serial='SERIAL-42')])['entity']['id'],'one')
+        self.assertNotIn('entity',self.resolve(raw,[self.item(serial='serial-42')]))
+        raw+='&sn=OTHER';self.assertNotIn('entity',self.resolve(raw,[self.item(serial='SERIAL-42')]))
+    def test_duplicate_or_archived_codes_never_choose(self):
+        raw='https://vendor.invalid/label'
+        result=self.resolve(raw,[self.item(code=raw),self.item('two',code=raw)])
+        self.assertTrue(result['ambiguous']);self.assertNotIn('entity',result)
+        self.assertNotIn('entity',self.resolve(raw,[self.item(code=raw,archived=True)]))
+    def test_shared_product_code_needs_individual_label(self):
+        raw='4006381333931';items=[self.item(gtin='04006381333931')]
+        self.assertIn('entity',self.resolve(raw,items))
+        items.append(self.item('two',gtin=raw));self.assertNotIn('entity',self.resolve(raw,items))
+    def test_serial_and_linked_code_conflict(self):
+        result=self.resolve('SERIAL-42',[self.item(serial='SERIAL-42'),self.item('two',code='SERIAL-42')])
+        self.assertTrue(result['ambiguous']);self.assertNotIn('entity',result)
+    def test_badge_and_homebox_cannot_be_registered(self):
+        for raw in ['LAB:U:secret','000-022','/item/efb41b6f-0386-452b-af21-75da992e9677']:
+            with self.assertRaises(ValueError):manufacturer_code(raw)
+
+class InvalidRegisteredCodes(unittest.TestCase):
+    def test_empty_or_oversize_scan_never_matches_a_native_field(self):
+        for raw in ['', 'x'*2049, 'SN\x001234']:
+            item={'id':'one','fields':[{'name':MANUFACTURER_FIELD,'type':'text','textValue':raw}]}
+            self.assertNotIn('entity',resolve_equipment(raw,normalize(raw),[item]))

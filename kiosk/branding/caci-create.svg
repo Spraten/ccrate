@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="currentColor" role="img" aria-label="C-Crate logo: drone flying out of a crate" style="height:auto;max-width:100%">
+  <g transform="translate(8 -2) scale(.88) rotate(-10 64 27)">
+    <path d="M54 26 27 16M74 26 101 16M54 32 27 40M74 32 101 40" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+    <rect x="47" y="21" width="34" height="17" rx="6"/>
+    <ellipse cx="24" cy="15" rx="19" ry="4"/>
+    <ellipse cx="104" cy="15" rx="19" ry="4"/>
+    <ellipse cx="24" cy="41" rx="19" ry="4"/>
+    <ellipse cx="104" cy="41" rx="19" ry="4"/>
+    <circle cx="64" cy="41" r="5"/>
+  </g>
+  <path d="m4 66 42-21 15 15-42 21zm63-6 15-15 42 21-15 15z"/>
+  <path fill-rule="evenodd" d="M20 85 61 105v20L20 105Z M27 94l27 13v3L27 97Z M67 105l41-20v20l-41 20Z M74 107l27-13v3l-27 13Z"/>
+  <path d="m56 49-3 7m22-8-3 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+</svg>

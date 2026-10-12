@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/arenahub-gg/print-design-pro",
+  "upstream_commit": "eb118cc05b169c554066d823c44dc179aa3b96bb",
+  "upstream_license": "MIT",
+  "source_path": "packages/editor/src",
+  "patches": ["patches/0001-offline-fonts.patch"],
+  "font": {
+    "family": "DejaVu Sans",
+    "file": "public/fonts/DejaVuSans.ttf",
+    "license_file": "public/fonts/DejaVu-Fonts-Copyright.txt",
+    "origin": "Debian fonts-dejavu-core package"
+  }
+}

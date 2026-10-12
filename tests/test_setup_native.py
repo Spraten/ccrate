@@ -88,9 +88,28 @@ class Tests(unittest.TestCase):
         job=self.jobs.unresolved(self.group)[0]
         with self.assertRaises(Conflict):recover_creation(self.client,self.jobs,self.group,job['id'],'cancel')
     def test_invalid_native_parent_never_creates_an_asset(self):
-        asset_id=str(uuid4());self.client.records[asset_id]=self.client.make(asset_id,{'name':'Equipment','entityTypeId':self.client.item_type})
+        asset_id=str(uuid4());self.client.records[asset_id]=self.client.make(asset_id,{'name':'Equipment','entityTypeId':self.client.item_type});self.client.records[asset_id]['archived']=True
         with self.assertRaises(ValueError):self.submit('create_asset',{'name':'Other','location_id':asset_id})
         self.assertEqual(self.client.posts,0)
+
+    def test_optional_mixed_parents_keep_native_types(self):
+        box=self.submit('create_asset',{'name':'Box'})['entity_id']
+        shelf=self.submit('create_location',{'name':'Shelf in box','parent_id':box})['entity_id']
+        nested=self.submit('create_asset',{'name':'Item in box','location_id':box})['entity_id']
+        self.assertIsNone(self.client.entity(box)['parent'])
+        self.assertTrue(self.client.entity(shelf)['entityType']['isLocation'])
+        self.assertEqual(self.client.entity(shelf)['parent']['id'],box)
+        self.assertEqual(self.client.entity(nested)['parent']['id'],box)
+
+    def test_manufacturer_code_enrollment_is_native_and_preserves_serial(self):
+        code='{"opaque":"manufacturer payload"}'
+        result=self.submit('create_asset',{'name':'Fixture equipment','serial':'SERIAL-QR','manufacturer_code':code,'location_id':self.client.room})
+        entity=self.client.entity(result['entity_id'])
+        self.assertEqual(entity['serialNumber'],'SERIAL-QR')
+        self.assertEqual(next(f['textValue'] for f in entity['fields'] if f['name']=='Manufacturer QR code'),code)
+        before=self.client.posts
+        with self.assertRaises(Conflict):self.submit('create_asset',{'name':'Other equipment','manufacturer_code':code,'location_id':self.client.room})
+        self.assertEqual(self.client.posts,before)
 
 
 if __name__=='__main__':unittest.main()

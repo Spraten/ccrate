@@ -1,7 +1,7 @@
 """Journaled native condition and scheduled maintenance issue reporting."""
 from datetime import datetime,timezone
 from ledger import uuid,Conflict
-from attachments import photo_bytes,ensure_photo
+from attachments import validate_photos,ensure_photo
 from conditions import condition,condition_note,set_condition
 from setup_native import text
 STATES=('Needs Attention','Broken','Maintenance','Quarantined')
@@ -11,7 +11,7 @@ def submit_problem(client,jobs,group,actor,key,data):
     if job['status']=='completed':return {'id':job['id'],'status':'completed','entity_id':job['result_id']}
     if job['status']!='prepared':raise Conflict('Problem report needs Admin recovery; do not submit another copy')
     try:
-        if data.get('photo'):photo_bytes(data['photo'])
+        validate_photos(data)
         entity=client.entity(uuid(data.get('entity_id')))
         if entity.get('entityType',{}).get('isLocation') or entity.get('archived'):raise ValueError('Choose active equipment')
         state=data.get('state','Needs Attention')
@@ -29,7 +29,7 @@ def submit_problem(client,jobs,group,actor,key,data):
 def finish_problem(client,jobs,group,job_id,start=False):
     job=jobs.detail(group,job_id);c=job['context'];entity=client.entity(c['entity_id'])
     current=(condition(entity),condition_note(entity));before=(c['before'],c['before_note']);after=(c['state'],c['note'])
-    if current not in (before,after):raise Conflict('Condition changed in Homebox; review the report manually')
+    if current not in (before,after):raise Conflict('Condition changed in C-Crate; review the report manually')
     if current!=after:
         set_condition(client,entity['id'],c['state'],c['note'])
         jobs.record(group,job_id,'condition_verified',{'entity_id':entity['id']})
@@ -37,7 +37,7 @@ def finish_problem(client,jobs,group,job_id,start=False):
     matches=[e for e in entries if marker(job) in e.get('description','')]
     if len(matches)>1:raise Conflict('Duplicate native maintenance references require review')
     if not matches:
-        if c.get('maintenance_started'):raise Conflict('Maintenance outcome is unknown; verify Homebox before creating another entry')
+        if c.get('maintenance_started'):raise Conflict('Maintenance outcome is unknown; verify C-Crate before creating another entry')
         # This durable flag prevents a second POST after an uncertain response.
         jobs.context(group,job_id,maintenance_started=True)
         entry=client.call('/api/v1/entities/'+entity['id']+'/maintenance','POST',{'name':'Equipment issue: '+c['state'],'description':c['note']+'\n\n'+marker(job),'scheduledDate':c['date'],'completedDate':'','cost':'0'})

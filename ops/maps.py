@@ -39,7 +39,7 @@ def object_geometry(data,room):
 
 def location(client,key):
     entity=client.entity(uuid(key))
-    if not entity.get('entityType',{}).get('isLocation'):raise ValueError('Choose a native Homebox location')
+    if not entity.get('entityType',{}).get('isLocation'):raise ValueError('Choose a native C-Crate location')
     if entity.get('archived'):raise ValueError('Archived locations cannot be placed on an active map')
     return entity
 
@@ -48,7 +48,7 @@ def ancestry(client,entity):
     result=[];visited=set()
     while entity:
         key=entity['id']
-        if key in visited or len(visited)>=64:raise ValueError('Invalid or excessively deep native location hierarchy')
+        if key in visited:raise ValueError('The native hierarchy contains a cycle; clear a parent to repair it')
         visited.add(key);result.append({'id':key,'name':entity['name']})
         parent=(entity.get('parent') or {}).get('id')
         entity=client.entity(parent) if parent else None
@@ -66,7 +66,7 @@ def list_map(client,entity_id=None):
             if room:rooms.append({'id':entity['id'],'name':entity['name'],**room_geometry(room)})
             if placement:objects.append({'id':entity['id'],'name':entity['name'],**placement})
             if not room and not placement:unplaced.append({'id':entity['id'],'name':entity['name']})
-        except (ValueError,TypeError,KeyError):errors.append({'id':entity['id'],'name':entity['name'],'error':'Map fields need review in Homebox'})
+        except (ValueError,TypeError,KeyError):errors.append({'id':entity['id'],'name':entity['name'],'error':'Map fields need review in C-Crate'})
     valid=[]
     for obj in objects:
         room=next((r for r in rooms if r['id']==obj.get('room_id')),None)
@@ -109,7 +109,7 @@ def save_object(client,key,data):
     geometry=decode(room,ROOM_FIELD)
     if not geometry:raise ValueError('Configure the map room first')
     if room['id'] not in {p['id'] for p in ancestry(client,entity)[1:]}:
-        raise ValueError('Location must belong to the selected room in Homebox')
+        raise ValueError('Location must belong to the selected room in C-Crate')
     placement=object_geometry(data,room_geometry(geometry))
     rename(entity,data)
     set_text_field(client,entity,OBJECT_FIELD,json.dumps(placement,sort_keys=True))

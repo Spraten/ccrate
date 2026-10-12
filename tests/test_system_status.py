@@ -14,6 +14,6 @@ class SystemStatusTests(unittest.TestCase):
     def test_healthy_storage(self):
         self.assertEqual(system_status.storage_health(self.disk(30*1024**3)),{'level':'ok','message':None})
     def test_disconnected_printer_keeps_diagnostics_available(self):
-        with patch.object(system_status,'probe',side_effect=OSError('Disconnected')),patch.object(system_status,'unit',return_value='active'),patch.object(system_status,'read_state',return_value=None),patch.object(system_status.shutil,'disk_usage',return_value=self.disk(30*1024**3)):
+        with patch('hardware.probe',side_effect=OSError('Disconnected')),patch.object(system_status,'camera_status',return_value={'connected':False}),patch.object(system_status,'unit',return_value='active'),patch.object(system_status,'read_state',return_value=None),patch.object(system_status.shutil,'disk_usage',return_value=self.disk(30*1024**3)):
             result=system_status.status()
         self.assertFalse(result['printer']['connected']);self.assertEqual(result['storage']['level'],'ok')

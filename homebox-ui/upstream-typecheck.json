@@ -1,0 +1,260 @@
+{
+  "pin": "e01dd737238a3fa7e1a6454b37de6c6fc88c86e4",
+  "diagnostics": [
+    [
+      "components/Entity/CreateModal.vue",
+      "TS18048",
+      "'form.location' is possibly 'undefined'."
+    ],
+    [
+      "components/Entity/CreateModal.vue",
+      "TS18048",
+      "'form.location' is possibly 'undefined'."
+    ],
+    [
+      "components/Item/View/ItemChangeDetails.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "components/Item/View/ItemChangeDetails.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "components/Item/View/ItemChangeDetails.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "components/Item/View/ItemChangeDetails.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "components/Item/View/table/columns.ts",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "components/Item/View/table/data-table-dropdown.vue",
+      "TS2304",
+      "Cannot find name 'ItemSummary'."
+    ],
+    [
+      "components/Item/View/table/data-table-dropdown.vue",
+      "TS2304",
+      "Cannot find name 'ItemSummary'."
+    ],
+    [
+      "components/Item/View/table/data-table-dropdown.vue",
+      "TS2304",
+      "Cannot find name 'ItemSummary'."
+    ],
+    [
+      "components/Item/View/table/data-table-expanded-row.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "components/Item/View/table/data-table-expanded-row.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "components/Item/View/table/data-table-expanded-row.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "components/Template/Card.vue",
+      "TS2322",
+      "Type '{ id: string; name: string; type: string; textValue: string; }[]' is not assignable to type 'TemplateField[]'."
+    ],
+    [
+      "components/Template/CreateModal.vue",
+      "TS2345",
+      "Argument of type '{ name: string; description: string; notes: string; defaultName: string | null; defaultDescription: string | null; defaultQuantity: number; defaultInsured: boolean; defaultManufacturer: string | null; ... 8 more ...; fields: { ...; }[]; }' is not assignable to parameter of type 'EntityTemplateCreate'."
+    ],
+    [
+      "composables/use-barcode-detector.ts",
+      "TS2305",
+      "Module '\"~~/lib/api/types/data-contracts\"' has no exported member 'ItemOut'."
+    ],
+    [
+      "composables/use-barcode-detector.ts",
+      "TS2305",
+      "Module '\"~~/lib/api/types/data-contracts\"' has no exported member 'ItemSummary'."
+    ],
+    [
+      "composables/use-barcode-detector.ts",
+      "TS2305",
+      "Module '\"~~/lib/api/types/data-contracts\"' has no exported member 'LocationOut'."
+    ],
+    [
+      "composables/use-barcode-detector.ts",
+      "TS2353",
+      "Object literal may only specify known properties, and 'locations' does not exist in type 'ItemsQuery'."
+    ],
+    [
+      "lib/api/__test__/factories/index.ts",
+      "TS2741",
+      "Property 'icon' is missing in type '{ name: string; description: string; color: string; }' but required in type 'TagCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ parentId: null; name: string; description: string; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ parentId: string; name: string; tagIds: never[]; description: string; quantity: number; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS1117",
+      "An object literal cannot have multiple properties with the same name."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ parentId: string; name: string; tagIds: never[]; description: string; quantity: number; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS1117",
+      "An object literal cannot have multiple properties with the same name."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2352",
+      "Conversion of type '{ parentId: string | null; tagIds: string[]; fields: EntityFieldData[]; archived: boolean; assetId: string; attachments: ItemAttachment[]; ... 29 more ...; warrantyExpires: Date | string; }' to type 'EntityUpdate' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2352",
+      "Conversion of type '{ parentId: string | null; tagIds: string[]; fields: EntityFieldData[]; archived: boolean; assetId: string; attachments: ItemAttachment[]; ... 29 more ...; warrantyExpires: Date | string; }' to type 'EntityUpdate' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ parentId: string; name: string; tagIds: never[]; description: string; quantity: number; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS1117",
+      "An object literal cannot have multiple properties with the same name."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ parentId: string; name: string; description: string; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ name: string; tagIds: never[]; description: string; quantity: number; parentId: string; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ name: string; tagIds: never[]; description: string; quantity: number; parentId: string; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ name: string; tagIds: never[]; description: string; quantity: number; parentId: string; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2352",
+      "Conversion of type '{ parentId: string; tagIds: never[]; archived: boolean; assetId: string; attachments: ItemAttachment[]; children: EntitySummary[]; ... 29 more ...; warrantyExpires: Date | string; }' to type 'EntityUpdate' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ name: string; tagIds: never[]; description: string; quantity: number; parentId: string; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2352",
+      "Conversion of type '{ parentId: string; tagIds: never[]; archived: boolean; assetId: string; attachments: ItemAttachment[]; children: EntitySummary[]; ... 29 more ...; warrantyExpires: Date | string; }' to type 'EntityUpdate' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    ],
+    [
+      "lib/api/__test__/user/items.test.ts",
+      "TS2345",
+      "Argument of type '{ parentId: string; tagIds: never[]; syncChildEntityLocations: boolean; archived: boolean; assetId: string; attachments: ItemAttachment[]; children: EntitySummary[]; ... 28 more ...; warrantyExpires: Date | string; }' is not assignable to parameter of type 'EntityUpdate'."
+    ],
+    [
+      "lib/api/__test__/user/tags.test.ts",
+      "TS2345",
+      "Argument of type '{ name: string; description: string; color: string; }' is not assignable to parameter of type 'TagCreate'."
+    ],
+    [
+      "lib/api/__test__/user/templates.test.ts",
+      "TS2739",
+      "Type '{ id: string; name: string; type: string; textValue: string; }' is missing the following properties from type 'TemplateField': booleanValue, numberValue, timeValue"
+    ],
+    [
+      "lib/api/__test__/user/templates.test.ts",
+      "TS2739",
+      "Type '{ id: string; name: string; type: string; textValue: string; }' is missing the following properties from type 'TemplateField': booleanValue, numberValue, timeValue"
+    ],
+    [
+      "lib/api/__test__/user/templates.test.ts",
+      "TS2739",
+      "Type '{ id: string; name: string; type: string; textValue: string; }' is missing the following properties from type 'TemplateField': booleanValue, numberValue, timeValue"
+    ],
+    [
+      "lib/api/__test__/user/templates.test.ts",
+      "TS2345",
+      "Argument of type '{ id: string; name: string; description: string; notes: string; defaultQuantity: number; defaultInsured: boolean; defaultName: string; defaultDescription: string; defaultManufacturer: string; ... 8 more ...; fields: { ...; }[]; }' is not assignable to parameter of type 'EntityTemplateUpdate'."
+    ],
+    [
+      "lib/api/__test__/user/templates.test.ts",
+      "TS2345",
+      "Argument of type 'Partial<EntityCreate> & { name: string; description: string; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "lib/api/__test__/user/templates.test.ts",
+      "TS2345",
+      "Argument of type 'Partial<EntityCreate> & { name: string; description: string; }' is not assignable to parameter of type 'EntityCreate'."
+    ],
+    [
+      "pages/collection/index/tools.vue",
+      "TS2345",
+      "Argument of type 'string | Date' is not assignable to parameter of type 'string'."
+    ],
+    [
+      "pages/item/[id]/index.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntityOut'."
+    ],
+    [
+      "pages/item/[id]/index.vue",
+      "TS2345",
+      "Argument of type '{ name: string; description: string; notes: string; defaultName: string; defaultDescription: string; defaultQuantity: number; defaultInsured: boolean; defaultManufacturer: string; defaultModelNumber: string; ... 7 more ...; fields: { ...; }[]; }' is not assignable to parameter of type 'EntityTemplateCreate'."
+    ],
+    [
+      "pages/item/[id]/index/edit.vue",
+      "TS2741",
+      "Property 'entityTypeId' is missing in type '{ parentId: any; tagIds: string[]; assetId: string; syncChildEntityLocations: boolean; archived: boolean; attachments: { createdAt: Date | string; id: string; mimeType: string; path: string; ... 4 more ...; updatedAt: Date | string; }[]; ... 29 more ...; warrantyExpires: Date | string; }' but required in type 'EntityUpdate'."
+    ],
+    [
+      "pages/reports/label-generator.vue",
+      "TS2339",
+      "Property 'location' does not exist on type 'EntitySummary'."
+    ],
+    [
+      "pages/reports/label-generator.vue",
+      "TS2352",
+      "Conversion of type 'EntitySummary' to type '{ assetId: string; location: { name: string; }; name: string; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+    ],
+    [
+      "pages/template/[id].vue",
+      "TS2345",
+      "Argument of type '{ defaultLocationId: string | null; id: string; name: string; description: string; notes: string; defaultName: string; defaultDescription: string; defaultQuantity: number; defaultInsured: boolean; ... 9 more ...; fields: { ...; }[]; }' is not assignable to parameter of type 'EntityTemplateUpdate'."
+    ]
+  ]
+}

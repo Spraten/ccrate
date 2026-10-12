@@ -1,0 +1,6 @@
+{
+  "version": "1.26.0",
+  "platform": "linux-arm64",
+  "source": "https://go.dev/dl/",
+  "sha256": "bd03b743eb6eb4193ea3c3fd3956546bf0e3ca5b7076c8226334afe6b75704cd"
+}

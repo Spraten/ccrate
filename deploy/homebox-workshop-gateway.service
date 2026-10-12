@@ -1,0 +1,16 @@
+[Unit]
+Description=Homebox and Workshop shared network address
+After=homebox-native.service homebox-companion.service
+Wants=homebox-native.service homebox-companion.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+[Service]
+Environment=WORKSHOP_ROOT=/home/user/Desktop/inventory-system
+Type=simple
+WorkingDirectory=/home/user/Desktop/inventory-system
+ExecStart=/usr/bin/python3 /home/user/Desktop/inventory-system/work/application-current/deploy/run-release.py gateway
+Restart=on-failure
+RestartSec=3
+UMask=0077
+[Install]
+WantedBy=default.target
