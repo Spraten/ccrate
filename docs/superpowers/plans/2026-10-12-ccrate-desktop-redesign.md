@@ -181,4 +181,41 @@ Run all python3/build commands in Linux WSL or CI with the existing fixture depe
 
 The user already requested parallel tasks/sessions and separate branches. Preserve that method: one shared-contract owner; independent map, label and page branches after the shell/fixture gate; review each deliverable and perform a fresh whole-branch review at the end. Coding workers use GPT-6 Luna Low; final review uses GPT-6.1 Sol High.
 
-The plan must be reviewed, and the visual target selected or revised, before UI implementation. Prebuilt-update implementation can proceed independently once its plan is approved. Mobile and the separate reliability backlog are not silently included; update-blocking backup and touched template-save defects are explicitly covered by their owning plans.
+Execution ruling (2026-10-12): the user explicitly authorized subagents to start the Workshop repair wave. Use the original uploaded Workshop reference for this wave; no generated alternative is claimed as selected. Tasks 8-10 are prioritized without marking Tasks 1-7 complete. Prebuilt-update implementation can proceed independently once its plan is approved. Mobile and the separate reliability backlog are not silently included; update-blocking backup and touched template-save defects are explicitly covered by their owning plans.
+
+
+## Immediate Workshop repair wave
+
+### Task 8: Expand the object catalog and supply recognizable artwork
+
+**Files:** Create `homebox-ui/overlay/lib/workshop-object-catalog.js`, reusable assets under `homebox-ui/overlay/public/workshop/objects/`, and `tests/workshop_object_catalog.test.mjs`. Own these files only; Task 9 owns catalog wiring in workshop-tools.js.
+
+**Interface:** Export `workshopObjectPresets` as records `{id,kind,name,category,width,depth,asset}`. Dimensions use feet. Export `workshopPresetForDrawing(drawing)` to return the matching preset or null using the existing kind/name data, without adding persisted fields. Catalog kinds must be accepted by the existing room schema. `asset` is a same-origin absolute `/workshop/objects/...` URL. Existing/custom names must have a safe visual fallback; do not interpret user names as URLs/markup. Renaming must not corrupt geometry/native links. Category order: Shelves, Cabinets, Drawers, Bins, Work surfaces, Structure, Machines.
+
+- [ ] Add at least 20 practical presets with distinct sizes: shelving/racks, wall/floor cabinets, drawer units/small-parts drawers, open/stacking bins/crates, tables/workbenches, wall/post and printer/CNC machines. Read the existing schema and reuse its types; unsupported furniture maps to Misc.
+- [ ] Provide distinct recognizable cabinet, bin and drawer artwork plus artwork for every preset category. Reuse the app's SVG/platform renderer and visual materials; no dependency. Asset files contain no caption text, executable content, external references or embedded private data. Preserve viewBox aspect ratio and verify every catalog asset exists.
+- [ ] Test unique IDs, schema-compatible kinds, positive dimensions, same-origin assets, known-name matching and custom-name fallback; run the Node test and record results.
+- [ ] Commit and write the task report with scope, commits, tests, limitations and asset provenance. Do not modify Task 9 or Task 10 files.
+
+### Task 9: Repair Workshop text and editor interactions; wire the catalog
+
+**Files:** Modify `homebox-ui/overlay/lib/workshop-tools.js` and `tests/test_workshop_browser.py` only. Consume Task 8's catalog module/assets. Task 10 owns CSS and its layout tests.
+
+**Interface:** Use Task 8's catalog records and resolver without adding persisted room/drawing fields. Palette selection uses a preset's native kind/name/dimensions; retained custom and historical drawing names render via fallback. Load the actual catalog in fixtures (never stub the behavior). Expose classes/data hooks needed by Task 10 without editing CSS. Preserve existing route bookmarks, manager restrictions, native-link dialogs, save request identities and uncertain result reconciliation.
+
+- [ ] Reproduce caption distortion and at least one demonstrable editor interaction fault before changing behavior; add focused browser regression cases. Exercise narrow and wide drawings, rotation, resize preview, selection, undo/redo, pointer cancellation and switching rooms.
+- [ ] Keep captions outside nonuniform artwork transforms. Use actual SVG geometry/viewport math to make readable text independent of drawing aspect ratio, with truncation/full accessible name. Render catalog artwork with preserved aspect ratio and safe fallback. Do not flatten/remove useful geometry/material behavior.
+- [ ] Group and search the full catalog; selecting a preset sets pending placement, pointer placement creates exactly one drawing with its preset dimensions and no native data mutation. Retain old machine native-kind behavior and meaningful placement/cancel feedback.
+- [ ] Correct reproduced drag/resize/history/cancel issues in the existing shared handlers. A completed gesture is one history transaction; cancellation leaves no geometry/history change. Do not introduce a speculative controller rewrite during this bounded wave.
+- [ ] Run affected standalone map cases plus room request tests in proper isolated fixtures, commit and report evidence/limitations. Coordinate catalog interface questions with the controller before assumptions.
+
+### Task 10: Rework Workshop desktop proportions and control access
+
+**Files:** Modify `homebox-ui/overlay/assets/css/workshop.css` and create `tests/test_workshop_layout.py` only. Task 9 owns DOM/handlers; request hooks through the controller if needed.
+
+**Interface:** Style the existing `.room-planner`, `.planner-toolbar`, palette/canvas/inspector and category/card classes. Preserve native theme variables, other Workshop pages and navigation. Use the original reference structure; no new dependency or fake nonfunctional controls.
+
+- [ ] Read the current renderer and reproduce the clutter/space/scroll problems in an isolated actual-JS browser fixture. Capture the before screenshot and add meaningful desktop geometry/access checks at 1280x800 and 1440x900.
+- [ ] Give the canvas the dominant area, a compact grouped command bar, a usable two-column illustrated/searchable catalog and a independently scrollable properties panel. Avoid nested page scrolling and giant empty panels. Essential controls remain reachable at 200% zoom; long names do not force horizontal overflow.
+- [ ] Coordinate with Task 9 on any required class/DOM hooks; do not edit its files. Test existing/default and custom theme contrast and keyboard focus access.
+- [ ] Run the layout checks, capture after screenshots, commit and report. Report fixture verification separately from compiled native-application verification, which the controller performs after integration.

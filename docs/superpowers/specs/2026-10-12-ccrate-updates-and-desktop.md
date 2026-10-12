@@ -1,6 +1,6 @@
 # C-Crate updates and desktop design specification
 
-Status: proposed for user review; implementation is not started.
+Status: implementation authorized; the user prioritized Workshop repairs on 2026-10-12. Other queue items remain planned.
 Baseline: C-Crate commit 607a7144a6f7d4037ea01340fc5da75a7e6090b9.
 
 ## Intended outcome
@@ -122,16 +122,27 @@ Fix the touched template-save ambiguity: route save through the existing write c
 
 Preserve the 36-item review limit, SUPVAN versus Letter profiles, matching reviewed dimensions, selected-item draft context, stale preview suppression, browser PDF/print and separate confirmation for physical printing. No physical output occurs during automated acceptance.
 
+## Workshop priority repair wave
+
+The user reports too few objects, clunky/buggy interactions, stretched object text and poor cabinet/bin/drawer artwork. This repair wave takes priority over the remaining desktop page work. The original [Workshop reference](../../design/desktop/workshop-reference.jpg) is the visual authority; the generated concepts are alternatives, not selected designs.
+
+- Expand the searchable, grouped catalog with at least 20 useful shelf, cabinet, drawer, bin, work-surface, structural and machine presets. Preserve native drawing kinds and the existing persisted schema; drawings alone never create native inventory.
+- Provide recognizable, distinct reusable artwork for cabinets, bins and drawer units in both the palette and map. Use existing rendering/platform facilities, with no new application dependency. Captions remain separate readable text, never baked into or stretched with artwork.
+- Reproduce and correct caption distortion, drag/resize/selection/history faults. Text stays readable across narrow/wide objects and rotation; a completed gesture is one undo action, canceled gestures restore geometry, and existing save/recovery guards remain intact.
+- Rework the desktop palette/canvas/inspector proportions and scroll behavior around the original reference. Make object search, placement instructions, selected properties and primary tools immediately usable at 1280x800 and 1440x900. Retain keyboard access and 200% zoom access.
+- Verify actual interactions and screenshot the result in isolated fixtures and the local compiled application before publishing. This bounded repair wave does not mark the later Vue controller extraction or other page redesign tasks complete.
+
 ## Work queue and dependencies
 
-1. Repair update-blocking backup and release preparation contracts.
-2. Build/cache/publish precompiled candidates and implement staging/preflight in parallel after agreeing their descriptor contract.
-3. Prove compatible fallback preparation, activation and interrupted recovery in isolated tests.
-4. User runs the Pi check; a supported installation and explicit apply authorization are prerequisites for real rollout.
-5. Select the desktop visual direction; this can proceed while update infrastructure is built.
-6. Rebuild the shared shell, then Workshop and Labels; these two pages may run on independent branches after shared contracts are stable.
-7. Rework Inventory, Home and Users with native authorities and clear page jobs.
-8. Whole-branch review, compiled desktop acceptance, Git push and a prebuilt release for user testing.
+1. **Now: Workshop repair wave (desktop plan Tasks 8-10), in parallel isolated branches:** catalog/artwork, canvas interactions/text, and layout. Integrate, review, verify and push this testable improvement.
+2. Repair update-blocking backup and release preparation contracts.
+3. Build/cache/publish precompiled candidates and implement staging/preflight in parallel after agreeing their descriptor contract.
+4. Prove compatible fallback preparation, activation and interrupted recovery in isolated tests.
+5. User runs the Pi check; a supported installation and explicit apply authorization are prerequisites for real rollout.
+6. Select the desktop visual direction; this can proceed while update infrastructure is built.
+7. Rebuild the shared shell, then Workshop and Labels; these two pages may run on independent branches after shared contracts are stable.
+8. Rework Inventory, Home and Users with native authorities and clear page jobs.
+9. Whole-branch review, compiled desktop acceptance, Git push and a prebuilt release for user testing.
 
 Parallel workers must not edit the same builder, shared type or README simultaneously. Assign one owner to shared contracts and integrate dependent tasks sequentially. Run focused tests after each task and a fresh whole-branch review before publication. Keep the existing exact upstream typecheck baseline; do not expand it to hide new diagnostics.
 
