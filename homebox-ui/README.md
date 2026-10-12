@@ -4,6 +4,10 @@
 
 The Members page shows native users, shared badge actions and checked-out items. Manage users edits the existing native profile. The native Home page and item details also expose workshop checkout information. Workshop routes reuse the native layout, collection, theme and authenticated request helper; the Equipment Terminal remains available from the sidebar.
 
+The Workshop map has a searchable illustrated object library with 22 presets across shelves, cabinets, drawers, bins, work surfaces, structure and machines. Choose **Edit**, select a preset and click the room to place it; **Escape** cancels pending placement. Preset dimensions are in feet. Adding or removing a drawing does not create or delete a native inventory/location record. Native linking remains an explicit action in the inspector.
+
+Object artwork uses separate SVG assets with preserved proportions. Captions stay horizontal when objects rotate. Drag and resize preview geometry; a completed change is one undo action, and returning to the starting point creates none. Save changes explicitly; an unconfirmed save must be checked before making another write.
+
 Build with the configured toolchain:
 
 ```sh

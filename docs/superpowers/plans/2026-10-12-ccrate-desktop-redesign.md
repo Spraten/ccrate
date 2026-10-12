@@ -10,6 +10,8 @@
 
 **Spec:** [C-Crate updates and desktop design specification](../specs/2026-10-12-ccrate-updates-and-desktop.md), sections Global constraints and B.
 
+**Status (2026-10-12):** Immediate Workshop repair Tasks 8-10 are complete and verified locally. Tasks 1-7 remain planned; this is the first repair wave, not completion of the full desktop redesign. Application revision `ffd2931` passed 35 focused Python checks, the catalog passed two Node checks, and the compiled local app passed desktop acceptance at 1280x800 and 1440x900 with the sidebar expanded and collapsed. No added typecheck diagnostics; 43 pinned upstream diagnostics remain. Pi rollout, hardware and prebuilt updates remain separate.
+
 ## Global Constraints
 
 - Homebox remains the inventory, account, collection and native-history authority.
@@ -192,10 +194,10 @@ Execution ruling (2026-10-12): the user explicitly authorized subagents to start
 
 **Interface:** Export `workshopObjectPresets` as records `{id,kind,name,category,width,depth,asset}`. Dimensions use feet. Export `workshopPresetForDrawing(drawing)` to return the matching preset or null using the existing kind/name data, without adding persisted fields. Catalog kinds must be accepted by the existing room schema. `asset` is a same-origin absolute `/workshop/objects/...` URL. Existing/custom names must have a safe visual fallback; do not interpret user names as URLs/markup. Renaming must not corrupt geometry/native links. Category order: Shelves, Cabinets, Drawers, Bins, Work surfaces, Structure, Machines.
 
-- [ ] Add at least 20 practical presets with distinct sizes: shelving/racks, wall/floor cabinets, drawer units/small-parts drawers, open/stacking bins/crates, tables/workbenches, wall/post and printer/CNC machines. Read the existing schema and reuse its types; unsupported furniture maps to Misc.
-- [ ] Provide distinct recognizable cabinet, bin and drawer artwork plus artwork for every preset category. Reuse the app's SVG/platform renderer and visual materials; no dependency. Asset files contain no caption text, executable content, external references or embedded private data. Preserve viewBox aspect ratio and verify every catalog asset exists.
-- [ ] Test unique IDs, schema-compatible kinds, positive dimensions, same-origin assets, known-name matching and custom-name fallback; run the Node test and record results.
-- [ ] Commit and write the task report with scope, commits, tests, limitations and asset provenance. Do not modify Task 9 or Task 10 files.
+- [x] Add at least 20 practical presets with distinct sizes: shelving/racks, wall/floor cabinets, drawer units/small-parts drawers, open/stacking bins/crates, tables/workbenches, wall/post and printer/CNC machines. Read the existing schema and reuse its types; unsupported furniture maps to Misc.
+- [x] Provide distinct recognizable cabinet, bin and drawer artwork plus artwork for every preset category. Reuse the app's SVG/platform renderer and visual materials; no dependency. Asset files contain no caption text, executable content, external references or embedded private data. Preserve viewBox aspect ratio and verify every catalog asset exists.
+- [x] Test unique IDs, schema-compatible kinds, positive dimensions, same-origin assets, known-name matching and custom-name fallback; run the Node test and record results.
+- [x] Commit and write the task report with scope, commits, tests, limitations and asset provenance. Do not modify Task 9 or Task 10 files.
 
 ### Task 9: Repair Workshop text and editor interactions; wire the catalog
 
@@ -203,11 +205,11 @@ Execution ruling (2026-10-12): the user explicitly authorized subagents to start
 
 **Interface:** Use Task 8's catalog records and resolver without adding persisted room/drawing fields. Palette selection uses a preset's native kind/name/dimensions; retained custom and historical drawing names render via fallback. Load the actual catalog in fixtures (never stub the behavior). Expose classes/data hooks needed by Task 10 without editing CSS. Preserve existing route bookmarks, manager restrictions, native-link dialogs, save request identities and uncertain result reconciliation.
 
-- [ ] Reproduce caption distortion and at least one demonstrable editor interaction fault before changing behavior; add focused browser regression cases. Exercise narrow and wide drawings, rotation, resize preview, selection, undo/redo, pointer cancellation and switching rooms.
-- [ ] Keep captions outside nonuniform artwork transforms. Use actual SVG geometry/viewport math to make readable text independent of drawing aspect ratio, with truncation/full accessible name. Render catalog artwork with preserved aspect ratio and safe fallback. Do not flatten/remove useful geometry/material behavior.
-- [ ] Group and search the full catalog; selecting a preset sets pending placement, pointer placement creates exactly one drawing with its preset dimensions and no native data mutation. Retain old machine native-kind behavior and meaningful placement/cancel feedback.
-- [ ] Correct reproduced drag/resize/history/cancel issues in the existing shared handlers. A completed gesture is one history transaction; cancellation leaves no geometry/history change. Do not introduce a speculative controller rewrite during this bounded wave.
-- [ ] Run affected standalone map cases plus room request tests in proper isolated fixtures, commit and report evidence/limitations. Coordinate catalog interface questions with the controller before assumptions.
+- [x] Reproduce caption distortion and at least one demonstrable editor interaction fault before changing behavior; add focused browser regression cases. Exercise narrow and wide drawings, rotation, resize preview, selection, undo/redo, pointer cancellation and switching rooms.
+- [x] Keep captions outside nonuniform artwork transforms. Use actual SVG geometry/viewport math to make readable text independent of drawing aspect ratio, with truncation/full accessible name. Render catalog artwork with preserved aspect ratio and safe fallback. Do not flatten/remove useful geometry/material behavior.
+- [x] Group and search the full catalog; selecting a preset sets pending placement, pointer placement creates exactly one drawing with its preset dimensions and no native data mutation. Retain old machine native-kind behavior and meaningful placement/cancel feedback.
+- [x] Correct reproduced drag/resize/history/cancel issues in the existing shared handlers. A completed gesture is one history transaction; cancellation leaves no geometry/history change. Do not introduce a speculative controller rewrite during this bounded wave.
+- [x] Run affected standalone map cases plus room request tests in proper isolated fixtures, commit and report evidence/limitations. Coordinate catalog interface questions with the controller before assumptions.
 
 ### Task 10: Rework Workshop desktop proportions and control access
 
@@ -215,7 +217,9 @@ Execution ruling (2026-10-12): the user explicitly authorized subagents to start
 
 **Interface:** Style the existing `.room-planner`, `.planner-toolbar`, palette/canvas/inspector and category/card classes. Preserve native theme variables, other Workshop pages and navigation. Use the original reference structure; no new dependency or fake nonfunctional controls.
 
-- [ ] Read the current renderer and reproduce the clutter/space/scroll problems in an isolated actual-JS browser fixture. Capture the before screenshot and add meaningful desktop geometry/access checks at 1280x800 and 1440x900.
-- [ ] Give the canvas the dominant area, a compact grouped command bar, a usable two-column illustrated/searchable catalog and a independently scrollable properties panel. Avoid nested page scrolling and giant empty panels. Essential controls remain reachable at 200% zoom; long names do not force horizontal overflow.
-- [ ] Coordinate with Task 9 on any required class/DOM hooks; do not edit its files. Test existing/default and custom theme contrast and keyboard focus access.
-- [ ] Run the layout checks, capture after screenshots, commit and report. Report fixture verification separately from compiled native-application verification, which the controller performs after integration.
+- [x] Read the current renderer and reproduce the clutter/space/scroll problems in an isolated actual-JS browser fixture. Capture the before screenshot and add meaningful desktop geometry/access checks at 1280x800 and 1440x900.
+- [x] Give the canvas the dominant area, a compact grouped command bar, a usable two-column illustrated/searchable catalog and an independently scrollable properties panel. Show the illustrated presets immediately after search, ahead of legacy drawing-type rows. Model the actual native sidebar, 32px content padding and 36px footer when checking the outer desktop viewport; a full-width standalone fixture is insufficient. Assert that preset artwork is painted in the initial palette viewport and that the page fits vertically at both desktop sizes, with all controls reachable. Avoid nested page scrolling and giant empty panels. Essential controls remain reachable at 200% zoom; long names do not force horizontal overflow.
+- [x] Coordinate with Task 9 on any required class/DOM hooks; do not edit its files. Test existing/default and custom theme contrast and keyboard focus access.
+- [x] Run the layout checks, capture after screenshots, commit and report. Report fixture verification separately from compiled native-application verification, which the controller performs after integration.
+
+**Completion evidence:** Compiled application `ffd2931` has no horizontal or vertical overflow in all four desktop/sidebar states; its footer ends at the viewport edge. All 22 catalog assets load and illustrated cards are visible immediately after search. Actual cabinet/CNC placement and undo, horizontal caption geometry, rotation/resize and undo, sticky search, inspector scrolling and Escape cancellation passed. Local room data was unchanged after discarding edits; no JavaScript errors or server writes occurred, and three preference requests were locally stubbed. The isolated layout fixture also covers custom-theme contrast, keyboard order and a 200% zoom approximation. Source and compiled evidence received GPT-6.1 Sol High review. The legacy query fixture failure on the unchanged baseline remains in the separate reliability queue; the whole legacy browser suite is not claimed green.

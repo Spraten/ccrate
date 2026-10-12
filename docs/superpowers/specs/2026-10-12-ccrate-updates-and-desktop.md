@@ -1,6 +1,6 @@
 # C-Crate updates and desktop design specification
 
-Status: implementation authorized; the user prioritized Workshop repairs on 2026-10-12. Other queue items remain planned.
+Status: the first Workshop repair wave (desktop Tasks 8-10) is implemented and verified locally on 2026-10-12. The full desktop redesign and prebuilt-update work remain planned.
 Baseline: C-Crate commit 607a7144a6f7d4037ea01340fc5da75a7e6090b9.
 
 ## Intended outcome
@@ -134,7 +134,7 @@ The user reports too few objects, clunky/buggy interactions, stretched object te
 
 ## Work queue and dependencies
 
-1. **Now: Workshop repair wave (desktop plan Tasks 8-10), in parallel isolated branches:** catalog/artwork, canvas interactions/text, and layout. Integrate, review, verify and push this testable improvement.
+1. **Completed: Workshop repair wave (desktop plan Tasks 8-10), in parallel isolated branches:** 22 illustrated presets, readable independent captions, corrected gesture/history handling, and desktop layout. Application revision `ffd2931` passed 35 focused Python checks and compiled desktop acceptance in all four viewport/sidebar states; two catalog Node checks passed. No new dependencies or persisted schema changes. Native room data was unchanged during compiled testing. This completes the bounded repair wave, not the later Vue workspace redesign.
 2. Repair update-blocking backup and release preparation contracts.
 3. Build/cache/publish precompiled candidates and implement staging/preflight in parallel after agreeing their descriptor contract.
 4. Prove compatible fallback preparation, activation and interrupted recovery in isolated tests.
@@ -152,6 +152,7 @@ Parallel workers must not edit the same builder, shared type or README simultane
 - A deleted entity's stale loan can block unrelated returns.
 - Cookie-authenticated photo recovery/upload can fail.
 - History truncation and repeated detail requests need focused fixes if they obstruct the new views.
+- Retarget the legacy query browser fixture that still expects Edit layout: it fails on the unchanged baseline. Preserve its scope/dirty-state assertions when moving to the room controller; do not delete useful authority tests to make the suite appear green.
 
 These are recorded findings, not completed fixes. Backup/update blockers and template-save uncertainty are in the two active plans because those workflows touch them. Other fixes need their own small reproduction and repair tasks, not unrelated additions to the redesign.
 
@@ -161,4 +162,4 @@ The update plan is accepted when a supported existing installation can stage and
 
 The desktop plan is accepted when the chosen target is visibly matched, all five primary workflows are reachable and coherent at the specified desktop sizes, keyboard use works, and save/review/print statuses remain truthful. Screenshot comparison must use the same size/state as its approved visual target; passing structural text tests is insufficient.
 
-No Pi deployment, physical print, hardware calibration or implementation has occurred as part of writing this specification.
+The first Workshop repair wave is implemented and verified in the isolated local app. No Pi deployment, physical print or hardware calibration occurred. The prebuilt updater is not implemented yet: pulling Git source alone does not refresh an installed sealed frontend; the existing build/deployment process is still required until that updater is delivered.
