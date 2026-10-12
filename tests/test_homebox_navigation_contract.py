@@ -26,6 +26,7 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.old_build = BUILDER.BUILD
         BUILDER.BUILD = self.build
         BUILDER.navigation_frontend()
+        BUILDER.shell_frontend()
         self.output = target.read_text()
 
     def tearDown(self):
@@ -61,6 +62,34 @@ class HomeboxNavigationContractTests(unittest.TestCase):
     def test_workshop_manager_routes_keep_their_access_gate(self):
         self.assertIn('...(workshop.manager.value ? [["imports"', self.output)
         self.assertIn('workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels")', self.output)
+
+    def test_compact_chrome_keeps_native_account_and_collection_controls(self):
+        self.assertIn('aria-label="C-Crate home"', self.output)
+        self.assertIn('<AppLogo aria-hidden="true" class="size-7 shrink-0" />', self.output)
+        self.assertIn('<CollectionSelector />', self.output)
+        self.assertIn('data-testid="logout-button"', self.output)
+        self.assertIn('hotkey="Shortcut: Ctrl+`"', self.output)
+        self.assertNotIn('$t("global.welcome", { username: username })', self.output)
+        self.assertNotIn('size-24', self.output)
+
+    def test_quiet_header_keeps_labeled_search_scanner_and_device_status(self):
+        self.assertIn('bg-card px-3 py-2', self.output)
+        self.assertIn(':aria-label="$t(\'global.search\')"', self.output)
+        self.assertIn(':aria-label="$t(\'menu.scanner\')"', self.output)
+        self.assertIn('<DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader"', self.output)
+        self.assertIn('<DeviceStatus v-if="preferences.displayLegacyHeader && terminalHeader"', self.output)
+        self.assertIn('matchMedia("(min-width: 1024px)")', self.output)
+        self.assertIn('<AppHeaderText class="h-6" />', self.output)
+
+    def test_polish_palette_is_scoped_to_the_homebox_default_theme(self):
+        css = (ROOT / "homebox-ui/overlay/assets/css/ccrate.css").read_text()
+        builder = (ROOT / "deploy/build-homebox-ui.py").read_text()
+        self.assertIn(":root.theme-homebox", css)
+        self.assertIn(":root:not([data-theme])", css)
+        self.assertIn("--primary: 139 16% 43%;", css)
+        self.assertIn("@media (max-width: 640px)", css)
+        self.assertIn('"@/assets/css/ccrate.css"', builder)
+        self.assertNotIn(".theme-dark", css)
 
 
 if __name__ == "__main__":
