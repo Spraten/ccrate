@@ -1,6 +1,8 @@
 import pathlib
 import unittest
 import os
+from io import BytesIO
+from PIL import Image
 
 from tests import test_workshop_browser as browser_fixture
 
@@ -69,6 +71,17 @@ class WorkshopLayoutTests(unittest.TestCase):
         for width, scroll_width in [state['workspace'], *state['panels']]:
             self.assertLessEqual(scroll_width, width + 1, state)
 
+    def set_native_shell(self, width, height):
+        self.page.set_viewport_size({'width': width, 'height': height})
+        self.page.evaluate('''({width,height})=>{
+          document.body.style.margin='0';
+          const view=document.querySelector('#view');
+          Object.assign(view.style,{position:'absolute',left:'288px',top:'91px',width:(width-320)+'px',margin:'0'});
+          let footer=document.querySelector('[data-fixture-native-footer]');
+          if(!footer){footer=document.createElement('div');footer.dataset.fixtureNativeFooter='true';document.body.append(footer)}
+          Object.assign(footer.style,{position:'absolute',left:'256px',top:(height-36)+'px',width:(width-256)+'px',height:'36px'});
+        }''', {'width': width, 'height': height})
+
     @staticmethod
     def contrast_ratio(page, selector):
         colors = page.locator(selector).first.evaluate('''el => {
@@ -91,7 +104,7 @@ class WorkshopLayoutTests(unittest.TestCase):
         proof_dir.mkdir(parents=True, exist_ok=True)
 
         for width, height in ((1280, 800), (1440, 900)):
-            self.page.set_viewport_size({'width': width, 'height': height})
+            self.set_native_shell(width, height)
             palette = self.page.locator('.planner-palette')
             canvas = self.page.locator('.planner-canvas-frame')
             inspector = self.page.locator('.planner-inspector')
@@ -101,16 +114,22 @@ class WorkshopLayoutTests(unittest.TestCase):
             geometry = self.page.evaluate('''() => {
               const box = selector => { const r=document.querySelector(selector).getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; };
               const root=document.querySelector('.room-planner'), workspace=document.querySelector('.planner-workspace');
-              return {viewport:[innerWidth,innerHeight],pageHeight:document.documentElement.scrollHeight,root:[root.clientWidth,root.scrollWidth],workspace:[workspace.clientWidth,workspace.scrollWidth],
+              const planner=root.getBoundingClientRect(),footer=document.querySelector('[data-fixture-native-footer]').getBoundingClientRect();
+              return {viewport:[innerWidth,innerHeight],pageHeight:document.documentElement.scrollHeight,plannerBottom:planner.bottom,footerTop:footer.top,root:[root.clientWidth,root.scrollWidth],workspace:[workspace.clientWidth,workspace.scrollWidth],
                 canvas:box('.planner-canvas-frame'),palette:box('.planner-palette'),inspector:box('.planner-inspector'),
+                canvasToolsRows:new Set([...document.querySelector('.planner-canvas-tools').children].map(el=>Math.round((el.getBoundingClientRect().top+el.getBoundingClientRect().bottom)/2/12))).size,
                 paletteOverflow:getComputedStyle(document.querySelector('.planner-palette')).overflowY,
                 inspectorOverflow:getComputedStyle(document.querySelector('.planner-inspector')).overflowY};
             }''')
             self.assertLessEqual(geometry['pageHeight'], height + 1, geometry)
+            self.assertLessEqual(geometry['plannerBottom'] + 16, geometry['footerTop'] + 1, geometry)
             self.assertLessEqual(geometry['root'][1], geometry['root'][0] + 1, geometry)
             self.assertLessEqual(geometry['workspace'][1], geometry['workspace'][0] + 1, geometry)
             self.assertGreater(geometry['canvas']['width'], geometry['palette']['width'], geometry)
             self.assertGreater(geometry['canvas']['width'], geometry['inspector']['width'], geometry)
+            self.assertLessEqual(geometry['palette']['width'], 240, geometry)
+            self.assertLessEqual(geometry['inspector']['width'], 240, geometry)
+            self.assertLessEqual(geometry['canvasToolsRows'], 2, geometry)
             self.assertGreater(geometry['canvas']['width'] * geometry['canvas']['height'],
                                geometry['palette']['width'] * geometry['palette']['height'], geometry)
             self.assertEqual((geometry['paletteOverflow'], geometry['inspectorOverflow']), ('auto', 'auto'))
@@ -128,6 +147,29 @@ class WorkshopLayoutTests(unittest.TestCase):
             self.assertGreaterEqual(sticky['top'], sticky['panelTop'], sticky)
             self.assertLessEqual(sticky['bottom'], sticky['panelBottom'], sticky)
             palette.evaluate('el=>el.scrollTop=0')
+            painted = self.page.evaluate('''() => {
+              const panel=document.querySelector('.planner-palette'),p=panel.getBoundingClientRect();
+              const card=[...panel.querySelectorAll('.planner-preset-card')].find(el=>{
+                const r=el.getBoundingClientRect();return !el.hidden&&r.bottom>p.top&&r.top<p.bottom;
+              });
+              if(!card)return null;
+              const image=card.querySelector('.planner-preset-art'),r=image.getBoundingClientRect();
+              const x=Math.max(p.left,r.left)+Math.min(r.width/2,Math.max(0,p.right-r.left)/2);
+              const y=Math.max(p.top,r.top)+Math.min(r.height/2,Math.max(0,p.bottom-r.top)/2);
+              const hit=document.elementFromPoint(x,y);
+              return {id:card.dataset.presetId,naturalWidth:image.naturalWidth,rect:[r.left,r.top,r.width,r.height],
+                hitIsArtwork:hit===image||hit.closest('.planner-preset-card')===card};
+            }''')
+            self.assertIsNotNone(painted, 'Preset artwork is painted in the initial visible catalog area.')
+            self.assertGreater(painted['naturalWidth'], 0, painted)
+            self.assertGreater(painted['rect'][2], 0, painted)
+            self.assertGreater(painted['rect'][3], 0, painted)
+            self.assertTrue(painted['hitIsArtwork'], painted)
+            art_pixels = Image.open(BytesIO(self.page.locator('.planner-preset-art').first.screenshot())).convert('RGBA')
+            pixels = art_pixels.tobytes()
+            visible_colors = {pixels[index:index + 4] for index in range(0, len(pixels), 4)
+                              if pixels[index + 3] > 0}
+            self.assertGreater(len(visible_colors), 5, 'Artwork screenshot contains painted color/detail pixels.')
             self.assert_no_horizontal_overflow()
             self.page.screenshot(path=str(proof_dir / f'after-{width}x{height}.png'), full_page=True)
 
@@ -164,13 +206,15 @@ class WorkshopLayoutTests(unittest.TestCase):
         self.assertNotEqual(focus_style['style'], 'none', focus_style)
         self.assertTrue(focus_style['color'], focus_style)
 
-        self.page.set_viewport_size({'width': 640, 'height': 450})
+        self.set_native_shell(640, 450)
         self.assertTrue(self.page.get_by_role('button', name='Objects', exact=True).is_visible())
         self.assertTrue(self.page.get_by_role('button', name='Details', exact=True).is_visible())
         self.page.get_by_role('button', name='Objects', exact=True).click()
         self.page.get_by_role('button', name='Details', exact=True).click()
         self.assertTrue(self.page.get_by_label('Search objects').is_visible())
         self.assertTrue(self.page.get_by_label('Workshop inspector').is_visible())
+        self.assertTrue(self.page.get_by_role('button', name='Pan right', exact=True).is_visible())
+        self.assertTrue(self.page.get_by_role('button', name='Fit room', exact=True).is_visible())
         self.assert_no_horizontal_overflow()
         self.page.screenshot(path=str(proof_dir / 'after-200pct-640x450.png'), full_page=True)
         self.assertEqual(self.errors, [])
