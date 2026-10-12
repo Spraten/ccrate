@@ -14,4 +14,7 @@ The private toolchain lives under `work/toolchains`; the build uses its pinned N
 
 The gateway serves the selected static tree from `work/homebox-ui-current`. Release selection and rollback are separate operations; a build does not deploy or restart services.
 
+The native label generator adapts the layout and generate/preview interaction from HomeSortStuff commit `85b96e5060a48dd11db24addfbc63407eed4e74c`.
+Its source is distributed under AGPL-3.0; see `HOMESORTSTUFF-LICENSE.txt`.
+
 Member names and identities come from native Homebox users. Badge-only accounts have no native password. Badge writes use durable request identities and uncertain results require Recovery. Private credentials, badge keys and operational databases remain on the Pi and outside generated frontend bundles.
