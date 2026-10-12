@@ -85,9 +85,9 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         css = (ROOT / "homebox-ui/overlay/assets/css/ccrate.css").read_text()
         builder = (ROOT / "deploy/build-homebox-ui.py").read_text()
         self.assertIn(":root.theme-homebox", css)
-        self.assertIn(":root:not([data-theme])", css)
+        self.assertNotIn(":root:not([data-theme])", css)
         self.assertIn("--primary: 139 16% 43%;", css)
-        self.assertIn("@media (max-width: 640px)", css)
+        self.assertNotIn(".device-status__name", css)
         self.assertIn('"@/assets/css/ccrate.css"', builder)
         self.assertNotIn(".theme-dark", css)
 

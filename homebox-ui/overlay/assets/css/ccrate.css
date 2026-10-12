@@ -1,6 +1,5 @@
 /* C-Crate's workshop-console palette applies to Homebox's default theme only. */
-:root.theme-homebox,
-:root:not([data-theme]) {
+:root.theme-homebox {
   --background: 0 0% 100%;
   --background-accent: 150 10% 97%;
   --foreground: 150 10% 19%;
@@ -29,26 +28,22 @@
   --sidebar-ring: 139 16% 43%;
 }
 
-:root.theme-homebox #app,
-:root:not([data-theme]) #app {
+:root.theme-homebox #app {
   color: hsl(var(--foreground));
   background: hsl(var(--background-accent));
 }
 
-:root.theme-homebox #app .container,
-:root:not([data-theme]) #app .container {
+:root.theme-homebox #app .container {
   width: 100%;
   max-width: 88rem;
   padding-inline: clamp(1rem, 2.5vw, 2rem);
 }
 
-:root.theme-homebox #app [data-sidebar="sidebar"],
-:root:not([data-theme]) #app [data-sidebar="sidebar"] {
+:root.theme-homebox #app [data-sidebar="sidebar"] {
   border-right: 1px solid hsl(var(--sidebar-border));
 }
 
-:root.theme-homebox #app [data-sidebar="header"] .drop-shadow-md,
-:root:not([data-theme]) #app [data-sidebar="header"] .drop-shadow-md {
+:root.theme-homebox #app [data-sidebar="header"] .drop-shadow-md {
   filter: none;
 }
 
@@ -58,21 +53,6 @@
 
 :root.theme-homebox #app .shadow-xl,
 :root.theme-homebox #app .shadow-lg,
-:root.theme-homebox #app .shadow-md,
-:root:not([data-theme]) #app .shadow-xl,
-:root:not([data-theme]) #app .shadow-lg,
-:root:not([data-theme]) #app .shadow-md {
+:root.theme-homebox #app .shadow-md {
   box-shadow: 0 1px 3px rgb(31 52 39 / 7%);
-}
-
-@media (max-width: 640px) {
-  :root.theme-homebox #app .device-status__name,
-  :root:not([data-theme]) #app .device-status__name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-  }
 }
