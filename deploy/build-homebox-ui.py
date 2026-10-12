@@ -151,8 +151,11 @@ def nest_frontend():
 
 
 def navigation_frontend():
-    replace('layouts/default.vue', '      <Sidebar collapsible="icon">', '      <Sidebar side="right" class="md:order-last" collapsible="icon">')
+    replace('layouts/default.vue', '      <Sidebar collapsible="icon">', '      <Sidebar side="right" collapsible="icon">')
+    replace('layouts/default.vue', '<SidebarInset class="min-h-dvh', '<SidebarInset class="md:order-first min-h-dvh')
     replace('layouts/default.vue', '<Collapsible v-else default-open', '<Collapsible v-else :default-open="n.name.value !== \'More\'"')
+    replace('layouts/default.vue', '<SidebarMenuLink\n                        :href="n.to"', '<CollapsibleTrigger v-if="n.name.value === \'More\'" as-child><SidebarMenuButton :tooltip="n.name.value" class="flex gap-2"><component :is="n.icon" /><span>{{ n.name.value }}</span><MdiChevronRight class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" /></SidebarMenuButton></CollapsibleTrigger>\n                      <SidebarMenuLink v-else\n                        :href="n.to"')
+    replace('layouts/default.vue', '<CollapsibleTrigger as-child>\n                        <SidebarMenuButton class="flex size-12', '<CollapsibleTrigger v-if="n.name.value !== \'More\'" as-child>\n                        <SidebarMenuButton class="flex size-12')
     replace('layouts/default.vue', '    collapsible?: {\n      active: ComputedRef<boolean>;', '    collapsible?: {\n      action?: () => void;\n      active: ComputedRef<boolean>;')
     replace('layouts/default.vue', '<SidebarMenuLink\n                            :href="c.to"', '<SidebarMenuLink v-if="!c.action"\n                            :href="c.to"')
     replace('layouts/default.vue', '                          </SidebarMenuLink>\n                        </SidebarMenuSubItem>', '                          </SidebarMenuLink>\n                          <SidebarMenuButton v-else @click.prevent="c.action?.()"><span>{{ c.name.value }}</span></SidebarMenuButton>\n                        </SidebarMenuSubItem>')
@@ -175,7 +178,7 @@ def navigation_frontend():
     { id: 9, icon: MdiTagMultiple, name: computed(() => "Label"), to: "/workshop/labels", active: computed(() => route.path === "/workshop/labels") },
     { ...baseNav[7], id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
     {
-      id: 11, icon: MdiFileDocumentMultiple, name: computed(() => "More"), to: "/home",
+      id: 11, icon: MdiFileDocumentMultiple, name: computed(() => "More"), to: "",
       active: computed(() => false),
       collapsible: [
         ...baseNav.slice(1, 3), baseNav[4], baseNav[5], baseNav[6],
@@ -189,7 +192,7 @@ def navigation_frontend():
   watch([workshopGroup, () => useAuthContext().user?.id], () => { workshop.context.value = null; workshop.refresh().catch(() => {}); }, { immediate: true });
 
   const quickMenuActions = computed(() => [''')
-    replace('layouts/default.vue', '...nav.map(v => ({', '...nav.value.map(v => ({')
+    replace('layouts/default.vue', '...nav.map(v => ({', '...nav.value.filter(v => v.name.value !== "More").map(v => ({')
     target = BUILD/'layouts/default.vue'
     target.write_text(target.read_text().replace('text: computed(() => v.name.value),', 'text: v.name.value,'))
 

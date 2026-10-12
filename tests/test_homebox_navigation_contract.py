@@ -33,7 +33,8 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_sidebar_is_right_aligned_without_leaving_a_left_gap(self):
-        self.assertIn('<Sidebar side="right" class="md:order-last" collapsible="icon">', self.output)
+        self.assertIn('<Sidebar side="right" collapsible="icon">', self.output)
+        self.assertIn('<SidebarInset class="md:order-first min-h-dvh', self.output)
 
     def test_primary_entries_point_to_homebox_and_workshop_routes(self):
         self.assertLess(self.output.index("baseNav[0],"), self.output.index('name: computed(() => "Inventory")'))
@@ -45,6 +46,11 @@ class HomeboxNavigationContractTests(unittest.TestCase):
     def test_more_is_closed_by_default_and_keeps_secondary_links(self):
         self.assertIn(':default-open="n.name.value !== \'More\'"', self.output)
         self.assertIn('name: computed(() => "More")', self.output)
+        self.assertIn('to: "",', self.output)
+        self.assertIn('<CollapsibleTrigger v-if="n.name.value === \'More\'" as-child><SidebarMenuButton', self.output)
+        self.assertIn('<SidebarMenuLink v-else', self.output)
+        self.assertIn('...nav.value.filter(v => v.name.value !== "More").map', self.output)
+        self.assertNotIn('name: computed(() => "More"), to: "/home"', self.output)
         self.assertIn('...baseNav[7].collapsible!.filter(item => item.to !== "/collection/members")', self.output)
         self.assertIn('to: terminalURL.value', self.output)
         self.assertIn('action: openScanner', self.output)
