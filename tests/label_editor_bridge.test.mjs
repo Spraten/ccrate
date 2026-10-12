@@ -13,16 +13,27 @@ test('proxied selected item context is plain-cloned through the validated bridge
 
   const listeners = new Map()
   const sent = []
-  const iframe = { contentWindow: { postMessage: (message, origin) => sent.push([structuredClone(message), origin]) }, setAttribute() {}, style: '', src: '', title: '' }
+  const style = {}
+  const iframe = { contentWindow: { postMessage: (message, origin) => sent.push([structuredClone(message), origin]) }, setAttribute() {}, src: '', title: '' }
+  Object.defineProperty(iframe, 'style', {
+    get: () => style,
+    set: cssText => Object.assign(style, Object.fromEntries(cssText.split(';').filter(Boolean).map(rule => {
+      const [name, value] = rule.split(':').map(part => part.trim())
+      return [name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()), value]
+    }))),
+  })
   globalThis.location = { origin: 'https://ccrate.test' }
   globalThis.document = { createElement: () => iframe }
   globalThis.window = {
+    innerHeight: 800,
     crypto: { randomUUID: () => 'nonce-test' },
     addEventListener: (name, fn) => listeners.set(name, fn),
     removeEventListener: name => listeners.delete(name),
     confirm: () => false,
   }
+  let containerTop = 232
   const container = {
+    getBoundingClientRect: () => ({ top: containerTop }),
     replaceChildren() {}, append() {}, addEventListener() {}, removeEventListener() {},
   }
   const selected = new Proxy({ generation: 8, instance: 'scope-a', user: new Proxy({ id: 'user-1' }, {}), group: new Proxy({ id: 'group-1' }, {}), selected_item: new Proxy({ entity_id: 'item-1', name: 'Bench drill', asset_code: 'A-4' }, {}) }, {})
@@ -32,6 +43,11 @@ test('proxied selected item context is plain-cloned through the validated bridge
     context: () => selected,
     request: () => new Promise(resolve => { finishRequest = resolve }),
   })
+  assert.equal(iframe.style.height, '496px', 'frame leaves room for the native card and footer')
+  window.innerHeight = 900
+  containerTop = 232
+  listeners.get('resize')()
+  assert.equal(iframe.style.height, '596px', 'frame height follows the available viewport on resize')
   const nonce = new URL(iframe.src, location.origin).searchParams.get('nonce')
   const dispatch = data => listeners.get('message')({ origin: location.origin, source: iframe.contentWindow, data: { channel: 'label-designer', nonce, ...data } })
 
@@ -49,4 +65,6 @@ test('proxied selected item context is plain-cloned through the validated bridge
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(sent.some(([message]) => message.type === 'response'), false)
   handle.dispose()
+  assert.equal(listeners.has('resize'), false, 'dispose removes the viewport listener')
+  assert.equal(listeners.has('message'), false, 'dispose keeps bridge cleanup intact')
 })

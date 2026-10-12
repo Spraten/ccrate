@@ -9,31 +9,50 @@ export function fitElementToPage(element, page, existing = []) {
     widthMm,
     heightMm,
   }
-  const occupied = existing.filter(other => other.visible !== false).map(bounds)
+  const occupied = existing.filter(other => other.visible !== false).map(other => paddedBounds(other))
   if (!occupied.length)
     return fitted
+  // Dense labels should remain responsive. Leave the item centered and let
+  // the host explain any overlap instead of doing a cubic grid search.
+  if (occupied.length > 32)
+    return fitted
 
-  const minWidth = fitted.type === 'text' ? Math.min(fitted.widthMm, 8) : Math.min(fitted.widthMm, 5)
+  const minWidth = fitted.type === 'text'
+    ? Math.min(fitted.widthMm, 8)
+    : fitted.type === 'qr'
+      ? Math.min(fitted.widthMm, 18.5)
+      : Math.min(fitted.widthMm, 5)
   const minHeight = fitted.type === 'text'
     ? Math.min(fitted.heightMm, fitted.fontSizePt * 25.4 / 72 * 1.2)
-    : Math.min(fitted.heightMm, 5)
+    : fitted.type === 'qr'
+      ? Math.min(fitted.heightMm, 18.5)
+      : Math.min(fitted.heightMm, 5)
+  const scales = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.475, 0.4, 0.3, 0.2, 0.1]
   if (fitted.type === 'text') {
-    for (let height = fitted.heightMm; height >= minHeight; height -= 1) for (let width = fitted.widthMm; width >= minWidth; width -= 1) {
-      const spot = findSpot(width, height, page, occupied)
+    for (const scale of scales) {
+      const height = Math.max(minHeight, Number((fitted.heightMm * scale).toFixed(3)))
+      const width = Math.max(minWidth, Number((fitted.widthMm * scale).toFixed(3)))
+      const spot = findSpot(width, height, page, occupied, fitted.strokeWidthMm || 0)
       if (spot)
         return { ...fitted, ...spot, widthMm: width, heightMm: height }
     }
   } else {
     const minScale = Math.min(minWidth / fitted.widthMm, minHeight / fitted.heightMm)
-    for (let scale = 1; scale >= minScale; scale -= 0.05) {
+    for (const scale of [...scales, minScale]) {
+      if (scale < minScale) continue
       const width = Number((fitted.widthMm * scale).toFixed(3))
       const height = Number((fitted.heightMm * scale).toFixed(3))
-      const spot = findSpot(width, height, page, occupied)
+      const spot = findSpot(width, height, page, occupied, fitted.strokeWidthMm || 0)
       if (spot)
         return { ...fitted, ...spot, widthMm: width, heightMm: height }
     }
   }
   return fitted
+}
+
+export function overlapsExisting(element, existing = []) {
+  const box = paddedBounds(element)
+  return existing.some(other => other.visible !== false && intersects(box, paddedBounds(other)))
 }
 
 function bounds(element) {
@@ -43,22 +62,35 @@ function bounds(element) {
   return { left: element.xMm - (width - element.widthMm) / 2, top: element.yMm - (height - element.heightMm) / 2, right: element.xMm + (width + element.widthMm) / 2, bottom: element.yMm + (height + element.heightMm) / 2 }
 }
 
-function findSpot(width, height, page, occupied) {
+function paddedBounds(element) {
+  const box = bounds(element)
+  const pad = element.strokeWidthMm || 0
+  return { left: box.left - pad, top: box.top - pad, right: box.right + pad, bottom: box.bottom + pad }
+}
+
+function findSpot(width, height, page, occupied, padding = 0) {
   const xs = new Set([0, page.widthMm - width])
   const ys = new Set([0, page.heightMm - height])
   for (const box of occupied) {
     xs.add(box.right); xs.add(box.left - width)
     ys.add(box.bottom); ys.add(box.top - height)
   }
-  let best = null, bestDistance = Infinity
+  const candidates = []
   for (const xMm of xs) for (const yMm of ys) {
     if (xMm < 0 || yMm < 0 || xMm + width > page.widthMm || yMm + height > page.heightMm)
       continue
-    const candidate = { left: xMm, top: yMm, right: xMm + width, bottom: yMm + height }
-    if (occupied.some(box => candidate.left < box.right && candidate.right > box.left && candidate.top < box.bottom && candidate.bottom > box.top))
-      continue
+    const candidate = { left: xMm - padding, top: yMm - padding, right: xMm + width + padding, bottom: yMm + height + padding }
     const distance = Math.hypot(xMm + width / 2 - page.widthMm / 2, yMm + height / 2 - page.heightMm / 2)
-    if (distance < bestDistance) { best = { xMm, yMm }; bestDistance = distance }
+    candidates.push({ xMm, yMm, distance, box: candidate })
   }
-  return best
+  candidates.sort((a, b) => a.distance - b.distance)
+  for (const candidate of candidates.slice(0, 2048)) {
+    if (!occupied.some(box => intersects(candidate.box, box)))
+      return { xMm: candidate.xMm, yMm: candidate.yMm }
+  }
+  return null
+}
+
+function intersects(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
 }

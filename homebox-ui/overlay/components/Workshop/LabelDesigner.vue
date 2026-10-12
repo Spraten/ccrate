@@ -37,5 +37,5 @@ defineExpose({ canLeave: () => frame?.canLeave() ?? true, dispose: () => frame?.
 </script>
 <template><div ref="frameRoot" class="label-designer-frame min-w-0 overflow-auto rounded-md border bg-white" /></template>
 <style scoped>
-.label-designer-frame { min-height: 580px; }
+.label-designer-frame { min-height: 390px; }
 </style>
