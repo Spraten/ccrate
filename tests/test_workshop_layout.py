@@ -115,8 +115,9 @@ class WorkshopLayoutTests(unittest.TestCase):
               const box = selector => { const r=document.querySelector(selector).getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; };
               const root=document.querySelector('.room-planner'), workspace=document.querySelector('.planner-workspace');
               const planner=root.getBoundingClientRect(),footer=document.querySelector('[data-fixture-native-footer]').getBoundingClientRect();
-              return {viewport:[innerWidth,innerHeight],pageHeight:document.documentElement.scrollHeight,plannerBottom:planner.bottom,footerTop:footer.top,root:[root.clientWidth,root.scrollWidth],workspace:[workspace.clientWidth,workspace.scrollWidth],
+              return {viewport:[innerWidth,innerHeight],pageHeight:document.documentElement.scrollHeight,plannerBottom:planner.bottom,footerTop:footer.top,root:[root.clientWidth,root.scrollWidth],workspaceOverflow:[workspace.clientWidth,workspace.scrollWidth],
                 canvas:box('.planner-canvas-frame'),palette:box('.planner-palette'),inspector:box('.planner-inspector'),
+                toolbar:box('.planner-toolbar'),workspace:box('.planner-workspace'),coverage:box('.planner-coverage'),
                 canvasToolsRows:new Set([...document.querySelector('.planner-canvas-tools').children].map(el=>Math.round((el.getBoundingClientRect().top+el.getBoundingClientRect().bottom)/2/12))).size,
                 canvasToolButtonFont:parseFloat(getComputedStyle(document.querySelector('.planner-canvas-tools>button')).fontSize),
                 rootFont:parseFloat(getComputedStyle(document.documentElement).fontSize),
@@ -124,9 +125,10 @@ class WorkshopLayoutTests(unittest.TestCase):
                 inspectorOverflow:getComputedStyle(document.querySelector('.planner-inspector')).overflowY};
             }''')
             self.assertLessEqual(geometry['pageHeight'], height + 1, geometry)
-            self.assertLessEqual(geometry['plannerBottom'] + 16, geometry['footerTop'] + 1, geometry)
+            # Preserve the established 16px gap plus 7px of native-shell chrome variation.
+            self.assertLessEqual(geometry['plannerBottom'] + 24, geometry['footerTop'] + 1, geometry)
             self.assertLessEqual(geometry['root'][1], geometry['root'][0] + 1, geometry)
-            self.assertLessEqual(geometry['workspace'][1], geometry['workspace'][0] + 1, geometry)
+            self.assertLessEqual(geometry['workspaceOverflow'][1], geometry['workspaceOverflow'][0] + 1, geometry)
             self.assertGreater(geometry['canvas']['width'], geometry['palette']['width'], geometry)
             self.assertGreater(geometry['canvas']['width'], geometry['inspector']['width'], geometry)
             self.assertLessEqual(geometry['palette']['width'], 240, geometry)
