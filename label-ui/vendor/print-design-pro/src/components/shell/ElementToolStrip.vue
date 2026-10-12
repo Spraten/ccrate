@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useEditorI18n } from '../../composables/use-editor-i18n'
 import { ImageTooLargeError, pickImageFile, readImage } from '../../composables/use-image-picker'
 import { addElementCommand, updateElementsCommand } from '../../core/commands/element-commands'
-import { fitElementToPage } from '../../core/element-placement.js'
+import { fitElementToPage, overlapsExisting } from '../../core/element-placement.js'
 import {
   createBarcode,
   createCircle,
@@ -111,6 +111,8 @@ function addItemQr(): void {
 
 function addElement(create: (place: { centerXMm: number, centerYMm: number }) => TemplateElement): void {
   const element = fitElementToPage(create({ centerXMm: doc.page.widthMm / 2, centerYMm: doc.page.heightMm / 2 }), doc.page, doc.elements)
+  if (overlapsExisting(element, doc.elements))
+    window.dispatchEvent(new CustomEvent('pp-element-placement-warning'))
   history.dispatch(addElementCommand(doc, element))
   selection.select(element.id)
 }
@@ -130,6 +132,8 @@ async function addImage(): Promise<void> {
       aspectRatio,
       Math.min(80, doc.page.widthMm * 0.6),
     ), doc.page, doc.elements)
+    if (overlapsExisting(element, doc.elements))
+      window.dispatchEvent(new CustomEvent('pp-element-placement-warning'))
     history.dispatch(addElementCommand(doc, element))
     selection.select(element.id)
   }

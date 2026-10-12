@@ -88,6 +88,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } }); bridge.changed?.(current)
       }
       const notify = (text: string) => { message.value = text; bridge.notify?.(text) }
+      const placementWarning = () => notify('This element overlaps existing artwork. It is selected; move it to a clear area before saving.')
       const load = (value: TemplateDocument, id: string | null = null) => {
         document.value = cloneJson(value); openTemplate(document.value, { document: doc, history, selection });
         selectedId.value = id; if (!id) revision.value = 0; baseline = JSON.stringify(snapshot()); dirty = false; draftPreviewRevision++; preview.value = null; bridge.dirty?.(false); send({ type: 'dirty', data: { dirty: false } }); fitToPage(document.value.page)
@@ -151,15 +152,16 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         h('button', { onClick: () => previewDraft().catch((e: Error) => notify(e.message)) }, 'Preview draft'),
       ])
       watch(() => history.editVersion, changed, { flush: 'sync' })
-      onMounted(() => { load(starter('supvan'), 'starter:supvan:left'); baseline = JSON.stringify(snapshot()); void loadList().catch((e: Error) => notify(e.message)); send({ type: 'ready', data: { nonce } }) })
-      onBeforeUnmount(() => { if (dirty) bridge.dirty?.(true) })
+      onMounted(() => { window.addEventListener('pp-element-placement-warning', placementWarning); load(starter('supvan'), 'starter:supvan:left'); baseline = JSON.stringify(snapshot()); void loadList().catch((e: Error) => notify(e.message)); send({ type: 'ready', data: { nonce } }) })
+      onBeforeUnmount(() => { window.removeEventListener('pp-element-placement-warning', placementWarning); if (dirty) bridge.dirty?.(true) })
       return () => h('div', { class: 'label-host' }, [buttons(), h('p', { role: 'status', class: 'label-host-message' }, message.value), h('div', { class: 'label-host-editor' }, [h(PrintDesigner, { modelValue: document.value, 'onUpdate:modelValue': (next: TemplateDocument) => { document.value = next; changed() } })]), preview.value ? h('section', { class: 'label-preview' }, [h('h2', 'Draft preview'), h('img', { src: preview.value.image, alt: 'Draft label preview' }), h('button', { onClick: () => preview.value = null }, 'Close preview')]) : null])
     },
   }))
   const exportGuard = document.createElement('style'); exportGuard.textContent = `:root,:root[data-theme="dark"]{--pp-color-app-bg:#f5f7f5;--pp-color-app-panel:#fff;--pp-color-app-inset:#edf1ee;--pp-color-app-border:#d9e1db;--pp-color-app-border2:#b8c7bb;--pp-color-app-desk:#e9eee9;--pp-color-app-text:#1c2b21;--pp-color-app-text2:#53645a;--pp-color-app-text3:#87958b;--pp-color-brand-500:#36704f;--pp-color-brand-600:#285d40;--pp-color-brand-soft:#e7f0e9;--pp-color-brand-soft2:#d5e5d9;--pp-color-brand-50:#e7f0e9;--pp-color-brand-100:#d5e5d9;--pp-color-brand-700:#244f37;--pp-color-app-ok:#36704f;--pp-color-app-ok-soft:#e7f0e9}
 [data-pp-export-open],[data-pp-home],[data-pp-home]+div,[data-pp-save-state],[data-pp-paper-preset],[data-pp-paper-select],[data-pp-theme-toggle]{display:none!important}
-.label-host-editor{height:min(68vh,760px);min-height:390px}
-.label-host-editor [data-pp-designer]{height:100%!important;min-height:390px}
+.label-host{display:flex;height:100%;min-height:0;flex-direction:column}
+.label-host-editor{flex:1;min-height:0;overflow:hidden}
+.label-host-editor [data-pp-designer]{height:100%!important;min-height:0}
 .label-host-editor [data-pp-designer]>div{grid-template-columns:minmax(0,1fr) minmax(220px,264px)!important}
 .label-host-editor [data-pp-designer]>div>aside:first-child{display:none}
 .label-host-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px;background:var(--pp-color-app-panel);color:var(--pp-color-app-text);border:1px solid var(--pp-color-app-border);border-radius:7px}
@@ -170,7 +172,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
 .label-host-message{min-height:1.5em}
 .label-host-selected-item{align-self:center;padding:8px 10px;color:var(--pp-color-app-text2);font-size:.875rem}
 .label-preview img{max-width:100%;image-rendering:pixelated}
-@media(max-width:700px){.label-host-editor{height:920px;min-height:920px;overflow:auto}.label-host-editor [data-pp-designer]{height:auto!important;min-height:880px;grid-template-rows:52px auto}.label-host-editor [data-pp-designer]>div{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto minmax(300px,420px) auto!important}.label-host-editor [data-pp-designer]>div>aside:first-child{display:none}.label-host-editor [data-pp-designer]>div>main{min-height:360px}.label-host-toolbar>*{flex:1 1 135px}}`; document.head.append(exportGuard); app.use(createPinia()); app.mount(container)
+@media(max-width:700px){.label-host{height:auto;min-height:100%}.label-host-editor{height:920px;min-height:920px;flex:none;overflow:auto}.label-host-editor [data-pp-designer]{height:auto!important;min-height:880px;grid-template-rows:52px auto}.label-host-editor [data-pp-designer]>div{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto minmax(300px,420px) auto!important}.label-host-editor [data-pp-designer]>div>aside:first-child{display:none}.label-host-editor [data-pp-designer]>div>main{min-height:360px}.label-host-toolbar>*{flex:1 1 135px}}`; document.head.append(exportGuard); app.use(createPinia()); app.mount(container)
   const onMessage = (event: MessageEvent<Message>) => {
     if (disposed || event.origin !== trustedOrigin || event.source !== window.parent || event.data?.channel !== 'label-designer' || event.data.nonce !== nonce) return
     bridge.activity?.()

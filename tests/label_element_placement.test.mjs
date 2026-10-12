@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { fitElementToPage } from '../label-ui/vendor/print-design-pro/src/core/element-placement.js'
+import { fitElementToPage, overlapsExisting } from '../label-ui/vendor/print-design-pro/src/core/element-placement.js'
 
 test('fits new elements to the active label while keeping their center and proportions', () => {
   const text = fitElementToPage({ type: 'text', xMm: -10, yMm: 8, widthMm: 60, heightMm: 12 }, { widthMm: 40, heightMm: 28 })
@@ -27,7 +27,13 @@ test('places readable text into available space around starter artwork without t
       { type: 'text', xMm: 23, yMm: 13, widthMm: 15, heightMm: 6, visible: true },
     ],
   )
-  assert.deepEqual([text.xMm, text.yMm, text.widthMm, text.heightMm], [21, 19, 19, 8])
+  assert.deepEqual([text.xMm, text.yMm], [21, 19])
+  assert.ok(text.widthMm >= 18.5 && text.heightMm >= 14 * 25.4 / 72 * 1.2)
+  assert.equal(overlapsExisting(text, [
+    { xMm: 2, yMm: 4.5, widthMm: 19, heightMm: 19, visible: true },
+    { xMm: 23, yMm: 4, widthMm: 15, heightMm: 7, visible: true },
+    { xMm: 23, yMm: 13, widthMm: 15, heightMm: 6, visible: true },
+  ]), false)
 })
 
 test('preserves square QR and tall-image proportions when another element occupies the center', () => {
@@ -35,8 +41,39 @@ test('preserves square QR and tall-image proportions when another element occupi
   const occupied = [{ type: 'rect', xMm: 10, yMm: 5, widthMm: 20, heightMm: 18, visible: true }]
   const qr = fitElementToPage({ type: 'qr', xMm: 5, yMm: -1, widthMm: 30, heightMm: 30 }, page, occupied)
   assert.equal(qr.widthMm, qr.heightMm)
+  assert.ok(qr.widthMm >= 18.5, 'SUPVAN QR stays above the four-dot module floor')
   assert.ok(qr.xMm >= 0 && qr.yMm >= 0 && qr.xMm + qr.widthMm <= page.widthMm && qr.yMm + qr.heightMm <= page.heightMm)
 
   const image = fitElementToPage({ type: 'image', xMm: 14, yMm: -32, widthMm: 12, heightMm: 92 }, page, occupied)
   assert.ok(Math.abs(image.widthMm / image.heightMm - 12 / 92) < 0.002)
+})
+
+test('keeps a QR printable and surfaces its overlap instead of shrinking it below the print floor', () => {
+  const page = { widthMm: 40, heightMm: 28 }
+  const wall = [{ type: 'rect', xMm: 0, yMm: 0, widthMm: 40, heightMm: 28, visible: true }]
+  const qr = fitElementToPage({ type: 'qr', xMm: 5, yMm: -1, widthMm: 30, heightMm: 30 }, page, wall)
+  assert.ok(qr.widthMm >= 18.5)
+  assert.equal(overlapsExisting(qr, wall), true)
+})
+
+test('counts stroked shapes when preventing an overlap with the item QR', () => {
+  const qr = { type: 'qr', xMm: 2, yMm: 4.5, widthMm: 19, heightMm: 19, visible: true }
+  const touching = { type: 'rect', xMm: 21.2, yMm: 8, widthMm: 5, heightMm: 5, strokeWidthMm: 0.4, visible: true }
+  assert.equal(overlapsExisting(touching, [qr]), true)
+  for (const type of ['rect', 'line', 'circle']) {
+    const placed = fitElementToPage({ ...touching, type }, { widthMm: 40, heightMm: 28 }, [qr])
+    assert.equal(overlapsExisting(placed, [qr]), false, `${type} is placed clear of the QR's stroked boundary`)
+  }
+})
+
+test('bounds dense-label search work at the supported 128-element limit', () => {
+  const page = { widthMm: 40, heightMm: 28 }
+  const dense = Array.from({ length: 128 }, (_, index) => ({
+    type: 'rect', xMm: index % 32, yMm: Math.floor(index / 32) * 7,
+    widthMm: 8, heightMm: 7, visible: true,
+  }))
+  const started = performance.now()
+  const text = fitElementToPage({ type: 'text', xMm: -10, yMm: 8, widthMm: 60, heightMm: 12, fontSizePt: 14 }, page, dense)
+  assert.ok(performance.now() - started < 250, 'dense placement avoids unbounded candidate search')
+  assert.ok(text.xMm >= 0 && text.yMm >= 0 && text.xMm + text.widthMm <= page.widthMm && text.yMm + text.heightMm <= page.heightMm)
 })

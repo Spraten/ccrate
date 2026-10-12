@@ -14,7 +14,13 @@ export function mountLabelDesigner(container, options) {
     iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'initialize', data: { context: plainContext, epoch } }, location.origin);
   };
   iframe.title = 'Label maker'; iframe.src = `${options.src}?nonce=${encodeURIComponent(nonce)}`;
-  iframe.style = 'display:block;width:100%;height:min(78vh,900px);min-height:560px;border:0;background:#fff';
+  const fitFrame = () => {
+    const available = window.innerHeight - container.getBoundingClientRect().top - 72;
+    iframe.style.height = `${Math.max(390, Math.min(900, available))}px`;
+  };
+  iframe.style = 'display:block;width:100%;min-height:0;border:0;background:#fff';
+  fitFrame();
+  window.addEventListener('resize', fitFrame);
   iframe.setAttribute('allow', 'clipboard-read; clipboard-write'); container.replaceChildren(iframe);
   const onMessage = async event => {
     if (disposed || event.origin !== location.origin || event.source !== iframe.contentWindow || event.data?.channel !== 'label-designer' || event.data.nonce !== nonce) return;
@@ -42,7 +48,7 @@ export function mountLabelDesigner(container, options) {
     }
   };
   window.addEventListener('message', onMessage); container.addEventListener('pointerdown', options.activity || (()=>{}), true); container.append(iframe);
-  return { iframe, canLeave() { return !busy && (!dirty || window.confirm('Discard unsaved label design changes?')); }, updateContext(context) { if (!disposed) postContext(context); }, invalidate() { epoch++; dirty = false; options.dirty?.(false); }, dispose() { if (disposed) return; disposed = true; epoch++; window.removeEventListener('message', onMessage); container.replaceChildren(); } };
+  return { iframe, canLeave() { return !busy && (!dirty || window.confirm('Discard unsaved label design changes?')); }, updateContext(context) { if (!disposed) postContext(context); }, invalidate() { epoch++; dirty = false; options.dirty?.(false); }, dispose() { if (disposed) return; disposed = true; epoch++; window.removeEventListener('resize', fitFrame); window.removeEventListener('message', onMessage); container.replaceChildren(); } };
 }
 
 export const createLabelEditorFrame = mountLabelDesigner;
