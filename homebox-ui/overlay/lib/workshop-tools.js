@@ -460,6 +460,7 @@ function paintPlannerCanvas(room, canvas) {
       if(!canEditPlan()){layoutDraft.rooms[roomIndex(room.id)]=drag.room;drag=null;workshopPaint();return}
       const point = pointFor(event), dx = point.x - drag.start.x, dy = point.y - drag.start.y;
       if (Math.abs(dx) + Math.abs(dy) >= .08) dragMoved = true;
+      if (!dragMoved) return;
       const snap = value => plannerSnap ? Math.round(value * 4) / 4 : Math.round(value * 1000) / 1000;
       if (drag.resize) {
         object.width = Math.max(.1, Math.min(room.width - object.x, snap(drag.object.width + dx)));
