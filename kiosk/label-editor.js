@@ -9,6 +9,10 @@ function secureNonce() {
 export function mountLabelDesigner(container, options) {
   const nonce = secureNonce(), iframe = document.createElement('iframe');
   let disposed = false, dirty = false, busy = false, epoch = 0;
+  const postContext = context => {
+    const plainContext = context == null ? context : JSON.parse(JSON.stringify(context));
+    iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'initialize', data: { context: plainContext, epoch } }, location.origin);
+  };
   iframe.title = 'Label maker'; iframe.src = `${options.src}?nonce=${encodeURIComponent(nonce)}`;
   iframe.style = 'display:block;width:100%;height:min(78vh,900px);min-height:560px;border:0;background:#fff';
   iframe.setAttribute('allow', 'clipboard-read; clipboard-write'); container.replaceChildren(iframe);
@@ -18,7 +22,7 @@ export function mountLabelDesigner(container, options) {
     if (msg.type === 'session-activity') { options.activity?.(); return; }
     if (msg.type === 'dirty') { dirty = !!msg.data?.dirty; options.dirty?.(dirty); return; }
     if (msg.type === 'busy') { busy = !!msg.data?.busy; options.busy?.(busy); return; }
-    if (msg.type === 'ready') { iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'initialize', data: { context: options.context?.(), epoch } }, location.origin); return; }
+    if (msg.type === 'ready') { postContext(options.context?.()); return; }
     if (msg.type !== 'request' || !msg.id || !LABEL_ACTIONS.has(msg.action)) return;
     const requestEpoch = epoch;
     try {
@@ -38,7 +42,7 @@ export function mountLabelDesigner(container, options) {
     }
   };
   window.addEventListener('message', onMessage); container.addEventListener('pointerdown', options.activity || (()=>{}), true); container.append(iframe);
-  return { iframe, canLeave() { return !busy && (!dirty || window.confirm('Discard unsaved label design changes?')); }, updateContext(context) { if (!disposed) iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'initialize', data: { context, epoch } }, location.origin); }, invalidate() { epoch++; dirty = false; options.dirty?.(false); }, dispose() { if (disposed) return; disposed = true; epoch++; window.removeEventListener('message', onMessage); container.replaceChildren(); } };
+  return { iframe, canLeave() { return !busy && (!dirty || window.confirm('Discard unsaved label design changes?')); }, updateContext(context) { if (!disposed) postContext(context); }, invalidate() { epoch++; dirty = false; options.dirty?.(false); }, dispose() { if (disposed) return; disposed = true; epoch++; window.removeEventListener('message', onMessage); container.replaceChildren(); } };
 }
 
 export const createLabelEditorFrame = mountLabelDesigner;
