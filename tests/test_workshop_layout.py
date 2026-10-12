@@ -131,6 +131,18 @@ class WorkshopLayoutTests(unittest.TestCase):
             self.assert_no_horizontal_overflow()
             self.page.screenshot(path=str(proof_dir / f'after-{width}x{height}.png'), full_page=True)
 
+        search = self.page.get_by_label('Search objects')
+        search.fill('wall cabinet')
+        wall_cabinet = self.page.locator('.planner-preset-card[data-preset-id="wall-cabinet"]')
+        base_cabinet = self.page.locator('.planner-preset-card[data-preset-id="base-cabinet"]')
+        bins = self.page.locator('.planner-preset-group[data-preset-category="Bins"]')
+        self.assertTrue(wall_cabinet.is_visible())
+        self.assertFalse(base_cabinet.is_visible(), 'Unmatched presets in a matching category stay hidden.')
+        self.assertFalse(bins.is_visible(), 'Categories with no matching presets stay hidden.')
+        search.fill('')
+        self.assertTrue(base_cabinet.is_visible(), 'Clearing search restores same-category presets.')
+        self.assertTrue(bins.is_visible(), 'Clearing search restores unmatched categories.')
+
         contrast_target = self.page.locator('.planner-preset-card').first
         contrast_target.evaluate("el=>el.style.transition='none'")
         self.set_native_theme(self.page)
@@ -138,7 +150,6 @@ class WorkshopLayoutTests(unittest.TestCase):
         self.set_native_theme(self.page, dark=True)
         self.assertGreaterEqual(self.contrast_ratio(self.page, '.planner-preset-card'), 4.5)
 
-        search = self.page.get_by_label('Search objects')
         search.focus()
         for _ in range(50):
             self.page.keyboard.press('Tab')
