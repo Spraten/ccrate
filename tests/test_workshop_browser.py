@@ -563,6 +563,7 @@ class WorkshopBrowserTests(unittest.TestCase):
         document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
         self.install_rooms4_plan(document,selected_drawing=DRAWING,types=['Misc'])
         self.page.locator('html').evaluate("el=>{el.style.setProperty('--background','220 20% 12%');el.style.setProperty('--foreground','0 0% 98%')}")
+        self.assertIn("fill='#293c42'",(ROOT/'homebox-ui/overlay/public/workshop/objects/benchtop-cnc.svg').read_text())
         caption=self.page.locator('[data-workshop-caption]')
         result=caption.evaluate('''text=>{
           const ink=getComputedStyle(text).fill,backing=text.parentElement.querySelector('[data-workshop-caption-backdrop]'),background=getComputedStyle(backing).fill;
@@ -570,10 +571,11 @@ class WorkshopBrowserTests(unittest.TestCase):
           const lum=color=>channels(color).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
           const a=lum(ink),b=lum(background),contrast=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);
           const oldInk=lum('#263943'),darkWindow=lum('#293c42'),oldContrast=(Math.max(oldInk,darkWindow)+.05)/(Math.min(oldInk,darkWindow)+.05);
-          const image=text.parentElement.querySelector('[data-workshop-artwork]');
-          return {ink,background,contrast,oldContrast,backingOpacity:getComputedStyle(backing).opacity,artwork:image?.getAttribute('data-workshop-artwork'),imageBeforeBacking:[...text.parentElement.children].indexOf(image)<[...text.parentElement.children].indexOf(backing),backingBounds:backing.getBoundingClientRect().toJSON(),captionBounds:text.getBoundingClientRect().toJSON()};
+          const image=text.parentElement.querySelector('[data-workshop-artwork]'),shape=text.parentElement.querySelector('rect[data-object-shape]');
+          return {ink,background,contrast,oldContrast,shapeFill:shape.getAttribute('fill'),backingOpacity:getComputedStyle(backing).opacity,artwork:image?.getAttribute('data-workshop-artwork'),imageBeforeBacking:[...text.parentElement.children].indexOf(image)<[...text.parentElement.children].indexOf(backing),backingBounds:backing.getBoundingClientRect().toJSON(),captionBounds:text.getBoundingClientRect().toJSON()};
         }''')
         self.assertEqual(result['artwork'],'benchtop-cnc')
+        self.assertEqual(result['shapeFill'],'#C89A69')
         self.assertTrue(result['imageBeforeBacking'],result)
         self.assertEqual(result['backingOpacity'],'1')
         self.assertLess(result['oldContrast'],1.2,result)
