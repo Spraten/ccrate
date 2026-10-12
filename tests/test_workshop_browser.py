@@ -594,6 +594,37 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertGreater(result['backingBounds']['width'],result['captionBounds']['width'])
         self.assertEqual(self.errors,[])
 
+    def test_palette_keyboard_order_starts_with_catalog_at_desktop_and_narrow_width(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        for width in (1440,320):
+            with self.subTest(viewport_width=width):
+                self.page.set_viewport_size({'width':width,'height':900})
+                self.install_rooms4_plan(document)
+                self.page.get_by_role('button',name='Edit',exact=True).click()
+                if width<=899:
+                    self.page.get_by_role('button',name='Objects',exact=True).click()
+                search=self.page.get_by_role('searchbox',name='Search objects')
+                search.focus()
+                self.page.keyboard.press('Tab')
+                first=self.page.evaluate('''()=>({text:document.activeElement.textContent.trim(),catalog:!!document.activeElement.closest('.planner-presets'),summary:document.activeElement.matches('.planner-preset-group>summary')})''')
+                self.assertTrue(first['catalog'],first)
+                self.assertTrue(first['summary'],first)
+                self.page.keyboard.press('Tab')
+                self.assertTrue(self.page.evaluate("()=>!!document.activeElement.closest('.planner-preset-card')"))
+                image=self.page.locator('.planner-preset-card img').first
+                image.evaluate("img=>img.decode()")
+                self.assertGreater(image.evaluate('(img)=>img.naturalWidth'),0)
+                for _ in range(40):
+                    if self.page.evaluate("()=>!!document.activeElement.closest('.planner-object-group:not(.planner-preset-group)')"):
+                        break
+                    self.assertTrue(self.page.evaluate("()=>!!document.activeElement.closest('.planner-presets')"),
+                                    'Keyboard focus must traverse the catalog before legacy groups.')
+                    self.page.keyboard.press('Tab')
+                self.assertTrue(self.page.evaluate("()=>document.activeElement.matches('.planner-object-group:not(.planner-preset-group)>summary')"),
+                                'The first legacy group should follow the complete catalog tab sequence.')
+        self.assertEqual(self.errors,[])
+
     def test_drag_back_to_origin_does_not_create_history(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
