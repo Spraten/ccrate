@@ -21,4 +21,8 @@ The gateway serves the selected static tree from `work/homebox-ui-current`. Rele
 The native label generator adapts the layout and generate/preview interaction from HomeSortStuff commit `85b96e5060a48dd11db24addfbc63407eed4e74c`.
 Its source is distributed under AGPL-3.0; see `HOMESORTSTUFF-LICENSE.txt`.
 
+For a label design, select an item in **Equipment**, then choose **Design a label**. **Label size** offers SUPVAN 40 × 28 mm and Letter 60 × 40 mm; the paper-size badge shows the current document's actual dimensions. Choose a starter from **Starter designs**, a matching saved design, or **Blank design**. Starter elements can be selected and dragged; newly added elements are selected and fitted to the paper where space permits. Adding an item QR selects an existing one instead of creating a duplicate.
+
+The canvas shows the selected native item's values while saved designs retain reusable field bindings. **Preview** opens a draft image in a dialog; close it with **Close** or **Escape**. A draft preview is not saved or printable. Save the design explicitly and use the existing review and physical-print workflow. Blank designs need a valid item QR before preview/save. An uncertain template save must be checked before another write; the broader durable pending-save repair remains queued.
+
 Member names and identities come from native Homebox users. Badge-only accounts have no native password. Badge writes use durable request identities and uncertain results require Recovery. Private credentials, badge keys and operational databases remain on the Pi and outside generated frontend bundles.

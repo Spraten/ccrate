@@ -10,7 +10,7 @@
 
 **Spec:** [C-Crate updates and desktop design specification](../specs/2026-10-12-ccrate-updates-and-desktop.md), sections Global constraints and B.
 
-**Status (2026-10-12):** Immediate Workshop repair Tasks 8-10 are complete and verified locally. Tasks 1-7 remain planned; this is the first repair wave, not completion of the full desktop redesign. Application revision `ffd2931` passed 35 focused Python checks, the catalog passed two Node checks, and the compiled local app passed desktop acceptance at 1280x800 and 1440x900 with the sidebar expanded and collapsed. No added typecheck diagnostics; 43 pinned upstream diagnostics remain. Pi rollout, hardware and prebuilt updates remain separate.
+**Status (2026-10-12):** Immediate Workshop repair Tasks 8-10 and label designer repair Task 11 are complete and verified locally. Tasks 1-7 remain planned; these repairs do not complete the full desktop redesign. Workshop application revision `ffd2931` passed 35 focused Python checks, two catalog Node checks and compiled desktop/sidebar acceptance. Label application revision `f18b8f8` passed nine Node checks, 30 focused Python checks and actual native-item draft previews at 1280x800 and 1440x900. No added typecheck diagnostics; 43 pinned upstream diagnostics remain. Pi rollout, hardware and prebuilt updates remain separate.
 
 ## Global Constraints
 
@@ -223,3 +223,23 @@ Execution ruling (2026-10-12): the user explicitly authorized subagents to start
 - [x] Run the layout checks, capture after screenshots, commit and report. Report fixture verification separately from compiled native-application verification, which the controller performs after integration.
 
 **Completion evidence:** Compiled application `ffd2931` has no horizontal or vertical overflow in all four desktop/sidebar states; its footer ends at the viewport edge. All 22 catalog assets load and illustrated cards are visible immediately after search. Actual cabinet/CNC placement and undo, horizontal caption geometry, rotation/resize and undo, sticky search, inspector scrolling and Escape cancellation passed. Local room data was unchanged after discarding edits; no JavaScript errors or server writes occurred, and three preference requests were locally stubbed. The isolated layout fixture also covers custom-theme contrast, keyboard order and a 200% zoom approximation. Source and compiled evidence received GPT-6.1 Sol High review. The legacy query fixture failure on the unchanged baseline remains in the separate reliability queue; the whole legacy browser suite is not claimed green.
+
+### Task 11: Repair the existing label designer workflow
+
+**User reports:** Controls are confusing or ineffective; SUPVAN paper size is hard to find; users need a draggable starter; newly created items are missing from the editor.
+
+**Reproduced baseline:** SUPVAN is already 40 x 28 mm but generic Add Text creates a 60 x 12 mm element at x=-10. Other insertion defaults also exceed the label. Selecting a native item updates the host status while the canvas still shows sample values. The vendor home button has no handler; native persistence is not represented by its Autosaved copy. The desktop iframe also exceeds the 1280 x 800 viewport. Existing starter dragging and undo/redo work and must be retained.
+
+Compiled testing also reproduced a Preview race: an identical delayed editor-model echo invalidated an immediate post-edit preview. The repair distinguishes that echo from a real edit, retains stale-result rejection, and uses a centered native dialog for draft images with Close, Escape and focus return.
+
+**Scope:** Existing label host, iframe bridge, selected-item integration, affected vendor insertion/preview/chrome components and maintained patches/tests. Reuse PrintDesignPro; no new dependencies or schema changes. Keep SUPVAN calibration, profile validation, native item identities, reusable template bindings, nonce/origin/epoch checks, dirty leave guards, request identities and reviewed physical-print authority.
+
+- [x] Add failing checks for element insertion bounds/visible glyphs, explicit paper size, real blank versus starter choices, native item canvas preview and retained history.
+- [x] Fit inserted elements to the active paper, retain image/QR proportions, use native field bindings and avoid silently creating a second item QR. Make starter and saved choices unambiguous and profile-aware.
+- [x] Render selected-item values through transient preview state, preserving reusable bindings and clearing old context safely. Keep starter elements selectable/draggable and retain undo/redo.
+- [x] Remove demonstrated no-op/misleading/duplicate controls, retain insertion/fit/zoom/layers/properties, and fit the actual desktop host without shrinking controls beyond readability. Display actual document dimensions.
+- [x] Capture maintained vendor patches/provenance; run focused label/bridge/authority checks and compiled desktop journeys with synthetic data and intercepted writes. Review with GPT-6.1 Sol High. No operational Pi or physical printing.
+
+**Completion evidence:** Application `f18b8f8` passed nine Node checks and 30 focused label/paper/print-authority Python checks. The final build passed with no added typecheck diagnostics, and strict editor validation matched its source inputs, both maintained patches, exact runtime assets and vendor-tree digest. Compiled native-item previews returned HTTP 200 with readable 320 x 224 images after adding Text at both desktop sizes; page height matched the viewport, canvas/footer remained reachable, and Close/Escape restored focus. The actual renderer's shared line-height now prevents the newly inserted text from fitting zero printable lines. Prior compiled checks verified profiles, genuine blank designs, native name/code values, starter dragging/history, and palette additions. A delayed mocked response survived an identical echo; a real inspector X edit discarded the pending stale result. No template-save, reviewed-print or physical-print requests occurred. Source and compiled evidence passed GPT-6.1 Sol High review. Git delivery must push main and the task branches and verify their remote hashes; publication is reported separately from local acceptance.
+
+Task 11 does not mark Task 4's broader Design/Produce composition or durable pending-save journal complete. Report that boundary explicitly; do not silently retry an uncertain save during acceptance.

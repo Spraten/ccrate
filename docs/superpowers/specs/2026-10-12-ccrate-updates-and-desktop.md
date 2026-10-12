@@ -1,6 +1,6 @@
 # C-Crate updates and desktop design specification
 
-Status: the first Workshop repair wave (desktop Tasks 8-10) is implemented and verified locally on 2026-10-12. The full desktop redesign and prebuilt-update work remain planned.
+Status: the Workshop repair wave (desktop Tasks 8-10) and label designer repair (Task 11) are implemented and verified locally on 2026-10-12. The full desktop redesign and prebuilt-update work remain planned.
 Baseline: C-Crate commit 607a7144a6f7d4037ea01340fc5da75a7e6090b9.
 
 ## Intended outcome
@@ -134,15 +134,18 @@ The user reports too few objects, clunky/buggy interactions, stretched object te
 
 ## Work queue and dependencies
 
+**Next priority: update-blocking backup and release contracts, then prebuilt updates.** The bounded label designer repair is complete locally; Task 4's full workspace and durable pending-save work remain queued.
+
 1. **Completed: Workshop repair wave (desktop plan Tasks 8-10), in parallel isolated branches:** 22 illustrated presets, readable independent captions, corrected gesture/history handling, and desktop layout. Application revision `ffd2931` passed 35 focused Python checks and compiled desktop acceptance in all four viewport/sidebar states; two catalog Node checks passed. No new dependencies or persisted schema changes. Native room data was unchanged during compiled testing. This completes the bounded repair wave, not the later Vue workspace redesign.
-2. Repair update-blocking backup and release preparation contracts.
-3. Build/cache/publish precompiled candidates and implement staging/preflight in parallel after agreeing their descriptor contract.
-4. Prove compatible fallback preparation, activation and interrupted recovery in isolated tests.
-5. User runs the Pi check; a supported installation and explicit apply authorization are prerequisites for real rollout.
-6. Select the desktop visual direction; this can proceed while update infrastructure is built.
-7. Rebuild the shared shell, then Workshop and Labels; these two pages may run on independent branches after shared contracts are stable.
-8. Rework Inventory, Home and Users with native authorities and clear page jobs.
-9. Whole-branch review, compiled desktop acceptance, Git push and a prebuilt release for user testing.
+2. **Completed: bounded label designer repair (desktop Task 11):** visible SUPVAN dimensions, grouped starters/saved designs and a genuine blank, fitted selected additions, native item values and corrected preview behavior. Application `f18b8f8` passed nine Node and 30 Python checks, source/asset provenance validation, and actual native-item previews after adding Text at both desktop sizes. Drag/history and stale-result rejection passed compiled checks. No operational data, template-save or print requests occurred during acceptance. The full Design/Produce workspace and durable pending-save journal remain queued.
+3. Repair update-blocking backup and release preparation contracts.
+4. Build/cache/publish precompiled candidates and implement staging/preflight in parallel after agreeing their descriptor contract.
+5. Prove compatible fallback preparation, activation and interrupted recovery in isolated tests.
+6. User runs the Pi check; a supported installation and explicit apply authorization are prerequisites for real rollout.
+7. Select the desktop visual direction; this can proceed while update infrastructure is built.
+8. Rebuild the shared shell, then Workshop and Labels; these two pages may run on independent branches after shared contracts are stable.
+9. Rework Inventory, Home and Users with native authorities and clear page jobs.
+10. Whole-branch review, compiled desktop acceptance, Git push and a prebuilt release for user testing.
 
 Parallel workers must not edit the same builder, shared type or README simultaneously. Assign one owner to shared contracts and integrate dependent tasks sequentially. Run focused tests after each task and a fresh whole-branch review before publication. Keep the existing exact upstream typecheck baseline; do not expand it to hide new diagnostics.
 
@@ -162,4 +165,4 @@ The update plan is accepted when a supported existing installation can stage and
 
 The desktop plan is accepted when the chosen target is visibly matched, all five primary workflows are reachable and coherent at the specified desktop sizes, keyboard use works, and save/review/print statuses remain truthful. Screenshot comparison must use the same size/state as its approved visual target; passing structural text tests is insufficient.
 
-The first Workshop repair wave is implemented and verified in the isolated local app. No Pi deployment, physical print or hardware calibration occurred. The prebuilt updater is not implemented yet: pulling Git source alone does not refresh an installed sealed frontend; the existing build/deployment process is still required until that updater is delivered.
+The Workshop and bounded label repair waves are implemented and verified in the isolated local app. No Pi deployment, physical print or hardware calibration occurred. The prebuilt updater is not implemented yet: pulling Git source alone does not refresh an installed sealed frontend; the existing build/deployment process is still required until that updater is delivered.
