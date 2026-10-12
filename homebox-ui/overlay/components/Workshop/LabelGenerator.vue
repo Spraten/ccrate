@@ -38,19 +38,22 @@ type Workspace = {
     recovery: () => void;
   };
 };
+const REVIEW_LIMIT = 36;
 const props = defineProps<{ workspace: Workspace | null; status: string }>();
 const search = ref("");
 const designerOpen = ref(false);
 const designerRef = ref<InstanceType<typeof LabelDesigner> | null>(null);
+const selectionNotice = ref("");
 watch(() => props.workspace, value => { if (!value) designerOpen.value = false; });
 const items = computed(() => (props.workspace?.items || []).filter(item =>
   `${item.name} ${item.assetId || ""}`.toLowerCase().includes(search.value.toLowerCase()),
 ).slice(0, 100));
 const selected = (id: string) => props.workspace?.selectedIds.includes(id) || false;
-const canReview = computed(() => !!props.workspace && props.workspace.selectedIds.length > 0 && !!props.workspace.templateId && !props.workspace.busy);
+const canReview = computed(() => !!props.workspace && props.workspace.selectedIds.length > 0 && props.workspace.selectedIds.length <= REVIEW_LIMIT && !!props.workspace.templateId && !props.workspace.busy);
+const selectedTemplate = computed(() => props.workspace?.templates.find(template => template.id === props.workspace?.templateId));
 const canCompose = computed(() => {
   const rows = props.workspace?.reviews || [];
-  return rows.length > 0 && rows.every(row => row.profile === "letter" && row.label_mm?.join("|") === rows[0]?.label_mm?.join("|"));
+  return rows.length > 0 && rows[0]?.label_mm?.length === 2 && rows.every(row => row.profile === "letter" && row.label_mm?.length === 2 && row.label_mm.join("|") === rows[0]?.label_mm?.join("|"));
 });
 const templateName = (template: Template) => template.id.startsWith("starter:")
   ? `${template.name} · Starter`
@@ -58,6 +61,8 @@ const templateName = (template: Template) => template.id.startsWith("starter:")
 function toggleItem(id: string, checked: boolean) {
   const ids = [...(props.workspace?.selectedIds || [])];
   const index = ids.indexOf(id);
+  if (checked && index < 0 && ids.length >= REVIEW_LIMIT) { selectionNotice.value = `Review up to ${REVIEW_LIMIT} labels at a time.`; return; }
+  selectionNotice.value = "";
   if (checked && index < 0) ids.push(id);
   if (!checked && index >= 0) ids.splice(index, 1);
   props.workspace?.actions.select(ids);
@@ -85,9 +90,10 @@ function designerClosed() {
 
 <template>
   <div class="label-generator mx-auto w-full max-w-none space-y-4">
-    <header>
-      <h1 class="text-2xl font-semibold tracking-tight">Label maker</h1>
-      <p class="text-sm text-muted-foreground">Choose current equipment and a saved design, then generate reviewed labels or a Letter sheet.</p>
+    <header class="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4 text-card-foreground">
+      <div><h1 class="text-2xl font-semibold tracking-tight">Label maker</h1>
+      <p class="text-sm text-muted-foreground">Choose equipment, then review labels before printing or making a Letter sheet.</p></div>
+      <Button :variant="designerOpen ? 'outline' : 'default'" :disabled="!workspace || workspace.busy" @click="toggleDesigner">{{ designerOpen ? 'Close label design' : 'Design a label' }}</Button>
     </header>
 
     <template v-if="workspace">
@@ -95,12 +101,18 @@ function designerClosed() {
         {{ workspace.pendingActions }} action{{ workspace.pendingActions === 1 ? ' has' : 's have' }} an unconfirmed result. Check saved actions before retrying.
         <Button variant="outline" class="ml-2" @click="workspace.actions.recovery()">Check saved actions</Button>
       </div>
-      <div class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,.9fr)]">
+      <section v-if="designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
+        <p class="mb-3 text-sm text-muted-foreground">Edit a reusable design for this collection. Draft previews do not create reviewed labels or start a print.</p>
+        <LabelDesigner ref="designerRef" :selected-item="workspace.items.find(item => item.id === workspace.selectedIds[0])" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @busy="workspace.actions.designerBusy" />
+      </section>
+
+      <div v-if="!designerOpen" class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,.9fr)]">
         <section class="rounded-lg border bg-card p-4 text-card-foreground">
           <div class="mb-3 flex items-center justify-between gap-3">
             <div><h2 class="text-lg font-semibold">Equipment</h2><p class="text-sm text-muted-foreground">{{ workspace.selectedIds.length }} selected in this collection</p></div>
             <Button variant="outline" :disabled="workspace.selectedIds.length === 0" @click="workspace.actions.select([])">Clear selection</Button>
           </div>
+          <p v-if="selectionNotice || workspace.selectedIds.length >= REVIEW_LIMIT" class="mb-2 text-sm text-muted-foreground" role="status">{{ selectionNotice || `Batch limit: ${REVIEW_LIMIT} items per review.` }}</p>
           <Label for="label-equipment-search">Search equipment</Label>
           <Input id="label-equipment-search" v-model="search" type="search" placeholder="Search name or asset code" />
           <div class="mt-3 max-h-64 overflow-auto rounded-md border">
@@ -124,33 +136,34 @@ function designerClosed() {
                 </SelectContent>
               </Select>
             </div>
-            <div class="space-y-2">
+            <div v-if="selectedTemplate?.profile === 'letter'" class="space-y-2">
               <Label>Page margin (mm)</Label>
               <Input aria-label="Page margin (mm)" type="number" min="0" step="0.1" :model-value="workspace.marginMm" @update:model-value="updateLayout('margin', $event)" />
             </div>
-            <div class="space-y-2">
+            <div v-if="selectedTemplate?.profile === 'letter'" class="space-y-2">
               <Label>Label gap (mm)</Label>
               <Input aria-label="Label gap (mm)" type="number" min="0" step="0.1" :model-value="workspace.gapMm" @update:model-value="updateLayout('gap', $event)" />
             </div>
           </div>
-          <p class="mt-3 text-sm text-muted-foreground">Letter sheets follow the selected design’s physical label size. Print at Actual Size / 100%.</p>
+          <p v-if="selectedTemplate?.profile === 'letter'" class="mt-3 text-sm text-muted-foreground">Letter sheets follow the selected design’s physical label size. Print at Actual Size / 100%.</p>
+          <p v-else class="mt-3 text-sm text-muted-foreground">SUPVAN labels are sent to the Pi only after individual review and print confirmation.</p>
           <Button class="mt-4 w-full" :disabled="!canReview" @click="workspace.actions.review()">Review selected labels</Button>
         </section>
       </div>
 
-      <section class="rounded-lg border bg-card p-4 text-card-foreground">
+      <section v-if="!designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
         <h2 class="text-lg font-semibold">Reviewed labels</h2>
         <p v-if="!workspace.reviews.length" class="text-sm text-muted-foreground">Review selected labels to see current item values before output.</p>
         <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <article v-for="row in workspace.reviews" :key="row.review_id" class="rounded-md border p-3">
             <img :src="row.image" :alt="'Reviewed label for ' + (workspace.items.find(item => item.id === row.entity_id)?.name || 'equipment')" class="mx-auto max-h-56 max-w-full bg-white object-contain" />
             <p class="truncate text-sm font-medium">{{ workspace.items.find(item => item.id === row.entity_id)?.name || row.entity_id }}</p>
-            <Button variant="outline" class="mt-2 w-full" :disabled="workspace.busy || workspace.printedReviewIds.includes(row.review_id)" @click="workspace.actions.printItem(row.entity_id, row.review_id)">{{ workspace.printedReviewIds.includes(row.review_id) ? 'Print submitted' : 'Confirm Pi label print' }}</Button>
+            <Button v-if="row.profile === 'supvan'" variant="outline" class="mt-2 w-full" :disabled="workspace.busy || workspace.printedReviewIds.includes(row.review_id)" @click="workspace.actions.printItem(row.entity_id, row.review_id)">{{ workspace.printedReviewIds.includes(row.review_id) ? 'Print submitted' : 'Confirm Pi label print' }}</Button>
           </article>
         </div>
       </section>
 
-      <section class="rounded-lg border bg-card p-4 text-card-foreground">
+      <section v-if="!designerOpen && (selectedTemplate?.profile === 'letter' || workspace.pages.length || workspace.reviews.some(row => row.profile === 'letter'))" class="rounded-lg border bg-card p-4 text-card-foreground">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div><h2 class="text-lg font-semibold">Letter sheet</h2><p class="text-sm text-muted-foreground">Only reviewed Letter labels can be composed.</p></div>
           <div class="flex flex-wrap gap-2">
@@ -164,13 +177,6 @@ function designerClosed() {
         </div>
       </section>
 
-      <section class="rounded-lg border bg-card p-4 text-card-foreground">
-        <Button variant="outline" :aria-expanded="designerOpen" @click="toggleDesigner">{{ designerOpen ? 'Close advanced reusable design' : 'Advanced reusable design' }}</Button>
-        <template v-if="designerOpen">
-        <p class="my-3 text-sm text-muted-foreground">Edit and save reusable layouts for this collection. Draft previews stay separate from reviewed output.</p>
-        <LabelDesigner v-if="designerOpen" ref="designerRef" :selected-item="workspace.selectedIds[0]" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @busy="workspace.actions.designerBusy" />
-        </template>
-      </section>
     </template>
     <p v-else class="rounded-md border p-4 text-sm text-muted-foreground" :role="status.startsWith('Loading') ? 'status' : 'alert'">{{ status }}</p>
   </div>

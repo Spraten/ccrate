@@ -38,7 +38,7 @@ export function mountLabelDesigner(container, options) {
     }
   };
   window.addEventListener('message', onMessage); container.addEventListener('pointerdown', options.activity || (()=>{}), true); container.append(iframe);
-  return { iframe, canLeave() { return !busy && (!dirty || window.confirm('Discard unsaved label design changes?')); }, invalidate() { epoch++; dirty = false; options.dirty?.(false); }, dispose() { if (disposed) return; disposed = true; epoch++; window.removeEventListener('message', onMessage); container.replaceChildren(); } };
+  return { iframe, canLeave() { return !busy && (!dirty || window.confirm('Discard unsaved label design changes?')); }, updateContext(context) { if (!disposed) iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'initialize', data: { context, epoch } }, location.origin); }, invalidate() { epoch++; dirty = false; options.dirty?.(false); }, dispose() { if (disposed) return; disposed = true; epoch++; window.removeEventListener('message', onMessage); container.replaceChildren(); } };
 }
 
 export const createLabelEditorFrame = mountLabelDesigner;

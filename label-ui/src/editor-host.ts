@@ -1,4 +1,4 @@
-import { createApp, defineComponent, h, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { createApp, defineComponent, h, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { createPinia } from 'pinia'
 import { secureRandomId } from '@print-design-pro/core/secure-random-id'
 import PrintDesigner from '@print-design-pro/components/shell/PrintDesigner.vue'
@@ -7,6 +7,7 @@ import { createEmptyTemplate, type TemplateDocument } from '@print-design-pro/co
 import { useDocumentStore } from '@print-design-pro/stores/document-store'
 import { useHistoryStore } from '@print-design-pro/stores/history-store'
 import { useSelectionStore } from '@print-design-pro/stores/selection-store'
+import { useViewportStore } from '@print-design-pro/stores/viewport-store'
 import { openTemplate } from '@print-design-pro/core/open-template'
 import { cloneJson } from '@print-design-pro/core/clone'
 import starters from './starter-documents.json'
@@ -24,6 +25,23 @@ export function mmToFontPoints(mm: number): number { return mm * 72 / 25.4 }
 declare global { interface Window { labelFontPointsFromMm: typeof mmToFontPoints } }
 window.labelFontPointsFromMm = mmToFontPoints
 
+function applyHostTheme(theme: any): void {
+  if (!theme || typeof theme !== 'object') return
+  const tokens: Record<string, unknown> = {
+    '--pp-color-app-bg': theme.background, '--pp-color-app-panel': theme.background,
+    '--pp-color-app-inset': theme.muted, '--pp-color-app-border': theme.border,
+    '--pp-color-app-border2': theme.border, '--pp-color-app-desk': theme.muted,
+    '--pp-color-app-text': theme.foreground, '--pp-color-app-text2': theme.mutedForeground, '--pp-color-app-text3': theme.mutedForeground,
+    '--pp-color-brand-500': theme.primary, '--pp-color-brand-600': theme.primary,
+    '--pp-color-brand-700': theme.primary, '--pp-color-brand-soft': theme.accent,
+    '--pp-color-brand-soft2': theme.accent, '--pp-color-brand-50': theme.accent,
+    '--pp-color-brand-100': theme.accent, '--pp-color-app-ok': theme.primary,
+    '--pp-color-app-ok-soft': theme.accent,
+  }
+  for (const [name, value] of Object.entries(tokens))
+    if (typeof value === 'string' && value.length < 120) document.documentElement.style.setProperty(name, value)
+}
+
 function starter(profile: Profile, kind = 'left'): TemplateDocument {
   const source = starterMap[`starter:${profile}:${kind}`]
   if (source) return cloneJson(source)
@@ -36,6 +54,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
   const trustedOrigin = location.origin
   let disposed = false, dirty = false, busy = false, instanceEpoch = 0, activeFieldEpoch = 0
   let bridgeContext: any = null
+  let applyBridgeContext: ((context: any) => void) | null = null
   const send = (message: Omit<Message, 'channel' | 'nonce'>) => { if (!disposed && window.parent !== window) window.parent.postMessage({ channel: 'label-designer', nonce, ...message }, trustedOrigin) }
   const requests = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }>()
   const request = (action: string, data?: any) => new Promise<any>((resolve, reject) => {
@@ -43,19 +62,39 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
   })
   const app = createApp(defineComponent({
     setup() {
-      const doc = useDocumentStore(), history = useHistoryStore(), selection = useSelectionStore()
+      const doc = useDocumentStore(), history = useHistoryStore(), selection = useSelectionStore(), viewport = useViewportStore()
       const document = ref(starter('supvan')), revision = ref(0), profile = ref<Profile>('supvan'), selectedId = ref<string | null>('starter:supvan:left')
       const templates = ref<any[]>([]), message = ref(''), preview = ref<any>(null), sampleName = ref('Sample item'), sampleCode = ref(''), selectedItem = ref('')
       let baseline = ''
+      let draftPreviewRevision = 0
       const snapshot = () => cloneJson(doc.document)
+      let fitVersion = 0
+      const fitToPage = (page: TemplateDocument['page']) => {
+        const version = ++fitVersion
+        void nextTick().then(() => requestAnimationFrame(() => {
+          if (version !== fitVersion || disposed) return
+          const canvas = container.querySelector<HTMLElement>('[data-pp-viewport]')
+          if (canvas) viewport.fitToPage({ width: canvas.clientWidth, height: canvas.clientHeight }, { widthMm: page.widthMm, heightMm: page.heightMm })
+        }))
+      }
       const changed = () => {
+        draftPreviewRevision++; preview.value = null
         const current = snapshot(); dirty = JSON.stringify(current) !== baseline
         bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } }); bridge.changed?.(current)
       }
       const notify = (text: string) => { message.value = text; bridge.notify?.(text) }
       const load = (value: TemplateDocument, id: string | null = null) => {
         document.value = cloneJson(value); openTemplate(document.value, { document: doc, history, selection });
-        selectedId.value = id; if (!id) revision.value = 0; baseline = JSON.stringify(snapshot()); dirty = false; bridge.dirty?.(false); send({ type: 'dirty', data: { dirty: false } })
+        selectedId.value = id; if (!id) revision.value = 0; baseline = JSON.stringify(snapshot()); dirty = false; draftPreviewRevision++; preview.value = null; bridge.dirty?.(false); send({ type: 'dirty', data: { dirty: false } }); fitToPage(document.value.page)
+      }
+      applyBridgeContext = (context: any) => {
+        applyHostTheme(context?.theme)
+        const item = context?.selected_item
+        const nextId = typeof item?.entity_id === 'string' ? item.entity_id : ''
+        const nextName = typeof item?.name === 'string' ? item.name : 'Sample item'
+        const nextCode = typeof item?.asset_code === 'string' ? item.asset_code : ''
+        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value) { draftPreviewRevision++; preview.value = null }
+        selectedItem.value = nextId; sampleName.value = nextName; sampleCode.value = nextCode
       }
       const invoke = async (action: string, data: any, write = false) => {
         busy = true; bridge.busy?.(true); send({ type: 'busy', data: { busy: true } })
@@ -82,8 +121,11 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         }
       }
       const previewDraft = async () => {
+        const version = ++draftPreviewRevision
         const data = selectedItem.value ? { mode: 'item_draft', entity_id: selectedItem.value, profile: profile.value, document: snapshot() } : { mode: 'synthetic', profile: profile.value, document: snapshot(), sample: { item_name: sampleName.value, asset_code: sampleCode.value } }
-        preview.value = await invoke('labels/preview', data); notify('Draft preview ready. It is not saved or printable.')
+        const result = await invoke('labels/preview', data)
+        if (version !== draftPreviewRevision || disposed) return
+        preview.value = result; notify('Draft preview ready. It is not saved or printable.')
       }
       const buttons = () => h('div', { class: 'label-host-toolbar' }, [
         h('label', ['Profile ', h('select', { value: profile.value, onChange: (e: Event) => { if (dirty && !window.confirm('Discard unsaved label design changes?')) { (e.target as HTMLSelectElement).value = profile.value; return } profile.value = (e.target as HTMLSelectElement).value as Profile; load(starter(profile.value), null) } }, [h('option', { value: 'supvan' }, 'SUPVAN 40 × 28 mm'), h('option', { value: 'letter' }, 'Letter label 60 × 40 mm')])]),
@@ -91,24 +133,22 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         h('button', { onClick: () => loadList().catch((e: Error) => notify(e.message)) }, 'Refresh'), h('button', { disabled: !history.canUndo, onClick: history.undo }, 'Undo'), h('button', { disabled: !history.canRedo, onClick: history.redo }, 'Redo'),
         h('button', { onClick: () => save(false).catch((e: Error) => notify(e.message)) }, 'Save'), h('button', { onClick: () => save(true).catch((e: Error) => notify(e.message)) }, 'Duplicate'),
         h('button', { onClick: () => { if (dirty && !window.confirm('Discard unsaved label design changes?')) return; const value = selectedId.value && !selectedId.value.startsWith('starter:') ? templates.value.find((t: any) => t.id === selectedId.value) : null; value ? loadTemplate(value.id).catch((e: Error) => notify(e.message)) : load(starter(profile.value), null) } }, 'Reset'),
-        h('input', { value: selectedItem.value, placeholder: 'Selected item UUID (optional)', 'aria-label': 'Selected item UUID', onInput: (e: Event) => selectedItem.value = (e.target as HTMLInputElement).value }),
-        h('input', { value: sampleName.value, placeholder: 'Sample item name', 'aria-label': 'Sample item name', onInput: (e: Event) => sampleName.value = (e.target as HTMLInputElement).value }),
-        h('input', { value: sampleCode.value, placeholder: 'Asset code', 'aria-label': 'Asset code', onInput: (e: Event) => sampleCode.value = (e.target as HTMLInputElement).value }),
+        h('span', { class: 'label-host-selected-item', role: 'status' }, selectedItem.value ? `Draft preview for ${sampleName.value}` : 'Draft preview with a sample item'),
         h('button', { onClick: () => previewDraft().catch((e: Error) => notify(e.message)) }, 'Preview draft'),
       ])
       watch(() => history.editVersion, changed, { flush: 'sync' })
-      onMounted(() => { baseline = JSON.stringify(snapshot()); void loadList().catch((e: Error) => notify(e.message)); send({ type: 'ready', data: { nonce } }) })
+      onMounted(() => { load(starter('supvan'), 'starter:supvan:left'); baseline = JSON.stringify(snapshot()); void loadList().catch((e: Error) => notify(e.message)); send({ type: 'ready', data: { nonce } }) })
       onBeforeUnmount(() => { if (dirty) bridge.dirty?.(true) })
       return () => h('div', { class: 'label-host' }, [buttons(), h('p', { role: 'status', class: 'label-host-message' }, message.value), h('div', { class: 'label-host-editor' }, [h(PrintDesigner, { modelValue: document.value, 'onUpdate:modelValue': (next: TemplateDocument) => { document.value = next; changed() } })]), preview.value ? h('section', { class: 'label-preview' }, [h('h2', 'Draft preview'), h('img', { src: preview.value.image, alt: 'Draft label preview' }), h('button', { onClick: () => preview.value = null }, 'Close preview')]) : null])
     },
   }))
-  const exportGuard = document.createElement('style'); exportGuard.textContent = '[data-pp-export-open]{display:none!important} .label-host-editor{height:min(74vh,820px);min-height:520px} .label-host-editor [data-pp-designer]{height:100%!important;min-height:520px} .label-host-toolbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:#eef2f5;color:#183348} .label-host-toolbar button,.label-host-toolbar select,.label-host-toolbar input{min-height:40px;padding:6px 10px;border:1px solid #a3b6c5;border-radius:6px;font:inherit} .label-host-toolbar label{display:flex;gap:6px;align-items:center} .label-host-message{min-height:1.5em} .label-preview img{max-width:100%;image-rendering:pixelated}'; document.head.append(exportGuard); app.use(createPinia()); app.mount(container)
+  const exportGuard = document.createElement('style'); exportGuard.textContent = ':root,:root[data-theme="dark"]{--pp-color-app-bg:#f5f7f5;--pp-color-app-panel:#fff;--pp-color-app-inset:#edf1ee;--pp-color-app-border:#d9e1db;--pp-color-app-border2:#b8c7bb;--pp-color-app-desk:#e9eee9;--pp-color-app-text:#1c2b21;--pp-color-app-text2:#53645a;--pp-color-app-text3:#87958b;--pp-color-brand-500:#36704f;--pp-color-brand-600:#285d40;--pp-color-brand-soft:#e7f0e9;--pp-color-brand-soft2:#d5e5d9;--pp-color-brand-50:#e7f0e9;--pp-color-brand-100:#d5e5d9;--pp-color-brand-700:#244f37;--pp-color-app-ok:#36704f;--pp-color-app-ok-soft:#e7f0e9}[data-pp-export-open]{display:none!important} [data-pp-paper-preset],[data-pp-paper-select]{display:none!important} .label-host-editor{height:min(68vh,760px);min-height:390px} .label-host-editor [data-pp-designer]{height:100%!important;min-height:390px} .label-host-editor [data-pp-designer]>div{grid-template-columns:minmax(0,1fr) minmax(220px,264px)!important}.label-host-editor [data-pp-designer]>div>aside:first-child{display:none} .label-host-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px;background:var(--pp-color-app-panel);color:var(--pp-color-app-text);border:1px solid var(--pp-color-app-border);border-radius:7px} .label-host-toolbar button,.label-host-toolbar select,.label-host-toolbar input{min-width:0;max-width:100%;min-height:40px;padding:6px 10px;border:1px solid var(--pp-color-app-border2);border-radius:6px;background:var(--pp-color-app-panel);color:var(--pp-color-app-text);font:inherit} .label-host-toolbar button:focus-visible,.label-host-toolbar select:focus-visible,.label-host-toolbar input:focus-visible{outline:2px solid var(--pp-color-brand-500);outline-offset:2px} .label-host-toolbar label{display:flex;gap:6px;align-items:center} .label-host-message{min-height:1.5em} .label-host-selected-item{align-self:center;padding:8px 10px;color:var(--pp-color-app-text2);font-size:.875rem} .label-preview img{max-width:100%;image-rendering:pixelated}@media(max-width:700px){.label-host-editor{height:920px;min-height:920px;overflow:auto}.label-host-editor [data-pp-designer]{height:auto!important;min-height:880px;grid-template-rows:52px auto}.label-host-editor [data-pp-designer]>div{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto minmax(300px,420px) auto!important}.label-host-editor [data-pp-designer]>div>aside:first-child{display:none}.label-host-editor [data-pp-designer]>div>main{min-height:360px}.label-host-toolbar>*{flex:1 1 135px}}'; document.head.append(exportGuard); app.use(createPinia()); app.mount(container)
   const onMessage = (event: MessageEvent<Message>) => {
     if (disposed || event.origin !== trustedOrigin || event.source !== window.parent || event.data?.channel !== 'label-designer' || event.data.nonce !== nonce) return
     bridge.activity?.()
     const message = event.data
     if (message.type === 'response' && message.id) { const pending = requests.get(message.id); if (pending) { requests.delete(message.id); message.ok ? pending.resolve(message.result) : pending.reject(new Error(message.error || 'Label request failed.')) } }
-    if (message.type === 'initialize') { bridgeContext = message.data?.context; void bridgeContext }
+    if (message.type === 'initialize') { bridgeContext = message.data?.context; applyBridgeContext?.(bridgeContext) }
     if (message.type === 'session-activity') bridge.activity?.()
   }
   window.addEventListener('message', onMessage)
