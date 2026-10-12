@@ -471,6 +471,22 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertEqual((saved['name'],saved['x'],saved['y'],saved['width'],saved['height']),('Shelf A1',1,1,6,1.25))
         self.assertEqual(self.errors,[])
 
+    def test_geometry_apply_flushes_input_without_change_event(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':LOCATION,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[{'id':DRAWING,'name':'Rack','kind':'Rack','x':3.75,'y':2,'width':3,'height':2,'rotation':0,'location_id':LOCATION}]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        for label,value in [('Position X in feet','1'),('Position Y in feet','1'),('Drawing width in feet','6'),('Drawing depth in feet','1.25')]:
+            self.page.get_by_label(label).evaluate('(el,value)=>{el.value=value;el.dispatchEvent(new Event("input",{bubbles:true}))}',value)
+        self.page.get_by_role('button',name='Apply geometry',exact=True).evaluate('(el)=>el.click()')
+        for label,value in [('Position X in feet','1'),('Position Y in feet','1'),('Drawing width in feet','6'),('Drawing depth in feet','1.25')]:
+            self.assertEqual(self.page.get_by_label(label).input_value(),value,label)
+        self.assertTrue(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.get_by_role('button',name='Save all room changes').click()
+        saved=self.page.evaluate('window.writes.at(-1)[1].document.rooms[0].objects[0]')
+        self.assertEqual((saved['x'],saved['y'],saved['width'],saved['height']),(1,1,6,1.25))
+        self.assertEqual(self.errors,[])
+
     def test_native_rename_refresh_keeps_geometry_and_updates_paths(self):
         self.page.get_by_role('button', name='Edit layout').click()
         self.page.get_by_role('button', name='Room settings').click()
