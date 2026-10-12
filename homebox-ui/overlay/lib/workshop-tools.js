@@ -375,7 +375,7 @@ function paintPlannerCanvas(room, canvas) {
     const text = svgNode('text', {
       x: object.width / 2, y: object.height / 2, 'text-anchor': 'middle',
       'dominant-baseline': 'middle', 'font-size': .3,
-      fill: plannerContrastInk(attentionOverlay?'#9B1C1C':object.color||defaultFill),
+      fill: attentionOverlay?'hsl(var(--destructive-foreground))':plannerContrastInk(object.color||defaultFill),
     }, object.name);
     const details=svgNode('g',{'pointer-events':'none'}),linkMarker=svgNode('circle',{cx:object.width-.18,cy:.18,r:.085,fill:object.location_id?'#2E78AD':'hsl(var(--background))',stroke:object.location_id?'#1D5C8A':'#718087','stroke-width':.04,'data-link-indicator':object.location_id?'linked':'drawing-only','pointer-events':'none'});
     const setFootprint = () => {
