@@ -425,7 +425,7 @@ class WorkshopBrowserTests(unittest.TestCase):
         ]
         document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':drawings}]}
         self.install_rooms4_plan(document,selected_drawing=DRAWING)
-        self.page.locator('html').evaluate("el=>el.style.setProperty('--foreground','0 0% 98%')")
+        self.page.locator('html').evaluate("el=>{el.style.setProperty('--foreground','0 0% 98%');el.style.setProperty('--background','220 20% 12%')}")
         palette=self.page.locator('.planner-palette')
         self.assertEqual(palette.evaluate('(el)=>getComputedStyle(el).display'),'none')
         self.assertEqual(self.page.get_by_role('button',name='Objects',exact=True).count(),0)
@@ -438,7 +438,9 @@ class WorkshopBrowserTests(unittest.TestCase):
         caption=self.page.locator('[data-workshop-drawing="'+DRAWING+'"] text')
         self.assertIsNone(caption.get_attribute('textLength'))
         self.assertIsNone(caption.get_attribute('lengthAdjust'))
-        self.assertEqual(caption.get_attribute('fill'),'#263943','light material captions must retain dark ink in dark themes')
+        contrast=caption.evaluate('''text=>{const backing=text.parentElement.querySelector('[data-workshop-caption-backdrop]'),ink=getComputedStyle(text).fill,background=getComputedStyle(backing).fill,channels=color=>color.match(/[\\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}),lum=color=>channels(color).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0),a=lum(ink),b=lum(background);return {ink,background,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),opacity:getComputedStyle(backing).opacity}}''')
+        self.assertGreaterEqual(contrast['ratio'],4.5,contrast)
+        self.assertEqual(contrast['opacity'],'1')
         self.assertGreaterEqual(float(caption.get_attribute('font-size')),.38)
         long_caption=self.page.locator('[data-workshop-drawing="'+RACK+'"] text')
         full_name=drawings[1]['name']
