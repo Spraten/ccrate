@@ -118,6 +118,8 @@ class WorkshopLayoutTests(unittest.TestCase):
               return {viewport:[innerWidth,innerHeight],pageHeight:document.documentElement.scrollHeight,plannerBottom:planner.bottom,footerTop:footer.top,root:[root.clientWidth,root.scrollWidth],workspace:[workspace.clientWidth,workspace.scrollWidth],
                 canvas:box('.planner-canvas-frame'),palette:box('.planner-palette'),inspector:box('.planner-inspector'),
                 canvasToolsRows:new Set([...document.querySelector('.planner-canvas-tools').children].map(el=>Math.round((el.getBoundingClientRect().top+el.getBoundingClientRect().bottom)/2/12))).size,
+                canvasToolButtonFont:parseFloat(getComputedStyle(document.querySelector('.planner-canvas-tools>button')).fontSize),
+                rootFont:parseFloat(getComputedStyle(document.documentElement).fontSize),
                 paletteOverflow:getComputedStyle(document.querySelector('.planner-palette')).overflowY,
                 inspectorOverflow:getComputedStyle(document.querySelector('.planner-inspector')).overflowY};
             }''')
@@ -130,6 +132,7 @@ class WorkshopLayoutTests(unittest.TestCase):
             self.assertLessEqual(geometry['palette']['width'], 240, geometry)
             self.assertLessEqual(geometry['inspector']['width'], 240, geometry)
             self.assertLessEqual(geometry['canvasToolsRows'], 2, geometry)
+            self.assertGreaterEqual(geometry['canvasToolButtonFont'], geometry['rootFont'] * .69, geometry)
             self.assertGreater(geometry['canvas']['width'] * geometry['canvas']['height'],
                                geometry['palette']['width'] * geometry['palette']['height'], geometry)
             self.assertEqual((geometry['paletteOverflow'], geometry['inspectorOverflow']), ('auto', 'auto'))
