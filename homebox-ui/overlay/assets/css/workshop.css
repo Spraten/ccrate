@@ -95,12 +95,12 @@
 .workshop-native .planner-palette,.workshop-native .planner-canvas-panel,.workshop-native .planner-inspector{min-width:0;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background:var(--planner-panel);padding:.65rem}
 .workshop-native .room-planner:not(.is-editing) .planner-palette{display:none}
 .workshop-native .planner-palette{container-type:inline-size;display:flex;flex-direction:column;max-height:min(62dvh,calc(100dvh - 12rem));min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
-.workshop-native .planner-palette>h2{order:0;flex:0 0 auto}
-.workshop-native .planner-palette>input[type=search]{order:1;flex:0 0 auto}
-.workshop-native .planner-palette>.planner-presets{order:2;flex:0 0 auto}
-.workshop-native .planner-palette>.planner-object-group{order:3;flex:0 0 auto}
-.workshop-native .planner-palette>.sub{order:4;flex:0 0 auto}
-.workshop-native .planner-palette>.planner-storage{order:5;flex:0 0 auto}
+.workshop-native .planner-palette>h2{flex:0 0 auto}
+.workshop-native .planner-palette>input[type=search]{flex:0 0 auto}
+.workshop-native .planner-palette>.planner-presets{flex:0 0 auto}
+.workshop-native .planner-palette>.planner-object-group{flex:0 0 auto}
+.workshop-native .planner-palette>.sub{flex:0 0 auto}
+.workshop-native .planner-palette>.planner-storage{flex:0 0 auto}
 .workshop-native .planner-palette h2,.workshop-native .planner-inspector h2{font-size:.92rem;margin:0 0 .4rem}
 .workshop-native .planner-palette>input[type=search]{position:sticky;top:0;z-index:1;box-sizing:border-box;width:100%;height:2.15rem;margin:0 0 .4rem;font-size:.8rem;background:hsl(var(--background))}
 .workshop-native .planner-object-group{border-top:1px solid hsl(var(--border));padding:.25rem 0}
