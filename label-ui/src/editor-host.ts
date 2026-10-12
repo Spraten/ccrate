@@ -11,6 +11,7 @@ import { useSelectionStore } from '@print-design-pro/stores/selection-store'
 import { useViewportStore } from '@print-design-pro/stores/viewport-store'
 import { openTemplate } from '@print-design-pro/core/open-template'
 import { cloneJson } from '@print-design-pro/core/clone'
+import { createDraftPreviewGuard, isSameDocumentSnapshot } from './draft-preview-guard.js'
 import starters from './starter-documents.json'
 import { validateLabelDocument } from './profile-validation'
 import '@print-design-pro/styles/index.css'
@@ -71,7 +72,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       const document = ref(starter('supvan')), revision = ref(0), profile = ref<Profile>('supvan'), selectedId = ref<string | null>('starter:supvan:left')
       const templates = ref<any[]>([]), message = ref(''), preview = ref<any>(null), sampleName = ref('Sample item'), sampleCode = ref(''), selectedItem = ref('')
       let baseline = ''
-      let draftPreviewRevision = 0
+      const draftPreview = createDraftPreviewGuard()
       const snapshot = () => cloneJson(doc.document)
       let fitVersion = 0
       const fitToPage = (page: TemplateDocument['page']) => {
@@ -83,7 +84,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         }))
       }
       const changed = () => {
-        draftPreviewRevision++; preview.value = null
+        draftPreview.invalidate(); preview.value = null
         const current = snapshot(); dirty = JSON.stringify(current) !== baseline
         bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } }); bridge.changed?.(current)
       }
@@ -91,7 +92,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       const placementWarning = () => notify('This element overlaps existing artwork. It is selected; move it to a clear area before saving.')
       const load = (value: TemplateDocument, id: string | null = null) => {
         document.value = cloneJson(value); openTemplate(document.value, { document: doc, history, selection });
-        selectedId.value = id; if (!id) revision.value = 0; baseline = JSON.stringify(snapshot()); dirty = false; draftPreviewRevision++; preview.value = null; bridge.dirty?.(false); send({ type: 'dirty', data: { dirty: false } }); fitToPage(document.value.page)
+        selectedId.value = id; if (!id) revision.value = 0; baseline = JSON.stringify(snapshot()); dirty = false; draftPreview.invalidate(); preview.value = null; bridge.dirty?.(false); send({ type: 'dirty', data: { dirty: false } }); fitToPage(document.value.page)
       }
       applyBridgeContext = (context: any) => {
         applyHostTheme(context?.theme)
@@ -99,7 +100,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         const nextId = typeof item?.entity_id === 'string' ? item.entity_id : ''
         const nextName = typeof item?.name === 'string' ? item.name : 'Sample item'
         const nextCode = typeof item?.asset_code === 'string' ? item.asset_code : ''
-        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value) { draftPreviewRevision++; preview.value = null }
+        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value) { draftPreview.invalidate(); preview.value = null }
         selectedItem.value = nextId; sampleName.value = nextName; sampleCode.value = nextCode
         batchData.setPreviewOverrides(nextId ? { item_name: nextName, asset_code: nextCode, item_path: `/item/${nextId}` } : null)
       }
@@ -129,10 +130,10 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         }
       }
       const previewDraft = async () => {
-        const version = ++draftPreviewRevision
+        const version = draftPreview.begin()
         const data = selectedItem.value ? { mode: 'item_draft', entity_id: selectedItem.value, profile: profile.value, document: snapshot() } : { mode: 'synthetic', profile: profile.value, document: snapshot(), sample: { item_name: sampleName.value, asset_code: sampleCode.value } }
         const result = await invoke('labels/preview', data)
-        if (version !== draftPreviewRevision || disposed) return
+        if (!draftPreview.accepts(version, disposed)) return
         preview.value = result; notify('Draft preview ready. It is not saved or printable.')
       }
       const buttons = () => h('div', { class: 'label-host-toolbar' }, [
@@ -154,7 +155,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       watch(() => history.editVersion, changed, { flush: 'sync' })
       onMounted(() => { window.addEventListener('pp-element-placement-warning', placementWarning); load(starter('supvan'), 'starter:supvan:left'); baseline = JSON.stringify(snapshot()); void loadList().catch((e: Error) => notify(e.message)); send({ type: 'ready', data: { nonce } }) })
       onBeforeUnmount(() => { window.removeEventListener('pp-element-placement-warning', placementWarning); if (dirty) bridge.dirty?.(true) })
-      return () => h('div', { class: 'label-host' }, [buttons(), h('p', { role: 'status', class: 'label-host-message' }, message.value), h('div', { class: 'label-host-editor' }, [h(PrintDesigner, { modelValue: document.value, 'onUpdate:modelValue': (next: TemplateDocument) => { document.value = next; changed() } })]), preview.value ? h('section', { class: 'label-preview' }, [h('h2', 'Draft preview'), h('img', { src: preview.value.image, alt: 'Draft label preview' }), h('button', { onClick: () => preview.value = null }, 'Close preview')]) : null])
+      return () => h('div', { class: 'label-host' }, [buttons(), h('p', { role: 'status', class: 'label-host-message' }, message.value), h('div', { class: 'label-host-editor' }, [h(PrintDesigner, { modelValue: document.value, 'onUpdate:modelValue': (next: TemplateDocument) => { const unchanged = isSameDocumentSnapshot(next, snapshot()); document.value = next; if (!unchanged) changed() } })]), preview.value ? h('section', { class: 'label-preview' }, [h('h2', 'Draft preview'), h('img', { src: preview.value.image, alt: 'Draft label preview' }), h('button', { onClick: () => preview.value = null }, 'Close preview')]) : null])
     },
   }))
   const exportGuard = document.createElement('style'); exportGuard.textContent = `:root,:root[data-theme="dark"]{--pp-color-app-bg:#f5f7f5;--pp-color-app-panel:#fff;--pp-color-app-inset:#edf1ee;--pp-color-app-border:#d9e1db;--pp-color-app-border2:#b8c7bb;--pp-color-app-desk:#e9eee9;--pp-color-app-text:#1c2b21;--pp-color-app-text2:#53645a;--pp-color-app-text3:#87958b;--pp-color-brand-500:#36704f;--pp-color-brand-600:#285d40;--pp-color-brand-soft:#e7f0e9;--pp-color-brand-soft2:#d5e5d9;--pp-color-brand-50:#e7f0e9;--pp-color-brand-100:#d5e5d9;--pp-color-brand-700:#244f37;--pp-color-app-ok:#36704f;--pp-color-app-ok-soft:#e7f0e9}
