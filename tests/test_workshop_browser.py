@@ -404,10 +404,11 @@ class WorkshopBrowserTests(unittest.TestCase):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawings=[
             {'id':DRAWING,'name':'A very long shelf caption','kind':'Rack','x':1,'y':1,'width':3,'height':2,'rotation':0,'location_id':LOCATION},
-            {'id':RACK,'name':'Unlinked bench','kind':'Misc','x':6,'y':1,'width':3,'height':2,'rotation':0,'location_id':None},
+            {'id':RACK,'name':'Long caption for this bench that cannot fit in its drawing '*2,'kind':'Misc','x':6,'y':1,'width':3,'height':2,'rotation':0,'location_id':None},
         ]
         document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':drawings}]}
         self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.locator('html').evaluate("el=>el.style.setProperty('--foreground','0 0% 98%')")
         palette=self.page.locator('.planner-palette')
         self.assertEqual(palette.evaluate('(el)=>getComputedStyle(el).display'),'none')
         self.assertEqual(self.page.get_by_role('button',name='Objects',exact=True).count(),0)
@@ -420,6 +421,13 @@ class WorkshopBrowserTests(unittest.TestCase):
         caption=self.page.locator('[data-workshop-drawing="'+DRAWING+'"] text')
         self.assertIsNone(caption.get_attribute('textLength'))
         self.assertIsNone(caption.get_attribute('lengthAdjust'))
+        self.assertEqual(caption.get_attribute('fill'),'#263943','light material captions must retain dark ink in dark themes')
+        long_caption=self.page.locator('[data-workshop-drawing="'+RACK+'"] text')
+        full_name=drawings[1]['name']
+        shown_caption=long_caption.text_content()
+        self.assertTrue(shown_caption.endswith('…'))
+        self.assertLess(len(shown_caption),len(full_name))
+        self.assertIn(full_name,self.page.locator('[data-workshop-drawing="'+RACK+'"]').get_attribute('aria-label'))
         self.page.get_by_role('button',name='Edit',exact=True).click()
         self.assertEqual(palette.evaluate('(el)=>getComputedStyle(el).display'),'block')
         desktop=self.page.locator('.planner-workspace')
