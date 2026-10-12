@@ -32,9 +32,10 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         BUILDER.BUILD = self.old_build
         self.temp.cleanup()
 
-    def test_sidebar_is_right_aligned_without_leaving_a_left_gap(self):
-        self.assertIn('<Sidebar side="right" collapsible="icon">', self.output)
-        self.assertIn('<SidebarInset class="md:order-first min-h-dvh', self.output)
+    def test_sidebar_is_left_aligned_in_native_provider_order(self):
+        self.assertIn('<Sidebar side="left" collapsible="icon">', self.output)
+        self.assertIn('<SidebarInset class="min-h-dvh', self.output)
+        self.assertNotIn('md:order-first', self.output)
 
     def test_primary_entries_point_to_homebox_and_workshop_routes(self):
         self.assertIn('computed<typeof baseNav>(() => [', self.output)

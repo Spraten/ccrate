@@ -151,8 +151,7 @@ def nest_frontend():
 
 
 def navigation_frontend():
-    replace('layouts/default.vue', '      <Sidebar collapsible="icon">', '      <Sidebar side="right" collapsible="icon">')
-    replace('layouts/default.vue', '<SidebarInset class="min-h-dvh', '<SidebarInset class="md:order-first min-h-dvh')
+    replace('layouts/default.vue', '      <Sidebar collapsible="icon">', '      <Sidebar side="left" collapsible="icon">')
     replace('layouts/default.vue', '<Collapsible v-else default-open', '<Collapsible v-else :default-open="n.name.value !== \'More\'"')
     replace('layouts/default.vue', '<SidebarMenuLink\n                        :href="n.to"', '<CollapsibleTrigger v-if="n.name.value === \'More\'" as-child><SidebarMenuButton :tooltip="n.name.value" class="flex gap-2"><component :is="n.icon" /><span>{{ n.name.value }}</span><MdiChevronRight class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" /></SidebarMenuButton></CollapsibleTrigger>\n                      <SidebarMenuLink v-else\n                        :href="n.to"')
     replace('layouts/default.vue', '<CollapsibleTrigger as-child>\n                        <SidebarMenuButton class="flex size-12', '<CollapsibleTrigger v-if="n.name.value !== \'More\'" as-child>\n                        <SidebarMenuButton class="flex size-12')
