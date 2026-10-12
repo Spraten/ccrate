@@ -127,10 +127,12 @@ index fee9758..cbe6e77 100644
        <span class="pp:text-[9px] pp:font-medium">{{ t(tool.labelKey) }}</span>
 diff --git a/packages/editor/src/core/element-placement.js b/packages/editor/src/core/element-placement.js
 new file mode 100644
-index 0000000..03899bd
+index 0000000..4d875ab
 --- /dev/null
 +++ b/packages/editor/src/core/element-placement.js
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,98 @@
++import { TEXT_LINE_HEIGHT } from '../render/text-layout.ts'
++
 +export function fitElementToPage(element, page, existing = []) {
 +  const scale = Math.min(1, page.widthMm / element.widthMm, page.heightMm / element.heightMm)
 +  const widthMm = Number((element.widthMm * scale).toFixed(3))
@@ -156,7 +158,7 @@ index 0000000..03899bd
 +      ? Math.min(fitted.widthMm, 18.5)
 +      : Math.min(fitted.widthMm, 5)
 +  const minHeight = fitted.type === 'text'
-+    ? Math.min(fitted.heightMm, fitted.fontSizePt * 25.4 / 72 * 1.2)
++    ? Math.min(fitted.heightMm, Math.ceil(fitted.fontSizePt * 25.4 / 72 * TEXT_LINE_HEIGHT * 1000) / 1000)
 +    : fitted.type === 'qr'
 +      ? Math.min(fitted.heightMm, 18.5)
 +      : Math.min(fitted.heightMm, 5)

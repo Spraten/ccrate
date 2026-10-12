@@ -1,3 +1,5 @@
+import { TEXT_LINE_HEIGHT } from '../render/text-layout.ts'
+
 export function fitElementToPage(element, page, existing = []) {
   const scale = Math.min(1, page.widthMm / element.widthMm, page.heightMm / element.heightMm)
   const widthMm = Number((element.widthMm * scale).toFixed(3))
@@ -23,7 +25,7 @@ export function fitElementToPage(element, page, existing = []) {
       ? Math.min(fitted.widthMm, 18.5)
       : Math.min(fitted.widthMm, 5)
   const minHeight = fitted.type === 'text'
-    ? Math.min(fitted.heightMm, fitted.fontSizePt * 25.4 / 72 * 1.2)
+    ? Math.min(fitted.heightMm, Math.ceil(fitted.fontSizePt * 25.4 / 72 * TEXT_LINE_HEIGHT * 1000) / 1000)
     : fitted.type === 'qr'
       ? Math.min(fitted.heightMm, 18.5)
       : Math.min(fitted.heightMm, 5)

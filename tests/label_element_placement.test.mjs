@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { fitElementToPage, overlapsExisting } from '../label-ui/vendor/print-design-pro/src/core/element-placement.js'
+import { fitTextToBox, TEXT_LINE_HEIGHT } from '../label-ui/vendor/print-design-pro/src/render/text-layout.ts'
 
 test('fits new elements to the active label while keeping their center and proportions', () => {
   const text = fitElementToPage({ type: 'text', xMm: -10, yMm: 8, widthMm: 60, heightMm: 12 }, { widthMm: 40, heightMm: 28 })
@@ -28,7 +29,9 @@ test('places readable text into available space around starter artwork without t
     ],
   )
   assert.deepEqual([text.xMm, text.yMm], [21, 19])
-  assert.ok(text.widthMm >= 18.5 && text.heightMm >= 14 * 25.4 / 72 * 1.2)
+  assert.ok(text.widthMm >= 18.5 && text.heightMm >= 14 * 25.4 / 72 * TEXT_LINE_HEIGHT)
+  const rendered = fitTextToBox('Text', text.widthMm, text.heightMm, 14 * 25.4 / 72, { measure: value => [...value].length * 2 })
+  assert.deepEqual(rendered, { lines: ['Text'], truncated: false }, 'the actual print layout keeps the inserted default text legible')
   assert.equal(overlapsExisting(text, [
     { xMm: 2, yMm: 4.5, widthMm: 19, heightMm: 19, visible: true },
     { xMm: 23, yMm: 4, widthMm: 15, heightMm: 7, visible: true },
