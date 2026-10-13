@@ -535,6 +535,7 @@ function paintPlannerCanvas(room, canvas) {
     suppressPlannerClick = false;
     const inverse = plan.getScreenCTM()?.inverse();
     if (!inverse) return;
+    event.preventDefault();
     const screenToRoom = new DOMMatrix([inverse.a,inverse.b,inverse.c,inverse.d,inverse.e,inverse.f]);
     const startPoint = new DOMPoint(event.clientX,event.clientY).matrixTransform(screenToRoom);
     backgroundPan = {

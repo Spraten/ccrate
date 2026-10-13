@@ -706,6 +706,42 @@ class WorkshopBrowserTests(unittest.TestCase):
                     self.page.mouse.up()
         self.assertEqual(self.errors,[])
 
+    def test_repeated_canvas_pans_from_room_to_blank_keep_capture_and_page_position(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':3.75,'y':2,'width':6,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':20,'height':16,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.page.set_viewport_size({'width':1280,'height':720})
+        self.install_rooms4_plan(document)
+        svg=self.page.locator('.planner-svg')
+        svg.evaluate("el=>{el.addEventListener('pointerdown',event=>el.dataset.panDefaultPrevented=String(event.defaultPrevented));el.addEventListener('pointercancel',()=>el.dataset.panPointerCancelled='true')}")
+        initial_scroll=self.page.evaluate('window.scrollY')
+        for index in range(2):
+            surface=svg.locator('[data-room-surface]').bounding_box()
+            svg_box=svg.bounding_box()
+            if index == 1:
+                svg.evaluate("el=>{const text=el.querySelector('text');const range=document.createRange();range.selectNodeContents(text);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.addEventListener('dragstart',()=>el.dataset.panDragStarted='true',true)}")
+                self.assertTrue(self.page.evaluate('window.getSelection().toString().length>0'),'The second gesture starts with SVG caption text selected, matching the native drag state.')
+                start={'x':max(svg_box['x']+4,surface['x']+surface['width']+8),'y':surface['y']+surface['height']/2}
+                end={'x':surface['x']+surface['width']+24,'y':surface['y']+surface['height']/2}
+            else:
+                start={'x':surface['x']+surface['width']/2,'y':surface['y']+surface['height']/2}
+                end={'x':surface['x']+surface['width']+32,'y':surface['y']+surface['height']/2+18}
+            before=svg.get_attribute('viewBox').split()
+            self.page.mouse.move(start['x'],start['y'])
+            self.page.mouse.down()
+            try:
+                self.assertTrue(svg.evaluate('el=>el.classList.contains("is-panning")'))
+                self.assertEqual(svg.get_attribute('data-pan-default-prevented'),'true','The admitted pan pointer must not start native selection, dragging, or autoscroll.')
+                self.assertTrue(svg.evaluate('el=>el.matches(":active")') or self.page.mouse.is_down(), 'A pan pointer should remain active until released.')
+                self.page.mouse.move(end['x'],end['y'])
+                self.assertNotEqual(svg.get_attribute('viewBox').split(),before,'Each successive pan gesture must move the camera.')
+                self.assertEqual(self.page.evaluate('window.scrollY'),initial_scroll,'Panning must not trigger native page autoscroll.')
+            finally:
+                self.page.mouse.up()
+            self.assertNotEqual(svg.get_attribute('data-pan-pointer-cancelled'),'true','Native browser behavior must not cancel a captured pan gesture.')
+            self.assertNotEqual(svg.get_attribute('data-pan-drag-started'),'true','Selected SVG caption text must not start a native drag during canvas panning.')
+        self.assertEqual(self.errors,[])
+
     def test_pointer_cancel_restores_empty_canvas_camera_without_room_edits(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
