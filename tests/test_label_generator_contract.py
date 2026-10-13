@@ -41,7 +41,7 @@ class LabelGeneratorContractTests(unittest.TestCase):
         patch = (ROOT / 'label-ui/patches/0002-label-editor-controls.patch').read_text()
         self.assertIn("key: 'short-code'", patch)
         self.assertIn("createText(place, '{{short_code}}')", patch)
-        self.assertIn("name: 'Short code', widthMm: 28, heightMm: 5.5, fontSizePt: 8, fontWeight: 600", patch)
+        self.assertIn("name: 'Short code', fontSizePt: 9, fontWeight: 400", patch)
         self.assertIn("shortCode:item.shortCode||''", workflow)
         self.assertIn("'Blank design'", editor)
         self.assertIn("Paper size: ${document.value.page.widthMm} × ${document.value.page.heightMm} mm", editor)

@@ -2,6 +2,23 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { fitElementToPage, overlapsExisting } from '../label-ui/vendor/print-design-pro/src/core/element-placement.js'
 import { fitTextToBox, TEXT_LINE_HEIGHT } from '../label-ui/vendor/print-design-pro/src/render/text-layout.ts'
+function createShortCode(place) {
+  return {
+    id: 'short-code',
+    type: 'text',
+    name: 'Short code',
+    content: '{{short_code}}',
+    rotation: 0,
+    locked: false,
+    visible: true,
+    xMm: place.centerXMm - 30,
+    yMm: place.centerYMm - 6,
+    widthMm: 60,
+    heightMm: 12,
+    fontSizePt: 9,
+    fontWeight: 400,
+  }
+}
 
 test('fits new elements to the active label while keeping their center and proportions', () => {
   const text = fitElementToPage({ type: 'text', xMm: -10, yMm: 8, widthMm: 60, heightMm: 12 }, { widthMm: 40, heightMm: 28 })
@@ -37,6 +54,35 @@ test('places readable text into available space around starter artwork without t
     { xMm: 23, yMm: 4, widthMm: 15, heightMm: 7, visible: true },
     { xMm: 23, yMm: 13, widthMm: 15, heightMm: 6, visible: true },
   ]), false)
+})
+
+test('short-code insertion stays centered on blank SUPVAN and keeps 1000-growth codes on one line', () => {
+  const page = { widthMm: 40, heightMm: 28 }
+  const blank = fitElementToPage(createShortCode({ centerXMm: 20, centerYMm: 14 }), page)
+  assert.deepEqual([blank.xMm, blank.yMm, blank.widthMm, blank.heightMm], [0, 10, 40, 8])
+  assert.equal(blank.content, '{{short_code}}')
+  assert.ok(blank.fontSizePt >= 8.504, 'small-paper text stays above the print floor')
+  assert.equal(blank.fontWeight, 400)
+
+  const starter = fitElementToPage(createShortCode({ centerXMm: 20, centerYMm: 14 }), page, [
+    { type: 'qr', xMm: 2, yMm: 4.5, widthMm: 19, heightMm: 19, visible: true },
+    { type: 'text', xMm: 23, yMm: 4, widthMm: 15, heightMm: 7, visible: true },
+    { type: 'text', xMm: 23, yMm: 13, widthMm: 15, heightMm: 6, visible: true },
+  ])
+  const measure = value => [...value].length * (18.515 / 8)
+  for (const code of ['DHP-001', 'WWW-1000']) {
+    assert.deepEqual(fitTextToBox(code, starter.widthMm, starter.heightMm, starter.fontSizePt * 25.4 / 72, { measure }), { lines: [code], truncated: false })
+  }
+
+  const letterPage = { widthMm: 60, heightMm: 40 }
+  const blankLetter = fitElementToPage(createShortCode({ centerXMm: 30, centerYMm: 20 }), letterPage)
+  assert.deepEqual([blankLetter.xMm, blankLetter.yMm, blankLetter.widthMm, blankLetter.heightMm], [0, 14, 60, 12])
+  const letterStarter = fitElementToPage(createShortCode({ centerXMm: 30, centerYMm: 20 }), letterPage, [
+    { type: 'qr', xMm: 2, yMm: 9, widthMm: 22, heightMm: 22, visible: true },
+    { type: 'text', xMm: 29, yMm: 6, widthMm: 28, heightMm: 7, visible: true },
+    { type: 'text', xMm: 29, yMm: 15, widthMm: 28, heightMm: 7, visible: true },
+  ])
+  assert.deepEqual(fitTextToBox('WWW-1000', letterStarter.widthMm, letterStarter.heightMm, letterStarter.fontSizePt * 25.4 / 72, { measure }), { lines: ['WWW-1000'], truncated: false })
 })
 
 test('preserves square QR and tall-image proportions when another element occupies the center', () => {
