@@ -579,6 +579,7 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.install_rooms4_plan(document,selected_drawing=DRAWING)
         group=self.page.locator('[data-workshop-drawing]')
         shape_locator=group.locator('[data-object-shape]')
+        self.page.locator('html').evaluate("el=>{el.style.setProperty('--primary','139 16% 43%');el.style.setProperty('--ring','139 16% 43%')}")
         unfocused=shape_locator.evaluate("el=>{const style=getComputedStyle(el);return {stroke:style.stroke,width:style.strokeWidth,dash:style.strokeDasharray}}")
         self.page.get_by_role('button',name='Pan right',exact=True).focus()
         self.page.keyboard.press('Tab')
