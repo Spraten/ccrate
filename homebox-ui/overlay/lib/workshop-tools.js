@@ -4,6 +4,7 @@ const labelQueues = new Map();
 // Established workshop workflows hosted by C-Crate's native layout.
 export function mountWorkshopTools(root, initialPage, workshop, navigate, notify, /** @type {{entityId:string|null,drawingId:string|null,roomId:string|null}} */ initialSelection={entityId:null,drawingId:null,roomId:null}, /** @type {(workspace:any,status?:string)=>any} */ labelWorkspaceChanged=(workspace)=>workspace) {
 let disposed=false;
+let suppressPlannerClick=false;
 const listeners=[];
 function listen(name, fn){window.addEventListener(name,fn);listeners.push([name,fn]);}
 // Native C-Crate owns inventory and authentication. This page holds no credentials.
@@ -507,29 +508,58 @@ function paintPlannerCanvas(room, canvas) {
   let backgroundPan = null;
   plan.onkeydown = event => { if(event.key==='Escape'&&cancelPendingPalettePlacement()) event.preventDefault(); };
   plan.onclick = event => {
+    if (suppressPlannerClick) {
+      suppressPlannerClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (!event.target.closest('[data-workshop-drawing]') && pendingPaletteKind && manager() && browseMode === 'edit') {
       addDrawingAt(pendingPaletteKind, pointFor(event), pendingPaletteName||pendingPaletteKind,pendingPalettePreset);
     }
   };
-  plan.onpointerdown = event => {
-    if (event.target.closest('[data-workshop-drawing]')) return;
-    if (event.button === 1 || event.shiftKey) {
-      backgroundPan = { x: event.clientX, y: event.clientY, pan: { ...plannerPan } };
-      plan.setPointerCapture(event.pointerId);
+  const endBackgroundPan = (event, cancelled=false) => {
+    if (!backgroundPan || event.pointerId !== backgroundPan.pointerId) return;
+    const gesture = backgroundPan;
+    backgroundPan = null;
+    plan.classList.remove('is-panning');
+    if (gesture.moved) suppressPlannerClick = true;
+    if (cancelled || !plan.isConnected || activeRoomId !== gesture.roomId || plannerZoom !== gesture.zoom) {
+      if (plan.isConnected) plan.setAttribute('viewBox', gesture.viewBox);
+      return;
     }
+    if (gesture.moved) plannerPan = gesture.nextPan;
+  };
+  plan.onpointerdown = event => {
+    if (!event.isPrimary || event.button !== 0 || event.target.closest('[data-workshop-drawing]')) return;
+    suppressPlannerClick = false;
+    const box = plan.getBoundingClientRect();
+    backgroundPan = {
+      pointerId:event.pointerId, x:event.clientX, y:event.clientY,
+      pan:{...plannerPan}, nextPan:{...plannerPan}, roomId:room.id, zoom:plannerZoom,
+      width, height, boxWidth:box.width, boxHeight:box.height,
+      viewBox:plan.getAttribute('viewBox'), moved:false,
+    };
+    plan.classList.add('is-panning');
+    plan.setPointerCapture(event.pointerId);
   };
   plan.onpointermove = event => {
-    if (!backgroundPan) return;
-    const box = plan.getBoundingClientRect(), scaleX = width / Math.max(1, box.width), scaleY = height / Math.max(1, box.height);
-    plannerPan = {
-      x: backgroundPan.pan.x - (event.clientX - backgroundPan.x) * scaleX,
-      y: backgroundPan.pan.y - (event.clientY - backgroundPan.y) * scaleY,
-    };
-    plan.setAttribute('viewBox', `${plannerPan.x} ${plannerPan.y} ${width} ${height}`);
+    if (!backgroundPan || event.pointerId !== backgroundPan.pointerId) return;
+    if (!plan.isConnected || activeRoomId !== backgroundPan.roomId || plannerZoom !== backgroundPan.zoom) {
+      endBackgroundPan(event, true);
+      return;
+    }
+    const dx=event.clientX-backgroundPan.x,dy=event.clientY-backgroundPan.y;
+    if (!backgroundPan.moved && Math.hypot(dx,dy)<3) return;
+    backgroundPan.moved = true;
+    suppressPlannerClick = true;
+    const scaleX=backgroundPan.width/Math.max(1,backgroundPan.boxWidth),scaleY=backgroundPan.height/Math.max(1,backgroundPan.boxHeight);
+    backgroundPan.nextPan={x:backgroundPan.pan.x-dx*scaleX,y:backgroundPan.pan.y-dy*scaleY};
+    plan.setAttribute('viewBox',`${backgroundPan.nextPan.x} ${backgroundPan.nextPan.y} ${backgroundPan.width} ${backgroundPan.height}`);
   };
-  plan.onpointerup = () => {
-    if (backgroundPan) { backgroundPan = null; persistPlannerSession(); }
-  };
+  plan.onpointerup = event => endBackgroundPan(event);
+  plan.onpointercancel = event => endBackgroundPan(event,true);
+  plan.onlostpointercapture = event => endBackgroundPan(event,true);
   canvas.append(plan);
   plannerCanvasObserver=new ResizeObserver(()=>captionRefreshers.forEach(refresh=>refresh()));
   plannerCanvasObserver.observe(plan);

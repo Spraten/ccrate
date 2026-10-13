@@ -613,6 +613,125 @@ class WorkshopBrowserTests(unittest.TestCase):
             self.page.mouse.up()
         self.assertEqual(self.errors,[])
 
+    def test_left_drag_empty_canvas_pans_view_without_editing_room_in_browse_and_edit(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        for mode in ('browse','edit'):
+            if mode=='edit':
+                self.page.get_by_role('button',name='Edit',exact=True).click()
+            svg=self.page.locator('.planner-svg')
+            self.assertEqual(svg.evaluate('el=>getComputedStyle(el).cursor'),'grab')
+            surface=svg.locator('[data-room-surface]')
+            surface_box=surface.bounding_box()
+            start={'x':surface_box['x']+10,'y':surface_box['y']+10}
+            initial_view=svg.get_attribute('viewBox').split()
+            selected_before=self.page.locator('[data-workshop-drawing]').get_attribute('class')
+            drawing_before=self.page.locator('[data-workshop-drawing]').evaluate("el=>['data-x','data-y','data-width','data-height'].map(key=>el.getAttribute(key))")
+            self.page.mouse.click(start['x'],start['y'])
+            self.assertEqual(svg.get_attribute('viewBox').split(),initial_view,'A background click must not pan the camera.')
+            self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('class'),selected_before,'A background click must preserve drawing selection.')
+            self.page.mouse.move(start['x'],start['y'])
+            self.page.mouse.down()
+            self.assertEqual(svg.evaluate('el=>getComputedStyle(el).cursor'),'grabbing')
+            self.page.mouse.move(start['x']+60,start['y']+40)
+            self.page.mouse.up()
+            self.assertEqual(svg.evaluate('el=>getComputedStyle(el).cursor'),'grab')
+            moved_view=svg.get_attribute('viewBox').split()
+            self.assertLess(float(moved_view[0]),float(initial_view[0]),mode)
+            self.assertLess(float(moved_view[1]),float(initial_view[1]),mode)
+            self.assertEqual(self.page.locator('[data-workshop-drawing]').evaluate("el=>['data-x','data-y','data-width','data-height'].map(key=>el.getAttribute(key))"),drawing_before)
+            self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('class'),selected_before)
+            self.assertEqual(self.page.evaluate('window.writes.length'),0)
+            self.assertEqual(self.page.evaluate('window.fixtureLayout.document.rooms[0].objects[0]'),drawing)
+            if mode=='edit':
+                self.assertTrue(self.page.get_by_role('button',name='Save all room changes').is_disabled())
+                self.assertTrue(self.page.get_by_role('button',name='Undo',exact=True).is_disabled())
+        self.assertEqual(self.errors,[])
+
+    def test_pan_drag_does_not_place_pending_catalog_item_but_click_still_does(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        self.install_rooms4_plan(document)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.page.get_by_role('region',name='Object palette').get_by_role('button',name='Bin',exact=True).click()
+        svg=self.page.locator('.planner-svg')
+        surface_box=svg.locator('[data-room-surface]').bounding_box()
+        start={'x':surface_box['x']+10,'y':surface_box['y']+10}
+        initial_view=svg.get_attribute('viewBox').split()
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+55,start['y']+32)
+        self.page.mouse.up()
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').count(),0,'A drag used to pan must not trigger catalog placement.')
+        self.assertNotEqual(svg.get_attribute('viewBox').split(),initial_view)
+        self.assertEqual(self.page.get_by_role('region',name='Object palette').get_by_role('button',name='Bin',exact=True).get_attribute('aria-pressed'),'true')
+        self.assertTrue(self.page.get_by_role('button',name='Save all room changes').is_disabled())
+        svg=self.page.locator('.planner-svg')
+        svg.click(position={'x':svg.bounding_box()['width']/2,'y':svg.bounding_box()['height']/2})
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').count(),1)
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('aria-label'),'Select Bin')
+        self.assertTrue(self.page.get_by_role('button',name='Save all room changes').is_enabled())
+        self.assertEqual(self.errors,[])
+
+    def test_pointer_cancel_restores_empty_canvas_camera_without_room_edits(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        svg=self.page.locator('.planner-svg')
+        initial_view=svg.get_attribute('viewBox').split()
+        surface_box=svg.locator('[data-room-surface]').bounding_box()
+        start={'x':surface_box['x']+10,'y':surface_box['y']+10}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+50,start['y']+28)
+        self.assertNotEqual(svg.get_attribute('viewBox').split(),initial_view,'The pointer must move the camera before cancellation is exercised.')
+        svg.evaluate("el=>el.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:1,pointerType:'mouse'}))")
+        self.assertEqual(svg.get_attribute('viewBox').split(),initial_view)
+        self.page.mouse.up()
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').evaluate("el=>['data-x','data-y'].map(key=>el.getAttribute(key))"),['2','3'])
+        self.assertEqual(self.page.evaluate('window.writes.length'),0)
+        self.assertEqual(self.errors,[])
+
+    def test_zoom_or_room_change_during_pan_does_not_commit_stale_camera_delta(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        other='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]},{'id':other,'location_id':None,'name':'Annex','width':12,'height':16,'unit':'ft','approximate':False,'objects':[]}]}
+        self.install_rooms4_plan(document)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        svg=self.page.locator('.planner-svg')
+        initial=svg.get_attribute('viewBox').split()
+        surface=svg.locator('[data-room-surface]').bounding_box()
+        start={'x':surface['x']+10,'y':surface['y']+10}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+45,start['y']+30)
+        self.assertNotEqual(svg.get_attribute('viewBox').split(),initial)
+        self.page.get_by_role('button',name='Zoom in',exact=True).evaluate('el=>el.click()')
+        zoomed=self.page.locator('.planner-svg').get_attribute('viewBox').split()
+        self.assertEqual(zoomed[:2],initial[:2],'Zooming cancels an in-progress drag without adopting its temporary camera offset.')
+        self.page.mouse.up()
+        self.assertEqual(self.page.locator('.planner-svg').get_attribute('viewBox').split(),zoomed)
+
+        svg=self.page.locator('.planner-svg')
+        before_room_change=svg.get_attribute('viewBox').split()
+        surface=svg.locator('[data-room-surface]').bounding_box()
+        start={'x':surface['x']+10,'y':surface['y']+10}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+42,start['y']+26)
+        self.assertNotEqual(svg.get_attribute('viewBox').split(),before_room_change)
+        self.page.get_by_label('Workshop room').select_option(other)
+        other_view=self.page.locator('.planner-svg').get_attribute('viewBox').split()
+        self.assertEqual(other_view[:2],before_room_change[:2],'Changing rooms cancels the old camera delta.')
+        self.page.mouse.up()
+        self.assertEqual(self.page.locator('.planner-svg').get_attribute('viewBox').split(),other_view)
+        self.assertEqual(self.page.evaluate('window.writes.length'),0)
+        self.assertTrue(self.page.get_by_role('button',name='Save all room changes').is_disabled())
+        self.assertEqual(self.errors,[])
+
     def test_resize_handle_keeps_visible_bounded_keyboard_focus(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':2,'y':3,'width':6,'height':2,'rotation':0,'location_id':None}
