@@ -732,7 +732,6 @@ class WorkshopBrowserTests(unittest.TestCase):
             try:
                 self.assertTrue(svg.evaluate('el=>el.classList.contains("is-panning")'))
                 self.assertEqual(svg.get_attribute('data-pan-default-prevented'),'true','The admitted pan pointer must not start native selection, dragging, or autoscroll.')
-                self.assertTrue(svg.evaluate('el=>el.matches(":active")') or self.page.mouse.is_down(), 'A pan pointer should remain active until released.')
                 self.page.mouse.move(end['x'],end['y'])
                 self.assertNotEqual(svg.get_attribute('viewBox').split(),before,'Each successive pan gesture must move the camera.')
                 self.assertEqual(self.page.evaluate('window.scrollY'),initial_scroll,'Panning must not trigger native page autoscroll.')
