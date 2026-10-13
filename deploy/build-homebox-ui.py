@@ -65,6 +65,8 @@ def nest_frontend():
     path = 'components/Entity/CreateModal.vue'
     replace(path, ':entity-types="subItemCreate ? entityTypes.filter(t => !t.isLocation) : entityTypes"', ':entity-types="entityTypes"')
     replace(path, '      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"', '      <FormTextField v-if="!selectedEntityType?.isLocation" v-model="form.modelNumber" label="Model number" :max-length="255" />\n      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"')
+    replace(path, '    name: "",\n    quantity: 1,', '    name: "",\n    modelNumber: "",\n    quantity: 1,')
+    replace(path, '    form.name = "";\n    form.quantity = 1;', '    form.name = "";\n    form.modelNumber = "";\n    form.quantity = 1;')
     target = BUILD/path
     text = target.read_text()
     start = text.index('      <ItemSelector\n'); end = text.index('      <FormTextField', start)
@@ -87,6 +89,7 @@ def nest_frontend():
     text = text[:start]+text[end:]
     text = text.replace('parentId: form.location.id as string', 'parentId: form.location?.id || null').replace('parentId: form.parentId || (form.location.id as string)', 'parentId: form.location?.id || null')
     text = text.replace('const templateRequest = {', 'const templateRequest = {\n        modelNumber: form.modelNumber?.trim() || undefined,')
+    text = text.replace('        name: form.name,\n        quantity: form.quantity,\n        description: form.description,', '        name: form.name,\n        modelNumber: form.modelNumber?.trim() || undefined,\n        quantity: form.quantity,\n        description: form.description,')
     target.write_text(text)
     path = 'pages/item/[id]/index/edit.vue'; target=BUILD/path; text=target.read_text()
     start=text.index('    if (data.parent && data.parent.entityType'); end=text.index('\n    return data;',start)
@@ -117,7 +120,7 @@ def nest_frontend():
       </section>
       <ItemViewSelectable v-if="items && items.length" :items="items || []" @refresh="refreshItemList" />''')
 
-    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  shortCode: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  shortCode: string;').replace('export interface EntityCreate {','export interface EntityCreate {\n  modelNumber?: string;').replace('export interface EntityTemplateCreateItemRequest {','export interface EntityTemplateCreateItemRequest {\n  modelNumber?: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
     start=text.index('export interface EntityTemplateCreateItemRequest {');end=text.index('\n}',start)
     text=text[:start]+text[start:end].replace('parentId: string;','parentId: string | null;')+text[end:];target.write_text(text)
     replace('composables/use-barcode-detector.ts','api.items.getAll({ locations: [id] })','api.items.getAll({ parentIds: [id] })')
