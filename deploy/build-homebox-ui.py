@@ -233,9 +233,31 @@ def shell_frontend():
     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import DeviceStatus from "~/components/Workshop/DeviceStatus.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
 
 
+def strip_item_response_short_codes_from_update_tests():
+    """Keep response-only shortCode out of update payloads in the pinned API tests."""
+    relative = pathlib.Path('lib/api/__test__/user/items.test.ts')
+    target = BUILD / relative
+    source = target.read_text()
+    rewrites = (
+        ("    const itemUpdate = {\n      ...item,\n      parentId: item.parent?.id || null,", "    const { shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      parentId: item.parent?.id || null,"),
+        ("    const child1ItemUpdate = {\n      ...child1Item,\n      parentId: parent.id,", "    const { shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      parentId: parent.id,"),
+        ("    const child2ItemUpdate = {\n      ...child2Item,\n      parentId: parent.id,", "    const { shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      parentId: parent.id,"),
+        ("    const itemUpdate = {\n      ...parent,\n      parentId: parentLocation.id,", "    const { shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      parentId: parentLocation.id,"),
+    )
+    if len(rewrites) != 4:
+        raise RuntimeError('Expected four pinned item update test fixtures')
+    for original, replacement in rewrites:
+        count = source.count(original)
+        if count != 1:
+            raise RuntimeError(f'Expected exactly one item update fixture anchor in {relative}, found {count}')
+        source = source.replace(original, replacement)
+    target.write_text(source)
+
+
 def prepare():
     shutil.copytree(UPSTREAM_ROOT/'upstream/homebox/frontend', BUILD, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('node_modules', '.nuxt', '.output'))
+    strip_item_response_short_codes_from_update_tests()
     shutil.copytree(ROOT/'homebox-ui/overlay', BUILD, dirs_exist_ok=True)
     shutil.copy2(ROOT/'kiosk/member-avatar.js', BUILD/'lib/member-avatar.js')
     shutil.copy2(ROOT/'kiosk/label-editor.js', BUILD/'lib/label-editor.js')
