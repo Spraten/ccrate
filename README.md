@@ -32,7 +32,33 @@ The stack preserves local test data across rebuilds and restarts. Do not use `do
 
 ### Updating an existing Pi installation
 
-The unified interface is on `main`. From the Pi's repository, update the source and pinned submodule:
+Open **C-Crate Manager.sh** on the Desktop (choose **Run in Terminal** if prompted).
+Press **8** to check `origin/main`, then **I** to install the checked revision.
+If you already built that revision, press **U** to validate and use those existing
+build outputs without compiling again.
+The manager asks you to type the displayed confirmation before installing.
+It builds in a separate directory while C-Crate keeps running, then briefly
+stops the active services, selects the new release, restarts those services,
+and checks that they serve the selected release.
+This source-based installer uses the existing Pi toolchains; building can take
+several minutes. It preserves your checkout and does not pull over local edits.
+
+The dashboard shows service PIDs, uptime, startup settings, and the update's
+stage, elapsed time, and log location.
+You can also inspect status from another terminal:
+
+```sh
+"$HOME/Desktop/C-Crate Manager.sh" --status
+```
+
+Use **B** for an optional backup before updating, and **7** for recent service
+logs. Updates do not create a backup automatically. Private backups are under `work/backups/`;
+installer output is under `work/manager-update-COMMIT12.log` and detailed build
+logs under `work/manager-updates/`. Data and configuration stay in place.
+An installation error is shown as a failure; a completed build alone does not
+mean the new site is live.
+
+For source development only, update the repository and pinned submodule:
 
 ```sh
 git fetch origin
@@ -53,7 +79,11 @@ python3 deploy/build-label-ui.py --source-root . --output work/label-ui-build
 
 The backend builder uses the selected native UI at `work/homebox-ui-current`. The UI and label builders stage output under `work/`; they do not select or deploy a release. See [C-Crate release notes](docs/C_CRATE_RELEASE.md), [label layouts](docs/LABEL_LAYOUTS.md), and the [native UI build notes](homebox-ui/README.md) for their prerequisites.
 
-Activation must package the matching frontend, label assets, gateway and companion code with `deploy/release_bundle.py`, then select the release through its backup and compatibility checks. This repository does not currently provide a complete Pi update command. `deploy/run-release.py` launches an already selected release; `deploy/stage-label-release.py` only stages a candidate. Restarting the existing services alone will keep serving the selected release.
+The manager packages the matching frontend, label assets, gateway and companion
+code with `deploy/release_bundle.py`, validates it, then switches the selected
+release and checks the running services. `deploy/run-release.py` launches an already selected
+release; `deploy/stage-label-release.py` only stages a candidate. Restarting the
+existing services alone keeps serving the selected release.
 
 ## Tests and operational safeguards
 

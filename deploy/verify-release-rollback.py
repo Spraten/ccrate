@@ -35,6 +35,16 @@ class ListenerOwnershipMismatch(FixtureRefusal):
                          f'observed listener owner pid(s) {list(self.owners)}')
 
 
+_LOOPBACK_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _loopback_open(request, *, timeout):
+    url = request.full_url if isinstance(request, urllib.request.Request) else str(request)
+    if not url.startswith(('http://127.0.0.1:', 'http://[::1]:', 'http://localhost:')):
+        raise FixtureRefusal('packaged process proof only permits loopback HTTP')
+    return _LOOPBACK_OPENER.open(request, timeout=timeout)
+
+
 def _reject_operational(path):
     raw = Path(path)
     if '..' in raw.parts:
@@ -463,7 +473,7 @@ def _http(url, pid, port, expected=None):
         if foreign:
             raise ListenerOwnershipMismatch(pid, port, foreign)
         raise ConnectionError(f'fixture listener at {port} is not ready or not yet observable for pid {pid}')
-    with urllib.request.urlopen(url, timeout=0.8) as response:
+    with _loopback_open(url, timeout=0.8) as response:
         body = response.read()
     if not _pid_owns_listener(pid, port):
         raise FixtureRefusal(f'listener ownership changed during probe at {port} for fixture process {pid}')
@@ -497,20 +507,24 @@ class _PackagedProcesses:
         self.processes_started = 0
         self.serial = 0
         self.native_state = None
+        self.native_states = []
         self.current_release = None
         self.native_port_retries = []
         self.native_port, self.companion_port, self.gateway_port = _free_ports(3)
 
     def _base_env(self, release, component, ready=None):
-        env = {key: value for key, value in os.environ.items()
-               if not key.startswith(('HBOX_', 'WORKSHOP_', 'HOMEBOX_WEB_'))}
+        safe_keys = ('PATH', 'LANG', 'LC_ALL', 'SYSTEMROOT', 'WINDIR')
+        env = {key: os.environ[key] for key in safe_keys if key in os.environ}
+        for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
+                    'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy', 'PYTHONPATH'):
+            env.pop(key, None)
         dep_link = self.runtime / 'program-files/runtime/hardware/python'
         dep_link.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if not dep_link.exists():
             dep_link.symlink_to(self.dependency, target_is_directory=True)
         env.update({'WORKSHOP_ROOT': str(self.runtime), 'WORKSHOP_FIXTURE_PROCESS': '1',
                     'WORKSHOP_FIXTURE_TOKEN': self.token, 'WORKSHOP_BIND_HOST': '127.0.0.1',
-                    'PYTHONDONTWRITEBYTECODE': '1'})
+                    'PYTHONDONTWRITEBYTECODE': '1', 'TMPDIR': str(self.runtime.parent)})
         if component == 'native':
             env.update({'HOMEBOX_WEB_HOST': '127.0.0.1', 'HOMEBOX_WEB_PORT': str(self.native_port),
                         'HBOX_OPTIONS_ALLOW_REGISTRATION': 'true'})
@@ -642,18 +656,20 @@ class _PackagedProcesses:
                           'static_root': gate_row['static_root']})
         if self.native_state is None:
             self.native_state = self._create_native_state(manifest_hash)
+            self.native_states = [self.native_state]
         else:
-            observed = self._native_state_snapshot(self.native_state)
-            _assert_native_state_snapshot(self.native_state['snapshot'], observed)
-            self.rows.append({'name': 'native_member_profile_avatar_private_note_badge_loan_history',
-                              'result': 'passed', **binding,
-                              'profile_sha256': observed['member_profile_sha256'],
-                              'loan_operation_id': observed['loan_history'][0]['operation_id'],
-                              'loan_created_at': observed['loan_history'][0]['created_at'],
-                              'loan_confirmed_at': observed['loan_history'][0]['confirmed_at'],
-                              'native_store_identity': observed['native_store_identity'],
-                              'ledger_store_identity': observed['ledger_store_identity'],
-                              'physical_effects': 0})
+            for state in self.native_states:
+                observed = self._native_state_snapshot(state)
+                _assert_native_state_snapshot(state['snapshot'], observed)
+                self.rows.append({'name': 'native_member_profile_avatar_private_note_badge_loan_history',
+                                  'result': 'passed', **binding,
+                                  'profile_sha256': observed['member_profile_sha256'],
+                                  'loan_operation_id': observed['loan_history'][0]['operation_id'],
+                                  'loan_created_at': observed['loan_history'][0]['created_at'],
+                                  'loan_confirmed_at': observed['loan_history'][0]['confirmed_at'],
+                                  'native_store_identity': observed['native_store_identity'],
+                                  'ledger_store_identity': observed['ledger_store_identity'],
+                                  'physical_effects': 0})
 
     def _api_json(self, base, path, method='GET', payload=None, *, token=None, child=None, port=None):
         if child is not None and not _pid_owns_listener(child.pid, port):
@@ -668,14 +684,14 @@ class _PackagedProcesses:
         # Fixture native registration and migration-adjacent writes can take
         # longer on the isolated storage used by the whole-map proof. Keep the
         # bounded request timeout generous enough for those owned processes.
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _loopback_open(request, timeout=30) as response:
             body = response.read()
         if child is not None and not _pid_owns_listener(child.pid, port):
             raise FixtureRefusal(f'fixture listener ownership changed during API request: {path}')
         return json.loads(body) if body else None
 
-    def _native_auth(self):
-        account = json.loads((self.runtime / 'work/baseline/test-account.json').read_text())
+    def _native_auth(self, account=None):
+        account = account or json.loads((self.runtime / 'work/baseline/test-account.json').read_text())
         login = self._api_json(f'http://127.0.0.1:{self.native_port}', '/api/v1/users/login',
                                'POST', {'username': account['email'], 'password': account['password']},
                                child=self.children['native'][0], port=self.native_port)
@@ -684,7 +700,7 @@ class _PackagedProcesses:
     def _native_state_snapshot(self, state):
         base = f'http://127.0.0.1:{self.native_port}'
         child = self.children['native'][0]
-        token = self._native_auth()
+        token = self._native_auth(state.get('account'))
         profile = self._api_json(base, f"/api/v1/groups/members/{state['member_id']}/profile",
                                  token=token, child=child, port=self.native_port)
         if (profile.get('id') != state['member_id'] or profile.get('name') != state['member_name']
@@ -793,7 +809,8 @@ class _PackagedProcesses:
             raise FixtureRefusal('fixture native loan did not complete')
         state = {'member_id': member_id, 'member_name': profile['name'], 'avatar': avatar,
                  'notes': notes, 'entity_id': entity['id'], 'entity_name': entity['name'],
-                 'badge_id': badge['id'], 'loan_id': loan['id'], 'group_id': owner['defaultGroupId']}
+                 'badge_id': badge['id'], 'loan_id': loan['id'], 'group_id': owner['defaultGroupId'],
+                 'account': account}
         snapshot = self._native_state_snapshot(state)
         state['snapshot'] = snapshot
         self.rows.append({'name': 'native_member_profile_avatar_private_note_badge_loan_history',

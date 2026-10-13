@@ -10,6 +10,53 @@
 
 **Spec:** [C-Crate updates and desktop design specification](../specs/2026-10-12-ccrate-updates-and-desktop.md), sections Global constraints and A.
 
+## Current operator-requested delivery: desktop manager source updates
+
+On 2026-10-13 the operator requested a working update action in the desktop
+terminal manager, rather than an unavailable installer. The immediate delivery
+uses the installed toolchains to build a pinned `origin/main` revision in an
+isolated staging directory. The prebuilt publishing pipeline below remains a
+separate future optimization; it is not a prerequisite for this source path.
+
+Implementation sequence:
+
+1. Prepare a sealed candidate with real build receipts, source identity, and
+   executed artifact-bound compatibility checks, without stopping services.
+2. Extend the existing release transaction only where needed to support a
+   caller-held lock and verified external compatibility evidence for the
+   installed valid format-2 bundle. Do not alter sealed previous artifacts or
+   add another selector/rollback mechanism.
+3. Under one transaction lock, stop writers, create and verify a private whole
+   store snapshot, verify compatible recovery, then activate through
+   `select_bundle`. Preserve interrupted-transaction recovery and never restore
+   old data or replay physical output automatically.
+4. Wire the manager's update check, exact-revision approval, progress, completion
+   identity, and recovery controls to the real installer. Test success and
+   failure paths with disposable data and simulated services.
+
+Development of this script does not authorize running an update, restarting the
+live services, or copying operational data into development fixtures. The
+operator will run the completed manager and explicitly approve activation.
+
+### Operator simplification, 2026-10-13
+
+The operator subsequently requested a simple manager and explicitly rejected
+mandatory backups, exhaustive test gates, and further manager work while the
+site was awaiting activation. The completed d877b35 build is now live; old
+application releases were removed and data/configuration retained. The
+operator has now authorized manager rework while continuing to use the site.
+
+For this manager delivery, replace the source-update activation sequence above
+with the direct flow used successfully on this installation: prepare the exact
+approved source (or explicitly reuse a completed build), validate/stage the
+application, stop services, atomically switch the selected release, start, and
+check the actual local HTTP responses. Keep backup as an optional operator
+action. Do not require O/C/F production-data copies or the broad repository
+test suite for a normal manager update. Preserve data/configuration and show
+failed/interrupted states honestly. Manager development must not restart,
+update, or mutate the installation the operator is currently using. Verify the
+workflow with small disposable fixtures and simulated service/build calls.
+
 ## Global Constraints
 
 - Homebox remains the inventory, account, collection and native-history authority.

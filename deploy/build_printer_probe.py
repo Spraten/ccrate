@@ -1,36 +1,42 @@
-import hashlib, os, pathlib, shutil, subprocess, tarfile, tomllib, urllib.request
+#!/usr/bin/env python3
+"""Rebuild the C-Crate printer adapter against the pinned Supvan protocol library."""
+import json
+import os
+import pathlib
+import shutil
+import subprocess
 
-root = pathlib.Path('/home/user/Desktop/inventory-system')
-work = root/'work'
-manifest = tomllib.loads((work/'hardware/rust-channel.toml').read_text())
-runtime = work/'rust-native'
-for component in ['rustc','cargo','rust-std']:
-    data = manifest['pkg'][component]['target']['aarch64-unknown-linux-gnu']
-    artifact = work/'hardware'/pathlib.Path(data['xz_url']).name
-    if not artifact.exists() or hashlib.sha256(artifact.read_bytes()).hexdigest() != data['xz_hash']:
-        print('DOWNLOAD', component, flush=True)
-        partial=artifact.with_suffix(artifact.suffix+'.part')
-        with urllib.request.urlopen(data['xz_url'], timeout=30) as source, partial.open('wb') as target:
-            shutil.copyfileobj(source,target)
-        assert hashlib.sha256(partial.read_bytes()).hexdigest() == data['xz_hash']
-        partial.replace(artifact)
-    assert hashlib.sha256(artifact.read_bytes()).hexdigest() == data['xz_hash']
-    folder = work/'hardware/rust-components'/artifact.name.removesuffix('.tar.xz')
-    if not (folder/'.extracted').exists():
-        with tarfile.open(artifact) as archive:
-            archive.extractall(folder.parent,filter='data')
-        (folder/'.extracted').touch()
-    print('INSTALL',component,flush=True)
-    subprocess.run(['sh',str(folder/'install.sh'),'--prefix='+str(runtime),'--disable-ldconfig'],check=True)
-deps=work/'build-deps/root'
-pcdir=deps/'usr/lib/aarch64-linux-gnu/pkgconfig'
-for path in pcdir.glob('*.pc'):
-    data=path.read_text()
-    if 'prefix=/usr' in data:
-        path.write_text(data.replace('/usr',str(deps/'usr')))
-env=dict(os.environ,PATH=str(runtime/'bin')+':'+os.environ['PATH'],
-         CARGO_HOME=str(work/'cargo-home'),PKG_CONFIG_PATH=str(pcdir))
-print('RUST',subprocess.check_output([str(runtime/'bin/rustc'),'--version'],text=True),flush=True)
-subprocess.run([str(runtime/'bin/cargo'),'build','--locked','--release','-p','supvan-cli','-j','2'],
-               cwd=work/'supvan-cups',env=env,check=True)
-print('PRINTER_CLI_READY',flush=True)
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+WORK = ROOT / "work"
+SOURCE = ROOT / "deploy" / "kiosk-label.rs"
+REPOSITORY = WORK / "supvan-cups"
+EXAMPLE = REPOSITORY / "crates" / "supvan-proto" / "examples" / "kiosk-label.rs"
+
+
+def main():
+    pin = json.loads((ROOT / "docs" / "runtime-manifest.json").read_text())["printer_source_pin"]
+    actual = subprocess.check_output(["git", "-C", str(REPOSITORY), "rev-parse", "HEAD"], text=True).strip()
+    if actual != pin:
+        raise SystemExit(f"Supvan source must be checked out at {pin}; found {actual}")
+    if not SOURCE.is_file():
+        raise SystemExit(f"Missing persistent adapter source: {SOURCE}")
+
+    tool_bin = ROOT / "work" / "toolchains" / "rust-home" / "bin"
+    cargo = str(tool_bin / "cargo") if (tool_bin / "cargo").is_file() else shutil.which("cargo")
+    if not cargo:
+        raise SystemExit("Rust/Cargo not found; install Rust 1.88 or newer and rerun this script")
+    EXAMPLE.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SOURCE, EXAMPLE)
+    env = os.environ.copy()
+    env.setdefault("CARGO_HOME", str(ROOT / "work" / "toolchains" / "rust-home"))
+    env.setdefault("RUSTUP_HOME", str(ROOT / "work" / "toolchains" / "rustup-home"))
+    subprocess.run([cargo, "build", "--locked", "--release", "-p", "supvan-proto", "--example", "kiosk-label"],
+                   cwd=REPOSITORY, env=env, check=True)
+    binary = REPOSITORY / "target" / "release" / "examples" / "kiosk-label"
+    if not binary.is_file():
+        raise SystemExit(f"Cargo completed without producing {binary}")
+    print(binary)
+
+
+if __name__ == "__main__":
+    main()

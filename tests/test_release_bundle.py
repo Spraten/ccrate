@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy"))
 from release_bundle import (BundleError, recover_interrupted, select_bundle,
                             stage_bundle, validate_bundle)
+import release_bundle as release_bundle_module
 
 _FIXTURE_OCF = {}
 
@@ -2119,6 +2120,112 @@ class ReleaseBundleTests(unittest.TestCase):
         with patch("subprocess.run", side_effect=AssertionError("publisher executed")):
             namespace = runpy.run_path(str(publisher), run_name="publish_users_import")
         self.assertTrue(callable(namespace["main"]))
+
+    def test_transaction_lock_token_is_live_and_bound_to_its_root(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "work").mkdir()
+            with release_bundle_module._transaction_lock(root) as token:
+                self.assertIs(token.validate(root), token)
+                with self.assertRaisesRegex(BundleError, "another process/root"):
+                    token.validate(root / "elsewhere")
+            with self.assertRaisesRegex(BundleError, "inactive"):
+                token.validate(root)
+            fabricated = release_bundle_module._TransactionLockToken(
+                root, ((root / "work").stat().st_dev, (root / "work").stat().st_ino), -1, (1, 1))
+            with self.assertRaisesRegex(BundleError, "inactive"):
+                fabricated.validate(root)
+
+    def test_candidate_is_not_launched_before_durable_exposure_marker(self):
+        from unittest.mock import patch
+        from release_bundle import JournalAppendRollbackError
+        runtime, previous, candidate, fallback, _ = self.selection_triple()
+        real_append = release_bundle_module._append_transaction_event
+
+        def interrupt(path, envelope, phase):
+            real_append(path, envelope, phase)
+            if phase == "candidate_selected":
+                raise JournalAppendRollbackError("simulated power loss edge")
+
+        with patch.object(release_bundle_module, "_append_transaction_event", side_effect=interrupt):
+            with self.assertRaisesRegex(BundleError, "journal cleanup failed"):
+                select_bundle(runtime, candidate, fallback=fallback,
+                    fallback_receipt=self.fallback_receipt(previous, candidate, fallback),
+                    run_services=lambda _args: None, verify=lambda _release: None)
+        with self.assertRaisesRegex(BundleError, "durable exposure"):
+            release_bundle_module.release_command(runtime, "native")
+
+    def test_legacy_o_external_proof_selects_and_recovers_through_schema_two(self):
+        from unittest.mock import patch
+        from release_bundle import JournalAppendRollbackError
+        def legacy_provenance():
+            legacy = self.provenance()
+            legacy.pop("workshop_capability")
+            return legacy
+        runtime, previous, candidate, fallback, _ = self.selection_triple(
+            previous_provenance=legacy_provenance)
+        manifest = validate_bundle(previous)
+        provenance = manifest["provenance"]
+        closure = release_bundle_module._workshop_closure_digest(
+            provenance["runtime_files"], provenance["runtime_modes"], provenance["public_files"],
+            provenance["label_files"], provenance["label_source_sha256"], provenance["native_sha256"])
+        external = {"schema": 1, "execution_scope": "production-matched",
+                    "previous_manifest_sha256": sha_bytes((previous / "manifest.json").read_bytes()),
+                    "closure_sha256": closure,
+                    "results": {name: True for name in (
+                        "legacy_v1_read_no_rewrite", "v2_read", "v2_write",
+                        "stale_write_conflict", "native_write_count_zero")}}
+        receipt = self.fallback_receipt(previous, candidate, fallback)
+        calls = []
+        select_bundle(runtime, candidate, fallback=fallback, fallback_receipt=receipt,
+                      previous_compatibility_proof=external,
+                      run_services=lambda args: (calls.append(list(args)),
+                          release_bundle_module.release_command(runtime, "native")
+                          if args[0] == "start" else None),
+                      verify=lambda release: validate_bundle(release))
+        events = release_bundle_module._read_transaction_events(
+            runtime / "work/application-release-journal.jsonl", runtime)
+        self.assertTrue(all(row["schema"] == 2 for row in events))
+        self.assertEqual(events[-1]["phase"], "candidate_verified")
+        self.assertEqual(events[-1]["previous_compatibility_proof"], external)
+
+        # Leave a second legacy transaction exposed but interrupted; recovery
+        # must revalidate the same proof and select F, never O.
+        import os
+        import shutil
+        shutil.rmtree(self.root / "runtime")
+        for base, directories, files in os.walk(self.root / "releases", topdown=False):
+            for name in files:
+                (Path(base) / name).chmod(0o600)
+            for name in directories:
+                (Path(base) / name).chmod(0o700)
+            Path(base).chmod(0o700)
+        shutil.rmtree(self.root / "releases")
+        runtime2, previous2, candidate2, fallback2, _ = self.selection_triple(
+            previous_provenance=legacy_provenance, with_sentinels=False)
+        provenance2 = validate_bundle(previous2)["provenance"]
+        closure2 = release_bundle_module._workshop_closure_digest(
+            provenance2["runtime_files"], provenance2["runtime_modes"], provenance2["public_files"],
+            provenance2["label_files"], provenance2["label_source_sha256"], provenance2["native_sha256"])
+        proof2 = dict(external,
+            execution_scope="fixture-only",
+            previous_manifest_sha256=sha_bytes((previous2 / "manifest.json").read_bytes()),
+            closure_sha256=closure2)
+        real_append = release_bundle_module._append_transaction_event
+        def interrupt(path, envelope, phase):
+            real_append(path, envelope, phase)
+            if phase == "candidate_started":
+                raise JournalAppendRollbackError("simulated process interruption")
+        with patch.object(release_bundle_module, "_append_transaction_event", side_effect=interrupt):
+            with self.assertRaisesRegex(BundleError, "journal cleanup failed"):
+                select_bundle(runtime2, candidate2, fallback=fallback2,
+                    fallback_receipt=self.fallback_receipt(previous2, candidate2, fallback2),
+                    previous_compatibility_proof=proof2,
+                    run_services=lambda _args: None, verify=lambda _release: None)
+        result = recover_interrupted(runtime2, run_services=lambda _args: None,
+                                     verify=lambda release: validate_bundle(release))
+        self.assertEqual(result, "fallback_verified")
+        self.assertEqual((runtime2 / "work/application-current").resolve(), fallback2.resolve())
 
 
 if __name__ == "__main__":

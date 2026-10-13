@@ -491,6 +491,18 @@ def release_command(root, component, *, release=None):
     manifest = validate_bundle(selected)
     if manifest.get("format") != 2:
         raise BundleError("selected release has no packaged launcher")
+    journal = runtime_root / "work" / JOURNAL_NAME
+    if journal.exists():
+        events = _read_transaction_events(journal, runtime_root)
+        latest = events[-1]
+        tx = [row for row in events if row["transaction_id"] == latest["transaction_id"]]
+        phases = {row["phase"] for row in tx}
+        exposure = "candidate_exposure_possible" in phases
+        if exposure and latest["phase"] not in TERMINAL_PHASES:
+            if selected == Path(latest["previous"]).resolve(strict=True):
+                raise BundleError("previous release startup is forbidden after candidate exposure")
+        elif latest["phase"] == "candidate_selected" and selected == Path(latest["candidate"]).resolve(strict=True):
+            raise BundleError("candidate startup is held until durable exposure is recorded")
     env = {"WORKSHOP_ROOT": str(runtime_root), "WORKSHOP_CODE_ROOT": str(selected),
            "HOMEBOX_UI_ROOT": str(selected / "public")}
     return [sys.executable, str(selected / "deploy" / entries[component])], env
@@ -522,6 +534,33 @@ def _manifest_digest(release):
     return hashlib.sha256((Path(release) / "manifest.json").read_bytes()).hexdigest()
 
 
+def _validate_previous_compatibility_proof(proof, previous):
+    """Validate an executed proof for a legacy O bundle with no embedded capability."""
+    expected = {"schema", "execution_scope", "previous_manifest_sha256", "closure_sha256", "results"}
+    if not isinstance(proof, dict) or set(proof) != expected or proof.get("schema") != 1:
+        raise BundleError("legacy previous-release proof schema is invalid")
+    if proof.get("execution_scope") not in ("production-matched", "fixture-only"):
+        raise BundleError("legacy previous-release proof has an unknown execution scope")
+    manifest = validate_bundle(previous)
+    if _manifest_digest(previous) != proof.get("previous_manifest_sha256"):
+        raise BundleError("legacy previous-release proof names a different O manifest")
+    provenance = manifest.get("provenance", {})
+    capability = provenance.get("workshop_capability")
+    closure = (capability.get("closure_sha256") if isinstance(capability, dict) else
+               _workshop_closure_digest(provenance.get("runtime_files"),
+                   provenance.get("runtime_modes"), provenance.get("public_files"),
+                   provenance.get("label_files"), provenance.get("label_source_sha256"),
+                   provenance.get("native_sha256")))
+    if not isinstance(closure, str) or len(closure) != 64 or proof.get("closure_sha256") != closure:
+        raise BundleError("legacy previous-release proof does not bind the O runtime closure")
+    rows = proof.get("results")
+    required = {"legacy_v1_read_no_rewrite", "v2_read", "v2_write", "stale_write_conflict", "native_write_count_zero"}
+    if (not isinstance(rows, dict) or set(rows) != required
+            or any(rows.get(name) is not True for name in required)):
+        raise BundleError("legacy previous-release proof lacks executed compatibility results")
+    return hashlib.sha256(json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def _directory_fsync(path):
     path = Path(path)
     info = path.lstat()
@@ -536,6 +575,41 @@ def _directory_fsync(path):
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+class _TransactionLockToken:
+    """Unforgeable-by-callers handle for one live release lock acquisition."""
+    def __init__(self, root, work_identity, fd, lock_identity):
+        self.root = str(Path(root).resolve())
+        self.pid = os.getpid()
+        self.work_identity = work_identity
+        self.fd = fd
+        self.lock_identity = lock_identity
+        self.active = True
+
+    def validate(self, root):
+        runtime = Path(root).resolve()
+        if (not self.active or self not in _ACTIVE_LOCK_TOKENS
+                or self.pid != os.getpid() or str(runtime) != self.root):
+            raise BundleError("release transaction lock token is inactive or belongs to another process/root")
+        work = runtime / "work"
+        work_info = work.lstat()
+        if (not stat.S_ISDIR(work_info.st_mode) or stat.S_ISLNK(work_info.st_mode)
+                or (work_info.st_dev, work_info.st_ino) != self.work_identity):
+            raise BundleError("release work directory changed while lock token was held")
+        try:
+            opened = os.fstat(self.fd)
+            path_info = (work / LOCK_NAME).lstat()
+        except OSError as exc:
+            raise BundleError("release transaction lock token is no longer open") from exc
+        expected = self.lock_identity
+        if (not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != expected
+                or not stat.S_ISREG(path_info.st_mode) or (path_info.st_dev, path_info.st_ino) != expected):
+            raise BundleError("release transaction lock identity changed")
+        return self
+
+
+_ACTIVE_LOCK_TOKENS = set()
 
 
 @contextmanager
@@ -560,8 +634,14 @@ def _transaction_lock(root):
         if (not stat.S_ISDIR(current.st_mode) or stat.S_ISLNK(current.st_mode)
                 or (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino)):
             raise BundleError("release work directory changed while acquiring lock")
-        yield
+        token = _TransactionLockToken(root, (info.st_dev, info.st_ino), fd,
+                                      (st.st_dev, st.st_ino))
+        _ACTIVE_LOCK_TOKENS.add(token)
+        yield token
     finally:
+        if 'token' in locals():
+            token.active = False
+            _ACTIVE_LOCK_TOKENS.discard(token)
         os.close(fd)
 
 
@@ -624,13 +704,15 @@ def _read_transaction_events(path, root):
             os.close(fd)
     if not lines:
         raise BundleError("release transaction journal is empty")
-    required = {
+    required_v1 = {
         "schema", "transaction_id", "root", "previous", "candidate", "fallback",
         "work_dev", "work_ino",
         "previous_manifest_sha256", "candidate_manifest_sha256", "fallback_manifest_sha256",
         "fallback_receipt", "fallback_receipt_sha256", "backup_receipt_sha256",
         "phase", "recorded_at",
     }
+    required_v2 = required_v1 | {"previous_compatibility_proof", "previous_compatibility_proof_sha256",
+                                "initial_active_services"}
     events, bindings = [], {}
     next_phases = {
         "transaction_prepared": {"stop_requested"},
@@ -661,7 +743,8 @@ def _read_transaction_events(path, root):
             row = json.loads(line)
         except (ValueError, TypeError) as exc:
             raise BundleError("release transaction journal is malformed") from exc
-        if not isinstance(row, dict) or set(row) != required or row.get("schema") != 1:
+        if (not isinstance(row, dict) or row.get("schema") not in (1, 2)
+                or set(row) != (required_v1 if row.get("schema") == 1 else required_v2)):
             raise BundleError("release transaction journal has ambiguous fields")
         if row.get("root") != str(Path(root).resolve()):
             raise BundleError("release transaction journal is bound to another root")
@@ -681,12 +764,25 @@ def _read_transaction_events(path, root):
             raise BundleError("release transaction journal work identity is invalid")
         if not isinstance(row.get("fallback_receipt"), dict):
             raise BundleError("release transaction journal fallback receipt is invalid")
+        if row["schema"] == 2:
+            active = row.get("initial_active_services")
+            if (not isinstance(active, list) or any(name not in ("native", "companion", "gateway") for name in active)
+                    or len(set(active)) != len(active)):
+                raise BundleError("release transaction initial service set is invalid")
+            proof = row.get("previous_compatibility_proof")
+            proof_hash = row.get("previous_compatibility_proof_sha256")
+            if proof is not None:
+                calculated = hashlib.sha256(json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+                if proof_hash != calculated:
+                    raise BundleError("legacy previous-release proof hash is invalid")
+            elif proof_hash is not None:
+                raise BundleError("legacy previous-release proof hash has no proof")
         backup_digest = row.get("backup_receipt_sha256")
         if backup_digest is not None and (not isinstance(backup_digest, str) or len(backup_digest) != 64):
             raise BundleError("release transaction journal backup receipt hash is invalid")
         if not isinstance(row.get("recorded_at"), (int, float)):
             raise BundleError("release transaction journal timestamp is invalid")
-        binding = {key: row[key] for key in required - {"phase", "recorded_at"}}
+        binding = {key: row[key] for key in set(row) - {"phase", "recorded_at"}}
         prior = bindings.setdefault(row["transaction_id"], binding)
         if prior != binding:
             raise BundleError("release transaction journal binding changed")
@@ -718,6 +814,8 @@ def _validate_fallback_receipt(receipt, previous, candidate, fallback):
     expected_keys = {"execution_scope", "checks", "fallback_policy_sha256"}
     for label in ("previous", "candidate", "fallback"):
         expected_keys.update({f"{label}_bundle_manifest_sha256", f"{label}_native_sha256"})
+    if isinstance(receipt, dict) and receipt.get("execution_scope") == "production-matched":
+        expected_keys.update({"process_assertions", "workshop_assertions"})
     if (not isinstance(receipt, dict) or set(receipt) != expected_keys
             or receipt.get("execution_scope") not in ("fixture-only", "production-matched")):
         raise BundleError("fallback receipt schema is invalid or missing")
@@ -746,6 +844,34 @@ def _validate_fallback_receipt(receipt, previous, candidate, fallback):
     if (not isinstance(checks, dict) or set(checks) != FALLBACK_CHECKS
             or any(checks.get(name) is not True for name in FALLBACK_CHECKS)):
         raise BundleError("fallback receipt lacks compatible recovery checks")
+    if receipt["execution_scope"] == "production-matched":
+        process = receipt.get("process_assertions")
+        expected_process = ["packaged_O_same_snapshot_and_existing_rows",
+                            "packaged_C_same_snapshot_and_existing_rows",
+                            "candidate_created_member_badge_loan",
+                            "packaged_F_same_snapshot_and_existing_rows",
+                            "fallback_reopened_o_and_c_created_member_badge_loan"]
+        if (not isinstance(process, list)
+                or [row.get("name") for row in process if isinstance(row, dict)] != expected_process
+                or any(not isinstance(row, dict) or set(row) != {"name", "result"}
+                       or row.get("result") != "passed" for row in process)):
+            raise BundleError("production fallback receipt lacks named O/C/F process results")
+        workshop = receipt.get("workshop_assertions")
+        if not isinstance(workshop, dict) or set(workshop) != {"candidate", "fallback"}:
+            raise BundleError("production fallback receipt lacks candidate/fallback Workshop results")
+        for label, path in (("candidate", candidate), ("fallback", fallback)):
+            item = workshop[label]
+            manifest = validate_bundle(path)
+            capability = manifest["provenance"].get("workshop_capability", {})
+            expected_names = capability.get("test_names")
+            tests = item.get("tests") if isinstance(item, dict) else None
+            if (not isinstance(item, dict) or set(item) != {"closure_sha256", "tests"}
+                    or item.get("closure_sha256") != capability.get("closure_sha256")
+                    or not isinstance(tests, list)
+                    or [row.get("name") for row in tests if isinstance(row, dict)] != expected_names
+                    or any(not isinstance(row, dict) or set(row) != {"name", "result"}
+                           or row.get("result") != "passed" for row in tests)):
+                raise BundleError(f"production {label} Workshop results are not bound to its artifact closure")
     return hashlib.sha256(json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -769,7 +895,9 @@ def _validate_fallback_code_pair(previous, candidate, fallback):
 
 
 def _select_bundle_durable(root, release, *, fallback, fallback_receipt,
-                           backup_receipt_sha256, run_services, verify):
+                           backup_receipt_sha256, run_services, verify,
+                           previous_compatibility_proof=None, lock_token=None,
+                           initial_active_services=None):
     runtime = Path(root).resolve(strict=True)
     selector = runtime / "work" / "application-current"
     work_stat = selector.parent.lstat()
@@ -790,20 +918,42 @@ def _select_bundle_durable(root, release, *, fallback, fallback_receipt,
     manifests = tuple(validate_bundle(path) for path in paths)
     if any(manifest.get("format") != 2 for manifest in manifests):
         raise BundleError("O, C and F must all be launcher-capable format-2 bundles")
-    _require_workshop_compatibility(manifests[0], role="previous")
+    if manifests[0].get("provenance", {}).get("workshop_capability") is None:
+        if previous_compatibility_proof is None:
+            raise BundleError("legacy previous release requires an executed compatibility proof")
+        previous_proof_hash = _validate_previous_compatibility_proof(previous_compatibility_proof, previous)
+    else:
+        _require_workshop_compatibility(manifests[0], role="previous")
+        if previous_compatibility_proof is not None:
+            _validate_previous_compatibility_proof(previous_compatibility_proof, previous)
+            previous_proof_hash = hashlib.sha256(json.dumps(previous_compatibility_proof, sort_keys=True,
+                separators=(",", ":")).encode()).hexdigest()
+        else:
+            previous_proof_hash = None
     _require_workshop_compatibility(manifests[1], role="candidate", require_writer=True)
     _require_workshop_compatibility(manifests[2], role="fallback")
     receipt_digest = _validate_fallback_receipt(fallback_receipt, *paths)
+    if (manifests[0].get("provenance", {}).get("workshop_capability") is None
+            and previous_compatibility_proof.get("execution_scope") == "fixture-only"
+            and fallback_receipt["execution_scope"] != "fixture-only"):
+        raise BundleError("legacy compatibility proof and fallback receipt execution scopes differ")
     if (fallback_receipt["execution_scope"] == "production-matched"
             and (not isinstance(backup_receipt_sha256, str) or len(backup_receipt_sha256) != 64)):
         raise BundleError("production selection requires a bound whole-store cold-backup receipt")
     if backup_receipt_sha256 is not None and (not isinstance(backup_receipt_sha256, str)
                                                or len(backup_receipt_sha256) != 64):
         raise BundleError("cold-backup receipt hash is invalid")
+    if initial_active_services is None:
+        initial_active_services = ["native", "companion", "gateway"]
+    if (not isinstance(initial_active_services, (list, tuple))
+            or any(name not in ("native", "companion", "gateway") for name in initial_active_services)
+            or len(set(initial_active_services)) != len(initial_active_services)):
+        raise BundleError("initial service state is invalid")
     snapshots = tuple(_manifest_digest(path) for path in paths)
     transaction_id = str(uuid.uuid4())
     envelope = {
-        "schema": 1, "transaction_id": transaction_id, "root": str(runtime),
+        "schema": 2,
+        "transaction_id": transaction_id, "root": str(runtime),
         "previous": str(previous), "candidate": str(candidate), "fallback": str(fallback),
         "work_dev": work_stat.st_dev, "work_ino": work_stat.st_ino,
         "previous_manifest_sha256": snapshots[0], "candidate_manifest_sha256": snapshots[1],
@@ -811,9 +961,15 @@ def _select_bundle_durable(root, release, *, fallback, fallback_receipt,
         "fallback_receipt_sha256": receipt_digest,
         "backup_receipt_sha256": backup_receipt_sha256,
     }
+    if envelope["schema"] == 2:
+        envelope["previous_compatibility_proof"] = previous_compatibility_proof
+        envelope["previous_compatibility_proof_sha256"] = previous_proof_hash
+        envelope["initial_active_services"] = list(initial_active_services)
     journal = selector.parent / JOURNAL_NAME
     stop = ["stop", "homebox-workshop-gateway", "homebox-companion", "homebox-native"]
-    start = ["start", "homebox-native", "homebox-companion", "homebox-workshop-gateway"]
+    service_units = {"native": "homebox-native", "companion": "homebox-companion",
+                     "gateway": "homebox-workshop-gateway"}
+    start = ["start", *(service_units[name] for name in initial_active_services)]
 
     def assert_work():
         current = selector.parent.lstat()
@@ -939,7 +1095,11 @@ def _select_bundle_durable(root, release, *, fallback, fallback_receipt,
                               f"to {selector.resolve(strict=False)}; services are stopped; no recovery "
                               f"callbacks ran; prior journal remains intact and recovery can resume") from primary_error
 
-    with _transaction_lock(runtime):
+    lock_context = _transaction_lock(runtime) if lock_token is None else contextlib.nullcontext(lock_token)
+    with lock_context as acquired_token:
+        if type(acquired_token) is not _TransactionLockToken:
+            raise BundleError("release transaction lock token is invalid")
+        _TransactionLockToken.validate(acquired_token, runtime)
         if journal.exists():
             events = _read_transaction_events(journal, runtime)
             if events[-1]["phase"] not in TERMINAL_PHASES:
@@ -1015,7 +1175,8 @@ def _select_bundle_durable(root, release, *, fallback, fallback_receipt,
 
 
 def select_bundle(root, release, *, run_services, verify, fallback=None, fallback_receipt=None,
-                  backup_receipt_sha256=None):
+                  backup_receipt_sha256=None, previous_compatibility_proof=None,
+                  lock_token=None, initial_active_services=None):
     """Select one matched bundle; production transitions require journal-bound O/C/F proof."""
     if fallback is None:
         raise BundleError("selection requires a bound O/C/F transaction and compatible F bundle")
@@ -1024,15 +1185,22 @@ def select_bundle(root, release, *, run_services, verify, fallback=None, fallbac
     return _select_bundle_durable(root, release, fallback=fallback,
                                   fallback_receipt=fallback_receipt,
                                   backup_receipt_sha256=backup_receipt_sha256,
-                                  run_services=run_services, verify=verify)
+                                  run_services=run_services, verify=verify,
+                                  previous_compatibility_proof=previous_compatibility_proof,
+                                  lock_token=lock_token,
+                                  initial_active_services=initial_active_services)
 
 
-def recover_interrupted(root, *, run_services, verify):
+def recover_interrupted(root, *, run_services, verify, lock_token=None):
     """Recover an incomplete O/C/F transaction from its transaction-bound journal."""
     runtime = Path(root).resolve(strict=True)
     selector = runtime / "work" / "application-current"
     journal = selector.parent / JOURNAL_NAME
-    with _transaction_lock(runtime):
+    lock_context = _transaction_lock(runtime) if lock_token is None else contextlib.nullcontext(lock_token)
+    with lock_context as acquired_token:
+        if type(acquired_token) is not _TransactionLockToken:
+            raise BundleError("release transaction lock token is invalid")
+        _TransactionLockToken.validate(acquired_token, runtime)
         events = _read_transaction_events(journal, runtime)
         latest_id = events[-1]["transaction_id"]
         transaction = [row for row in events if row["transaction_id"] == latest_id]
@@ -1082,6 +1250,13 @@ def recover_interrupted(root, *, run_services, verify):
         if proof_hash != latest["fallback_receipt_sha256"]:
             raise BundleError("interrupted fallback proof changed")
         _validate_fallback_receipt(proof, paths["previous"], paths["candidate"], paths["fallback"])
+        if latest["schema"] == 2 and latest.get("previous_compatibility_proof") is not None:
+            proof_hash = _validate_previous_compatibility_proof(
+                latest["previous_compatibility_proof"], paths["previous"])
+            if proof_hash != latest["previous_compatibility_proof_sha256"]:
+                raise BundleError("interrupted legacy previous-release proof changed")
+        elif manifests["previous"].get("provenance", {}).get("workshop_capability") is None:
+            raise BundleError("interrupted legacy previous release has no bound compatibility proof")
         if exposure:
             target, selected_phase, started_phase, verified_phase, result = (
                 paths["fallback"], "fallback_selected", "fallback_started", "fallback_verified", "fallback_verified")
@@ -1115,7 +1290,10 @@ def recover_interrupted(root, *, run_services, verify):
         assert_bundle_unchanged("fallback" if exposure else "previous")
         _append_transaction_event(journal, recovery_envelope, selected_phase)
         _append_transaction_event(journal, recovery_envelope, started_phase)
-        run_services(["start", "homebox-native", "homebox-companion", "homebox-workshop-gateway"])
+        active = latest.get("initial_active_services", ["native", "companion", "gateway"])
+        services = {"native": "homebox-native", "companion": "homebox-companion",
+                    "gateway": "homebox-workshop-gateway"}
+        run_services(["start", *(services[name] for name in active)])
         assert_work()
         if selector.resolve(strict=True) != target:
             raise BundleError("selector changed while recovery services started")
