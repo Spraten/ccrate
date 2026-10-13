@@ -50,7 +50,8 @@
 .workshop-native .timeline small{color:hsl(var(--muted-foreground))}
 .workshop-native .map{display:block;width:100%;height:27rem;background:hsl(var(--muted) / .3);border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);touch-action:none}
 .workshop-native .map g[role=button]{cursor:pointer}
-.workshop-native .map g[role=button]:focus{outline:2px solid hsl(var(--ring))}
+.workshop-native .map g[role=button]:focus{outline:none}
+.workshop-native .map g[role=button]:focus > :is(rect,path,polygon,circle):first-child{stroke:hsl(var(--ring));stroke-width:3px;stroke-dasharray:4px 2px;vector-effect:non-scaling-stroke}
 .workshop-native .map text{pointer-events:none}
 .workshop-native .map-toolbar{margin-bottom:.75rem}
 .workshop-native .location-tree{list-style:none;padding-left:1rem}
@@ -129,7 +130,8 @@
 .workshop-native .planner-svg [data-workshop-drawing]{cursor:grab;touch-action:none}
 .workshop-native .planner-svg [data-workshop-drawing]:active{cursor:grabbing}
 .workshop-native .planner-svg [data-resize-handle]{cursor:nwse-resize}
-.workshop-native .planner-svg [role=button]:focus-visible{outline:2px solid hsl(var(--ring));outline-offset:3px}
+.workshop-native .planner-svg [role=button]:focus-visible{outline:none}
+.workshop-native .planner-svg [data-workshop-drawing]:focus-visible [data-object-shape],.workshop-native .planner-svg [data-resize-handle]:focus-visible{stroke:hsl(var(--ring));stroke-width:3px;stroke-dasharray:4px 2px;vector-effect:non-scaling-stroke}
 .workshop-native .planner-svg [data-object-shape]{filter:drop-shadow(0 .035rem .025rem #26394335)}
 .workshop-native .planner-svg [data-workshop-drawing].is-selected [data-object-shape]{filter:drop-shadow(0 .05rem .05rem #233c5755)}
 .workshop-native .planner-legend{display:flex;align-items:center;gap:.85rem;flex-wrap:wrap;font-size:.72rem;color:hsl(var(--muted-foreground));margin:.4rem 0 0}
