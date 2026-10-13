@@ -1,6 +1,7 @@
 import json
 import pathlib
 import base64
+from io import BytesIO
 import os
 import time
 import unittest
@@ -9,6 +10,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from urllib.error import HTTPError
 
 from playwright.sync_api import sync_playwright
+from PIL import Image
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -570,6 +572,62 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertGreaterEqual(transform['size'],11)
         self.assertEqual(self.errors,[])
 
+    def test_keyboard_focus_ring_stays_around_drawing_at_map_scale(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':2,'y':3,'width':6,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        group=self.page.locator('[data-workshop-drawing]')
+        shape_locator=group.locator('[data-object-shape]')
+        unfocused=shape_locator.evaluate("el=>{const style=getComputedStyle(el);return {stroke:style.stroke,width:style.strokeWidth,dash:style.strokeDasharray}}")
+        self.page.get_by_role('button',name='Pan right',exact=True).focus()
+        self.page.keyboard.press('Tab')
+        self.page.keyboard.press('Tab')
+        self.assertTrue(group.evaluate("el=>el.matches(':focus-visible')"))
+        focused=shape_locator.evaluate("el=>{const style=getComputedStyle(el);return {stroke:style.stroke,width:style.strokeWidth,dash:style.strokeDasharray,vectorEffect:style.vectorEffect}}")
+        self.assertEqual(focused['stroke'],unfocused['stroke'])
+        self.assertNotEqual(focused['dash'],unfocused['dash'],'focus stays distinct when the selected border uses the same theme color')
+        self.assertEqual(focused['width'],'3px')
+        self.assertEqual(focused['vectorEffect'],'non-scaling-stroke')
+        self.page.locator('html').evaluate("el=>el.style.setProperty('--ring','300 100% 50%')")
+        shape=shape_locator.bounding_box()
+        self.assert_focus_ink_tracks(shape)
+        self.assertEqual(self.errors,[])
+
+    def test_resize_handle_keeps_visible_bounded_keyboard_focus(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':2,'y':3,'width':6,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.page.locator('html').evaluate("el=>el.style.setProperty('--ring','300 100% 50%')")
+        self.page.get_by_role('button',name='Pan right',exact=True).focus()
+        for _ in range(3):
+            self.page.keyboard.press('Tab')
+        handle=self.page.locator('[data-resize-handle]')
+        self.assertTrue(handle.evaluate("el=>el===document.activeElement&&el.matches(':focus-visible')"))
+        focus_style=handle.evaluate("el=>{const style=getComputedStyle(el);return {width:style.strokeWidth,dash:style.strokeDasharray,vectorEffect:style.vectorEffect}}")
+        self.assertEqual(focus_style,{'width':'3px','dash':'4px, 2px','vectorEffect':'non-scaling-stroke'})
+        self.assert_focus_ink_tracks(handle.bounding_box())
+        self.assertEqual(self.errors,[])
+
+    def test_legacy_map_focus_ring_uses_bounded_shape_stroke(self):
+        self.page.locator('html').evaluate("el=>el.style.setProperty('--ring','300 100% 50%')")
+        self.page.evaluate('''() => {
+          const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+          svg.setAttribute('class','map');svg.setAttribute('viewBox','0 0 20 20');
+          svg.style.cssText='position:fixed;left:24px;top:24px;width:200px;height:200px;z-index:9999';
+          const group=document.createElementNS(svg.namespaceURI,'g');group.setAttribute('role','button');group.setAttribute('tabindex','0');
+          const shape=document.createElementNS(svg.namespaceURI,'rect');shape.setAttribute('x','2');shape.setAttribute('y','3');shape.setAttribute('width','6');shape.setAttribute('height','2');shape.setAttribute('fill','#83909b');
+          group.append(shape);svg.append(group);document.querySelector('.workshop-native').append(svg);group.focus();
+        }''')
+        shape_locator=self.page.locator('.map g[role=button] rect')
+        focus_style=shape_locator.evaluate("el=>{const style=getComputedStyle(el);return {width:style.strokeWidth,dash:style.strokeDasharray,vectorEffect:style.vectorEffect}}")
+        self.assertEqual(focus_style,{'width':'3px','dash':'4px, 2px','vectorEffect':'non-scaling-stroke'})
+        shape=shape_locator.bounding_box()
+        self.assert_focus_ink_tracks(shape)
+        self.assertEqual(self.errors,[])
+
     def test_benchtop_cnc_caption_has_theme_contrast_backing(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Benchtop CNC','kind':'Misc','x':2,'y':3,'width':4,'height':3,'rotation':0,'location_id':None}
@@ -595,6 +653,7 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertGreaterEqual(result['contrast'],4.5,result)
         self.assertGreater(result['backingBounds']['width'],result['captionBounds']['width'])
         self.assertEqual(self.errors,[])
+
 
     def test_palette_keyboard_order_starts_with_catalog_at_desktop_and_narrow_width(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -1322,6 +1381,22 @@ class WorkshopBrowserTests(unittest.TestCase):
           window.instance.dispose(); window.instance=window.mountFixture();
         }""", {'document': document, 'revision': revision, 'selectedDrawing': selected_drawing, 'types': types})
         self.page.locator('.planner-svg').wait_for(state='visible')
+
+    def focus_ink_bounds(self):
+        screenshot=Image.open(BytesIO(self.page.screenshot())).convert('RGB')
+        ink=[]
+        for y in range(screenshot.height):
+            for x in range(screenshot.width):
+                red,green,blue=screenshot.getpixel((x,y))
+                if red>=180 and blue>=180 and green<=90:
+                    ink.append((x,y))
+        return (min(x for x,_ in ink),min(y for _,y in ink),max(x for x,_ in ink),max(y for _,y in ink)) if ink else None
+
+    def assert_focus_ink_tracks(self, shape):
+        bounds=self.focus_ink_bounds()
+        self.assertIsNotNone(bounds,'Keyboard focus must remain visibly indicated.')
+        outside=max(shape['x']-bounds[0],shape['y']-bounds[1],bounds[2]-(shape['x']+shape['width']),bounds[3]-(shape['y']+shape['height']))
+        self.assertLessEqual(outside,4,{'focus_pixels':bounds,'shape':shape})
 
     def test_rooms4_clean_refresh_clears_only_stale_room_history(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
