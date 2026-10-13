@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/sysadminsmedia/homebox/backend/internal/data/ent/entityfield"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,4 +149,42 @@ func TestItemShortCodeCounterExpandsPastThreeDigits(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
 	require.Equal(t, "THR-1000", code)
+}
+
+func TestGetByShortCodeDetectsPaddedSerialCollision(t *testing.T) {
+	ctx := context.Background()
+	itemType := useItemEntityType(t)
+	owner, err := tRepos.Entities.Create(ctx, tGroup.ID, EntityCreate{Name: "Code owner", ModelNumber: "COL", EntityTypeID: itemType.ID})
+	require.NoError(t, err)
+	other, err := tRepos.Entities.Create(ctx, tGroup.ID, EntityCreate{Name: "Serial collision", ModelNumber: "OTH", EntityTypeID: itemType.ID})
+	require.NoError(t, err)
+	for _, item := range []EntityOut{owner, other} {
+		t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, item.ID) })
+	}
+	require.NoError(t, tClient.Entity.UpdateOneID(other.ID).SetSerialNumber("X" + owner.ShortCode + "X").Exec(ctx))
+	resolved, err := tRepos.Entities.GetByShortCode(ctx, tGroup.ID, owner.ShortCode)
+	require.NoError(t, err)
+	require.Equal(t, owner.ID, resolved.ID, "substring-only serial is not a collision")
+	require.NoError(t, tClient.Entity.UpdateOneID(other.ID).SetSerialNumber("  " + owner.ShortCode + "  ").Exec(ctx))
+
+	_, err = tRepos.Entities.GetByShortCode(ctx, tGroup.ID, owner.ShortCode)
+	require.ErrorContains(t, err, "short code is ambiguous")
+}
+
+func TestGetByShortCodeDetectsPaddedManufacturerQRCodeCollision(t *testing.T) {
+	ctx := context.Background()
+	itemType := useItemEntityType(t)
+	owner, err := tRepos.Entities.Create(ctx, tGroup.ID, EntityCreate{Name: "Code owner", ModelNumber: "COL", EntityTypeID: itemType.ID})
+	require.NoError(t, err)
+	other, err := tRepos.Entities.Create(ctx, tGroup.ID, EntityCreate{Name: "QR collision", ModelNumber: "OTH", EntityTypeID: itemType.ID})
+	require.NoError(t, err)
+	for _, item := range []EntityOut{owner, other} {
+		t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, item.ID) })
+	}
+	_, err = tClient.EntityField.Create().SetEntityID(other.ID).SetName("Manufacturer QR code").
+		SetType(entityfield.Type("text")).SetTextValue("  " + owner.ShortCode + "  ").Save(ctx)
+	require.NoError(t, err)
+
+	_, err = tRepos.Entities.GetByShortCode(ctx, tGroup.ID, owner.ShortCode)
+	require.ErrorContains(t, err, "short code is ambiguous")
 }

@@ -53,8 +53,8 @@ func (r *EntityRepository) GetByShortCode(ctx context.Context, gid uuid.UUID, co
 		entity.HasEntityTypeWith(entitytype.IsLocation(false)),
 		entity.Or(
 			entity.ShortCodeEqualFold(code),
-			entity.SerialNumberEqualFold(code),
-			entity.HasFieldsWith(entityfield.And(entityfield.Name("Manufacturer QR code"), entityfield.TextValueEqualFold(code))),
+			entity.SerialNumberContainsFold(code),
+			entity.HasFieldsWith(entityfield.And(entityfield.Name("Manufacturer QR code"), entityfield.TextValueContainsFold(code))),
 		),
 	).WithFields().All(ctx)
 	if err != nil {
@@ -63,9 +63,9 @@ func (r *EntityRepository) GetByShortCode(ctx context.Context, gid uuid.UUID, co
 	owners := make(map[uuid.UUID]*ent.Entity)
 	for _, candidate := range items {
 		shortCodeMatch := candidate.ShortCode != nil && strings.EqualFold(*candidate.ShortCode, code)
-		metadataMatch := strings.EqualFold(candidate.SerialNumber, code)
+		metadataMatch := strings.EqualFold(strings.TrimSpace(candidate.SerialNumber), code)
 		for _, field := range candidate.Edges.Fields {
-			if field.Name == "Manufacturer QR code" && strings.EqualFold(field.TextValue, code) {
+			if field.Name == "Manufacturer QR code" && strings.EqualFold(strings.TrimSpace(field.TextValue), code) {
 				metadataMatch = true
 			}
 		}
