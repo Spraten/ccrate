@@ -531,13 +531,16 @@ function paintPlannerCanvas(room, canvas) {
     if (gesture.moved) plannerPan = gesture.nextPan;
   };
   plan.onpointerdown = event => {
-    if (!event.isPrimary || event.button !== 0 || event.target.closest('[data-workshop-drawing]')) return;
+    if (!event.isPrimary || (event.button !== 0 && event.button !== 1) || event.target.closest('[data-workshop-drawing]')) return;
     suppressPlannerClick = false;
-    const box = plan.getBoundingClientRect();
+    const inverse = plan.getScreenCTM()?.inverse();
+    if (!inverse) return;
+    const screenToRoom = new DOMMatrix([inverse.a,inverse.b,inverse.c,inverse.d,inverse.e,inverse.f]);
+    const startPoint = new DOMPoint(event.clientX,event.clientY).matrixTransform(screenToRoom);
     backgroundPan = {
-      pointerId:event.pointerId, x:event.clientX, y:event.clientY,
+      pointerId:event.pointerId, startPoint, screenToRoom, screenX:event.clientX, screenY:event.clientY,
       pan:{...plannerPan}, nextPan:{...plannerPan}, roomId:room.id, zoom:plannerZoom,
-      width, height, boxWidth:box.width, boxHeight:box.height,
+      width, height,
       viewBox:plan.getAttribute('viewBox'), moved:false,
     };
     plan.classList.add('is-panning');
@@ -549,12 +552,12 @@ function paintPlannerCanvas(room, canvas) {
       endBackgroundPan(event, true);
       return;
     }
-    const dx=event.clientX-backgroundPan.x,dy=event.clientY-backgroundPan.y;
-    if (!backgroundPan.moved && Math.hypot(dx,dy)<3) return;
+    const pointer = new DOMPoint(event.clientX,event.clientY).matrixTransform(backgroundPan.screenToRoom);
+    const dx=pointer.x-backgroundPan.startPoint.x,dy=pointer.y-backgroundPan.startPoint.y;
+    if (!backgroundPan.moved && Math.hypot(event.clientX-backgroundPan.screenX,event.clientY-backgroundPan.screenY)<3) return;
     backgroundPan.moved = true;
     suppressPlannerClick = true;
-    const scaleX=backgroundPan.width/Math.max(1,backgroundPan.boxWidth),scaleY=backgroundPan.height/Math.max(1,backgroundPan.boxHeight);
-    backgroundPan.nextPan={x:backgroundPan.pan.x-dx*scaleX,y:backgroundPan.pan.y-dy*scaleY};
+    backgroundPan.nextPan={x:backgroundPan.pan.x-dx,y:backgroundPan.pan.y-dy};
     plan.setAttribute('viewBox',`${backgroundPan.nextPan.x} ${backgroundPan.nextPan.y} ${backgroundPan.width} ${backgroundPan.height}`);
   };
   plan.onpointerup = event => endBackgroundPan(event);
