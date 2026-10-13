@@ -154,6 +154,16 @@ The user reports too few objects, clunky/buggy interactions, stretched object te
 
 Parallel workers must not edit the same builder, shared type or README simultaneously. Assign one owner to shared contracts and integrate dependent tasks sequentially. Run focused tests after each task and a fresh whole-branch review before publication. Keep the existing exact upstream typecheck baseline; do not expand it to hide new diagnostics.
 
+## Item shortcodes (2026-10-13)
+
+The user needs a short manual lookup alternative when an item's UUID QR cannot be scanned, and a corresponding draggable label field. Use a permanent native `shortCode` such as `DHP-001`, linked to the existing UUID. The first three uppercase ASCII letters/digits come from the model number after removing punctuation, falling back to the item name; pad a shorter prefix with `X`, or use `ITM` when neither supplies characters. Prefixes are readable model hints, not separate model identities: models sharing a prefix share its sequence. Numbering starts at 001, expands beyond 999, is collection-scoped, and never reuses a deleted number.
+
+Store assignments and counters in the native Homebox database with transactional allocation and a collection/code uniqueness constraint. Allocate on every native item creation path and idempotently backfill existing/archived items; preserve UUIDs, asset IDs, metadata and assignments through ordinary updates. Duplicates and newly imported items get new codes. Existing-item import updates retain codes. Read/preview requests never allocate. Database backups restore assignments and counters together. CSV identity policy must be explicit; never silently adopt a conflicting code supplied by an import.
+
+Expose `shortCode` on native item summaries/details and in native search. Keep UUID QR contents unchanged. The existing manual-code flows accept trimmed, case-insensitive `XXX-123` and resolve under the active collection/account; unavailable/archived/foreign items do not resolve. A collision with an existing manufacturer/serial code fails closed instead of silently choosing another item. Label templates use `{{short_code}}`; selected-item canvas preview, rendered review and output read the real native value. Codes remain fixed after model/name/parent edits so printed labels stay valid. Add an obvious Short code insertion control and display/copy the code on the item, following the existing theme.
+
+Implement and verify this bounded feature in the existing authorities before the broader redesign. No Pi deployment or physical printing is authorized by this feature request.
+
 ## Separate reliability follow-up queue
 
 - Native metadata edits can be overwritten by companion read/modify/write operations.
