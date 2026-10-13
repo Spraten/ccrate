@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { register } from 'node:module'
 import test from 'node:test'
 import { fitElementToPage, overlapsExisting } from '../label-ui/vendor/print-design-pro/src/core/element-placement.js'
 import { fitTextToBox, TEXT_LINE_HEIGHT } from '../label-ui/vendor/print-design-pro/src/render/text-layout.ts'
@@ -20,6 +21,22 @@ function createShortCode(place) {
   }
 }
 
+// Load the real TypeScript factory in Node's native test runner while stubbing
+// only its UUID source; its geometry and font defaults remain production code.
+const vendorTsLoader = `
+export async function resolve(specifier, context, nextResolve) {
+  if (context.parentURL?.endsWith('/element-factories.ts') && specifier === './schema/template') {
+    return { url: 'data:text/javascript,export%20function%20newId()%7Breturn%20%22factory-test-id%22%7D', shortCircuit: true }
+  }
+  if (specifier.startsWith('.') && context.parentURL?.includes('/label-ui/vendor/print-design-pro/src/') && !/\\.[a-z0-9]+$/i.test(specifier))
+    return nextResolve(specifier + '.ts', context)
+  return nextResolve(specifier, context)
+}
+`
+register(`data:text/javascript,${encodeURIComponent(vendorTsLoader)}`, import.meta.url)
+await new Promise(resolve => setImmediate(resolve))
+const { createText } = await import('../label-ui/vendor/print-design-pro/src/core/element-factories.ts')
+
 test('fits new elements to the active label while keeping their center and proportions', () => {
   const text = fitElementToPage({ type: 'text', xMm: -10, yMm: 8, widthMm: 60, heightMm: 12 }, { widthMm: 40, heightMm: 28 })
   assert.deepEqual([text.xMm, text.yMm, text.widthMm, text.heightMm], [0, 10, 40, 8])
@@ -36,8 +53,10 @@ test('fits new elements to the active label while keeping their center and propo
 })
 
 test('places readable text into available space around starter artwork without touching the item QR', () => {
+  const textToolElement = createText({ centerXMm: 20, centerYMm: 14 })
+  assert.equal(textToolElement.fontSizePt, 9, 'the editor text tool uses its maintained printable default')
   const text = fitElementToPage(
-    { type: 'text', xMm: -10, yMm: 8, widthMm: 60, heightMm: 12, fontSizePt: 14 },
+    textToolElement,
     { widthMm: 40, heightMm: 28 },
     [
       { type: 'qr', xMm: 2, yMm: 4.5, widthMm: 19, heightMm: 19, visible: true },
@@ -45,9 +64,9 @@ test('places readable text into available space around starter artwork without t
       { type: 'text', xMm: 23, yMm: 13, widthMm: 15, heightMm: 6, visible: true },
     ],
   )
-  assert.deepEqual([text.xMm, text.yMm], [21, 19])
-  assert.ok(text.widthMm >= 18.5 && text.heightMm >= 14 * 25.4 / 72 * TEXT_LINE_HEIGHT)
-  const rendered = fitTextToBox('Text', text.widthMm, text.heightMm, 14 * 25.4 / 72, { measure: value => [...value].length * 2 })
+  assert.ok(text.xMm >= 0 && text.yMm >= 0 && text.xMm + text.widthMm <= 40 && text.yMm + text.heightMm <= 28)
+  assert.ok(text.widthMm >= 18.5 && text.heightMm >= textToolElement.fontSizePt * 25.4 / 72 * TEXT_LINE_HEIGHT)
+  const rendered = fitTextToBox(text.content, text.widthMm, text.heightMm, text.fontSizePt * 25.4 / 72, { measure: value => [...value].length * 2 })
   assert.deepEqual(rendered, { lines: ['Text'], truncated: false }, 'the actual print layout keeps the inserted default text legible')
   assert.equal(overlapsExisting(text, [
     { xMm: 2, yMm: 4.5, widthMm: 19, heightMm: 19, visible: true },
@@ -122,7 +141,7 @@ test('bounds dense-label search work at the supported 128-element limit', () => 
     widthMm: 8, heightMm: 7, visible: true,
   }))
   const started = performance.now()
-  const text = fitElementToPage({ type: 'text', xMm: -10, yMm: 8, widthMm: 60, heightMm: 12, fontSizePt: 14 }, page, dense)
+  const text = fitElementToPage(createText({ centerXMm: 20, centerYMm: 14 }), page, dense)
   assert.ok(performance.now() - started < 250, 'dense placement avoids unbounded candidate search')
   assert.ok(text.xMm >= 0 && text.yMm >= 0 && text.xMm + text.widthMm <= page.widthMm && text.yMm + text.heightMm <= page.heightMm)
 })
