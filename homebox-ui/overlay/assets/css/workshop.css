@@ -130,7 +130,7 @@
 .workshop-native .planner-svg [data-workshop-drawing]{cursor:grab;touch-action:none}
 .workshop-native .planner-svg [data-workshop-drawing]:active{cursor:grabbing}
 .workshop-native .planner-svg [data-resize-handle]{cursor:nwse-resize}
-.workshop-native .planner-svg [role=button]:focus-visible{outline:none}
+.workshop-native .planner-svg [role=button]:focus{outline:none}
 .workshop-native .planner-svg [data-workshop-drawing]:focus-visible [data-object-shape],.workshop-native .planner-svg [data-resize-handle]:focus-visible{stroke:hsl(var(--ring));stroke-width:3px;stroke-dasharray:4px 2px;vector-effect:non-scaling-stroke}
 .workshop-native .planner-svg [data-object-shape]{filter:drop-shadow(0 .035rem .025rem #26394335)}
 .workshop-native .planner-svg [data-workshop-drawing].is-selected [data-object-shape]{filter:drop-shadow(0 .05rem .05rem #233c5755)}
