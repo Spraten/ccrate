@@ -675,6 +675,37 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertTrue(self.page.get_by_role('button',name='Save all room changes').is_enabled())
         self.assertEqual(self.errors,[])
 
+    def test_canvas_pan_tracks_pointer_through_svg_letterboxing_and_zoom(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':6,'y':7,'width':4,'height':3,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        for viewport in ({'width':1280,'height':720},{'width':900,'height':1000}):
+            with self.subTest(viewport=viewport):
+                self.page.set_viewport_size(viewport)
+                self.install_rooms4_plan(document,selected_drawing=DRAWING)
+                self.page.get_by_role('button',name='Zoom in',exact=True).click()
+                self.page.get_by_role('button',name='Zoom in',exact=True).click()
+                svg=self.page.locator('.planner-svg')
+                svg_box=svg.bounding_box()
+                surface_box=svg.locator('[data-room-surface]').bounding_box()
+                start={'x':svg_box['x']+8,'y':svg_box['y']+8}
+                self.assertFalse(surface_box['x']<=start['x']<=surface_box['x']+surface_box['width'] and surface_box['y']<=start['y']<=surface_box['y']+surface_box['height'],
+                                 'This gesture begins in blank SVG space outside the room boundary.')
+                shape=self.page.locator('[data-workshop-drawing] [data-object-shape]')
+                initial=shape.bounding_box()
+                self.page.mouse.move(start['x'],start['y'])
+                self.page.mouse.down()
+                try:
+                    self.assertTrue(svg.evaluate("el=>el.classList.contains('is-panning')"), 'The SVG must capture a background pan pointer.')
+                    for dx,dy in ((36,24),(68,43)):
+                        self.page.mouse.move(start['x']+dx,start['y']+dy)
+                        moved=shape.bounding_box()
+                        self.assertAlmostEqual(moved['x']-initial['x'],dx,delta=1.5, msg=f'x movement at {viewport}')
+                        self.assertAlmostEqual(moved['y']-initial['y'],dy,delta=1.5, msg=f'y movement at {viewport}')
+                finally:
+                    self.page.mouse.up()
+        self.assertEqual(self.errors,[])
+
     def test_pointer_cancel_restores_empty_canvas_camera_without_room_edits(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
