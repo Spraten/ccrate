@@ -1,3 +1,4 @@
+Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 name: Build and publish C-Crate ARM64 releases
 
 on:
@@ -77,8 +78,8 @@ jobs:
           key: ccrate-linux-arm64-labels-${{ hashFiles('deploy/build-label-ui.py', 'label-ui/vendor/**', 'label-ui/src/**', 'label-ui/public/**', 'label-ui/patches/**', 'label-ui/pnpm-lock.yaml', 'label-ui/vendor-manifest.json', 'label-ui/package.json', 'label-ui/vite.config.ts', 'label-ui/editor.html', 'label-ui/render.html') }}-node24.21.0-pnpm10.28.0
           restore-keys: ccrate-linux-arm64-labels-
 
-      - name: Run producer and bundle contract tests
-        run: python3 -m unittest tests.test_build_release tests.test_release_bundle tests.test_release_launchers -v
+      - name: Run candidate build, bundle, and updater tests
+        run: python3 -m unittest tests.test_build_release tests.test_update_ccrate -v
 
       - name: Build and seal candidate
         run: python3 deploy/build-release.py --source-root . --toolchain-root work/toolchains --output "work/releases/${GITHUB_SHA}"

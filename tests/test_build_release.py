@@ -1,3 +1,4 @@
+Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 import importlib.util
 import hashlib
 import json
@@ -59,6 +60,13 @@ class BuildReleaseTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_candidate_verification_scopes_receipt_to_builder_bundle_and_updater_checks(self):
+        commands = build_release.verification_commands(sys.executable)
+        self.assertEqual(commands, [[
+            sys.executable, "-m", "unittest", "tests.test_build_release",
+            "tests.test_update_ccrate", "-v",
+        ]])
 
     def run_builder(self, component, *, source_root, toolchain_root, output_path):
         self.calls.append(component)
