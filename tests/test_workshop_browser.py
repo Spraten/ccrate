@@ -595,6 +595,24 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assert_focus_ink_tracks(shape)
         self.assertEqual(self.errors,[])
 
+    def test_pointer_focus_does_not_show_scaled_browser_outline(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Workbench','kind':'Workbench','x':2,'y':3,'width':6,'height':2.5,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document)
+        group=self.page.locator('[data-workshop-drawing]')
+        box=group.bounding_box()
+        self.page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2)
+        self.page.mouse.down()
+        try:
+            state=group.evaluate("el=>({focused:el.matches(':focus'),focusVisible:el.matches(':focus-visible'),outline:getComputedStyle(el).outlineStyle})")
+            self.assertTrue(state['focused'],state)
+            self.assertFalse(state['focusVisible'],state)
+            self.assertEqual(state['outline'],'none','Pointer focus must not render the browser default outline in map units.')
+        finally:
+            self.page.mouse.up()
+        self.assertEqual(self.errors,[])
+
     def test_resize_handle_keeps_visible_bounded_keyboard_focus(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         drawing={'id':DRAWING,'name':'Shelf A1','kind':'Rack','x':2,'y':3,'width':6,'height':2,'rotation':0,'location_id':None}
