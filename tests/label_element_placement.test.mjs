@@ -55,6 +55,9 @@ test('fits new elements to the active label while keeping their center and propo
 test('places readable text into available space around starter artwork without touching the item QR', () => {
   const textToolElement = createText({ centerXMm: 20, centerYMm: 14 })
   assert.equal(textToolElement.fontSizePt, 9, 'the editor text tool uses its maintained printable default')
+  const shortCodeToolElement = createText({ centerXMm: 20, centerYMm: 14 }, '{{short_code}}')
+  assert.equal(shortCodeToolElement.content, '{{short_code}}')
+  assert.equal(shortCodeToolElement.fontSizePt, 9, 'short-code labels use the same printable text factory')
   const text = fitElementToPage(
     textToolElement,
     { widthMm: 40, heightMm: 28 },
