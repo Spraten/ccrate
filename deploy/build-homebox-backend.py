@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """Stage a pinned native backend with flexible hierarchy fixes; never deploy it."""
-import pathlib,shutil,subprocess,os,json,hashlib,re
+import argparse,pathlib,shutil,subprocess,os,json,hashlib,re
 from datetime import datetime,timezone
-ROOT=pathlib.Path(__file__).resolve().parents[1]
+parser=argparse.ArgumentParser()
+parser.add_argument('--source-root',type=pathlib.Path,default=pathlib.Path(__file__).resolve().parents[1])
+parser.add_argument('--toolchain-root',type=pathlib.Path)
+parser.add_argument('--output',type=pathlib.Path)
+parser.add_argument('--external-frontend',action='store_true')
+args=parser.parse_args()
+ROOT=args.source_root.resolve()
 BUILD=ROOT/'work/homebox-backend-build'
 shutil.copytree(ROOT/'upstream/homebox/backend',BUILD,dirs_exist_ok=True)
 for source, destination in (
@@ -21,8 +27,9 @@ anchor='\t\tfield.String("import_ref").'
 assert body.count(anchor)==1
 body=body.replace(anchor,'\t\tfield.String("short_code").Optional().Nillable().MaxLen(32),\n'+anchor)
 schema.write_text(body)
-go=pathlib.Path((ROOT/'work/toolchains/go-path.txt').read_text().strip())/'bin/go'
-env=dict(os.environ,CGO_ENABLED='0',GOTOOLCHAIN='local',GOPATH=str(ROOT/'work/toolchains/go-cache'),GOCACHE=str(ROOT/'work/toolchains/go-build-cache'))
+TOOLCHAIN=args.toolchain_root.resolve() if args.toolchain_root else ROOT/'work/toolchains'
+go=pathlib.Path((TOOLCHAIN/'go-path.txt').read_text().strip())/'bin/go'
+env=dict(os.environ,CGO_ENABLED='0',GOTOOLCHAIN='local',GOPATH=str(TOOLCHAIN/'go-cache'),GOCACHE=str(TOOLCHAIN/'go-build-cache'))
 subprocess.run([str(go),'generate','./internal/data/ent'],cwd=BUILD,env=env,check=True)
 test_main=BUILD/'internal/data/repo/main_test.go';mb=test_main.read_text()
 mb=mb.replace('"github.com/sysadminsmedia/homebox/backend/internal/data/ent"','"github.com/sysadminsmedia/homebox/backend/internal/data/ent"\n\t"github.com/sysadminsmedia/homebox/backend/internal/data/shortcodes"',1)
@@ -364,12 +371,25 @@ start=body.index('const docTemplate = `')+len('const docTemplate = `');end=body.
 raw=body[start:end].replace('{{ marshal .Schemes }}','"__CACI_SCHEMES__"')
 raw=json.dumps(patch_contract(json.loads(raw)),indent=2).replace('"__CACI_SCHEMES__"','{{ marshal .Schemes }}').replace('`',r'\u0060')
 docs.write_text(body[:start]+raw+body[end:])
-# Embed the current verified frontend; the public gateway selects its own release.
-shutil.copytree(ROOT/'work/homebox-ui-current',BUILD/'app/api/static/public',dirs_exist_ok=True)
+# Release builds hand frontend requests to the workshop gateway. Keep the
+# selected-frontend embed for direct local builds until all callers migrate.
+public=BUILD/'app/api/static/public'
+if args.external_frontend:
+    public.mkdir(parents=True,exist_ok=True)
+    (public/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>C-Crate</title><p>The C-Crate interface is served by the workshop gateway.</p><a href="/">Open C-Crate</a>\n')
+else:
+    shutil.copytree(ROOT/'work/homebox-ui-current',public,dirs_exist_ok=True)
 subprocess.run([str(go.with_name('gofmt')),'-w',str(schema),str(source),str(source.parent/'repo_hierarchy.go'),str(controller),str(docs),str(users),str(profile_repo),str(profile_controller),str(routes),str(groups),str(service),str(BUILD/'internal/data/repo/repo_short_codes.go'),str(BUILD/'internal/data/repo/repo_short_codes_test.go'),str(BUILD/'internal/data/ent/short_code_tx.go'),str(BUILD/'internal/data/shortcodes/migration_test.go'),str(BUILD/'app/api/handlers/v1/v1_ctrl_item_short_codes.go')],check=True)
 pin=subprocess.check_output(['git','-C',str(ROOT/'upstream/homebox'),'rev-parse','HEAD'],text=True).strip()
 flags='-s -w -X main.version=0.26.2-caci.2-shortcodes -X main.commit='+pin+'+hierarchy+members+shortcodes -X main.date='+datetime.now(timezone.utc).isoformat()
+if args.external_frontend:
+    if 'CCRATE_GOOS' in os.environ: env['GOOS']=os.environ['CCRATE_GOOS']
+    if 'CCRATE_GOARCH' in os.environ: env['GOARCH']=os.environ['CCRATE_GOARCH']
 subprocess.run([str(go),'build','-mod=readonly','-p','2','-trimpath','-ldflags',flags,'-o',str(BUILD/'homebox'),'./app/api'],cwd=BUILD,env=env,check=True)
 receipt={'upstream':pin,'hierarchy_source_sha256':hashlib.sha256((ROOT/'homebox-backend/repo_hierarchy.go').read_bytes()).hexdigest(),'member_sources_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'homebox-backend/repo_member_profiles.go',ROOT/'homebox-backend/v1_ctrl_member_profiles.go')},'short_code_sources_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'homebox-backend/repo_short_codes.go',ROOT/'homebox-backend/ent_tx_sql.go',ROOT/'homebox-backend/v1_ctrl_item_short_codes.go',ROOT/'homebox-backend/shortcodes/short_code.go',ROOT/'homebox-backend/shortcodes/migration.go',ROOT/'homebox-backend/20260513120000_item_short_codes.go',ROOT/'homebox-backend/20260513120001_item_short_codes.go')},'binary_sha256':hashlib.sha256((BUILD/'homebox').read_bytes()).hexdigest(),'version':'0.26.2-caci.2-shortcodes','deployed':False}
 (BUILD/'build-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+if args.output:
+    output=args.output.resolve()
+    output.mkdir(parents=True,exist_ok=True)
+    shutil.copy2(BUILD/'homebox',output/'homebox')
 print(json.dumps(receipt))

@@ -1,0 +1,203 @@
+name: Build and publish C-Crate ARM64 releases
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["ccrate-*"]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build and verify Linux ARM64 candidate
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      release_ready: ${{ steps.capability.outputs.ready }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check out pinned source and submodules
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install Go 1.26.0
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: 1.26.0
+          cache: false
+
+      - name: Install Node.js 24.21.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.21.0
+          check-latest: false
+
+      - name: Prepare pinned toolchain layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/toolchains/pnpm/node_modules/.bin
+          printf '%s\n' "$(go env GOROOT)" > work/toolchains/go-path.txt
+          node_root="$(dirname "$(dirname "$(readlink -f "$(command -v node)")")")"
+          printf '%s\n' "$node_root" > work/toolchains/node-path.txt
+          corepack enable
+          corepack prepare pnpm@10.28.0 --activate
+          ln -s "$(command -v pnpm)" work/toolchains/pnpm/node_modules/.bin/pnpm
+          test "$(go version)" = "go version go1.26.0 linux/arm64"
+          test "$(node --version)" = "v24.21.0"
+          test "$(pnpm --version)" = "10.28.0"
+          test "$(uname -m)" = "aarch64"
+
+      - name: Restore backend component cache
+        id: backend-cache
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # actions/cache v4.2.3
+        with:
+          path: work/component-builds/backend
+          key: ccrate-linux-arm64-backend-${{ hashFiles('deploy/build-homebox-backend.py', 'homebox-backend/**', 'upstream/homebox/PIN', 'upstream/homebox/backend/**') }}-go1.26.0
+          restore-keys: ccrate-linux-arm64-backend-
+
+      - name: Restore frontend component cache
+        id: frontend-cache
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # actions/cache v4.2.3
+        with:
+          path: work/component-builds/frontend
+          key: ccrate-linux-arm64-frontend-${{ hashFiles('deploy/build-homebox-ui.py', 'homebox-ui/overlay/**', 'homebox-ui/pnpm-lock.yaml', 'homebox-ui/upstream-typecheck.json', 'upstream/homebox/PIN', 'upstream/homebox/frontend/**', 'kiosk/branding/**', 'kiosk/member-avatar.js', 'kiosk/label-editor.js') }}-node24.21.0-pnpm10.28.0
+          restore-keys: ccrate-linux-arm64-frontend-
+
+      - name: Restore label component cache
+        id: labels-cache
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # actions/cache v4.2.3
+        with:
+          path: work/component-builds/labels
+          key: ccrate-linux-arm64-labels-${{ hashFiles('deploy/build-label-ui.py', 'label-ui/vendor/**', 'label-ui/src/**', 'label-ui/public/**', 'label-ui/patches/**', 'label-ui/pnpm-lock.yaml', 'label-ui/vendor-manifest.json', 'label-ui/package.json', 'label-ui/vite.config.ts', 'label-ui/editor.html', 'label-ui/render.html') }}-node24.21.0-pnpm10.28.0
+          restore-keys: ccrate-linux-arm64-labels-
+
+      - name: Run producer and bundle contract tests
+        run: python3 -m unittest tests.test_build_release tests.test_release_bundle tests.test_release_launchers -v
+
+      - name: Build and seal candidate
+        run: python3 deploy/build-release.py --source-root . --toolchain-root work/toolchains --output "work/releases/${GITHUB_SHA}"
+
+      - name: Save backend component cache
+        if: steps.backend-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # actions/cache v4.2.3
+        with:
+          path: work/component-builds/backend
+          key: ${{ steps.backend-cache.outputs.cache-primary-key }}
+
+      - name: Save frontend component cache
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # actions/cache v4.2.3
+        with:
+          path: work/component-builds/frontend
+          key: ${{ steps.frontend-cache.outputs.cache-primary-key }}
+
+      - name: Save label component cache
+        if: steps.labels-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # actions/cache v4.2.3
+        with:
+          path: work/component-builds/labels
+          key: ${{ steps.labels-cache.outputs.cache-primary-key }}
+
+      - name: Verify release descriptor and archive identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib, tarfile
+          root = pathlib.Path(f"work/releases/{__import__('os').environ['GITHUB_SHA']}")
+          descriptor = json.loads((root / "release.json").read_text())
+          archive = root / descriptor["archive"]
+          assert descriptor["format"] == 1 and descriptor["application"] == "ccrate"
+          assert descriptor["architecture"] == "linux-arm64"
+          assert descriptor["commit"] == __import__('os').environ["GITHUB_SHA"]
+          assert archive.stat().st_size == descriptor["compressed_bytes"]
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == descriptor["sha256"]
+          with tarfile.open(archive, "r:gz") as bundle:
+              names = bundle.getnames()
+              assert names and all(name == "candidate" or name.startswith("candidate/") for name in names)
+              manifest = json.load(bundle.extractfile("candidate/manifest.json"))
+              assert manifest["format"] == 2
+              public = json.load(bundle.extractfile("candidate/public/ccrate-release.json"))
+              assert public["commit"] == descriptor["commit"]
+          PY
+
+      - name: Require artifact-matched Workshop compatibility before release publication
+        id: capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, pathlib, tarfile
+          root = pathlib.Path(f"work/releases/{os.environ['GITHUB_SHA']}")
+          descriptor = json.loads((root / "release.json").read_text())
+          with tarfile.open(root / descriptor["archive"], "r:gz") as archive:
+              manifest = json.load(archive.extractfile("candidate/manifest.json"))
+          capability = manifest.get("provenance", {}).get("workshop_capability")
+          required = ["workshop_read_v1", "workshop_read_v2", "workshop_write_v2"]
+          ready = (isinstance(capability, dict)
+                   and capability.get("schema") == 1
+                   and capability.get("read_versions") == [1, 2]
+                   and capability.get("write_mode") == "v2"
+                   and capability.get("test_names") == required)
+          print(f"ready={'true' if ready else 'false'}")
+          PY
+
+      - name: Upload candidate for review or trusted publication
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ccrate-release-${{ github.sha }}
+          path: work/releases/${{ github.sha }}/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish trusted release
+    needs: build
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/ccrate-')) &&
+      needs.build.outputs.release_ready == 'true'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the exact trusted commit and submodules
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Download the verified build output
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ccrate-release-${{ github.sha }}
+          path: work/releases/${{ github.sha }}
+
+      - name: Publish deterministic commit release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="$GITHUB_SHA"
+          tag="ccrate-${commit:0:12}"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo "Refusing tag $GITHUB_REF_NAME; expected $tag for $commit" >&2
+            exit 1
+          fi
+          release_dir="work/releases/$commit"
+          test "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["commit"])' "$release_dir/release.json")" = "$commit"
+          gh release create "$tag" \
+            "$release_dir/$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["archive"])' "$release_dir/release.json")" \
+            "$release_dir/release.json" \
+            "$release_dir/build-receipt.json" \
+            "$release_dir/test-receipt.json" \
+            "$release_dir/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" --target "$commit" \
+            --title "$tag" --notes "Verified prebuilt Linux ARM64 C-Crate release for commit $commit."

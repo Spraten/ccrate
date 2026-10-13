@@ -8,6 +8,7 @@ import calendar
 import hashlib
 import json
 import os
+import posixpath
 from pathlib import Path
 import shutil
 import subprocess
@@ -118,18 +119,50 @@ def _validate_backup_members(archive_path, manifest):
         raise BundleError("cold backup manifest is not an object")
     members = manifest.get("members")
     hashes = manifest.get("sha256")
-    if (manifest.get("format") != 1 or not isinstance(members, list)
+    backup_format = manifest.get("format")
+    if (type(backup_format) is not int or backup_format not in (1, 2)
+            or not isinstance(members, list)
+            or any(not isinstance(name, str) or not name or "\\" in name for name in members)
             or not required <= set(members) or not isinstance(hashes, dict)
             or not {"work/ops/ledger.db", "work/baseline/data/homebox.db",
                     "work/homebox-bin/homebox",
                     "work/supvan-cups/target/release/examples/kiosk-label"} <= set(hashes)):
-        raise BundleError("cold backup manifest lacks required format-1 whole-store members")
+        raise BundleError("cold backup manifest lacks required whole-store members")
+    selected = manifest.get("selected_release")
+    if backup_format == 2:
+        if selected is None and any(isinstance(name, str) and name.startswith("work/releases/")
+                                    for name in members):
+            raise BundleError("format-2 backup omits the selected sealed release")
+        if selected is not None:
+            release_path = selected.get("relative_path") if isinstance(selected, dict) else None
+            files = selected.get("files") if isinstance(selected, dict) else None
+            manifest_hash = selected.get("manifest_sha256") if isinstance(selected, dict) else None
+            parts = release_path.split("/") if isinstance(release_path, str) else []
+            if (not isinstance(selected, dict)
+                    or set(selected) != {"relative_path", "manifest_sha256", "files"}
+                    or not isinstance(release_path, str) or "\\" in release_path
+                    or len(parts) < 3 or parts[:2] != ["work", "releases"]
+                    or any(part in ("", ".", "..") for part in parts)
+                    or release_path not in members
+                    or not isinstance(manifest_hash, str) or len(manifest_hash) != 64
+                    or any(c not in "0123456789abcdef" for c in manifest_hash)
+                    or not isinstance(files, dict) or "manifest.json" not in files
+                    or any(not isinstance(name, str) or not name or "\\" in name
+                           or posixpath.isabs(name) or any(part in ("", ".", "..")
+                           for part in name.split("/"))
+                           or not isinstance(digest, str) or len(digest) != 64
+                           or any(c not in "0123456789abcdef" for c in digest)
+                           for name, digest in files.items())):
+                raise BundleError("format-2 backup selected-release binding is invalid")
+    elif selected is not None:
+        raise BundleError("format-1 backup cannot declare a selected sealed release")
     try:
         with tarfile.open(archive_path, "r:gz") as archive:
             rows = {}
             for row in archive.getmembers():
                 name = row.name.rstrip("/")
-                if (not name or name.startswith("/") or ".." in Path(name).parts
+                if (not name or "\\" in name or posixpath.isabs(name)
+                        or posixpath.normpath(name) != name or ".." in name.split("/")
                         or name in rows):
                     raise BundleError("cold backup archive contains an unsafe or duplicate member")
                 rows[name] = row
@@ -159,6 +192,44 @@ def _validate_backup_members(archive_path, manifest):
                         digest.update(block)
                 if digest.hexdigest() != expected:
                     raise BundleError(f"cold backup archived hash mismatch for {name}")
+            if backup_format == 2 and selected is not None:
+                release_path = selected["relative_path"]
+                prefix = release_path + "/"
+                selected_files = selected["files"]
+                archived_files = {name[len(prefix):]: row for name, row in rows.items()
+                                  if name.startswith(prefix) and row.isfile()}
+                archived_directories = {name for name, row in rows.items()
+                                        if (name == release_path or name.startswith(prefix)) and row.isdir()}
+                if set(archived_files) != set(selected_files) or release_path not in archived_directories:
+                    raise BundleError("cold backup selected-release membership differs from its manifest")
+                expected_directories = {release_path}
+                for name in selected_files:
+                    parent = posixpath.dirname(name)
+                    while parent:
+                        expected_directories.add(release_path + "/" + parent)
+                        parent = posixpath.dirname(parent)
+                if archived_directories != expected_directories:
+                    raise BundleError("cold backup selected-release directory membership differs from its manifest")
+                if any(row.issym() or row.islnk() or row.isdev() or row.isfifo()
+                       for name, row in rows.items() if name == release_path or name.startswith(prefix)):
+                    raise BundleError("cold backup selected release contains a non-regular member")
+                if any(rows[name].mode & 0o777 != 0o555 for name in archived_directories):
+                    raise BundleError("cold backup selected-release directory is not sealed")
+                for name, expected in selected_files.items():
+                    row = archived_files[name]
+                    if row.mode & 0o777 not in (0o444, 0o555):
+                        raise BundleError(f"cold backup selected-release file is not sealed: {name}")
+                    stream = archive.extractfile(row)
+                    if stream is None:
+                        raise BundleError(f"cold backup selected-release file cannot be read: {name}")
+                    digest = hashlib.sha256()
+                    with stream:
+                        for block in iter(lambda: stream.read(1024 * 1024), b""):
+                            digest.update(block)
+                    if digest.hexdigest() != expected:
+                        raise BundleError(f"cold backup selected-release hash mismatch for {name}")
+                if selected_files.get("manifest.json") != selected["manifest_sha256"]:
+                    raise BundleError("cold backup selected-release manifest hash is inconsistent")
     except (OSError, tarfile.TarError) as exc:
         raise BundleError("cold backup archive members could not be validated") from exc
 
@@ -213,6 +284,16 @@ def _build_cold_backup_receipt(result, root, previous, candidate, fallback):
         raise BundleError("cold backup checksum sidecar does not match the archive")
     raw_manifest, backup_manifest = _archive_manifest(archive_path)
     _validate_backup_members(archive_path, backup_manifest)
+    selected = backup_manifest.get("selected_release")
+    try:
+        previous_path = Path(previous["bundle_path"]).resolve(strict=True)
+        previous_relative = previous_path.relative_to(root).as_posix()
+    except (KeyError, OSError, ValueError) as exc:
+        raise BundleError("publication previous bundle is outside the deployment root") from exc
+    if (backup_manifest.get("format") != 2 or not isinstance(selected, dict)
+            or selected.get("relative_path") != previous_relative
+            or selected.get("manifest_sha256") != previous["manifest_sha256"]):
+        raise BundleError("cold backup does not bind the currently selected sealed previous bundle")
     receipt = {
         "schema": 1,
         "execution_scope": "production-matched",
@@ -225,6 +306,8 @@ def _build_cold_backup_receipt(result, root, previous, candidate, fallback):
         "backup_manifest_sha256": hashlib.sha256(raw_manifest).hexdigest(),
         "backup_created_at": backup_manifest.get("created_at"),
         "backup_bytes": archive_stat.st_size,
+        "selected_release_path": selected["relative_path"],
+        "selected_release_manifest_sha256": selected["manifest_sha256"],
         "previous_bundle_manifest_sha256": previous["manifest_sha256"],
         "candidate_bundle_manifest_sha256": candidate["manifest_sha256"],
         "fallback_bundle_manifest_sha256": fallback["manifest_sha256"],
@@ -241,7 +324,8 @@ def validate_cold_backup_receipt(receipt, root, previous, candidate, fallback):
     expected_keys = {
         "schema", "execution_scope", "status", "exit_code", "database_integrity", "root",
         "backup_path", "backup_archive_sha256", "backup_manifest_sha256", "backup_created_at",
-        "backup_bytes", "previous_bundle_manifest_sha256", "candidate_bundle_manifest_sha256",
+        "backup_bytes", "selected_release_path", "selected_release_manifest_sha256",
+        "previous_bundle_manifest_sha256", "candidate_bundle_manifest_sha256",
         "fallback_bundle_manifest_sha256", "previous_native_sha256", "candidate_native_sha256",
         "fallback_native_sha256",
     }
@@ -279,6 +363,18 @@ def validate_cold_backup_receipt(receipt, root, previous, candidate, fallback):
         raise BundleError("cold backup deployment manifest changed")
     if manifest.get("created_at") != receipt["backup_created_at"]:
         raise BundleError("cold backup timestamp changed")
+    selected = manifest.get("selected_release")
+    try:
+        previous_path = Path(previous["bundle_path"]).resolve(strict=True)
+        previous_relative = previous_path.relative_to(root).as_posix()
+    except (KeyError, OSError, ValueError) as exc:
+        raise BundleError("publication previous bundle is outside the deployment root") from exc
+    if (manifest.get("format") != 2 or not isinstance(selected, dict)
+            or selected.get("relative_path") != previous_relative
+            or selected.get("manifest_sha256") != previous["manifest_sha256"]
+            or receipt["selected_release_path"] != selected["relative_path"]
+            or receipt["selected_release_manifest_sha256"] != selected["manifest_sha256"]):
+        raise BundleError("cold backup receipt is not bound to the selected previous sealed bundle")
     try:
         created = calendar.timegm(time.strptime(receipt["backup_created_at"], "%Y%m%dT%H%M%SZ"))
     except (ValueError, TypeError) as exc:

@@ -9,6 +9,7 @@ import pathlib
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tarfile
 import time
 
@@ -45,13 +46,17 @@ def checkpoint_databases(root, databases):
                 raise RuntimeError('Database integrity check failed: ' + name)
 
 
-def build_backup_manifest(root, *, created_at, commit, homebox_pin, members, databases):
+def build_backup_manifest(root, *, created_at, commit, homebox_pin, members, databases,
+                          selected_release=None):
     root = pathlib.Path(root)
     hashed = list(databases) + [name for name in HASHED_BINARIES if (root / name).is_file()]
-    return {
+    manifest = {
         'format': 2, 'created_at': created_at, 'commit': commit, 'homebox_pin': homebox_pin,
         'members': list(members), 'sha256': {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in hashed},
     }
+    if selected_release is not None:
+        manifest['selected_release'] = selected_release
+    return manifest
 
 
 def create_archive(root, target, members, manifest):
@@ -78,8 +83,42 @@ def create_archive(root, target, members, manifest):
     return target
 
 
-def main():
-    root = pathlib.Path('/home/user/Desktop/inventory-system')
+def _selected_release(root):
+    selector = root / 'work/application-current'
+    if not selector.exists() and not selector.is_symlink():
+        return None
+    if not selector.is_symlink():
+        raise RuntimeError('application-current is not a release selector symlink')
+    selected = selector.resolve(strict=True)
+    try:
+        relative = selected.relative_to(root.resolve()).as_posix()
+    except ValueError as exc:
+        raise RuntimeError('selected release is outside the deployment root') from exc
+    if not relative.startswith('work/releases/'):
+        raise RuntimeError('selected release is outside the immutable release store')
+    sys.path.insert(0, str(root / 'deploy'))
+    try:
+        from release_bundle import validate_bundle
+        release_manifest = validate_bundle(selected)
+    finally:
+        sys.path.pop(0)
+    if release_manifest.get('format') != 2:
+        raise RuntimeError('application-current does not select a sealed format-2 release')
+    files = {}
+    for path in sorted(selected.rglob('*')):
+        if path.is_symlink():
+            raise RuntimeError('selected release contains a symbolic link')
+        if path.is_file():
+            files[path.relative_to(selected).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return relative, {
+        'relative_path': relative,
+        'manifest_sha256': hashlib.sha256((selected / 'manifest.json').read_bytes()).hexdigest(),
+        'files': files,
+    }
+
+
+def create_cold_backup(root: pathlib.Path, *, manage_services: bool = True) -> dict:
+    root = pathlib.Path(root).resolve()
     folder = root / 'work/backups'; folder.mkdir(mode=0o700, exist_ok=True)
     os.umask(0o077)
     with (folder / 'deployment.lock').open('a') as lock:
@@ -91,16 +130,23 @@ def main():
                                 ('homebox-ui', root/'homebox-ui'), ('work/homebox-ui-current', root/'work/homebox-ui-current'),
                                 ('work/kiosk-ui-current', root/'work/kiosk-ui-current')):
             if directory.is_dir(): members.append(name)
+        selected = _selected_release(root)
+        selected_release = None
+        if selected is not None:
+            relative, selected_release = selected
+            members.append(relative)
         databases = database_inventory(root)
         stopped = False
         try:
-            subprocess.run(['systemctl', '--user', 'stop', 'homebox-companion.service', 'homebox-native.service'], check=True)
-            stopped = True
+            if manage_services:
+                subprocess.run(['systemctl', '--user', 'stop', 'homebox-workshop-gateway.service',
+                                'homebox-companion.service', 'homebox-native.service'], check=True)
+                stopped = True
             checkpoint_databases(root, databases)
             manifest = build_backup_manifest(root, created_at=stamp,
                 commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
                 homebox_pin=subprocess.check_output(['git', '-C', 'upstream/homebox', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
-                members=members, databases=databases)
+                members=members, databases=databases, selected_release=selected_release)
             create_archive(root, target, members, manifest)
             (target.with_suffix('.sha256')).write_text(hashlib.sha256(target.read_bytes()).hexdigest() + '  ' + target.name + '\n')
             result = {'status': 'completed', 'backup': target.name, 'bytes': target.stat().st_size, 'database_integrity': 'ok'}
@@ -109,13 +155,19 @@ def main():
             except (FileNotFoundError, ValueError): state = {}
             state.update(result)
             state_path.write_text(json.dumps(state)); state_path.chmod(0o600)
-            print(json.dumps(result))
+            return result
         except Exception:
             (root/'work/backup-status.json').write_text(json.dumps({'status':'failed','reason':'Backup failed; inspect the local service log'}))
             raise
         finally:
             if stopped:
-                subprocess.run(['systemctl', '--user', 'start', 'homebox-native.service', 'homebox-companion.service'], check=True)
+                subprocess.run(['systemctl', '--user', 'start', 'homebox-native.service',
+                                'homebox-companion.service', 'homebox-workshop-gateway.service'], check=True)
+
+
+def main():
+    result = create_cold_backup(pathlib.Path('/home/user/Desktop/inventory-system'))
+    print(json.dumps(result))
 
 
 if __name__ == '__main__':

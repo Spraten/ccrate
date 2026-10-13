@@ -1,16 +1,9 @@
-FROM node:24-bookworm AS build
+FROM node:24-bookworm AS build-base
 COPY --from=golang:1.26-bookworm /usr/local/go /usr/local/go
 ENV PATH=/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends git python3 ca-certificates && rm -rf /var/lib/apt/lists/* \
     && npm install --global pnpm@10.28.0
-COPY deploy/build-homebox-backend.py deploy/build-homebox-ui.py deploy/build-label-ui.py /src/deploy/
-COPY homebox-ui/overlay /src/homebox-ui/overlay
-COPY homebox-ui/pnpm-lock.yaml homebox-ui/upstream-typecheck.json /src/homebox-ui/
-COPY homebox-backend/ /src/homebox-backend/
-COPY kiosk/branding/ /src/kiosk/branding/
-COPY kiosk/member-avatar.js kiosk/label-editor.js /src/kiosk/
-COPY label-ui/ /src/label-ui/
 RUN mkdir -p /src/work/toolchains/pnpm/node_modules/.bin \
     && printf '/usr/local\n' > /src/work/toolchains/node-path.txt \
     && printf '/usr/local/go\n' > /src/work/toolchains/go-path.txt \
@@ -19,13 +12,28 @@ RUN mkdir -p /src/work/toolchains/pnpm/node_modules/.bin \
     && git -C /src/upstream/homebox remote add origin https://github.com/sysadminsmedia/homebox.git \
     && git -C /src/upstream/homebox fetch --depth 1 origin e01dd737238a3fa7e1a6454b37de6c6fc88c86e4 \
     && git -C /src/upstream/homebox checkout --detach FETCH_HEAD
+
+# Keep component inputs in separate stages so an edit to one does not invalidate
+# the other component's Docker build cache.
+FROM build-base AS backend-build
+COPY deploy/build-homebox-backend.py /src/deploy/build-homebox-backend.py
+COPY homebox-backend/ /src/homebox-backend/
+RUN python3 /src/deploy/build-homebox-backend.py --external-frontend
+
+FROM build-base AS frontend-build
+COPY deploy/build-homebox-ui.py /src/deploy/build-homebox-ui.py
+COPY homebox-ui/overlay/ /src/homebox-ui/overlay/
+COPY homebox-ui/pnpm-lock.yaml homebox-ui/upstream-typecheck.json /src/homebox-ui/
+COPY kiosk/branding/ /src/kiosk/branding/
+COPY kiosk/member-avatar.js kiosk/label-editor.js /src/kiosk/
 RUN python3 -c "import runpy; runpy.run_path('/src/deploy/build-homebox-ui.py')['prepare']()" \
     && pnpm --dir /src/work/homebox-ui-build install --frozen-lockfile \
-    && python3 /src/deploy/build-homebox-ui.py --toolchain-root /src/work/toolchains --upstream-root /src \
-    && mkdir -p /src/work/homebox-ui-current \
-    && cp -a /src/work/homebox-ui-build/.output/public/. /src/work/homebox-ui-current/ \
-    && python3 /src/deploy/build-label-ui.py --source-root /src --output work/label-ui-build --toolchain-root /src/work/toolchains \
-    && python3 /src/deploy/build-homebox-backend.py
+    && python3 /src/deploy/build-homebox-ui.py --toolchain-root /src/work/toolchains --upstream-root /src
+
+FROM build-base AS labels-build
+COPY deploy/build-label-ui.py /src/deploy/build-label-ui.py
+COPY label-ui/ /src/label-ui/
+RUN python3 /src/deploy/build-label-ui.py --source-root /src --output work/label-ui-build --toolchain-root /src/work/toolchains
 
 FROM python:3.13-slim-bookworm AS runtime
 ENV PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
@@ -53,9 +61,9 @@ COPY --chown=10001:10001 ops/ /app/ops/
 COPY --chown=10001:10001 kiosk/ /app/kiosk/
 COPY --chown=10001:10001 desktop/ /app/desktop/
 COPY --chown=10001:10001 deploy/kiosk-server.py deploy/workshop-gateway.py deploy/local-test.py /app/deploy/
-COPY --from=build --chown=10001:10001 /src/work/homebox-backend-build/homebox /app/native/homebox
-COPY --from=build --chown=10001:10001 /src/work/homebox-ui-build/.output/public /app/public
-COPY --from=build --chown=10001:10001 /src/work/label-ui-build /app/label-ui
+COPY --from=backend-build --chown=10001:10001 /src/work/homebox-backend-build/homebox /app/native/homebox
+COPY --from=frontend-build --chown=10001:10001 /src/work/homebox-ui-build/.output/public /app/public
+COPY --from=labels-build --chown=10001:10001 /src/work/label-ui-build /app/label-ui
 COPY --chown=10001:10001 label-ui/src/starter-documents.json /app/label-ui/src/starter-documents.json
 USER 10001:10001
 EXPOSE 17745 17749
