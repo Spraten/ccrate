@@ -97,3 +97,14 @@ class HomeboxNavigationContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HomeboxShortCodeBuilderContractTests(unittest.TestCase):
+    def test_native_item_and_create_modal_keep_readonly_short_code_contract(self):
+        builder = (ROOT / 'deploy/build-homebox-ui.py').read_text()
+        self.assertIn('item.shortCode', builder)
+        self.assertIn('CopyText :text="item.shortCode"', builder)
+        self.assertIn('v-model="form.modelNumber" label="Model number"', builder)
+        self.assertIn('modelNumber: form.modelNumber?.trim() || undefined', builder)
+        self.assertIn("export interface EntitySummary {\\n  shortCode: string;", builder)
+        self.assertIn("export interface EntityOut {\\n  shortCode: string;", builder)

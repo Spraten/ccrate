@@ -9,7 +9,7 @@ from unittest.mock import patch
 from PIL import Image
 import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'ops'))
-from label_layouts import LabelLayouts, Conflict
+from label_layouts import LabelLayouts, Conflict, _native_values
 
 
 def document():
@@ -17,6 +17,11 @@ def document():
 
 
 class LabelLayoutTests(unittest.TestCase):
+    def test_legacy_native_item_without_short_code_renders_blank_fallback(self):
+        name, asset, short_code, updated, warnings = _native_values({'id':'44444444-4444-4444-8444-444444444444','name':'Legacy','assetId':'A-1','updatedAt':'2026-10-07T12:00:00Z'})
+        self.assertEqual((name, asset, short_code, updated), ('Legacy', 'A-1', '', '2026-10-07T12:00:00Z'))
+        self.assertEqual(warnings, [])
+
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.store=LabelLayouts(pathlib.Path(self.tmp.name)/'private.db')
@@ -54,10 +59,13 @@ class LabelLayoutTests(unittest.TestCase):
         with self.assertRaises(Conflict): self.store.save(self.group,self.actor,{'id':first['id'],'revision':0,'name':'Stale','profile':'supvan','document':document(),'request_key':'stale'})
 
     def test_drafts_never_issue_review_tickets(self):
-        self.store.renderer=lambda doc,profile:{'png':b'png','width':320,'height':224,'sha256':'a'*64,'warnings':['Text was shortened with an ellipsis.']}
-        synthetic=self.store.preview(None,self.group,self.actor,{'mode':'synthetic','profile':'supvan','document':document(),'sample':{'item_name':'Demo','asset_code':''}})
+        rendered_docs=[]
+        self.store.renderer=lambda doc,profile:(rendered_docs.append(doc) or {'png':b'png','width':320,'height':224,'sha256':'a'*64,'warnings':['Text was shortened with an ellipsis.']})
+        synthetic=self.store.preview(None,self.group,self.actor,{'mode':'synthetic','profile':'supvan','document':document(),'sample':{'item_name':'Demo','asset_code':'','short_code':'TMP-001'}})
         draft=self.store.preview(FakeClient(),self.group,self.actor,{'mode':'item_draft','entity_id':'44444444-4444-4444-8444-444444444444','profile':'supvan','document':document()})
         self.assertNotIn('review_id',synthetic);self.assertNotIn('review_id',draft)
+        self.assertEqual(rendered_docs[0]['variables']['short_code'],'TMP-001')
+        self.assertEqual(rendered_docs[1]['variables']['short_code'],'DHP-001')
         self.assertIn('Text was shortened with an ellipsis.',synthetic['warnings'])
         self.assertIn('Text was shortened with an ellipsis.',draft['warnings'])
         self.assertEqual(self.store.review(self.group,self.actor,'missing'),None)
@@ -96,10 +104,11 @@ class LabelLayoutTests(unittest.TestCase):
             mutate(doc)
             with self.subTest(index=index),self.assertRaises(ValueError):
                 self.store.save(self.group,self.actor,{'revision':0,'name':'Bad schema','profile':'supvan','document':doc,'request_key':f'bad-schema-{index}'})
-        doc=document();doc['variables']={'item_name':'Sensitive selected value','asset_code':'secret'}
+        doc=document();doc['variables']={'item_name':'Sensitive selected value','asset_code':'secret','short_code':'DHP-001'}
         saved=self.store.save(self.group,self.actor,{'revision':0,'name':'Sanitized','profile':'supvan','document':doc,'request_key':'sanitized-samples'})
         self.assertEqual(saved['document']['variables']['item_name'],'Sample item')
         self.assertEqual(saved['document']['variables']['asset_code'],'')
+        self.assertEqual(saved['document']['variables']['short_code'],'')
 
     def test_save_accepts_a_supported_square_quarter_turn_qr(self):
         doc=document();doc['elements'][0]['rotation']=90
@@ -160,6 +169,7 @@ class LabelLayoutTests(unittest.TestCase):
         self.store.renderer=renderer
         response=self.store.preview(FakeClient(),self.group,self.actor,{'mode':'item','entity_id':'44444444-4444-4444-8444-444444444444','template_id':'starter:supvan:left','template_revision':0})
         self.assertEqual(seen[0]['variables']['asset_code'],'')
+        self.assertEqual(seen[0]['variables']['short_code'],'DHP-001')
         self.assertEqual(seen[0]['elements'][0]['content'],'/item/44444444-4444-4444-8444-444444444444')
         ticket=self.store.review(self.group,self.actor,response['review_id'])
         self.assertEqual(ticket['png'],b'canonical-png')
@@ -193,7 +203,7 @@ class LabelLayoutTests(unittest.TestCase):
 
 
 class FakeClient:
-    def entity(self,key): return {'id':key,'name':'Sample','assetId':'','updatedAt':'2026-10-07T12:00:00Z'}
+    def entity(self,key): return {'id':key,'name':'Sample','assetId':'','shortCode':'DHP-001','updatedAt':'2026-10-07T12:00:00Z'}
 
 
 if __name__=='__main__': unittest.main()

@@ -176,7 +176,7 @@ export function createText(place: PlaceAt, content = 'Text'): TextElement {
     type: 'text',
     name: 'Text',
     content,
-    fontSizePt: 14,
+    fontSizePt: 9,
     fontWeight: 400,
     align: 'left',
     color: '#0f172a',

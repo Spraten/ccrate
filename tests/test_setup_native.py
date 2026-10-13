@@ -12,7 +12,7 @@ class Client:
     def __init__(self):
         self.item_type,self.loc_type,self.room=[str(uuid4()) for _ in range(3)]
         self.records={self.room:self.make(self.room,{'name':'Workshop','quantity':0,'entityTypeId':self.loc_type})}
-        self.tags={};self.templates={};self.posts=0;self.lose_entity_response=False
+        self.tags={};self.templates={};self.posts=0;self.create_bodies=[];self.lose_entity_response=False
     def make(self,key,body):
         entity={'id':key,'name':body['name'],'description':body.get('description',''),'quantity':body.get('quantity',1),'archived':False,'parent':{'id':body['parentId']} if body.get('parentId') else None,'entityType':{'id':body['entityTypeId'],'isLocation':body['entityTypeId']==self.loc_type},'tags':[{'id':tag} for tag in body.get('tagIds',[])],'fields':[],'serialNumber':'','manufacturer':'','modelNumber':''}
         return entity
@@ -33,6 +33,7 @@ class Client:
             if method=='PUT':self.templates[key]=copy.deepcopy(data)
             return copy.deepcopy(self.templates[key])
         if method=='POST' and (path=='/api/v1/entities' or path.endswith('/create-item')):
+            self.create_bodies.append(copy.deepcopy(data))
             key=str(uuid4());entity=self.make(key,data);self.posts+=1
             if path.endswith('/create-item'):
                 template=self.templates[path.split('/')[-2]];entity['fields']=copy.deepcopy(template['fields']);entity['manufacturer']=template.get('defaultManufacturer','');entity['modelNumber']=template.get('defaultModelNumber','')
@@ -67,7 +68,11 @@ class Tests(unittest.TestCase):
     def test_unreviewed_enrollment_and_serial_metadata(self):
         result=self.submit('create_asset',{'name':'Drone','serial':'SERIAL-1','location_id':self.client.room})
         entity=self.client.entity(result['entity_id']);self.assertEqual(entity['serialNumber'],'SERIAL-1');self.assertEqual(condition(entity),'Unreviewed')
+        self.assertEqual(self.client.create_bodies[0]['modelNumber'],'')
         with self.assertRaises(Conflict):self.submit('create_asset',{'name':'Other drone','serial':'SERIAL-1','location_id':self.client.room})
+    def test_model_number_is_sent_before_native_creation(self):
+        self.submit('create_asset',{'name':'Drone','model':'DHP-44','location_id':self.client.room})
+        self.assertEqual(self.client.create_bodies[0]['modelNumber'],'DHP-44')
     def test_explicit_review_can_mark_new_equipment_ready(self):
         result=self.submit('create_asset',{'name':'Drone','location_id':self.client.room,'reviewed':True})
         self.assertEqual(condition(self.client.entity(result['entity_id'])),'Ready')
@@ -82,6 +87,10 @@ class Tests(unittest.TestCase):
         result=self.submit('create_asset',{'name':'Owned product','serial':'UNIT-1','location_id':self.client.room,'template_id':product['entity_id']})
         entity=self.client.entity(result['entity_id']);self.assertEqual(entity['manufacturer'],'Demo');self.assertEqual(entity['modelNumber'],'Model-1')
         self.assertTrue(any(f['name']==GTIN_FIELD for f in entity['fields']));self.assertEqual(condition(entity),'Unreviewed')
+    def test_explicit_model_number_precedes_template_default_for_code_allocation(self):
+        product=self.submit('create_template',{'name':'Synthetic product','gtin':'4006381333931','manufacturer':'Demo','model':'Default-Model'})
+        self.submit('create_asset',{'name':'Owned product','location_id':self.client.room,'template_id':product['entity_id'],'model':'Chosen-Model'})
+        self.assertEqual(self.client.create_bodies[-1]['modelNumber'],'Chosen-Model')
     def test_created_record_cannot_be_cancelled_after_lost_response(self):
         self.client.lose_entity_response=True
         with self.assertRaises(Conflict):self.submit('create_location',{'name':'Shelf','parent_id':self.client.room})

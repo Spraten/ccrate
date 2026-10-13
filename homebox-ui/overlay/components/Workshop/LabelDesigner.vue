@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { mountLabelDesigner } from "../../lib/label-editor.js";
-type SelectedItem = { id: string; name: string; assetId?: string };
+type SelectedItem = { id: string; name: string; assetId?: string; shortCode?: string };
 const props = defineProps<{ selectedItem?: SelectedItem }>();
 const emit = defineEmits<{ dirty: [value: boolean]; busy: [value: boolean]; ready: [handle: ReturnType<typeof mountLabelDesigner>]; closed: [] }>();
 const workshop = useWorkshop();
@@ -13,7 +13,7 @@ function editorContext() {
   const token = (name: string, fallback: string) => `hsl(${css.getPropertyValue(name).trim() || fallback})`;
   return {
     ...workshop.context.value,
-    selected_item: props.selectedItem ? { entity_id: props.selectedItem.id, name: props.selectedItem.name, asset_code: props.selectedItem.assetId || "" } : null,
+    selected_item: props.selectedItem ? { entity_id: props.selectedItem.id, name: props.selectedItem.name, asset_code: props.selectedItem.assetId || "", short_code: props.selectedItem.shortCode || "" } : null,
     theme: {
       background: token("--background", "0 0% 100%"), foreground: token("--foreground", "222 47% 11%"),
       muted: token("--muted", "210 40% 96%"), mutedForeground: token("--muted-foreground", "215 16% 47%"),

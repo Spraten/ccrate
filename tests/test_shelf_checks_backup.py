@@ -156,6 +156,33 @@ class ShelfChecksBackupTests(unittest.TestCase):
         self.assertIn('work/ops/ledger.db', databases)
         self.assertTrue(set(optional).issubset(databases))
 
+    def test_transaction_backup_does_not_restart_services(self):
+        backup = runpy.run_path(str(SCRIPT), run_name='backup_transaction_fixture')
+        for name in ('work/ops/ledger.db', 'work/baseline/data/homebox.db'):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(path)
+            connection.close()
+        calls = []
+
+        class SyntheticSubprocess:
+            @staticmethod
+            def run(args, **kwargs):
+                calls.append(list(args))
+                return types.SimpleNamespace(returncode=0)
+
+            @staticmethod
+            def check_output(args, **kwargs):
+                return 'synthetic-revision\n'
+
+        # runpy returns a globals copy, while the function resolves globals from
+        # its original execution namespace. Patch that namespace at the boundary.
+        backup['create_cold_backup'].__globals__['subprocess'] = SyntheticSubprocess
+        result = backup['create_cold_backup'](self.root, manage_services=False)
+        self.assertEqual(result['status'], 'completed')
+        self.assertFalse(any(args[:3] == ['systemctl', '--user', 'start']
+                             or args[:3] == ['systemctl', '--user', 'stop'] for args in calls))
+
     def test_private_backup_restores_original_review_and_results(self):
         saved = {}
 
@@ -246,12 +273,12 @@ class ShelfChecksBackupTests(unittest.TestCase):
             self.assertEqual(reopened.request(self.ctx, request_key)['result'], result)
         self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
         self.assertEqual(run_fixture_backup.intercepted_calls, [
-            ('run', ['systemctl', '--user', 'stop', 'homebox-companion.service',
-                     'homebox-native.service']),
+            ('run', ['systemctl', '--user', 'stop', 'homebox-workshop-gateway.service',
+                     'homebox-companion.service', 'homebox-native.service']),
             ('check_output', ['git', 'rev-parse', 'HEAD']),
             ('check_output', ['git', '-C', 'upstream/homebox', 'rev-parse', 'HEAD']),
             ('run', ['systemctl', '--user', 'start', 'homebox-native.service',
-                     'homebox-companion.service']),
+                     'homebox-companion.service', 'homebox-workshop-gateway.service']),
         ])
         self.assertEqual(run_fixture_backup.intercepted_prints, [(json.dumps({
             'status': 'completed', 'backup': backup.name, 'bytes': backup.stat().st_size,

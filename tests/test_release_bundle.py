@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -1750,8 +1751,10 @@ class ReleaseBundleTests(unittest.TestCase):
         self.assertEqual(bound[0].get("backup_receipt_sha256"), expected_digest)
 
     def test_cold_backup_receipt_binds_O_C_F_and_archive_manifest(self):
+        import contextlib
         import io
         import runpy
+        import sqlite3
         import tarfile
         import time
         runtime, previous, candidate, fallback, _ = self.selection_triple()
@@ -1774,7 +1777,13 @@ class ReleaseBundleTests(unittest.TestCase):
                        "work/homebox-bin/homebox": database_hash,
                        "work/supvan-cups/target/release/examples/kiosk-label": database_hash},
         }
-        archived_bytes = b"synthetic archived bytes"
+        database_fixture = self.root / "legacy-fixture.db"
+        with contextlib.closing(sqlite3.connect(database_fixture)) as db:
+            with db:
+                db.execute("CREATE TABLE fixture (value TEXT)")
+                db.execute("INSERT INTO fixture VALUES ('legacy private store')")
+        archived_bytes = database_fixture.read_bytes()
+        database_fixture.unlink()
         manifest_raw = json.dumps(backup_manifest, sort_keys=True).encode()
         archive_path = backups / "deployment-fixture.tar.gz"
         with tarfile.open(archive_path, "w:gz") as archive:
@@ -1841,23 +1850,246 @@ class ReleaseBundleTests(unittest.TestCase):
                 archive.addfile(member, io.BytesIO(archived_bytes))
         archive_hash = sha_bytes(archive_path.read_bytes())
         archive_path.with_suffix(".sha256").write_text(f"{archive_hash}  {archive_path.name}\n")
-        receipt_path, receipt = namespace["_build_cold_backup_receipt"](
-            {"status": "completed", "database_integrity": "ok", "backup": archive_path.name,
-             "bytes": archive_path.stat().st_size}, self.root,
-            previous_row, candidate_row, fallback_row)
-        self.assertEqual(receipt_path, self.root / "work/matched-release-cold-backup-receipt.json")
-        self.assertEqual(receipt_path.stat().st_mode & 0o777, 0o600)
-        namespace["validate_cold_backup_receipt"](receipt, self.root,
-                                                  previous_row, candidate_row, fallback_row)
+        # Genuine format-1 whole-store archives remain structurally readable,
+        # while publication refuses them because they cannot prove the current
+        # sealed previous bundle was included.
+        namespace["_validate_backup_members"](archive_path, backup_manifest)
+        restore_module = runpy.run_path(
+            str(Path(__file__).resolve().parents[1] / "deploy/restore-cold-backup.py"),
+            run_name="restore_legacy_cold_backup_test")
+        restored_legacy = self.root / "restored-format1"
+        outcome = restore_module["restore_backup"](archive_path, restored_legacy)
+        self.assertEqual(outcome["format"], 1)
+        self.assertIsNone(outcome["selected_release"])
+        self.assertFalse((restored_legacy / "work/application-current").exists())
+        self.assertEqual(sha_bytes((restored_legacy / "work/ops/ledger.db").read_bytes()),
+                         sha_bytes(archived_bytes))
+        with self.assertRaises(BundleError):
+            namespace["_build_cold_backup_receipt"](
+                {"status": "completed", "database_integrity": "ok", "backup": archive_path.name,
+                 "bytes": archive_path.stat().st_size}, self.root,
+                previous_row, candidate_row, fallback_row)
         wrong_manifest = dict(backup_manifest)
         wrong_manifest["sha256"] = dict(backup_manifest["sha256"])
         wrong_manifest["sha256"]["work/ops/ledger.db"] = "f" * 64
         with self.assertRaisesRegex(BundleError, "hash mismatch"):
             namespace["_validate_backup_members"](archive_path, wrong_manifest)
-        receipt["candidate_bundle_manifest_sha256"] = "0" * 64
-        with self.assertRaisesRegex(BundleError, "exact O/C/F"):
-            namespace["validate_cold_backup_receipt"](receipt, self.root,
-                                                      previous_row, candidate_row, fallback_row)
+
+    def test_format2_backup_restores_selected_release(self):
+        import contextlib
+        import io
+        import runpy
+        import tarfile
+
+        selected = self.root / "selected-release"
+        self.stage(selected)
+        if os.name != "nt":
+            self.assertEqual(validate_bundle(selected)["format"], 2)
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        private_store = runtime / "work/ops/ledger.db"
+        private_store.parent.mkdir(parents=True, exist_ok=True)
+        import sqlite3
+        with contextlib.closing(sqlite3.connect(private_store)) as db:
+            with db:
+                db.execute("CREATE TABLE fixture (value TEXT)")
+                db.execute("INSERT INTO fixture VALUES ('private store')")
+        homebox_database = runtime / "work/baseline/data/homebox.db"
+        homebox_database.parent.mkdir(parents=True, exist_ok=True)
+        with contextlib.closing(sqlite3.connect(homebox_database)) as db:
+            with db:
+                db.execute("CREATE TABLE fixture (value TEXT)")
+                db.execute("INSERT INTO fixture VALUES ('native store')")
+
+        required = ["AGENTS.md", ".git", "ops", "kiosk", "deploy", "docs",
+                    "upstream/homebox", "work/baseline/data", "work/baseline/pepper",
+                    "work/baseline/test-account.json", "work/ops", "work/homebox-bin/homebox",
+                    "work/hardware/python", "work/supvan-cups/target/release/examples/kiosk-label"]
+        required_files = {"AGENTS.md", "work/baseline/pepper", "work/baseline/test-account.json",
+                          "work/baseline/data/homebox.db", "work/homebox-bin/homebox",
+                          "work/supvan-cups/target/release/examples/kiosk-label"}
+        for name in required:
+            path = runtime / name
+            if name in required_files:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"fixture")
+            else:
+                path.mkdir(parents=True, exist_ok=True)
+        store_digest = sha_bytes(private_store.read_bytes())
+        selected_files = {path.relative_to(selected).as_posix(): sha_bytes(path.read_bytes())
+                          for path in sorted(selected.rglob("*")) if path.is_file()}
+        required_hashes = {name: sha_bytes((runtime / name).read_bytes()) for name in (
+            "work/ops/ledger.db", "work/baseline/data/homebox.db", "work/homebox-bin/homebox",
+            "work/supvan-cups/target/release/examples/kiosk-label")}
+        backup_manifest = {
+            "format": 2, "created_at": "20261013T000000Z", "commit": "fixture",
+            "homebox_pin": "fixture", "members": required + ["work/releases/previous"],
+            "sha256": required_hashes,
+            "selected_release": {
+                "relative_path": "work/releases/previous",
+                "manifest_sha256": sha_bytes((selected / "manifest.json").read_bytes()),
+                "files": selected_files,
+            },
+        }
+        archive_path = self.root / "format2-backup.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as archive:
+            for name in required:
+                archive.add(runtime / name, arcname=name, recursive=True)
+            archive.add(selected, arcname="work/releases/previous", recursive=True)
+            raw = json.dumps(backup_manifest, sort_keys=True).encode()
+            info = tarfile.TarInfo("deployment-manifest.json")
+            info.size, info.mode = len(raw), 0o600
+            archive.addfile(info, io.BytesIO(raw))
+
+        publisher = runpy.run_path(str(Path(__file__).resolve().parents[1] / "deploy/publish-users.py"),
+                                   run_name="publish_users_format2_restore_test")
+        publisher["_validate_backup_members"](archive_path, backup_manifest)
+        missing_path = self.root / "missing-selected-release.tar.gz"
+        with tarfile.open(archive_path, "r:gz") as source_archive, \
+                tarfile.open(missing_path, "w:gz") as missing_archive:
+            for row in source_archive.getmembers():
+                if row.name == "work/releases/previous" or row.name.startswith("work/releases/previous/"):
+                    continue
+                stream = source_archive.extractfile(row) if row.isfile() else None
+                missing_archive.addfile(row, stream)
+        with self.assertRaisesRegex(BundleError, "membership"):
+            publisher["_validate_backup_members"](missing_path, backup_manifest)
+        changed_manifest = dict(backup_manifest)
+        changed_release = dict(backup_manifest["selected_release"])
+        changed_files = dict(changed_release["files"])
+        changed_files["manifest.json"] = "0" * 64
+        changed_release["files"] = changed_files
+        changed_manifest["selected_release"] = changed_release
+        with self.assertRaisesRegex(BundleError, "hash mismatch"):
+            publisher["_validate_backup_members"](archive_path, changed_manifest)
+        restore_module = runpy.run_path(
+            str(Path(__file__).resolve().parents[1] / "deploy/restore-cold-backup.py"),
+            run_name="restore_cold_backup_test")
+        restored = self.root / "restored"
+        try:
+            outcome = restore_module["restore_backup"](archive_path, restored)
+        except OSError as exc:
+            if os.name == "nt":
+                self.skipTest(f"host cannot create application-current symlinks: {exc}")
+            raise
+        self.assertEqual(outcome["status"], "restored")
+        restored_release = restored / "work/releases/previous"
+        if os.name != "nt":
+            self.assertEqual(validate_bundle(restored_release)["format"], 2)
+        self.assertEqual(sha_bytes((restored_release / "manifest.json").read_bytes()),
+                         backup_manifest["selected_release"]["manifest_sha256"])
+        self.assertEqual(sha_bytes((restored / "work/ops/ledger.db").read_bytes()), store_digest)
+        restored_selector = restored / "work/application-current"
+        self.assertEqual(restored_selector.resolve(), restored_release.resolve())
+
+    def test_production_backup_restores_sealed_selection_and_receipt_binding(self):
+        import contextlib
+        import runpy
+        import shutil
+        import sqlite3
+        import tarfile
+        import types
+
+        runtime = self.root / "production-fixture"
+        runtime.mkdir()
+        backup_module = runpy.run_path(
+            str(Path(__file__).resolve().parents[1] / "deploy/backup-deployment.py"),
+            run_name="backup_deployment_production_restore_test")
+        for name in backup_module["BASE_MEMBERS"]:
+            path = runtime / name
+            if name in {".git", "ops", "kiosk", "deploy", "docs", "upstream/homebox",
+                        "work/baseline/data", "work/ops", "work/hardware/python", "work/label-ui-build",
+                        "label-ui/src", "label-ui/vendor", "label-ui/public", "label-ui/patches"}:
+                path.mkdir(parents=True, exist_ok=True)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"synthetic backup member")
+        shutil.copy2(Path(__file__).resolve().parents[1] / "deploy/release_bundle.py",
+                     runtime / "deploy/release_bundle.py")
+        for name in ("work/ops/ledger.db", "work/baseline/data/homebox.db"):
+            path = runtime / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with contextlib.closing(sqlite3.connect(path)) as db:
+                with db:
+                    db.execute("CREATE TABLE fixture (value TEXT)")
+                    db.execute("INSERT INTO fixture VALUES ('private')")
+
+        selected = runtime / "work/releases/previous"
+        selected.parent.mkdir(parents=True, exist_ok=True)
+        self.stage(selected)
+        selector = runtime / "work/application-current"
+        try:
+            selector.symlink_to(Path("releases/previous"), target_is_directory=True)
+        except OSError as exc:
+            if os.name == "nt":
+                self.skipTest(f"host cannot create application-current symlinks: {exc}")
+            raise
+
+        class SyntheticSubprocess:
+            @staticmethod
+            def run(args, **kwargs):
+                return types.SimpleNamespace(returncode=0)
+
+            @staticmethod
+            def check_output(args, **kwargs):
+                return "fixture-revision\n"
+
+        producer = backup_module["create_cold_backup"]
+        producer.__globals__["subprocess"] = SyntheticSubprocess
+        result = producer(runtime, manage_services=False)
+        archive_path = runtime / "work/backups" / result["backup"]
+        # The actual producer output is consumed by the production restore tool.
+        restore_module = runpy.run_path(
+            str(Path(__file__).resolve().parents[1] / "deploy/restore-cold-backup.py"),
+            run_name="restore_cold_backup_production_test")
+        restored = self.root / "production-restored"
+        try:
+            outcome = restore_module["restore_backup"](archive_path, restored)
+        except OSError as exc:
+            if os.name == "nt":
+                self.skipTest(f"host cannot create application-current symlinks: {exc}")
+            raise
+        restored_release = restored / "work/releases/previous"
+        self.assertEqual(outcome["selected_release"], "work/releases/previous")
+        self.assertEqual((restored / "work/application-current").resolve(), restored_release.resolve())
+        self.assertEqual(validate_bundle(restored_release)["format"], 2)
+        self.assertEqual(sha_bytes((restored / "work/ops/ledger.db").read_bytes()),
+                         sha_bytes((runtime / "work/ops/ledger.db").read_bytes()))
+        with tarfile.open(archive_path, "r:gz") as archive:
+            raw = archive.extractfile("deployment-manifest.json").read()
+        backup_manifest = json.loads(raw)
+        selected_binding = backup_manifest["selected_release"]
+        self.assertEqual(selected_binding["relative_path"], "work/releases/previous")
+        self.assertEqual(selected_binding["manifest_sha256"],
+                         sha_bytes((selected / "manifest.json").read_bytes()))
+
+        publisher = runpy.run_path(
+            str(Path(__file__).resolve().parents[1] / "deploy/publish-users.py"),
+            run_name="publish_users_selected_receipt_binding_test")
+        bound = validate_bundle(selected)
+        previous = {**bound, "manifest_sha256": selected_binding["manifest_sha256"],
+                    "bundle_path": str(selected)}
+        receipt_path, receipt = publisher["_build_cold_backup_receipt"](
+            result, runtime, previous, previous, previous)
+        publisher["validate_cold_backup_receipt"](receipt, runtime, previous, previous, previous)
+        self.assertEqual(receipt["selected_release_path"], "work/releases/previous")
+        self.assertEqual(receipt["selected_release_manifest_sha256"], previous["manifest_sha256"])
+        wrong_previous = {**previous, "manifest_sha256": "0" * 64}
+        with self.assertRaisesRegex(BundleError, "currently selected sealed previous bundle"):
+            publisher["_build_cold_backup_receipt"](result, runtime, wrong_previous,
+                                                    previous, previous)
+
+    def test_unknown_backup_format_is_refused(self):
+        import runpy
+        import tarfile
+        publisher = runpy.run_path(str(Path(__file__).resolve().parents[1] / "deploy/publish-users.py"),
+                                   run_name="publish_users_unknown_backup_format_test")
+        with tempfile.TemporaryDirectory() as temp:
+            archive_path = Path(temp) / "unknown.tar.gz"
+            with tarfile.open(archive_path, "w:gz"):
+                pass
+            with self.assertRaises(BundleError):
+                publisher["_validate_backup_members"](archive_path, {"format": 99})
 
     def test_candidate_start_failure_restores_previous_bundle(self):
         runtime, previous, candidate, _ = self.selection_pair()

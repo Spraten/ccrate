@@ -4,6 +4,8 @@ from scan_codes import normalize, resolve_serial, resolve_equipment, manufacture
 class ScanTests(unittest.TestCase):
     def test_native_asset_url(self):
         self.assertEqual(normalize('http://homebox.local/a/000-013'),{'kind':'asset','asset_id':'000-013'})
+    def test_short_code_normalizes_case_and_whitespace(self):
+        self.assertEqual(normalize('  dhp-1000 '), {'kind': 'short_code', 'short_code': 'DHP-1000'})
     def test_untrusted_url_is_only_an_identifier(self):
         self.assertEqual(normalize('https://untrusted.invalid/a/000-013')['asset_id'],'000-013')
     def test_script_is_rejected(self):
@@ -42,11 +44,11 @@ if __name__=='__main__':unittest.main()
 
 
 class EquipmentCodeTests(unittest.TestCase):
-    def item(self,identifier='one',serial='',code=None,gtin=None,archived=False):
+    def item(self,identifier='one',serial='',code=None,gtin=None,archived=False,shortCode=None):
         fields=[]
         if code is not None:fields.append({'name':MANUFACTURER_FIELD,'type':'text','textValue':code})
         if gtin is not None:fields.append({'name':'Product GTIN','type':'text','textValue':gtin})
-        return {'id':identifier,'serialNumber':serial,'fields':fields,'archived':archived}
+        return {'id':identifier,'serialNumber':serial,'shortCode':shortCode,'fields':fields,'archived':archived}
     def resolve(self,raw,items):return resolve_equipment(raw,normalize(raw),items)
     def test_homebox_uuid_and_entity_url(self):
         identifier='efb41b6f-0386-452b-af21-75da992e9677'
@@ -72,6 +74,25 @@ class EquipmentCodeTests(unittest.TestCase):
     def test_serial_and_linked_code_conflict(self):
         result=self.resolve('SERIAL-42',[self.item(serial='SERIAL-42'),self.item('two',code='SERIAL-42')])
         self.assertTrue(result['ambiguous']);self.assertNotIn('entity',result)
+    def test_short_code_conflict_with_serial_fails_closed(self):
+        result=self.resolve(' dhp-001 ',[self.item(serial='DHP-001'),self.item('two',shortCode='DHP-001')])
+        self.assertTrue(result['ambiguous']);self.assertNotIn('entity',result)
+    def test_short_code_resolves_exactly_case_insensitively(self):
+        item=self.item(shortCode='DHP-001')
+        self.assertEqual(self.resolve(' dhp-001 ',[item])['entity'],item)
+    def test_legacy_serial_or_manufacturer_code_can_resolve_a_shaped_token(self):
+        for item in [self.item(serial='DHP-001'),self.item(code='DHP-001')]:
+            self.assertEqual(self.resolve('DHP-001',[item])['entity'],item)
+    def test_legacy_cross_kind_matches_for_one_item_are_deduplicated(self):
+        item=self.item(serial='DHP-001',code='DHP-001')
+        self.assertEqual(self.resolve('DHP-001',[item])['entity'],item)
+    def test_case_folded_code_collision_is_ambiguous(self):
+        items=[self.item(shortCode='DHP-001'),self.item('two',code='dhp-001')]
+        result=self.resolve('DHP-001',items)
+        self.assertTrue(result['ambiguous'])
+        self.assertNotIn('entity',result)
+    def test_archived_short_code_does_not_resolve(self):
+        self.assertNotIn('entity',self.resolve('DHP-001',[self.item(shortCode='DHP-001',archived=True)]))
     def test_badge_and_homebox_cannot_be_registered(self):
         for raw in ['LAB:U:secret','000-022','/item/efb41b6f-0386-452b-af21-75da992e9677']:
             with self.assertRaises(ValueError):manufacturer_code(raw)

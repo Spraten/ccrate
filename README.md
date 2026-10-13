@@ -53,7 +53,15 @@ python3 deploy/build-label-ui.py --source-root . --output work/label-ui-build
 
 The backend builder uses the selected native UI at `work/homebox-ui-current`. The UI and label builders stage output under `work/`; they do not select or deploy a release. See [C-Crate release notes](docs/C_CRATE_RELEASE.md), [label layouts](docs/LABEL_LAYOUTS.md), and the [native UI build notes](homebox-ui/README.md) for their prerequisites.
 
-Activation must package the matching frontend, label assets, gateway and companion code with `deploy/release_bundle.py`, then select the release through its backup and compatibility checks. This repository does not currently provide a complete Pi update command. `deploy/run-release.py` launches an already selected release; `deploy/stage-label-release.py` only stages a candidate. Restarting the existing services alone will keep serving the selected release.
+Candidate builds run on GitHub's Linux ARM64 runner by `.github/workflows/release.yml`; the Pi does not compile the application. Pull requests and trusted `main` builds upload a review artifact. GitHub Releases are published only after the sealed candidate proves artifact-matched Workshop v1/v2 reads and v2 writes; builds without that evidence remain non-deployable CI artifacts. Published releases use `ccrate-<first-12-commit-characters>` and include the sealed candidate archive, `release.json`, checksums and build/test receipts. The archive contains one `candidate/` tree and its descriptor binds the full source commit, pinned Homebox revision, package manifest hash and archive SHA-256. The workflow never deploys to a Pi.
+
+The updater can stage a trusted release and run a read-only preflight with `--check`. On installations that do not yet have a sealed release selector, preflight returns `migration_required`; it does not modify the current installation. Builds without the required Workshop compatibility evidence are not deployable.
+
+```sh
+python3 deploy/update-ccrate.py --root "$PWD" --version ccrate-COMMIT12 --check
+```
+
+The activation transaction is not available yet, so `--apply` refuses to change the installation. Do not install by pulling source, unpacking an archive over the running application, or restarting services. `deploy/run-release.py` launches an already selected release; it does not select or update one.
 
 ## Tests and operational safeguards
 

@@ -192,14 +192,18 @@ def _native_values(entity):
     if not isinstance(entity,dict) or not entity.get('id') or not isinstance(entity.get('name',''),str):raise ValueError('Native item data is incomplete')
     name=entity.get('name',''); asset=entity.get('assetId') or ''
     if not isinstance(asset,str):raise ValueError('Native asset code is invalid')
+    short_code=entity.get('shortCode','')
+    if not isinstance(short_code,str):raise ValueError('Native item short code is invalid')
     warnings=[]
     if len(name)>MAX_TEXT:
         name=name[:MAX_TEXT];warnings.append('Item name exceeded the document limit and was shortened.')
     if len(asset)>MAX_TEXT:
         asset=asset[:MAX_TEXT];warnings.append('Asset code exceeded the document limit and was shortened.')
+    if len(short_code)>MAX_TEXT:
+        short_code=short_code[:MAX_TEXT];warnings.append('Short code exceeded the document limit and was shortened.')
     updated=entity.get('updatedAt')
     if not isinstance(updated,str) or not updated:raise ValueError('Native item version is unavailable; reload the item')
-    return name,asset,updated,warnings
+    return name,asset,short_code,updated,warnings
 
 
 class LabelLayouts:
@@ -277,7 +281,7 @@ class LabelLayouts:
         profile=data.get('profile');source_doc=copy.deepcopy(data.get('document'))
         if not isinstance(source_doc,dict):raise ValueError('Invalid label document')
         # Saved templates contain no current-item sample values.
-        source_doc['variables']={'item_name':'Sample item','asset_code':'','item_path':f'/item/{SYNTHETIC_ID}'}
+        source_doc['variables']={'item_name':'Sample item','asset_code':'','short_code':'','item_path':f'/item/{SYNTHETIC_ID}'}
         doc=validate_document(source_doc,profile)
         name=data.get('name')
         if not isinstance(name,str) or not name.strip() or len(name)>120:raise ValueError('Template name is required (maximum 120 characters)')
@@ -321,9 +325,9 @@ class LabelLayouts:
         if entity.get('isLocation') is True or (entity.get('entityType') or {}).get('isLocation') is True:raise ValueError('Location labels are not available in the item-label workflow')
         return entity
 
-    def _prepared_doc(self,template,profile,name,asset,path):
+    def _prepared_doc(self,template,profile,name,asset,short_code,path):
         doc=copy.deepcopy(template)
-        values={'item_name':name,'asset_code':asset,'item_path':path};doc['variables']=values
+        values={'item_name':name,'asset_code':asset,'short_code':short_code,'item_path':path};doc['variables']=values
         for element in doc['elements']:
             if element.get('type')=='qr':element['content']=path
         return doc
@@ -339,12 +343,13 @@ class LabelLayouts:
             _remaining(deadline)
             if mode=='synthetic':
                 profile=data.get('profile');doc=validate_document(data.get('document'),profile);sample=data.get('sample') or {}
-                name=sample.get('item_name','Sample item');asset=sample.get('asset_code','')
-                if not isinstance(name,str) or not isinstance(asset,str):raise ValueError('Invalid preview sample')
+                name=sample.get('item_name','Sample item');asset=sample.get('asset_code','');short_code=sample.get('short_code','')
+                if not isinstance(name,str) or not isinstance(asset,str) or not isinstance(short_code,str):raise ValueError('Invalid preview sample')
                 warnings=[]
                 if len(name)>180:name=name[:179]+'…';warnings.append('Item name was shortened to fit the label.')
                 if len(asset)>120:asset=asset[:119]+'…';warnings.append('Asset code was shortened to fit the label.')
-                final=self._prepared_doc(doc,profile,name,asset,f'/item/{SYNTHETIC_ID}')
+                if len(short_code)>120:short_code=short_code[:119]+'…';warnings.append('Short code was shortened to fit the label.')
+                final=self._prepared_doc(doc,profile,name,asset,short_code,f'/item/{SYNTHETIC_ID}')
                 rendered=self._render_one(final,profile,_remaining(deadline))
                 response=self._response(rendered,profile,warnings+rendered.get('warnings',[]))
                 _remaining(deadline)
@@ -352,9 +357,9 @@ class LabelLayouts:
             if mode=='item_draft':
                 profile=data.get('profile');doc=validate_document(data.get('document'),profile)
                 remaining=_remaining(deadline)
-                entity=self._load_item(client,data.get('entity_id'),remaining);name,asset,updated,warnings=_native_values(entity)
+                entity=self._load_item(client,data.get('entity_id'),remaining);name,asset,short_code,updated,warnings=_native_values(entity)
                 _remaining(deadline)
-                final=self._prepared_doc(doc,profile,name,asset,f"/item/{_uuid(entity['id'])}")
+                final=self._prepared_doc(doc,profile,name,asset,short_code,f"/item/{_uuid(entity['id'])}")
                 rendered=self._render_one(final,profile,_remaining(deadline))
                 response=self._response(rendered,profile,warnings+rendered.get('warnings',[]))
                 _remaining(deadline)
@@ -370,9 +375,9 @@ class LabelLayouts:
             prepared=[]
             for entity_id in entity_ids:
                 remaining=_remaining(deadline)
-                entity=self._load_item(client,entity_id,remaining);name,asset,updated,warnings=_native_values(entity)
+                entity=self._load_item(client,entity_id,remaining);name,asset,short_code,updated,warnings=_native_values(entity)
                 _remaining(deadline)
-                final=self._prepared_doc(doc,profile,name,asset,f"/item/{_uuid(entity['id'])}")
+                final=self._prepared_doc(doc,profile,name,asset,short_code,f"/item/{_uuid(entity['id'])}")
                 prepared.append((entity,updated,warnings,final))
             remaining=_remaining(deadline)
             if self.renderer is None:

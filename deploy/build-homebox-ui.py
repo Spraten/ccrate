@@ -56,7 +56,7 @@ def item_log_frontend():
     path = 'pages/item/[id]/index.vue'
     replace(path, '  import LabelMaker from', '  import WorkshopItemLog from "@/components/Workshop/ItemLog.vue";\n  import ItemLoans from "@/components/Workshop/ItemLoans.vue";\n  import LabelMaker from')
     details_anchor = '          </DetailsSection>\n        </BaseCard>\n\n        <!-- anything in this is not rendered if on another page -->'
-    replace(path, details_anchor, '          </DetailsSection>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
+    replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
 
 
 def nest_frontend():
@@ -64,6 +64,9 @@ def nest_frontend():
     replace('components/ui/dialog-provider/utils.ts', '[DialogID.CreateEntity]: { baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" };', '[DialogID.CreateEntity]: ({ baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" }) & { parentId?: string };')
     path = 'components/Entity/CreateModal.vue'
     replace(path, ':entity-types="subItemCreate ? entityTypes.filter(t => !t.isLocation) : entityTypes"', ':entity-types="entityTypes"')
+    replace(path, '      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"', '      <FormTextField v-if="!selectedEntityType?.isLocation" v-model="form.modelNumber" label="Model number" :max-length="255" />\n      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"')
+    replace(path, '    name: "",\n    quantity: 1,', '    name: "",\n    modelNumber: "",\n    quantity: 1,')
+    replace(path, '    form.name = "";\n    form.quantity = 1;', '    form.name = "";\n    form.modelNumber = "";\n    form.quantity = 1;')
     target = BUILD/path
     text = target.read_text()
     start = text.index('      <ItemSelector\n'); end = text.index('      <FormTextField', start)
@@ -85,6 +88,8 @@ def nest_frontend():
     start = text.index('    // Items must live somewhere'); end = text.index('    if (loading.value)', start)
     text = text[:start]+text[end:]
     text = text.replace('parentId: form.location.id as string', 'parentId: form.location?.id || null').replace('parentId: form.parentId || (form.location.id as string)', 'parentId: form.location?.id || null')
+    text = text.replace('const templateRequest = {', 'const templateRequest = {\n        modelNumber: form.modelNumber?.trim() || undefined,')
+    text = text.replace('        name: form.name,\n        quantity: form.quantity,\n        description: form.description,', '        name: form.name,\n        modelNumber: form.modelNumber?.trim() || undefined,\n        quantity: form.quantity,\n        description: form.description,')
     target.write_text(text)
     path = 'pages/item/[id]/index/edit.vue'; target=BUILD/path; text=target.read_text()
     start=text.index('    if (data.parent && data.parent.entityType'); end=text.index('\n    return data;',start)
@@ -115,7 +120,7 @@ def nest_frontend():
       </section>
       <ItemViewSelectable v-if="items && items.length" :items="items || []" @refresh="refreshItemList" />''')
 
-    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  shortCode: string;').replace('export interface EntityCreate {','export interface EntityCreate {\n  modelNumber?: string;').replace('export interface EntityTemplateCreateItemRequest {','export interface EntityTemplateCreateItemRequest {\n  modelNumber?: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
     start=text.index('export interface EntityTemplateCreateItemRequest {');end=text.index('\n}',start)
     text=text[:start]+text[start:end].replace('parentId: string;','parentId: string | null;')+text[end:];target.write_text(text)
     replace('composables/use-barcode-detector.ts','api.items.getAll({ locations: [id] })','api.items.getAll({ parentIds: [id] })')
@@ -228,9 +233,31 @@ def shell_frontend():
     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import DeviceStatus from "~/components/Workshop/DeviceStatus.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
 
 
+def strip_item_response_short_codes_from_update_tests():
+    """Keep response-only shortCode out of update payloads in the pinned API tests."""
+    relative = pathlib.Path('lib/api/__test__/user/items.test.ts')
+    target = BUILD / relative
+    source = target.read_text()
+    rewrites = (
+        ("    const itemUpdate = {\n      ...item,\n      parentId: item.parent?.id || null,", "    const { shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      parentId: item.parent?.id || null,"),
+        ("    const child1ItemUpdate = {\n      ...child1Item,\n      parentId: parent.id,", "    const { shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      parentId: parent.id,"),
+        ("    const child2ItemUpdate = {\n      ...child2Item,\n      parentId: parent.id,", "    const { shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      parentId: parent.id,"),
+        ("    const itemUpdate = {\n      ...parent,\n      parentId: parentLocation.id,", "    const { shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      parentId: parentLocation.id,"),
+    )
+    if len(rewrites) != 4:
+        raise RuntimeError('Expected four pinned item update test fixtures')
+    for original, replacement in rewrites:
+        count = source.count(original)
+        if count != 1:
+            raise RuntimeError(f'Expected exactly one item update fixture anchor in {relative}, found {count}')
+        source = source.replace(original, replacement)
+    target.write_text(source)
+
+
 def prepare():
     shutil.copytree(UPSTREAM_ROOT/'upstream/homebox/frontend', BUILD, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('node_modules', '.nuxt', '.output'))
+    strip_item_response_short_codes_from_update_tests()
     shutil.copytree(ROOT/'homebox-ui/overlay', BUILD, dirs_exist_ok=True)
     shutil.copy2(ROOT/'kiosk/member-avatar.js', BUILD/'lib/member-avatar.js')
     shutil.copy2(ROOT/'kiosk/label-editor.js', BUILD/'lib/label-editor.js')
