@@ -174,6 +174,52 @@ body=body.replace('UNION ALL','UNION').replace('JOIN entity_path ep ON e.id = ep
 body=body.replace('SELECT id, name\n\t  FROM entity_path', "SELECT ep.id, ep.name, CASE WHEN et.is_location THEN 'location' ELSE 'item' END\n\t  FROM entity_path ep\n\t  JOIN entities e ON e.id = ep.id\n\t  JOIN entity_types et ON et.id = e.entity_type_entities")
 body=body.replace('\t\tentry.Type = EntityPathTypeLocation\n','').replace('rows.Scan(&entry.ID, &entry.Name)', 'rows.Scan(&entry.ID, &entry.Name, &entry.Type)')
 text=text[:start]+body+text[end:]
+# Allocate a missing native code atomically when an entity becomes an item.
+# The existing update keeps its validation and lifecycle fields; move its
+# entity update into the same Ent transaction as the counter allocation.
+start=text.index('func (r *EntityRepository) UpdateByGroup(')
+end=text.index('\nfunc ',start)
+body=text[start:end]
+anchor='''\tq := r.db.Entity.Update().Where(entity.ID(data.ID), entity.HasGroupWith(group.ID(gid))).'''
+assert body.count(anchor)==1
+setup='''\tshortCodeTx, err := r.db.Tx(ctx)
+\tif err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\tshortCodeTxCommitted := false
+\tdefer func() { if !shortCodeTxCommitted { _ = shortCodeTx.Rollback() } }()
+\tcurrent, err := shortCodeTx.Entity.Query().Where(entity.ID(data.ID), entity.HasGroupWith(group.ID(gid))).Only(ctx)
+\tif err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\ttargetTypeID := data.EntityTypeID
+\tif targetTypeID == uuid.Nil {
+\t\tcurrentType, err := current.QueryEntityType().Only(ctx)
+\t\tif err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\t\ttargetTypeID = currentType.ID
+\t}
+\ttargetType, err := shortCodeTx.EntityType.Get(ctx, targetTypeID)
+\tif err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\tshortCode := ""
+\tif !targetType.IsLocation && (current.ShortCode == nil || *current.ShortCode == "") {
+\t\tshortCode, err = allocateShortCode(ctx, shortCodeTx, gid, data.ModelNumber, data.Name)
+\t\tif err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\t}
+\tq := shortCodeTx.Entity.Update().Where(entity.ID(data.ID), entity.HasGroupWith(group.ID(gid))).'''
+body=body.replace(anchor,setup,1)
+anchor='''\t\tSetSyncChildEntityLocations(data.SyncChildEntityLocations)
+'''
+assert body.count(anchor)==1
+body=body.replace(anchor,anchor+'''\tif shortCode != "" { q.SetShortCode(shortCode) }
+''',1)
+# Error logging is slightly different across pinned upstream revisions; insert
+# commit after the exact q.Exec error block found in the checked-out source.
+exec_start=body.index('err = q.Exec(ctx)')
+exec_close=body.index('\n\texecSpan.End()',exec_start)
+block=body[exec_start:exec_close]
+assert block.rstrip().endswith('}')
+body=body[:exec_close]+'''\n\tif err := shortCodeTx.Commit(); err != nil {
+\t\trecordSpanError(span, err)
+\t\treturn EntityOut{}, err
+\t}
+\tshortCodeTxCommitted = true'''+body[exec_close:]
+text=text[:start]+body+text[end:]
 source.write_text(text)
 # Native, password-free member profiles reuse the existing user/settings tables.
 users=BUILD/'internal/data/repo/repo_users.go';body=users.read_text()

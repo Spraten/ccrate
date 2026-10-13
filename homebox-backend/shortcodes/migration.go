@@ -74,27 +74,62 @@ func Install(ctx context.Context, tx *sql.Tx, postgres bool) error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
+	// Seed from durable counters first. A deleted item may have consumed a
+	// number, and an assigned row can sort after an unassigned row.
+	counterRows, err := tx.QueryContext(ctx, `SELECT group_id, prefix, next_number FROM item_shortcode_counters`)
+	if err != nil {
+		return fmt.Errorf("read short code counters: %w", err)
+	}
+	for counterRows.Next() {
+		var group, prefix string
+		var next int64
+		if err := counterRows.Scan(&group, &prefix, &next); err != nil {
+			counterRows.Close()
+			return fmt.Errorf("read short code counter: %w", err)
+		}
+		k := key{group, strings.ToUpper(prefix)}
+		if next > 1 && next-1 > counts[k] {
+			counts[k] = next - 1
+		}
+	}
+	if err := counterRows.Err(); err != nil {
+		counterRows.Close()
+		return fmt.Errorf("read short code counters: %w", err)
+	}
+	if err := counterRows.Close(); err != nil {
+		return err
+	}
+	// Existing assignments participate in the high-water mark regardless of
+	// their row order. Prefix keys are normalized to match allocator behavior.
 	for _, row := range records {
-		code := row.code
-		prefix := Prefix(row.model, row.name)
-		if code == "" {
-			k := key{row.group, prefix}
-			counts[k]++
-			code = fmt.Sprintf("%s-%03d", prefix, counts[k])
-			update := `UPDATE entities SET short_code = ? WHERE id = ? AND short_code IS NULL`
-			if postgres {
-				update = `UPDATE entities SET short_code = $1 WHERE id = $2 AND short_code IS NULL`
-			}
-			if _, err := tx.ExecContext(ctx, update, code, row.id); err != nil {
-				return fmt.Errorf("assign short code for %s: %w", row.id, err)
-			}
+		if row.code == "" {
 			continue
 		}
-		parts := strings.SplitN(code, "-", 2)
+		parts := strings.SplitN(row.code, "-", 2)
 		if len(parts) == 2 && len(parts[0]) == 3 {
-			if number, err := strconv.ParseInt(parts[1], 10, 64); err == nil && number > counts[key{row.group, parts[0]}] {
-				counts[key{row.group, parts[0]}] = number
+			if number, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+				k := key{row.group, strings.ToUpper(parts[0])}
+				if number > counts[k] {
+					counts[k] = number
+				}
 			}
+		}
+	}
+	// Only after both high-water sources are known may missing rows be assigned.
+	for _, row := range records {
+		if row.code != "" {
+			continue
+		}
+		prefix := Prefix(row.model, row.name)
+		k := key{row.group, prefix}
+		counts[k]++
+		code := fmt.Sprintf("%s-%03d", prefix, counts[k])
+		update := `UPDATE entities SET short_code = ? WHERE id = ? AND short_code IS NULL`
+		if postgres {
+			update = `UPDATE entities SET short_code = $1 WHERE id = $2 AND short_code IS NULL`
+		}
+		if _, err := tx.ExecContext(ctx, update, code, row.id); err != nil {
+			return fmt.Errorf("assign short code for %s: %w", row.id, err)
 		}
 	}
 	for k, number := range counts {

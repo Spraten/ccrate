@@ -35,6 +35,36 @@ func TestItemShortCodesAreScopedStableAndFreshForDuplicates(t *testing.T) {
 	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, next.ID) })
 }
 
+func TestItemShortCodeSurvivesEntityTypeTransitions(t *testing.T) {
+	ctx := context.Background()
+	locationType := useContainerEntityType(t)
+	itemType := useItemEntityType(t)
+	location, err := tRepos.Entities.Create(ctx, tGroup.ID, EntityCreate{
+		Name: "Shelf A", EntityTypeID: locationType.ID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, location.ShortCode)
+	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, location.ID) })
+
+	item, err := tRepos.Entities.UpdateByGroup(ctx, tGroup.ID, EntityUpdate{
+		ID: location.ID, Name: location.Name, EntityTypeID: itemType.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "SHE-001", item.ShortCode)
+
+	asLocation, err := tRepos.Entities.UpdateByGroup(ctx, tGroup.ID, EntityUpdate{
+		ID: item.ID, Name: item.Name, EntityTypeID: locationType.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, item.ShortCode, asLocation.ShortCode)
+
+	asItem, err := tRepos.Entities.UpdateByGroup(ctx, tGroup.ID, EntityUpdate{
+		ID: item.ID, Name: item.Name, EntityTypeID: itemType.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, item.ShortCode, asItem.ShortCode)
+}
+
 func TestItemShortCodeCounterRollsBackWithCreateTransaction(t *testing.T) {
 	ctx := context.Background()
 	tx, err := tClient.Tx(ctx)

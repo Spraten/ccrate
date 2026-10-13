@@ -116,3 +116,57 @@ func TestGooseBackfillsOldItemsAndKeepsCodesAfterReopen(t *testing.T) {
 		t.Fatal("case-folded duplicate short code was accepted")
 	}
 }
+
+func TestGooseBackfillSeedsExistingCodesAndDurableCountersBeforeAllocating(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "partially-numbered-homebox.db")
+	db, err := sql.Open("sqlite3", path)
+	if err != nil { t.Fatal(err) }
+	gooseFS, err := migrations.Migrations("sqlite3")
+	if err != nil { t.Fatal(err) }
+	goose.SetBaseFS(gooseFS)
+	if err := goose.SetDialect("sqlite3"); err != nil { t.Fatal(err) }
+	if err := goose.UpToContext(ctx, db, "sqlite3", 20260512130000); err != nil {
+		t.Fatalf("create old Homebox schema: %v", err)
+	}
+	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, db)))
+	collection, err := client.Group.Create().SetName("Partial collection").Save(ctx)
+	if err != nil { t.Fatal(err) }
+	itemType, err := client.EntityType.Create().SetName("Item").SetDescription("").SetIsLocation(false).SetGroupID(collection.ID).Save(ctx)
+	if err != nil { t.Fatal(err) }
+	items := []struct{ id, name, model string }{
+		{"00000000-0000-4000-8000-000000000001", "Missing earlier row", "M-18"},
+		{"00000000-0000-4000-8000-000000000002", "Existing row", "M-18"},
+		{"00000000-0000-4000-8000-000000000003", "Deleted high sequence", "HIGH"},
+	}
+	for _, row := range items {
+		_, err := client.Entity.Create().SetID(uuid.MustParse(row.id)).SetName(row.name).SetDescription("").SetGroupID(collection.ID).
+			SetEntityTypeID(itemType.ID).SetModelNumber(row.model).Save(ctx)
+		if err != nil { t.Fatal(err) }
+	}
+	if err := client.Close(); err != nil { t.Fatal(err) }
+	db, err = sql.Open("sqlite3", path)
+	if err != nil { t.Fatal(err) }
+	if _, err := db.ExecContext(ctx, `ALTER TABLE entities ADD COLUMN short_code text NULL`); err != nil { t.Fatal(err) }
+	if _, err := db.ExecContext(ctx, `CREATE TABLE item_shortcode_counters (
+		group_id uuid NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+		prefix varchar(3) NOT NULL,
+		next_number integer NOT NULL CHECK(next_number > 0),
+		PRIMARY KEY(group_id,prefix))`); err != nil { t.Fatal(err) }
+	if _, err := db.ExecContext(ctx, `UPDATE entities SET short_code='M18-001' WHERE id=?`, items[1].id); err != nil { t.Fatal(err) }
+	if _, err := db.ExecContext(ctx, `INSERT INTO item_shortcode_counters(group_id,prefix,next_number) VALUES(?,?,?)`, collection.ID, "M18", 3); err != nil { t.Fatal(err) }
+	if _, err := db.ExecContext(ctx, `INSERT INTO item_shortcode_counters(group_id,prefix,next_number) VALUES(?,?,?)`, collection.ID, "HIG", 1001); err != nil { t.Fatal(err) }
+	if err := goose.UpContext(ctx, db, "sqlite3"); err != nil {
+		t.Fatalf("apply registered short-code migration: %v", err)
+	}
+	for _, expected := range []struct{ id, code string }{
+		{items[0].id, "M18-003"},
+		{items[1].id, "M18-001"},
+		{items[2].id, "HIG-1001"},
+	} {
+		var got string
+		if err := db.QueryRowContext(ctx, `SELECT short_code FROM entities WHERE id=?`, expected.id).Scan(&got); err != nil { t.Fatal(err) }
+		if got != expected.code { t.Errorf("%s code = %q, want %q", expected.id, got, expected.code) }
+	}
+	if err := db.Close(); err != nil { t.Fatal(err) }
+}
