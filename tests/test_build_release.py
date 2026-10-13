@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 import importlib.util
 import hashlib
 import json
@@ -65,8 +64,32 @@ class BuildReleaseTests(unittest.TestCase):
         commands = build_release.verification_commands(sys.executable)
         self.assertEqual(commands, [[
             sys.executable, "-m", "unittest", "tests.test_build_release",
-            "tests.test_update_ccrate", "-v",
+            "tests.test_update_ccrate",
+            "tests.test_release_bundle.ReleaseBundleTests.test_format2_backup_restores_selected_release",
+            "tests.test_release_bundle.ReleaseBundleTests.test_production_backup_restores_sealed_selection_and_receipt_binding",
+            "-v",
         ]])
+
+    def test_restored_selector_target_is_relative_to_selector_directory(self):
+        import importlib.util
+        import os
+        fcntl = types.ModuleType("fcntl")
+        fcntl.LOCK_EX, fcntl.LOCK_UN = 1, 2
+        fcntl.flock = lambda *_args, **_kwargs: None
+        restore_path = ROOT / "deploy/restore-cold-backup.py"
+        spec = importlib.util.spec_from_file_location("restore_cold_backup_test", restore_path)
+        restore = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {"fcntl": fcntl}):
+            spec.loader.exec_module(restore)
+        root = Path(self.temp.name) / "restore-root"
+        selected = root / "work/releases/previous"
+        selected.mkdir(parents=True)
+        targets = []
+        with patch.object(Path, "symlink_to", side_effect=lambda target, **kwargs: targets.append(target)), \
+             patch.object(restore.os, "replace") as replace:
+            restore._restore_selector(root, selected)
+        self.assertEqual([Path(target) for target in targets], [Path("releases/previous")])
+        replace.assert_called_once()
 
     def run_builder(self, component, *, source_root, toolchain_root, output_path):
         self.calls.append(component)

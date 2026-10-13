@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 #!/usr/bin/env python3
 """Build independently fingerprinted C-Crate components into a verified cache."""
 import argparse
@@ -264,7 +263,10 @@ def _verify_component_results(component_results):
 def verification_commands(python_executable):
     """Checks required to produce a review-only candidate artifact receipt."""
     return [[python_executable, "-m", "unittest", "tests.test_build_release",
-             "tests.test_update_ccrate", "-v"]]
+             "tests.test_update_ccrate",
+             "tests.test_release_bundle.ReleaseBundleTests.test_format2_backup_restores_selected_release",
+             "tests.test_release_bundle.ReleaseBundleTests.test_production_backup_restores_sealed_selection_and_receipt_binding",
+             "-v"]]
 
 
 def capture_verification(source_root: pathlib.Path, artifacts: dict) -> dict:

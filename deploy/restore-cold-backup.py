@@ -43,7 +43,8 @@ def _restore_selector(root, selected):
     temporary = selector.with_name(".application-current.restore")
     if temporary.exists() or temporary.is_symlink():
         temporary.unlink()
-    temporary.symlink_to(Path(selected).relative_to(Path(root)), target_is_directory=True)
+    relative_target = os.path.relpath(Path(selected), selector.parent)
+    temporary.symlink_to(relative_target, target_is_directory=True)
     os.replace(temporary, selector)
 
 
