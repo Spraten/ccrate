@@ -65,6 +65,7 @@ class BuildReleaseTests(unittest.TestCase):
         self.assertEqual(commands, [[
             sys.executable, "-m", "unittest", "tests.test_build_release",
             "tests.test_update_ccrate",
+            "tests.test_update_compatibility",
             "tests.test_release_bundle.ReleaseBundleTests.test_format2_backup_restores_selected_release",
             "tests.test_release_bundle.ReleaseBundleTests.test_production_backup_restores_sealed_selection_and_receipt_binding",
             "-v",

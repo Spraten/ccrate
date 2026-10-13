@@ -104,6 +104,7 @@ class UpdateCcrateTests(unittest.TestCase):
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode="w:gz") as archive:
             if members is None:
+                archive.add(self.package, arcname="candidate", recursive=False)
                 for path in sorted(self.package.rglob("*")):
                     relative = path.relative_to(self.package).as_posix()
                     info = archive.gettarinfo(str(path), arcname=f"candidate/{relative}")

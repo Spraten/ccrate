@@ -1,5 +1,6 @@
 """Build and validate a bounded, provenance-bound application bundle."""
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -7,9 +8,12 @@ import contextlib
 import shutil
 import stat
 import sys
+import tempfile
 import fcntl
 import time
 import uuid
+import sqlite3
+import tarfile
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -207,7 +211,7 @@ def _validate_fallback_policy(policy):
             or len(policy["candidate_manifest_sha256"]) != 64
             or policy.get("roomsv2_read_versions") != [1, 2]
             or policy.get("workshop_mutation_mode") not in ("v2", "disabled")
-            or policy.get("member_profile_loan_compatibility") != "verified"
+            or policy.get("member_profile_loan_compatibility") not in ("verified", "unverified")
             or policy.get("runtime_state_policy") != "same-stores-no-restore"
             or policy.get("physical_effect_policy") != "never-replay"):
         raise BundleError("fallback policy does not describe compatible F recovery")
@@ -268,7 +272,80 @@ def _require_workshop_compatibility(manifest, *, role, require_writer=False):
     return capability
 
 
-def stage_bundle(destination, *, binary, public, source, provenance, fallback_policy=None):
+def _verify_staged_workshop(root):
+    """Run v1-read, v2-read and v2-write checks against the copied Workshop code."""
+    root = Path(root).absolute()
+    try:
+        if not stat.S_ISDIR(root.lstat().st_mode):
+            raise BundleError("staged Workshop tree must be a real directory")
+    except OSError as exc:
+        raise BundleError("staged Workshop tree is unavailable") from exc
+    ops = root / "ops"
+    module_names = ("ledger", "native_fields", "workshop")
+    saved = {name: sys.modules.pop(name) for name in module_names if name in sys.modules}
+    write_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(ops))
+    try:
+        spec = importlib.util.spec_from_file_location("workshop", ops / "workshop.py")
+        if spec is None or spec.loader is None:
+            raise BundleError("staged Workshop module could not be loaded")
+        workshop_module = importlib.util.module_from_spec(spec)
+        sys.modules["workshop"] = workshop_module
+        spec.loader.exec_module(workshop_module)
+        Workshop = workshop_module.Workshop
+        group, actor = str(uuid.uuid4()), str(uuid.uuid4())
+        with tempfile.TemporaryDirectory(prefix="ccrate-workshop-compat-") as temporary:
+            database = Path(temporary) / "workshop.db"
+            store = Workshop(database)
+            legacy = {"name": "Legacy workshop", "width": 12, "height": 10, "objects": []}
+            with contextlib.closing(sqlite3.connect(database)) as db, db:
+                db.execute("INSERT INTO plans VALUES(?,?,?)", (group, 1, json.dumps(legacy)))
+            old_read = store.get(group)
+            if (old_read["stored_schema_version"] != 1
+                    or old_read["document"].get("version") != 2
+                    or old_read["document"]["rooms"][0]["name"] != "Legacy workshop"):
+                raise BundleError("staged Workshop code failed legacy v1 read")
+
+            group_v2 = str(uuid.uuid4())
+            document = {"version": 2, "rooms": [{"id": str(uuid.uuid4()), "location_id": None,
+                        "name": "Version 2 workshop", "width": 12, "height": 10,
+                        "unit": "ft", "approximate": False, "objects": []}]}
+            key = str(uuid.uuid4())
+            result = store.save(object(), group_v2, {"schema_version": 2, "revision": 0,
+                                "request_key": key, "document": document}, actor_id=actor)
+            reopened = Workshop(database).get(group_v2)
+            if (result["revision"] != 1 or reopened["stored_schema_version"] != 2
+                    or reopened["document"] != document):
+                raise BundleError("staged Workshop code failed v2 read/write")
+        return {"workshop_read_v1": "passed", "workshop_read_v2": "passed",
+                "workshop_write_v2": "passed"}
+    finally:
+        sys.path.remove(str(ops))
+        for name in module_names:
+            sys.modules.pop(name, None)
+        sys.modules.update(saved)
+        sys.dont_write_bytecode = write_bytecode
+
+
+def _remove_staging_tree(root):
+    root = Path(root)
+    for current, directories, files in os.walk(root, topdown=False, followlinks=False):
+        for name in files:
+            path = Path(current) / name
+            if not path.is_symlink():
+                os.chmod(path, 0o600)
+        for name in directories:
+            path = Path(current) / name
+            if not path.is_symlink():
+                os.chmod(path, 0o700)
+    if root.exists() and not root.is_symlink():
+        os.chmod(root, 0o700)
+    shutil.rmtree(root)
+
+
+def stage_bundle(destination, *, binary, public, source, provenance, fallback_policy=None,
+                 verification=None):
     """Copy only runtime allowlists and seal hashes, modes, and receipt bindings."""
     destination, binary, public, source = map(Path, (destination, binary, public, source))
     if destination.exists() or destination.is_symlink():
@@ -290,6 +367,7 @@ def stage_bundle(destination, *, binary, public, source, provenance, fallback_po
             raise BundleError("launcher bundle lacks label starter documents")
         label_source_sha256 = _hash(label_source)
     native_sha = _hash(binary)
+    provenance = dict(provenance)
     matched = _provenance(provenance, binary_sha=native_sha, source_files=source_files,
                           public_files=public_files, label_files=label_files,
                           check_receipt_bytes=True, label_source_sha256=label_source_sha256)
@@ -321,6 +399,31 @@ def stage_bundle(destination, *, binary, public, source, provenance, fallback_po
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(label_source, target)
             os.chmod(target, 0o444)
+        if verification is not None:
+            outcomes = verification(destination)
+            required = ("workshop_read_v1", "workshop_read_v2", "workshop_write_v2")
+            if not isinstance(outcomes, dict) or outcomes != {name: "passed" for name in required}:
+                raise BundleError("staged Workshop verification did not pass every required case")
+            tests = dict(provenance["test_receipt"])
+            tests["workshop_compatibility"] = {
+                "closure_sha256": _workshop_closure_digest(
+                    matched["runtime_files"], matched["runtime_modes"], public_files, label_files,
+                    label_source_sha256, native_sha),
+                "tests": [{"name": name, "result": outcomes[name]} for name in required],
+            }
+            provenance["test_receipt"] = tests
+            provenance["workshop_capability"] = {
+                "schema": 1, "read_versions": [1, 2], "write_mode": "v2",
+                "closure_sha256": tests["workshop_compatibility"]["closure_sha256"],
+                "test_names": list(required),
+            }
+            raw = json.dumps(tests, sort_keys=True, indent=2) + "\n"
+            provenance["test_receipt_raw"] = raw
+            provenance["test_receipt_sha256"] = hashlib.sha256(raw.encode()).hexdigest()
+            provenance["test_receipt_canonical_sha256"] = _json_hash(tests)
+            matched = _provenance(provenance, binary_sha=native_sha, source_files=source_files,
+                                  public_files=public_files, label_files=label_files,
+                                  check_receipt_bytes=True, label_source_sha256=label_source_sha256)
         files = {}
         for path in sorted(destination.rglob("*")):
             if path.is_file():
@@ -338,9 +441,245 @@ def stage_bundle(destination, *, binary, public, source, provenance, fallback_po
         os.chmod(destination, 0o555)
         return manifest
     except Exception:
-        shutil.rmtree(destination)
+        _remove_staging_tree(destination)
         raise
 
+
+
+def _refresh_provenance_receipts(provenance):
+    """Re-encode a captured receipt after adding artifact-assembly facts."""
+    provenance = dict(provenance)
+    for kind in ("build", "test"):
+        receipt = dict(provenance[f"{kind}_receipt"])
+        raw = json.dumps(receipt, sort_keys=True, indent=2) + "\n"
+        provenance[f"{kind}_receipt"] = receipt
+        provenance[f"{kind}_receipt_raw"] = raw
+        provenance[f"{kind}_receipt_sha256"] = hashlib.sha256(raw.encode()).hexdigest()
+        provenance[f"{kind}_receipt_canonical_sha256"] = _json_hash(receipt)
+    return provenance
+
+
+def assemble_fallback(previous: Path, candidate: Path, destination: Path, *, verification):
+    """Seal candidate code with the captured previous public/Terminal bytes.
+
+    ``verification`` runs against the actual copied staging tree. Its return value
+    must be the Workshop capability checks; assembly never substitutes a
+    declared-success dictionary for executing that callback.
+    """
+    previous, candidate, destination = map(Path, (previous, candidate, destination))
+    o = validate_bundle(previous)
+    c = validate_bundle(candidate)
+    _require_workshop_compatibility(o, role="previous")
+    _require_workshop_compatibility(c, role="candidate", require_writer=True)
+    if not callable(verification):
+        raise BundleError("fallback assembly requires an executable verification callback")
+    if destination.exists() or destination.is_symlink():
+        raise BundleError(f"destination already exists: {destination}")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    assembly = Path(tempfile.mkdtemp(prefix=".ccrate-fallback-", dir=destination.parent))
+    source = assembly / "source"
+    public = assembly / "public"
+    try:
+        source.mkdir()
+        public.mkdir()
+        for area in ("ops", "deploy", "kiosk"):
+            shutil.copytree(candidate / area, source / area)
+        shutil.copytree(candidate / "label-ui" / "src", source / "label-ui" / "src")
+        label_build = source / "work" / "label-ui-build"
+        shutil.copytree(candidate / "label-ui", label_build,
+                        ignore=shutil.ignore_patterns("src"))
+        shutil.copytree(previous / "public", public, dirs_exist_ok=True)
+        # Previous non-Python kiosk files are UI; Python remains candidate code.
+        for directory in (source / "kiosk", *(path for path in (source / "kiosk").rglob("*") if path.is_dir())):
+            directory.chmod(directory.stat().st_mode | 0o200)
+        for path in (source / "kiosk").rglob("*"):
+            if path.is_file() and path.suffix.lower() != ".py":
+                path.unlink()
+        for path in (previous / "kiosk").rglob("*"):
+            if path.is_file() and path.suffix.lower() != ".py":
+                rel = path.relative_to(previous / "kiosk")
+                target = source / "kiosk" / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+
+        binary = candidate / "native" / "homebox"
+        source_files = _runtime_files(source, LAUNCHER_DEPLOY_FILES)
+        runtime_files = {name.as_posix(): _hash(path) for path, name in source_files}
+        runtime_modes = {name.as_posix(): path.stat().st_mode & 0o777 for path, name in source_files}
+        source_digest = _json_hash({"files": runtime_files, "modes": runtime_modes})
+        public_names = {rel.as_posix() for _, rel in _walk(public, lambda _r, _p: True)}
+        label_names = {rel.as_posix() for _, rel in _walk(label_build, lambda _r, _p: True)}
+        public_files = _inventory(public, {name: {} for name in public_names})
+        label_files = _inventory(label_build, {name: {} for name in label_names})
+        static_digest = _json_hash({"public": public_files, "labels": label_files})
+
+        provenance = dict(c["provenance"])
+        tests = dict(provenance["test_receipt"])
+        build = dict(provenance["build_receipt"])
+        tests.pop("workshop_compatibility", None)
+        tests["source_manifest_digest"] = source_digest
+        tests["static_manifest_sha256"] = static_digest
+        tests["source_entries"] = {
+            name: {"sha256": runtime_files[name], "mode": runtime_modes[name]}
+            for name in runtime_files}
+        tests["assembly_origins"] = {
+            "native": "candidate", "ops": "candidate", "deploy": "candidate",
+            "kiosk_python": "candidate", "label_ui": "candidate",
+            "public": "previous", "kiosk_non_python": "previous"}
+        build["source_manifest_digest"] = source_digest
+        build["static_manifest_sha256"] = static_digest
+        provenance.update({
+            "source_manifest_digest": source_digest,
+            "static_manifest_sha256": static_digest,
+            "runtime_files": runtime_files, "runtime_modes": runtime_modes,
+            "public_files": public_files, "label_files": label_files,
+            "label_source_sha256": _hash(source / "label-ui/src/starter-documents.json"),
+            "native_sha256": _hash(binary), "build_receipt": build, "test_receipt": tests,
+        })
+        provenance.pop("workshop_capability", None)
+        provenance = _refresh_provenance_receipts(provenance)
+        candidate_sha = _manifest_digest(candidate)
+        policy = {
+            "schema": 1, "evidence_scope": "fixture-only",
+            "strategy": "candidate-code-with-captured-previous-public",
+            "candidate_manifest_sha256": candidate_sha,
+            "roomsv2_read_versions": [1, 2], "workshop_mutation_mode": "v2",
+            "member_profile_loan_compatibility": "unverified",
+            "runtime_state_policy": "same-stores-no-restore",
+            "physical_effect_policy": "never-replay",
+        }
+        stage_bundle(destination, binary=binary, public=public, source=source,
+                     provenance=provenance, fallback_policy=policy, verification=verification)
+        _validate_fallback_code_pair(previous, candidate, destination)
+        return destination
+    finally:
+        _remove_staging_tree(assembly)
+
+
+def _owned_private_work(root):
+    root = Path(root).absolute()
+    try:
+        root_info = root.lstat()
+        if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
+            raise BundleError("upgrade proof root must be a real directory")
+        root = root.resolve(strict=True)
+        temporary_root = Path(tempfile.gettempdir()).resolve(strict=True)
+        if not root.is_relative_to(temporary_root):
+            raise BundleError("upgrade proof root must be an owned disposable temporary directory")
+        work = root / "work"
+        work_info = work.lstat()
+    except OSError as exc:
+        raise BundleError("upgrade proof root and work directory must exist") from exc
+    if (root_info.st_uid != os.getuid() or not stat.S_ISDIR(work_info.st_mode)
+            or stat.S_ISLNK(work_info.st_mode) or work_info.st_uid != os.getuid()):
+        raise BundleError("upgrade proof root and work directory must be owned real directories")
+    if work_info.st_mode & 0o077:
+        raise BundleError("upgrade proof work directory permissions are too broad")
+    return root, work
+
+
+def verify_upgrade_pair(root: Path, previous: Path, candidate: Path, fallback: Path,
+                        backup_archive: Path) -> dict:
+    """Restore and inspect an archive privately, then emit a fixture-scoped receipt.
+
+    This performs no selector change, endpoint access, service control, or
+    hardware call. Incomplete native member/loan evidence remains false and
+    therefore cannot pass the publisher's required-check gate.
+    """
+    root, work = _owned_private_work(root)
+    previous, candidate, fallback, backup_archive = map(
+        Path, (previous, candidate, fallback, backup_archive))
+    previous_manifest = validate_bundle(previous)
+    candidate_manifest = validate_bundle(candidate)
+    fallback_manifest = validate_bundle(fallback)
+    _validate_fallback_code_pair(previous, candidate, fallback)
+    capability = _require_workshop_compatibility(fallback_manifest, role="fallback")
+    policy = _validate_fallback_policy(fallback_manifest.get("fallback_policy"))
+    if (policy["candidate_manifest_sha256"] != _manifest_digest(candidate)
+            or policy["evidence_scope"] != "fixture-only"):
+        raise BundleError("fallback policy does not bind the fixture candidate")
+    try:
+        archive_info = backup_archive.lstat()
+    except OSError as exc:
+        raise BundleError("actual backup archive is required") from exc
+    if (not stat.S_ISREG(archive_info.st_mode) or stat.S_ISLNK(archive_info.st_mode)
+            or archive_info.st_uid != os.getuid() or archive_info.st_mode & 0o077):
+        raise BundleError("backup archive must be an owned private regular file")
+
+    import runpy
+    restore = runpy.run_path(str(Path(__file__).with_name("restore-cold-backup.py")),
+                             run_name="verify_update_restore_backup")
+    proof_id = uuid.uuid4().hex
+    restored = work / f".update-proof-restore-{proof_id}"
+    receipt_path = work / f"update-proof-{proof_id}.json"
+    try:
+        restore_result = restore["restore_backup"](backup_archive, restored)
+        if restore_result["status"] != "restored":
+            raise BundleError("backup snapshot was not actually restored")
+        with tarfile.open(backup_archive, "r:gz") as archive:
+            backup_row = archive.getmember("deployment-manifest.json")
+            if not backup_row.isfile() or backup_row.size > 2 * 1024 * 1024:
+                raise BundleError("backup deployment manifest is not a bounded regular member")
+            backup_stream = archive.extractfile(backup_row)
+            if backup_stream is None:
+                raise BundleError("backup deployment manifest cannot be read")
+            backup_manifest = json.loads(backup_stream.read(2 * 1024 * 1024 + 1).decode("utf-8"))
+        selected = restore_result.get("selected_release")
+        snapshot_matches = False
+        if selected:
+            archived_previous = restored / selected
+            snapshot_matches = _manifest_digest(archived_previous) == _manifest_digest(previous)
+        # The archive must contain the exact O release; a format-1 or unrelated
+        # snapshot is valid backup material but not matched upgrade evidence.
+        if not snapshot_matches:
+            raise BundleError("restored snapshot does not contain the exact previous bundle")
+        checks = {
+            "matched_previous_release_preserves_new_fixture_profiles_and_loans": False,
+            "legacy_missing_member_api_is_not_a_rollback_target": False,
+            "fallback_candidate_compatible_handlers": True,
+            "fallback_reads_rooms_v1_v2_writes_v2_or_disables_mutation": (
+                capability["read_versions"] == [1, 2]
+                and capability["write_mode"] in ("v2", "disabled")),
+            "fallback_preserves_member_profile_loan_state": False,
+            "same_runtime_stores_no_restore_or_physical_replay": False,
+        }
+        receipt = {
+            "schema": 1, "execution_scope": "fixture-only",
+            "previous_bundle_manifest_sha256": _manifest_digest(previous),
+            "candidate_bundle_manifest_sha256": _manifest_digest(candidate),
+            "fallback_bundle_manifest_sha256": _manifest_digest(fallback),
+            "previous_native_sha256": previous_manifest["provenance"]["native_sha256"],
+            "candidate_native_sha256": candidate_manifest["provenance"]["native_sha256"],
+            "fallback_native_sha256": fallback_manifest["provenance"]["native_sha256"],
+            "fallback_policy_sha256": _json_hash(policy),
+            "snapshot": {"archive_sha256": _hash(backup_archive),
+                         "selected_release_manifest_sha256": _manifest_digest(restored / selected),
+                         "restored_store_sha256": {
+                             name: backup_manifest["sha256"][name] for name in (
+                                 "work/ops/ledger.db", "work/baseline/data/homebox.db")},
+                         "database_integrity_check": "ok",
+                         "restored_actual_snapshot": True},
+            "checks": checks,
+        }
+        raw = json.dumps(receipt, sort_keys=True, indent=2) + "\n"
+        fd = os.open(receipt_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY
+                     | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        _directory_fsync(work)
+        return receipt
+    finally:
+        if restored.exists() and not restored.is_symlink():
+            try:
+                _remove_staging_tree(restored)
+            except Exception:
+                if receipt_path.exists() and not receipt_path.is_symlink():
+                    os.chmod(receipt_path, 0o600)
+                    receipt_path.unlink()
+                raise
 
 def _bundle_layout(release):
     try:
@@ -735,6 +1074,8 @@ def _validate_fallback_receipt(receipt, previous, candidate, fallback):
     fallback_manifest = validate_bundle(fallback)
     candidate_digest = _manifest_digest(candidate)
     policy = _validate_fallback_policy(fallback_manifest.get("fallback_policy"))
+    if policy["member_profile_loan_compatibility"] != "verified":
+        raise BundleError("fallback lacks verified native member/profile/loan compatibility")
     if (policy["candidate_manifest_sha256"] != candidate_digest
             or policy["evidence_scope"] != receipt.get("execution_scope")
             or receipt.get("fallback_policy_sha256") != _json_hash(policy)):

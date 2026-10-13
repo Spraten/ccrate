@@ -264,6 +264,7 @@ def verification_commands(python_executable):
     """Checks required to produce a review-only candidate artifact receipt."""
     return [[python_executable, "-m", "unittest", "tests.test_build_release",
              "tests.test_update_ccrate",
+             "tests.test_update_compatibility",
              "tests.test_release_bundle.ReleaseBundleTests.test_format2_backup_restores_selected_release",
              "tests.test_release_bundle.ReleaseBundleTests.test_production_backup_restores_sealed_selection_and_receipt_binding",
              "-v"]]
@@ -411,10 +412,6 @@ def package_release(source_root: pathlib.Path, component_results: dict, verifica
             "verification": verification["verification"],
             "closure_sha256": verification["closure_sha256"],
             "execution_scope": "isolated-release-candidate",
-            "workshop_compatibility": {
-                "status": "not-established",
-                "required_cases": ["workshop_read_v1", "workshop_read_v2", "workshop_write_v2"],
-            },
         }
         build_raw = _write_json(destination / "build-receipt.json", build)
         tests_raw = _write_json(destination / "test-receipt.json", tests)
@@ -444,8 +441,10 @@ def package_release(source_root: pathlib.Path, component_results: dict, verifica
             shutil.copytree(labels, stage_source / "work/label-ui-build")
             candidate = destination / "candidate"
             release_bundle.stage_bundle(candidate, binary=binary, public=public, source=stage_source,
-                                        provenance=provenance)
+                                        provenance=provenance,
+                                        verification=release_bundle._verify_staged_workshop)
             manifest = release_bundle.validate_bundle(candidate)
+            _write_json(destination / "test-receipt.json", manifest["provenance"]["test_receipt"])
         finally:
             sys.modules.pop("release_bundle", None)
             sys.path.pop(0)
