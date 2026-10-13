@@ -26,6 +26,8 @@ def normalize(raw):
         if not parsed.hostname or parsed.username or parsed.password:return {'kind':'invalid','reason':'Malformed manufacturer QR URL'}
         return {'kind':'manufacturer','manufacturer_code':value}
     if re.fullmatch(r'\d{3}-\d{3}',value):return {'kind':'asset','asset_id':value}
+    match=re.fullmatch(r'([A-Za-z0-9]{3})-([0-9]{3,})',value)
+    if match:return {'kind':'short_code','short_code':f'{match.group(1).upper()}-{match.group(2)}'}
     if value.isascii() and value.isdigit() and len(value) in (8,12,13,14):
         total=sum(int(n)*(3 if i%2==0 else 1) for i,n in enumerate(reversed(value[:-1])))
         if (10-total%10)%10==int(value[-1]):return {'kind':'product','gtin':value}
@@ -62,6 +64,16 @@ def resolve_equipment(raw,code,items):
     active=[e for e in items if not e.get('archived') and not e.get('entityType',{}).get('isLocation')]
     value=raw.strip()
     def field(entity,name):return [f.get('textValue','') for f in entity.get('fields',[]) if f.get('name')==name]
+    if code['kind']=='short_code':
+        canonical=code['short_code'].upper()
+        matches=[e for e in active if isinstance(e.get('shortCode'),str) and e['shortCode'].strip().upper()==canonical]
+        metadata=[e for e in active if isinstance(e.get('serialNumber'),str) and e['serialNumber'].strip().upper()==canonical or
+                  any(v.strip().upper()==canonical for v in field(e,MANUFACTURER_FIELD) if isinstance(v,str))]
+        owners={e.get('id') or id(e):e for e in matches+metadata}
+        if len(owners)>1:
+            return {**code,'ambiguous':True,'reason':'This code matches multiple item identifiers. Check the item short code, serial number, or manufacturer code.'}
+        if owners:return {**code,'entity':next(iter(owners.values()))}
+        return {**code,'reason':'No equipment is registered with this short code.'}
     matches=[e for e in active if value in field(e,MANUFACTURER_FIELD)]
     if code['kind']=='serial':
         matches=[e for e in active if value in field(e,MANUFACTURER_FIELD) or e.get('serialNumber')==code['serial']]
