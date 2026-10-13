@@ -56,7 +56,7 @@ def item_log_frontend():
     path = 'pages/item/[id]/index.vue'
     replace(path, '  import LabelMaker from', '  import WorkshopItemLog from "@/components/Workshop/ItemLog.vue";\n  import ItemLoans from "@/components/Workshop/ItemLoans.vue";\n  import LabelMaker from')
     details_anchor = '          </DetailsSection>\n        </BaseCard>\n\n        <!-- anything in this is not rendered if on another page -->'
-    replace(path, details_anchor, '          </DetailsSection>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
+    replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
 
 
 def nest_frontend():
@@ -64,6 +64,7 @@ def nest_frontend():
     replace('components/ui/dialog-provider/utils.ts', '[DialogID.CreateEntity]: { baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" };', '[DialogID.CreateEntity]: ({ baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" }) & { parentId?: string };')
     path = 'components/Entity/CreateModal.vue'
     replace(path, ':entity-types="subItemCreate ? entityTypes.filter(t => !t.isLocation) : entityTypes"', ':entity-types="entityTypes"')
+    replace(path, '      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"', '      <FormTextField v-if="!selectedEntityType?.isLocation" v-model="form.modelNumber" label="Model number" :max-length="255" />\n      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"')
     target = BUILD/path
     text = target.read_text()
     start = text.index('      <ItemSelector\n'); end = text.index('      <FormTextField', start)
@@ -85,6 +86,7 @@ def nest_frontend():
     start = text.index('    // Items must live somewhere'); end = text.index('    if (loading.value)', start)
     text = text[:start]+text[end:]
     text = text.replace('parentId: form.location.id as string', 'parentId: form.location?.id || null').replace('parentId: form.parentId || (form.location.id as string)', 'parentId: form.location?.id || null')
+    text = text.replace('const templateRequest = {', 'const templateRequest = {\n        modelNumber: form.modelNumber?.trim() || undefined,')
     target.write_text(text)
     path = 'pages/item/[id]/index/edit.vue'; target=BUILD/path; text=target.read_text()
     start=text.index('    if (data.parent && data.parent.entityType'); end=text.index('\n    return data;',start)
@@ -115,7 +117,7 @@ def nest_frontend():
       </section>
       <ItemViewSelectable v-if="items && items.length" :items="items || []" @refresh="refreshItemList" />''')
 
-    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  shortCode: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
     start=text.index('export interface EntityTemplateCreateItemRequest {');end=text.index('\n}',start)
     text=text[:start]+text[start:end].replace('parentId: string;','parentId: string | null;')+text[end:];target.write_text(text)
     replace('composables/use-barcode-detector.ts','api.items.getAll({ locations: [id] })','api.items.getAll({ parentIds: [id] })')

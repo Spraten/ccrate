@@ -33,6 +33,7 @@ const TOOLS = [
   { key: 'line', glyph: '—', labelKey: 'palette.line', create: createLine },
   { key: 'circle', glyph: '◯', labelKey: 'palette.circle', create: createCircle },
   { key: 'text', glyph: 'Aa', labelKey: 'palette.text', create: createText },
+  { key: 'short-code', glyph: '#', labelKey: 'palette.shortCode', create: (place: { centerXMm: number, centerYMm: number }) => createText(place, '{{short_code}}') },
   { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: (place: { centerXMm: number, centerYMm: number }) => createQr(place, '{{item_path}}') },
   { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: (place: { centerXMm: number, centerYMm: number }) => createBarcode(place, '{{asset_code}}') },
   { key: 'table', glyph: '⊞', labelKey: 'palette.table', create: createTable },

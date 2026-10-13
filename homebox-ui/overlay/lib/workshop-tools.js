@@ -138,7 +138,7 @@ async function labelsPage(revision){
   const key=scope(),identity=context?.identity; if(labelQueues.has(key))labelSelection=new Set(labelQueues.get(key)); else labelSelection=new Set();
   let reviewRevision=0,paperCurrent=()=>false;
   labelTemplates=await api('labels/templates',undefined,identity); if(revision!==routeVersion||identity!==context?.identity)return;
-  const selection=[...labelSelection],items=equipment.filter(item=>!item.archived).map(item=>({id:item.id,name:item.name,assetId:item.assetId||''}));
+  const selection=[...labelSelection],items=equipment.filter(item=>!item.archived).map(item=>({id:item.id,name:item.name,assetId:item.assetId||'',shortCode:item.shortCode||''}));
   labelWorkspace={items,templates:labelTemplates,selectedIds:selection,templateId:labelTemplates[0]?.id||'',marginMm:10,gapMm:3,reviews:[],printedReviewIds:[],pages:[],paper:null,pendingActions:0,busy:false,actions:{}};
   labelWorkspace=labelWorkspaceChanged(labelWorkspace)||labelWorkspace;
   const workspace=labelWorkspace;

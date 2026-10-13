@@ -264,3 +264,43 @@ index a406610..f2a5bd4 100644
      setCsv,
      clear,
      stepPreview,
+diff --git a/packages/editor/src/components/shell/ElementToolStrip.vue b/packages/editor/src/components/shell/ElementToolStrip.vue
+index cbe6e77..3a31d29 100644
+--- a/packages/editor/src/components/shell/ElementToolStrip.vue
++++ b/packages/editor/src/components/shell/ElementToolStrip.vue
+@@ -33,6 +33,7 @@ const TOOLS = [
+   { key: 'line', glyph: '—', labelKey: 'palette.line', create: createLine },
+   { key: 'circle', glyph: '◯', labelKey: 'palette.circle', create: createCircle },
+   { key: 'text', glyph: 'Aa', labelKey: 'palette.text', create: createText },
++  { key: 'short-code', glyph: '#', labelKey: 'palette.shortCode', create: (place: { centerXMm: number, centerYMm: number }) => createText(place, '{{short_code}}') },
+   { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: (place: { centerXMm: number, centerYMm: number }) => createQr(place, '{{item_path}}') },
+   { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: (place: { centerXMm: number, centerYMm: number }) => createBarcode(place, '{{asset_code}}') },
+   { key: 'table', glyph: '⊞', labelKey: 'palette.table', create: createTable },
+diff --git a/packages/editor/src/locales/messages.ts b/packages/editor/src/locales/messages.ts
+index 742dd85..c2992e0 100644
+--- a/packages/editor/src/locales/messages.ts
++++ b/packages/editor/src/locales/messages.ts
+@@ -8,6 +8,7 @@ export const messages = {
+     'palette.line': 'Line',
+     'palette.circle': 'Circle',
+     'palette.text': 'Text',
++    'palette.shortCode': 'Short code',
+     'palette.image': 'Image',
+     'palette.soon': 'Soon',
+     'palette.imageTooLarge': 'Image is too large (max 2MB)',
+@@ -161,6 +162,7 @@ export const messages = {
+     'palette.line': 'Đường kẻ',
+     'palette.circle': 'Hình tròn',
+     'palette.text': 'Văn bản',
++    'palette.shortCode': 'Mã ngắn',
+     'palette.image': 'Hình ảnh',
+     'palette.soon': 'Sắp có',
+     'palette.imageTooLarge': 'Ảnh quá lớn (tối đa 2MB)',
+@@ -314,6 +316,7 @@ export const messages = {
+     'palette.line': '直线',
+     'palette.circle': '圆形',
+     'palette.text': '文本',
++    'palette.shortCode': '短码',
+     'palette.image': '图片',
+     'palette.soon': '即将推出',
+     'palette.imageTooLarge': '图片过大（最大 2MB）',
