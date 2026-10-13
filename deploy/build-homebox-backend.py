@@ -220,6 +220,45 @@ body=body[:exec_close]+'''\n\tif err := shortCodeTx.Commit(); err != nil {
 \t}
 \tshortCodeTxCommitted = true'''+body[exec_close:]
 text=text[:start]+body+text[end:]
+# Patch already owns an Ent transaction. When it changes an uncoded location
+# into an item, allocate from the persisted model/name in that same transaction.
+start=text.index('func (r *EntityRepository) Patch(')
+end=text.index('\nfunc ',start)
+body=text[start:end]
+anchor='''\tq := tx.Entity.Update().
+		Where(
+			entity.ID(id),
+			entity.HasGroupWith(group.ID(gid)),
+		)
+
+	if data.ImportRef != nil {'''
+assert body.count(anchor)==1
+replacement='''	current, err := tx.Entity.Query().Where(entity.ID(id), entity.HasGroupWith(group.ID(gid))).Only(ctx)
+	if err != nil { recordSpanError(span, err); return err }
+	targetTypeID := data.EntityTypeID
+	if targetTypeID == uuid.Nil {
+		currentType, err := current.QueryEntityType().Only(ctx)
+		if err != nil { recordSpanError(span, err); return err }
+		targetTypeID = currentType.ID
+	}
+	targetType, err := tx.EntityType.Get(ctx, targetTypeID)
+	if err != nil { recordSpanError(span, err); return err }
+	shortCode := ""
+	if !targetType.IsLocation && (current.ShortCode == nil || *current.ShortCode == "") {
+		shortCode, err = allocateShortCode(ctx, tx, gid, current.ModelNumber, current.Name)
+		if err != nil { recordSpanError(span, err); return err }
+	}
+	q := tx.Entity.Update().
+		Where(
+			entity.ID(id),
+			entity.HasGroupWith(group.ID(gid)),
+		)
+
+	if shortCode != "" { q.SetShortCode(shortCode) }
+
+	if data.ImportRef != nil {'''
+body=body.replace(anchor,replacement,1)
+text=text[:start]+body+text[end:]
 source.write_text(text)
 # Native, password-free member profiles reuse the existing user/settings tables.
 users=BUILD/'internal/data/repo/repo_users.go';body=users.read_text()

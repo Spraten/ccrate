@@ -65,6 +65,24 @@ func TestItemShortCodeSurvivesEntityTypeTransitions(t *testing.T) {
 	require.Equal(t, item.ShortCode, asItem.ShortCode)
 }
 
+func TestPatchToItemAllocatesShortCodeFromPersistedModelAndName(t *testing.T) {
+	ctx := context.Background()
+	locationType := useContainerEntityType(t)
+	itemType := useItemEntityType(t)
+	location, err := tRepos.Entities.Create(ctx, tGroup.ID, EntityCreate{
+		Name: "Impact Driver", ModelNumber: "M-18", EntityTypeID: locationType.ID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, location.ShortCode)
+	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, location.ID) })
+
+	err = tRepos.Entities.Patch(ctx, tGroup.ID, location.ID, EntityPatch{EntityTypeID: itemType.ID})
+	require.NoError(t, err)
+	item, err := tRepos.Entities.GetOneByGroup(ctx, tGroup.ID, location.ID)
+	require.NoError(t, err)
+	require.Equal(t, "M18-001", item.ShortCode)
+}
+
 func TestItemShortCodeCounterRollsBackWithCreateTransaction(t *testing.T) {
 	ctx := context.Background()
 	tx, err := tClient.Tx(ctx)
