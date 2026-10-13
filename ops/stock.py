@@ -8,7 +8,7 @@ def browse(client,refresh=False):
         if _cache is None or refresh or time.monotonic()-_time>10:
             rows=[]
             for summary in client.entities():
-                e=client.entity(summary['id']);rows.append({'id':e['id'],'name':e['name'],'assetId':e.get('assetId'),'parent':e.get('parent'),'entityType':e.get('entityType'),'quantity':e.get('quantity'),'archived':e.get('archived'),'condition':condition(e),'manufacturer':e.get('manufacturer',''),'modelNumber':e.get('modelNumber',''),'serialNumber':e.get('serialNumber',''),'description':e.get('description',''),'tags':e.get('tags',[])})
+                e=client.entity(summary['id']);rows.append({'id':e['id'],'name':e['name'],'shortCode':e.get('shortCode'),'assetId':e.get('assetId'),'parent':e.get('parent'),'entityType':e.get('entityType'),'quantity':e.get('quantity'),'archived':e.get('archived'),'condition':condition(e),'manufacturer':e.get('manufacturer',''),'modelNumber':e.get('modelNumber',''),'serialNumber':e.get('serialNumber',''),'description':e.get('description',''),'tags':e.get('tags',[])})
             _cache=rows;_time=time.monotonic()
         return [dict(e) for e in _cache]
 def invalidate():

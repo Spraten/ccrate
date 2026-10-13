@@ -597,7 +597,13 @@ def _ambiguous_equipment(raw, code, entities):
     active = [e for e in entities if not e.get('archived') and not e.get('entityType', {}).get('isLocation')]
     matches = [e for e in active if value in [f.get('textValue', '') for f in e.get('fields', [])
                                                 if f.get('name') == 'Manufacturer QR code']]
-    if code.get('kind') == 'serial':
+    if code.get('kind') == 'short_code':
+        canonical = code.get('short_code', '').upper()
+        matches = [e for e in active if e.get('shortCode', '').strip().upper() == canonical or
+                   e.get('serialNumber', '').strip().upper() == canonical or
+                   canonical in [f.get('textValue', '').strip().upper() for f in e.get('fields', [])
+                                 if f.get('name') == 'Manufacturer QR code']]
+    elif code.get('kind') == 'serial':
         matches = [e for e in active if value in [f.get('textValue', '') for f in e.get('fields', [])
                                                    if f.get('name') == 'Manufacturer QR code'] or
                    e.get('serialNumber') == code.get('serial')]

@@ -268,6 +268,18 @@ class WorkshopViewTests(unittest.TestCase):
         short = self.client.add('Single character match', fields=[{'name': 'Manufacturer QR code', 'type': 'text', 'textValue': 'a'}])
         self.assertEqual(resolve_workshop_code(self.client, 'a')['entity_id'], short)
 
+    def test_short_code_resolves_case_insensitively_and_metadata_collision_fails_closed(self):
+        item = self.client.add('Battery', shortCode='DHP-001')
+        self.assertEqual(resolve_workshop_code(self.client, ' dhp-001 ')['entity_id'], item)
+        conflict = self.client.add('Other battery', serialNumber='dhp-001')
+        result = resolve_workshop_code(self.client, 'DHP-001')
+        self.assertIsNone(result['entity_id'])
+        self.assertEqual({row['id'] for row in result['candidates']}, {item, conflict})
+
+    def test_archived_short_code_is_not_resolvable(self):
+        archived = self.client.add('Archived tool', archived=True, shortCode='DHP-002')
+        self.assertIsNone(resolve_workshop_code(self.client, 'DHP-002')['entity_id'])
+
     def test_badge_metadata_never_resolves(self):
         self.client.nodes[self.tool]['fields'] = [{'name': 'Manufacturer QR code', 'type': 'text', 'textValue': 'LAB:U:badge'}]
         result = resolve_workshop_code(self.client, 'LAB:U:badge')

@@ -74,8 +74,12 @@ def prepare_asset(client,data):
         if text_field(template,MARKER_FIELD):raise Conflict('Catalog template is still being created')
         result['path']='/api/v1/templates/'+template['id']+'/create-item'
         result['create']['tagIds']=[t['id'] for t in template.get('defaultTags',[])]
+        if data.get('model'):
+            result['create']['modelNumber']=text(data.get('model',''),'Model')
     else:
-        result['metadata'].update(manufacturer=text(data.get('manufacturer',''),'Manufacturer'),modelNumber=text(data.get('model',''),'Model'))
+        model_number=text(data.get('model',''),'Model')
+        result['create']['modelNumber']=model_number
+        result['metadata'].update(manufacturer=text(data.get('manufacturer',''),'Manufacturer'),modelNumber=model_number)
         if data.get('gtin'):result['fields'].append({'name':GTIN_FIELD,'type':'text','textValue':gtin(data['gtin'])})
     if data.get('import_source_key'):
         key=text(data['import_source_key'],'Import source key',64,True)
