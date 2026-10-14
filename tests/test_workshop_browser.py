@@ -836,7 +836,1271 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertEqual(self.errors,[])
 
     def test_benchtop_cnc_caption_has_theme_contrast_backing(self):
-        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaam��ͭ�G����ƭy�: '77777777-7777-4777-8777-777777777777', 'name': 'Shelf 2',
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Benchtop CNC','kind':'Misc','x':2,'y':3,'width':4,'height':3,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING,types=['Misc'])
+        self.page.locator('html').evaluate("el=>{el.style.setProperty('--background','220 20% 12%');el.style.setProperty('--foreground','0 0% 98%')}")
+        self.assertIn("fill='#293c42'",(ROOT/'homebox-ui/overlay/public/workshop/objects/benchtop-cnc.svg').read_text())
+        caption=self.page.locator('[data-workshop-caption]')
+        result=caption.evaluate('''text=>{
+          const ink=getComputedStyle(text).fill,backing=text.parentElement.querySelector('[data-workshop-caption-backdrop]'),background=getComputedStyle(backing).fill;
+          const channels=color=>{const values=color.startsWith('#')?color.match(/[a-f\\d]{2}/gi).map(v=>parseInt(v,16)):color.match(/[\\d.]+/g).slice(0,3).map(Number);return values.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4})};
+          const lum=color=>channels(color).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+          const a=lum(ink),b=lum(background),contrast=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+          const oldInk=lum('#263943'),darkWindow=lum('#293c42'),oldContrast=(Math.max(oldInk,darkWindow)+.05)/(Math.min(oldInk,darkWindow)+.05);
+          const image=text.parentElement.querySelector('[data-workshop-artwork]'),shape=text.parentElement.querySelector('rect[data-object-shape]');
+          return {ink,background,contrast,oldContrast,shapeFill:shape.getAttribute('fill'),backingOpacity:getComputedStyle(backing).opacity,artwork:image?.getAttribute('data-workshop-artwork'),imageBeforeBacking:[...text.parentElement.children].indexOf(image)<[...text.parentElement.children].indexOf(backing),backingBounds:backing.getBoundingClientRect().toJSON(),captionBounds:text.getBoundingClientRect().toJSON()};
+        }''')
+        self.assertEqual(result['artwork'],'benchtop-cnc')
+        self.assertEqual(result['shapeFill'],'#C89A69')
+        self.assertTrue(result['imageBeforeBacking'],result)
+        self.assertEqual(result['backingOpacity'],'1')
+        self.assertLess(result['oldContrast'],1.2,result)
+        self.assertGreaterEqual(result['contrast'],4.5,result)
+        self.assertGreater(result['backingBounds']['width'],result['captionBounds']['width'])
+        self.assertEqual(self.errors,[])
+
+
+    def test_palette_keyboard_order_starts_with_catalog_at_desktop_and_narrow_width(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        for width in (1440,320):
+            with self.subTest(viewport_width=width):
+                self.page.set_viewport_size({'width':width,'height':900})
+                self.install_rooms4_plan(document)
+                self.page.get_by_role('button',name='Edit',exact=True).click()
+                if width<=899:
+                    self.page.get_by_role('button',name='Objects',exact=True).click()
+                search=self.page.get_by_role('searchbox',name='Search objects')
+                search.focus()
+                self.page.keyboard.press('Tab')
+                first=self.page.evaluate('''()=>({text:document.activeElement.textContent.trim(),catalog:!!document.activeElement.closest('.planner-presets'),summary:document.activeElement.matches('.planner-preset-group>summary')})''')
+                self.assertTrue(first['catalog'],first)
+                self.assertTrue(first['summary'],first)
+                self.page.keyboard.press('Tab')
+                self.assertTrue(self.page.evaluate("()=>!!document.activeElement.closest('.planner-preset-card')"))
+                image=self.page.locator('.planner-preset-card img').first
+                image.evaluate("img=>img.decode()")
+                self.assertGreater(image.evaluate('(img)=>img.naturalWidth'),0)
+                for _ in range(40):
+                    if self.page.evaluate("()=>!!document.activeElement.closest('.planner-object-group:not(.planner-preset-group)')"):
+                        break
+                    self.assertTrue(self.page.evaluate("()=>!!document.activeElement.closest('.planner-presets')"),
+                                    'Keyboard focus must traverse the catalog before legacy groups.')
+                    self.page.keyboard.press('Tab')
+                self.assertTrue(self.page.evaluate("()=>document.activeElement.matches('.planner-object-group:not(.planner-preset-group)>summary')"),
+                                'The first legacy group should follow the complete catalog tab sequence.')
+        self.assertEqual(self.errors,[])
+
+    def test_drag_back_to_origin_does_not_create_history(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        box=self.page.locator('[data-workshop-drawing]').bounding_box()
+        start={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+40,start['y']+25)
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.up()
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-x'),'2')
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-y'),'3')
+        self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled(),
+                         'A gesture that returns to its start must not add a no-op history entry.')
+
+    def test_pointer_cancel_restores_drawing_without_history(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        group=self.page.locator('[data-workshop-drawing]')
+        box=group.bounding_box()
+        start={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+40,start['y']+25)
+        self.page.locator('.planner-svg').evaluate('''svg=>svg.querySelector('[data-workshop-drawing]').dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:1,pointerType:'mouse'}))''')
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-x'),'2')
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-y'),'3')
+        self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.assertEqual(self.errors,[])
+
+    def test_tiny_drag_jitter_preserves_geometry_with_snap_on_and_off(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2.12,'y':3.13,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        snap=self.page.get_by_role('checkbox',name='Snap to quarter-foot grid')
+        for enabled in (False,True):
+            if snap.is_checked()!=enabled:
+                snap.click()
+            group=self.page.locator('[data-workshop-drawing]')
+            box=group.bounding_box()
+            scale=self.page.locator('.planner-svg').evaluate('svg=>Math.hypot(svg.getScreenCTM().a,svg.getScreenCTM().b)')
+            start={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
+            self.page.mouse.move(start['x'],start['y'])
+            self.page.mouse.down()
+            self.page.mouse.move(start['x']+scale*.02,start['y'])
+            self.page.mouse.up()
+            self.assertAlmostEqual(float(self.page.locator('[data-workshop-drawing]').get_attribute('data-x')),2.12,places=2,
+                                   msg='Sub-threshold jitter must not silently change geometry (snap '+str(enabled)+').')
+            self.assertAlmostEqual(float(self.page.locator('[data-workshop-drawing]').get_attribute('data-y')),3.13,places=2)
+            self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+            self.assertFalse(self.page.get_by_role('button',name='Save all room changes').is_enabled())
+        self.assertEqual(self.errors,[])
+
+    def test_drag_history_survives_switching_rooms(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        other_room='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]},{'id':other_room,'location_id':None,'name':'Annex','width':12,'height':16,'unit':'ft','approximate':False,'objects':[]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        box=self.page.locator('[data-workshop-drawing]').bounding_box()
+        start={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
+        self.page.mouse.move(start['x'],start['y'])
+        self.page.mouse.down()
+        self.page.mouse.move(start['x']+40,start['y']+25)
+        self.page.mouse.up()
+        moved=float(self.page.locator('[data-workshop-drawing]').get_attribute('data-x'))
+        self.assertGreater(moved,2)
+        self.assertTrue(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.evaluate("roomId=>window.instance.selectRoom(roomId)",other_room)
+        self.assertFalse(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.evaluate("roomId=>window.instance.selectRoom(roomId)",room)
+        self.assertTrue(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.get_by_role('button',name='Undo',exact=True).click()
+        self.assertEqual(self.page.locator('[data-workshop-drawing]').get_attribute('data-x'),'2')
+        self.assertTrue(self.page.get_by_role('button',name='Redo',exact=True).is_enabled())
+        self.page.get_by_role('button',name='Redo',exact=True).click()
+        self.assertEqual(float(self.page.locator('[data-workshop-drawing]').get_attribute('data-x')),moved)
+        self.assertEqual(self.errors,[])
+
+    def test_resizing_updates_material_details_before_pointer_up(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        drawing={'id':DRAWING,'name':'Rack A1','kind':'Rack','x':2,'y':3,'width':3,'height':2,'rotation':0,'location_id':None}
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[drawing]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        rect=self.page.locator('[data-workshop-drawing] rect[data-object-shape]')
+        before=rect.bounding_box()
+        handle=self.page.get_by_role('button',name='Resize drawing handle')
+        box=handle.bounding_box()
+        self.page.mouse.move(box['x']+box['width']/2,box['y']+box['height']/2)
+        self.page.mouse.down()
+        self.page.mouse.move(box['x']+box['width']/2+60,box['y']+box['height']/2+30)
+        after=rect.bounding_box()
+        self.assertGreater(after['width'],before['width']+20)
+        self.assertGreater(after['height'],before['height']+10)
+        details=self.page.locator('[data-workshop-drawing] [data-footprint-detail]')
+        first_detail=details.first.bounding_box()
+        self.assertAlmostEqual(first_detail['width'],after['width'],delta=8)
+        self.assertAlmostEqual(first_detail['height'],after['height'],delta=8)
+        for detail in details.all():
+            detail_box=detail.bounding_box()
+            self.assertGreaterEqual(detail_box['x'],after['x']-5)
+            self.assertLessEqual(detail_box['x']+detail_box['width'],after['x']+after['width']+5)
+            self.assertGreaterEqual(detail_box['y'],after['y']-5)
+            self.assertLessEqual(detail_box['y']+detail_box['height'],after['y']+after['height']+5)
+        self.page.mouse.up()
+        self.assertEqual(self.errors,[])
+
+    def test_small_map_stacks_open_palette_and_inspector(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        self.install_rooms4_plan(document)
+        self.page.set_viewport_size({'width':375,'height':800})
+        workspace=self.page.locator('.planner-workspace')
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.page.get_by_role('button',name='Objects',exact=True).click()
+        self.page.get_by_role('button',name='Details',exact=True).click()
+        state=workspace.evaluate('''el=>({width:el.clientWidth,scrollWidth:el.scrollWidth,columns:getComputedStyle(el).gridTemplateColumns,palette:getComputedStyle(el.querySelector('.planner-palette')).display,inspector:getComputedStyle(el.querySelector('.planner-inspector')).display,paletteColumn:getComputedStyle(el.querySelector('.planner-palette')).gridColumnStart,inspectorColumn:getComputedStyle(el.querySelector('.planner-inspector')).gridColumnStart})''')
+        self.assertLessEqual(state['scrollWidth'],state['width']+1,state)
+        self.assertEqual(len(state['columns'].split()),1,state)
+        self.assertEqual((state['palette'],state['inspector']),('block','block'),state)
+        self.assertEqual((state['paletteColumn'],state['inspectorColumn']),('1','1'),state)
+        self.assertEqual(self.errors,[])
+
+    def test_planner_geometry_fields_commit_before_apply(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':LOCATION,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[{'id':DRAWING,'name':'Rack','kind':'Rack','x':3.75,'y':2,'width':3,'height':2,'rotation':0,'location_id':LOCATION}]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        for label,value in [('Drawing caption','Shelf A1'),('Position X in feet','1'),('Position Y in feet','1'),('Drawing width in feet','6'),('Drawing depth in feet','1.25')]:
+            self.page.get_by_label(label).fill(value)
+        self.page.get_by_role('button',name='Apply geometry',exact=True).click()
+        for label,value in [('Drawing caption','Shelf A1'),('Position X in feet','1'),('Position Y in feet','1'),('Drawing width in feet','6'),('Drawing depth in feet','1.25')]:
+            self.assertEqual(self.page.get_by_label(label).input_value(),value,label)
+        self.page.get_by_role('button',name='Save all room changes').click()
+        saved=self.page.evaluate('window.writes.at(-1)[1].document.rooms[0].objects[0]')
+        self.assertEqual((saved['name'],saved['x'],saved['y'],saved['width'],saved['height']),('Shelf A1',1,1,6,1.25))
+        self.assertEqual(self.errors,[])
+
+    def test_geometry_apply_flushes_input_without_change_event(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':LOCATION,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[{'id':DRAWING,'name':'Rack','kind':'Rack','x':3.75,'y':2,'width':3,'height':2,'rotation':0,'location_id':LOCATION}]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        for label,value in [('Position X in feet','1'),('Position Y in feet','1'),('Drawing width in feet','6'),('Drawing depth in feet','1.25')]:
+            self.page.get_by_label(label).evaluate('(el,value)=>{el.value=value;el.dispatchEvent(new Event("input",{bubbles:true}))}',value)
+        self.page.get_by_role('button',name='Apply geometry',exact=True).evaluate('(el)=>el.click()')
+        for label,value in [('Position X in feet','1'),('Position Y in feet','1'),('Drawing width in feet','6'),('Drawing depth in feet','1.25')]:
+            self.assertEqual(self.page.get_by_label(label).input_value(),value,label)
+        self.assertTrue(self.page.get_by_role('button',name='Undo',exact=True).is_enabled())
+        self.page.get_by_role('button',name='Save all room changes').click()
+        saved=self.page.evaluate('window.writes.at(-1)[1].document.rooms[0].objects[0]')
+        self.assertEqual((saved['x'],saved['y'],saved['width'],saved['height']),(1,1,6,1.25))
+        self.assertEqual(self.errors,[])
+
+    def test_wall_dimensions_commit_on_enter_and_stay_inside_room(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':LOCATION,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[{'id':DRAWING,'name':'Partition wall','kind':'Wall','x':6,'y':8,'width':8,'height':2,'rotation':0,'location_id':None}]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        width=self.page.get_by_label('Drawing width in feet')
+        width.evaluate("el=>{el.value='10';el.dispatchEvent(new Event('input',{bubbles:true}))}")
+        width.press('Enter')
+        self.assertEqual(width.input_value(),'10')
+        self.assertTrue(self.page.get_by_role('button',name='Save all room changes').is_enabled())
+        depth=self.page.get_by_label('Drawing depth in feet')
+        depth.evaluate("el=>{el.value='14';el.dispatchEvent(new Event('input',{bubbles:true}))}")
+        depth.press('Enter')
+        self.assertEqual(depth.input_value(),'14')
+        self.page.get_by_role('button',name='Save all room changes').click()
+        saved=self.page.evaluate('window.writes.at(-1)[1].document.rooms[0].objects[0]')
+        self.assertEqual((saved['x'],saved['y'],saved['width'],saved['height']),(4,6,10,14))
+        self.assertEqual(self.errors,[])
+
+    def test_native_rename_refresh_keeps_geometry_and_updates_paths(self):
+        self.page.get_by_role('button', name='Edit layout').click()
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.locator('#dialog[open]').wait_for(state='visible', timeout=1500)
+        self.page.get_by_label('Room name').fill('Draft floor')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.get_by_role('button', name='Edit drawing properties').click()
+        self.page.get_by_label('Width in feet').fill('4')
+        self.page.get_by_label('Position from left').fill('2.5')
+        self.page.get_by_role('button', name='Apply drawing changes').click()
+        before = self.page.locator('[data-workshop-caption]').inner_text()
+        self.page.evaluate("""async () => {
+          const id='11111111-1111-4111-8111-111111111111';
+          window.fixtureLayout.locations[0].name='Storage Room renamed';
+          delete window.fixtureLayout.locations[0].code;
+          window.fixtureLayout.parents[0].name='Storage Room renamed';
+          delete window.fixtureLayout.parents[0].code;
+          window.fixtureLayout.revision=99;
+          window.fixtureViews.locationView.path[0].name='Storage Room renamed';
+          await window.instance.refreshWorkshopView(id,false);
+        }""")
+        self.assertEqual(before, 'Old drawing name')
+        self.assertEqual(self.page.locator('[data-workshop-caption]').inner_text(), before)
+        self.assertIn('Storage Room renamed', self.page.locator('.map').text_content())
+        self.assertTrue(self.page.get_by_role('link', name='Storage Room renamed', exact=True).count())
+        self.assertTrue(self.page.get_by_text('Assigned storage: Storage Room renamed', exact=False).count())
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.page.get_by_role('button', name='Save layout changes').click()
+        saved = self.page.evaluate('window.writes[0][1]')
+        self.assertEqual(saved['revision'], 7)
+        self.assertEqual(saved['layout']['name'], 'Draft floor')
+        self.assertEqual(saved['layout']['objects'][0], {
+            'id': DRAWING, 'name': 'Old drawing name', 'kind': 'Rack', 'x': 2.5, 'y': 0,
+            'width': 4, 'height': 2, 'location_id': LOCATION,
+        })
+        self.assertEqual(self.errors, [])
+
+    def test_search_rows_do_not_replace_normalized_storage_hierarchy(self):
+        self.page.evaluate("""() => {
+          const cage='66666666-6666-4666-8666-666666666666';
+          window.fixtureLayout.parents=[
+            {id:'""" + LOCATION + """',name:'Storage Room',parent_id:null,isLocation:true},
+            {id:cage,name:'the Cage',parent_id:'""" + LOCATION + """',isLocation:true},
+            {id:'""" + RACK + """',name:'Rack 1',parent_id:cage,isLocation:true},
+            {id:'""" + SHELF + """',name:'Rack 1-A',parent_id:'""" + RACK + """',isLocation:true},
+            {id:'""" + ITEM + """',name:'Camera',parent_id:'""" + SHELF + """',isLocation:false}
+          ];
+          window.fixtureLayout.locations=window.fixtureLayout.parents.filter(row=>row.isLocation);
+          window.fixtureSearchLocations=[{id:'""" + SHELF + """',name:'Rack 1-A',assetId:'1-A',entityType:{isLocation:true},parent:{id:'""" + RACK + """'}}];
+          window.instance.dispose();
+          window.instance=window.mountFixture();
+        }""")
+        self.assertTrue(self.page.get_by_role('link', name='Storage Room / the Cage / Rack 1 / Rack 1-A', exact=True).count())
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('Rack 1-A')
+        result = self.page.locator('.workshop-search-results button').filter(has_text='1-A')
+        result.click()
+        self.assertTrue(self.page.get_by_role('link', name='Storage Room / the Cage / Rack 1 / Rack 1-A', exact=True).count())
+        self.assertTrue(self.page.get_by_role('link', name='Storage Room / the Cage / Rack 1 / Rack 1-A / Camera', exact=True).count())
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.assertEqual(self.errors, [])
+
+    def test_search_results_render_after_refresh_replaces_search_container(self):
+        self.page.evaluate("""() => {
+          const request=window.fixtureWorkshop.request;
+          window.fixtureWorkshop.request=async (path,data,identity)=>{
+            if(path.startsWith('workshop/view')&&window.deferFixtureView){
+              window.fixtureViewStarted=true;
+              await new Promise(resolve=>window.releaseFixtureView=resolve);
+              window.deferFixtureView=false;
+            }
+            if(path==='locations'&&window.deferFixtureSearch){
+              window.fixtureSearchStarted=true;
+              await new Promise(resolve=>window.releaseFixtureSearch=resolve);
+              window.deferFixtureSearch=false;
+            }
+            return request(path,data,identity);
+          };
+          window.deferFixtureView=true;
+          window.deferFixtureSearch=true;
+          window.manualRefresh=window.instance.refreshWorkshopView('11111111-1111-4111-8111-111111111111',false);
+        }""")
+        self.page.wait_for_function('window.fixtureViewStarted===true')
+        self.page.get_by_label('Search native equipment and storage').fill('CAM-9')
+        self.page.wait_for_function('window.fixtureSearchStarted===true')
+        self.page.evaluate('window.releaseFixtureView()')
+        self.page.evaluate('window.manualRefresh')
+        self.assertEqual(self.page.get_by_label('Search native equipment and storage').input_value(), 'CAM-9')
+        self.page.evaluate('window.releaseFixtureSearch()')
+        result = self.page.locator('.workshop-search-results button').filter(has_text='CAM-9')
+        result.wait_for(state='visible')
+        self.assertIn('Camera', result.inner_text())
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.assertEqual(self.errors, [])
+
+    def test_search_response_during_save_waits_to_render_enabled_results(self):
+        self.page.get_by_role('button', name='Edit layout').click()
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.get_by_label('Room name').fill('Busy search draft')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.evaluate("""() => {
+          const request=window.fixtureWorkshop.request;
+          window.fixtureWorkshop.request=async (path,data,identity)=>{
+            const result=path==='locations'&&window.deferFixtureSearch
+              ? (window.fixtureSearchStarted=true,await new Promise(resolve=>window.releaseFixtureSearch=resolve),window.deferFixtureSearch=false,await request(path,data,identity))
+              : await request(path,data,identity);
+            if(path==='locations')window.fixtureSearchResponseReturned=true;
+            return result;
+          };
+          window.deferFixtureSearch=true;
+          window.deferLayoutSave=true;
+        }""")
+        self.page.get_by_label('Search native equipment and storage').fill('CAM-9')
+        self.page.wait_for_function('window.fixtureSearchStarted===true')
+        self.page.get_by_role('button', name='Save layout changes').click()
+        self.page.wait_for_function('window.layoutSaveCount===1')
+        self.page.evaluate('window.releaseFixtureSearch()')
+        self.page.wait_for_function('window.fixtureSearchResponseReturned===true')
+        self.page.wait_for_timeout(50)
+        self.assertTrue(self.page.get_by_role('button', name='Save layout changes', exact=True).is_disabled())
+        self.assertEqual(self.page.locator('.workshop-search-results button').count(), 0)
+        self.assertEqual(self.page.evaluate('window.writes.length'), 1)
+        self.page.evaluate('window.releaseLayoutSave()')
+        self.page.get_by_role('button', name='Layout saved', exact=True).wait_for()
+        self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').wait_for(state='visible')
+        self.assertEqual(self.page.evaluate('window.writes.length'), 1)
+        self.assertEqual(self.errors, [])
+
+    def test_stale_owner_search_response_cannot_replace_current_results(self):
+        self.page.evaluate("""() => {
+          const request=window.fixtureWorkshop.request;
+          window.fixtureWorkshop.request=async (path,data,identity)=>{
+            if(path==='locations'&&window.deferFirstSearch&&!window.fixtureSearchStarted){
+              window.fixtureSearchStarted=true;
+              await new Promise(resolve=>window.releaseFirstSearch=resolve);
+            }
+            return request(path,data,identity);
+          };
+          window.deferFirstSearch=true;
+        }""")
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('CAM-9')
+        self.page.wait_for_function('window.fixtureSearchStarted===true')
+        self.page.evaluate("""() => {
+          window.fixtureContext.value.identity='identity-2';
+          window.fixtureSearchEquipment=[{id:'88888888-8888-4888-8888-888888888888',name:'Fresh owner asset',assetId:'FRESH-2'}];
+          window.fixtureSearchLocations=[];
+        }""")
+        search.fill('Fresh owner')
+        fresh = self.page.locator('.workshop-search-results button').filter(has_text='FRESH-2')
+        fresh.wait_for(state='visible')
+        self.page.evaluate('window.releaseFirstSearch()')
+        self.assertTrue(fresh.is_visible())
+        search.fill('CAM-9')
+        self.page.get_by_text('No native records match.', exact=False).wait_for(state='visible')
+        self.assertEqual(self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').count(), 0)
+        identities = [row[2] for row in self.page.evaluate('window.apiCalls') if row[0] in ('equipment','locations')]
+        self.assertIn('identity-2', identities)
+        self.assertEqual(self.errors, [])
+
+    def test_stale_owner_search_failure_cannot_clear_current_results(self):
+        self.page.evaluate("""() => {
+          const request=window.fixtureWorkshop.request;
+          window.fixtureWorkshop.request=async (path,data,identity)=>{
+            if(path==='locations'&&window.deferFirstSearch&&!window.fixtureSearchStarted){
+              window.fixtureSearchStarted=true;
+              await new Promise(resolve=>window.releaseFirstSearch=resolve);
+              throw new Error('stale search failure');
+            }
+            return request(path,data,identity);
+          };
+          window.deferFirstSearch=true;
+        }""")
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('CAM-9')
+        self.page.wait_for_function('window.fixtureSearchStarted===true')
+        self.page.evaluate("""() => {
+          window.fixtureContext.value.identity='identity-2';
+          window.fixtureSearchEquipment=[{id:'88888888-8888-4888-8888-888888888888',name:'Fresh owner asset',assetId:'FRESH-2'}];
+          window.fixtureSearchLocations=[];
+        }""")
+        search.fill('Fresh owner')
+        fresh = self.page.locator('.workshop-search-results button').filter(has_text='FRESH-2')
+        fresh.wait_for(state='visible')
+        self.page.evaluate('window.releaseFirstSearch()')
+        search.fill('Fresh owner')
+        self.assertTrue(fresh.is_visible())
+        self.assertEqual(self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').count(), 0)
+        self.assertEqual(self.errors, [])
+
+    def test_enter_resolution_finishing_after_dispose_cannot_navigate(self):
+        self.page.evaluate("""() => {
+          const request=window.fixtureWorkshop.request;
+          window.fixtureWorkshop.request=async (path,data,identity)=>{
+            if(path==='workshop/resolve'&&window.deferFixtureResolve){
+              window.fixtureResolveStarted=true;
+              await new Promise(resolve=>window.releaseFixtureResolve=resolve);
+              window.deferFixtureResolve=false;
+            }
+            return request(path,data,identity);
+          };
+          window.deferFixtureResolve=true;
+        }""")
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('CAM-9')
+        search.press('Enter')
+        self.page.wait_for_function('window.fixtureResolveStarted===true')
+        self.page.evaluate('window.instance.dispose(); window.instance=window.mountFixture()')
+        self.page.evaluate('window.releaseFixtureResolve()')
+        self.page.wait_for_timeout(50)
+        self.assertEqual(self.page.evaluate('window.navigate'), [])
+        self.assertTrue(self.page.get_by_label('Search native equipment and storage').is_visible())
+        self.assertEqual(self.errors, [])
+
+    def test_new_query_invalidates_held_enter_resolution(self):
+        self.page.evaluate("""() => {
+          const request=window.fixtureWorkshop.request;
+          window.fixtureWorkshop.request=async (path,data,identity)=>{
+            if(path==='workshop/resolve'&&window.deferFixtureResolve){
+              window.fixtureResolveStarted=true;
+              await new Promise(resolve=>window.releaseFixtureResolve=resolve);
+              window.deferFixtureResolve=false;
+            }
+            return request(path,data,identity);
+          };
+          window.deferFixtureResolve=true;
+        }""")
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('CAM-9')
+        search.press('Enter')
+        self.page.wait_for_function('window.fixtureResolveStarted===true')
+        self.page.evaluate("""() => {
+          window.selectionUpdate=window.instance.updateWorkshopSelection({
+            entityId:'55555555-5555-4555-8555-555555555555',drawingId:null,roomId:null
+          });
+        }""")
+        self.page.evaluate('window.selectionUpdate')
+        self.page.evaluate('window.releaseFixtureResolve()')
+        self.page.wait_for_timeout(50)
+        self.assertEqual(self.page.evaluate('window.navigate'), [])
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.assertEqual(self.errors, [])
+
+    def test_unknown_enter_does_not_cache_an_empty_inventory_result(self):
+        self.page.evaluate("""() => {
+          const request=window.fixtureWorkshop.request;
+          window.fixtureWorkshop.request=async (path,data,identity)=>{
+            if(path==='locations'&&!window.fixtureSearchStarted){
+              window.fixtureSearchStarted=true;
+              await new Promise(resolve=>window.releaseFixtureSearch=resolve);
+            }
+            return request(path,data,identity);
+          };
+        }""")
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('UNKNOWN-MFR')
+        self.page.wait_for_function('window.fixtureSearchStarted===true')
+        search.press('Enter')
+        self.page.get_by_text('No unique native record found.', exact=False).wait_for(state='visible')
+        self.page.evaluate('window.releaseFixtureSearch()')
+        search.fill('CAM-9')
+        self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').wait_for(state='visible')
+        self.assertEqual(self.errors, [])
+
+    def test_disposed_pending_search_cannot_clear_remounted_instance_results(self):
+        self.page.get_by_role('button', name='Edit layout').click()
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.get_by_label('Room name').fill('Old instance draft')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.evaluate("""() => {
+          const request=window.fixtureWorkshop.request;
+          window.fixtureWorkshop.request=async (path,data,identity)=>{
+            if(path==='locations'&&window.deferOldSearch){
+              window.oldSearchStarted=true;
+              await new Promise(resolve=>window.releaseOldSearch=resolve);
+              window.deferOldSearch=false;
+            }
+            const result=await request(path,data,identity);
+            if(path==='locations'&&window.oldSearchStarted)window.oldSearchResponseReturned=true;
+            return result;
+          };
+          window.deferOldSearch=true;
+          window.deferLayoutSave=true;
+        }""")
+        self.page.get_by_label('Search native equipment and storage').fill('CAM-9')
+        self.page.wait_for_function('window.oldSearchStarted===true')
+        self.page.get_by_role('button', name='Save layout changes').click()
+        self.page.wait_for_function('window.layoutSaveCount===1')
+        self.page.evaluate('window.releaseOldSearch()')
+        self.page.wait_for_function('window.oldSearchResponseReturned===true')
+        self.page.wait_for_timeout(50)
+        self.page.evaluate("""() => {
+          window.instance.dispose();
+          window.fixtureSearchEquipment=[{id:'99999999-9999-4999-8999-999999999999',name:'Remounted asset',assetId:'NEW-9'}];
+          window.fixtureSearchLocations=[];
+          window.instance=window.mountFixture();
+        }""")
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('NEW-9')
+        fresh = self.page.locator('.workshop-search-results button').filter(has_text='NEW-9')
+        fresh.wait_for(state='visible')
+        self.page.evaluate('window.releaseLayoutSave()')
+        self.page.wait_for_timeout(50)
+        self.assertTrue(fresh.is_visible())
+        self.assertEqual(self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').count(), 0)
+        self.assertEqual(self.errors, [])
+
+    def test_new_query_wins_over_held_search_navigation(self):
+        self.page.evaluate("""() => {
+          window.instance.dispose();
+          window.fixtureNavigate=async path=>{
+            window.navigate.push(path);
+            window.fixtureNavigationStarted=true;
+            await new Promise(resolve=>window.releaseFixtureNavigation=resolve);
+          };
+          window.instance=window.mountFixture();
+        }""")
+        self.page.get_by_label('Search native equipment and storage').fill('CAM-9')
+        self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').click()
+        self.page.wait_for_function('window.fixtureNavigationStarted===true')
+        self.page.evaluate("""() => {
+          window.selectionUpdate=window.instance.updateWorkshopSelection({
+            entityId:'55555555-5555-4555-8555-555555555555',drawingId:null,roomId:null
+          });
+        }""")
+        self.page.evaluate('window.selectionUpdate')
+        self.page.evaluate('window.releaseFixtureNavigation()')
+        self.page.wait_for_timeout(50)
+        views = [row[0] for row in self.page.evaluate('window.apiCalls') if row[0].startswith('workshop/view')]
+        self.assertTrue(any('55555555-5555-4555-8555-555555555555' in path for path in views))
+        self.assertFalse(any('22222222-2222-4222-8222-222222222222' in path for path in views))
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.assertEqual(self.errors, [])
+
+    def test_disposed_held_search_navigation_cannot_repaint_remounted_page(self):
+        self.page.evaluate("""() => {
+          window.instance.dispose();
+          window.fixtureNavigate=async path=>{
+            window.navigate.push(path);
+            window.fixtureNavigationStarted=true;
+            await new Promise(resolve=>window.releaseFixtureNavigation=resolve);
+          };
+          window.instance=window.mountFixture();
+        }""")
+        self.page.get_by_label('Search native equipment and storage').fill('CAM-9')
+        self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').click()
+        self.page.wait_for_function('window.fixtureNavigationStarted===true')
+        self.page.evaluate("""() => {
+          window.instance.dispose();
+          window.fixtureSearchEquipment=[{id:'99999999-9999-4999-8999-999999999999',name:'Remounted asset',assetId:'NEW-9'}];
+          window.fixtureSearchLocations=[];
+          window.instance=window.mountFixture();
+        }""")
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('NEW-9')
+        fresh = self.page.locator('.workshop-search-results button').filter(has_text='NEW-9')
+        fresh.wait_for(state='visible')
+        self.page.evaluate('window.releaseFixtureNavigation()')
+        self.page.wait_for_timeout(50)
+        self.assertTrue(fresh.is_visible())
+        self.assertEqual(self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').count(), 0)
+        self.assertEqual(self.errors, [])
+
+    def test_empty_layout_keeps_setup_and_safe_browse_controls(self):
+        self.page.evaluate("""() => {
+          window.instance.dispose();
+          window.fixtureLayout.layout=null;
+          window.instance=window.mountFixture();
+        }""")
+        create = self.page.get_by_role('button', name='Create empty room')
+        create.wait_for(state='visible')
+        self.page.get_by_label('Equipment filter').select_option('attention')
+        self.page.get_by_role('checkbox', name='Show status overlays on map').check()
+        self.assertTrue(create.is_visible())
+        create.click()
+        self.page.get_by_role('button', name='Edit layout').wait_for(state='visible')
+        self.assertFalse(self.page.get_by_role('button', name='Create empty room').count())
+        self.assertTrue(self.page.get_by_role('heading', name='Workshop & storage', exact=True).is_visible())
+        self.page.get_by_role('button', name='Edit layout').click()
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.get_by_label('Room name').fill('Created room draft')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.get_by_role('button', name='Add drawing object').click()
+        self.page.get_by_label('Object name').fill('Fixture rack')
+        self.page.get_by_role('button', name='Apply drawing changes').click()
+        self.page.get_by_role('button', name='Refresh native view').click()
+        self.page.get_by_role('button', name='Save layout changes').wait_for(state='visible')
+        self.assertEqual(self.page.locator('.map + p').inner_text(), 'Created room draft · 13.5 × 21 ft · approximate')
+        self.assertTrue(self.page.get_by_text('Fixture rack', exact=True).count())
+        self.assertFalse(self.page.get_by_role('button', name='Create empty room').count())
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.assertEqual(self.errors, [])
+
+    def test_shelf_order_recovery_uses_saved_action_and_never_reposts(self):
+        self.page.evaluate('window.loseOrderResponse=true')
+        self.page.get_by_role('button', name='Review shelf order').click()
+        self.page.get_by_role('button', name='Confirm shelf order').click()
+        self.page.get_by_text('fixture lost response').wait_for()
+        pending = json.loads(self.page.evaluate("localStorage.getItem('workshop-pending:group-1:user-1')"))
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]['path'], 'workshop/shelf-order')
+        self.assertEqual(pending[0]['subject'], LOCATION)
+        request_key = pending[0]['key']
+        order_marker = json.loads(self.page.evaluate("localStorage.getItem('workshop-order:group-1:user-1:11111111-1111-4111-8111-111111111111')"))
+        self.assertEqual(order_marker['request_key'], request_key)
+        self.assertEqual(order_marker['status'], 'pending')
+        self.page.get_by_role('button', name='Close').click()
+        self.page.get_by_role('button', name='Review shelf order').click()
+        self.page.get_by_role('button', name='Check saved order result').click()
+        self.assertIn(request_key, self.page.locator('#dialog-body').inner_text())
+        self.assertTrue(self.page.get_by_text('not_started', exact=False).is_visible())
+        self.page.get_by_role('button', name='Acknowledge no operation started').click()
+        self.assertEqual(json.loads(self.page.evaluate("localStorage.getItem('workshop-pending:group-1:user-1')")), [])
+        self.assertIsNone(self.page.evaluate("localStorage.getItem('workshop-order:group-1:user-1:11111111-1111-4111-8111-111111111111')"))
+        self.assertEqual(len(self.page.evaluate('window.writes')), 1)
+        status_calls = [call for call in self.page.evaluate('window.apiCalls') if call[0]=='operation/status']
+        self.assertEqual(len(status_calls), 1)
+        self.assertEqual(status_calls[0][1], {'request_key': request_key})
+        self.assertEqual(status_calls[0][2], 'identity-1')
+
+    def test_shelf_order_completed_recovery_clears_matching_request_without_replay(self):
+        self.page.evaluate("window.loseOrderResponse=true; window.fixtureOperationStatus='completed'")
+        self.page.get_by_role('button', name='Review shelf order').click()
+        self.page.get_by_role('button', name='Confirm shelf order').click()
+        self.page.get_by_text('fixture lost response').wait_for()
+        before = json.loads(self.page.evaluate("localStorage.getItem('workshop-pending:group-1:user-1')"))
+        request_key = before[0]['key']
+        self.page.get_by_role('button', name='Close').click()
+        self.page.get_by_role('button', name='Review shelf order').click()
+        self.page.get_by_role('button', name='Check saved order result').click()
+        self.assertTrue(self.page.get_by_text('The saved outcome is confirmed. It will not be resubmitted.', exact=True).is_visible())
+        self.assertEqual(json.loads(self.page.evaluate("localStorage.getItem('workshop-pending:group-1:user-1')")), [])
+        self.assertIsNone(self.page.evaluate("localStorage.getItem('workshop-order:group-1:user-1:11111111-1111-4111-8111-111111111111')"))
+        self.assertEqual(len(self.page.evaluate('window.writes')), 1)
+        self.assertEqual(len([call for call in self.page.evaluate('window.apiCalls') if call[0]=='operation/status' and call[1]=={'request_key':request_key}]), 1)
+
+    def test_shelf_order_wrong_terminal_action_stays_locked(self):
+        self.page.evaluate("window.loseOrderResponse=true; window.fixtureOperationStatus='completed'; window.fixtureOperationAction='print_label'")
+        self.page.get_by_role('button', name='Review shelf order').click()
+        self.page.get_by_role('button', name='Confirm shelf order').click()
+        self.page.get_by_text('fixture lost response').wait_for()
+        pending = json.loads(self.page.evaluate("localStorage.getItem('workshop-pending:group-1:user-1')"))
+        request_key = pending[0]['key']
+        self.page.get_by_role('button', name='Close').click()
+        self.page.get_by_role('button', name='Review shelf order').click()
+        self.page.get_by_role('button', name='Check saved order result').click()
+        self.assertTrue(self.page.get_by_text('The returned status does not match this saved shelf-order request. It remains locked for inspection.', exact=True).is_visible())
+        self.assertEqual(json.loads(self.page.evaluate("localStorage.getItem('workshop-pending:group-1:user-1')")), pending)
+        self.assertEqual(json.loads(self.page.evaluate("localStorage.getItem('workshop-order:group-1:user-1:11111111-1111-4111-8111-111111111111')"))['request_key'], request_key)
+        self.assertEqual(len(self.page.evaluate('window.writes')), 1)
+
+    def test_status_overlay_is_scoped_to_the_selected_native_drawing(self):
+        self.page.evaluate("""() => {
+          window.fixtureViews.locationView.contents[0].condition='Broken';
+          window.fixtureViews.locationView.counts.needs_attention=1;
+          window.fixtureLayout.layout.objects.push({id:'88888888-8888-4888-8888-888888888888',name:'Unrelated shelf',kind:'Shelf',x:5,y:0,width:2,height:1,location_id:'99999999-9999-4999-8999-999999999999'});
+          window.instance.dispose();
+          window.instance=window.mountFixture();
+        }""")
+        self.page.locator('.map g rect').nth(1).wait_for(state='attached')
+        self.page.get_by_role('checkbox', name='Show status overlays on map').check()
+        fills = self.page.locator('.map g rect').evaluate_all('(nodes)=>nodes.map(node=>node.getAttribute("fill"))')
+        self.assertIn('--destructive', fills[0])
+        self.assertNotIn('--destructive', fills[1])
+        self.assertTrue(self.page.get_by_text('Status overlay coloring is limited to the selected map area.', exact=True).is_visible())
+        self.assertEqual(self.errors, [])
+
+    def test_rooms4_status_overlay_toggles_selected_scope_without_editing_plan(self):
+        self.page.evaluate("""() => {
+          const room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+          const duplicate='77777777-7777-4777-8777-777777777777',unrelated='88888888-8888-4888-8888-888888888888';
+          window.fixtureViews.locationView.contents[0].condition='Broken';
+          window.fixtureViews.locationView.counts.needs_attention=1;
+          window.fixtureViews.locationView.selection.matches=[
+            {room_id:room,drawing_id:'33333333-3333-4333-8333-333333333333',location_id:'11111111-1111-4111-8111-111111111111'},
+            {room_id:room,drawing_id:duplicate,location_id:'11111111-1111-4111-8111-111111111111'}
+          ];
+          window.fixtureViews.itemView.selection_status={condition:'Broken',checked_out:false,blocker:null};
+          window.fixtureViews.itemView.selection.matches=window.fixtureViews.locationView.selection.matches;
+          window.fixtureLayout={revision:7,document:{version:2,rooms:[{id:room,location_id:null,name:'Main',width:14,height:20,unit:'ft',approximate:false,objects:[
+            {id:'33333333-3333-4333-8333-333333333333',name:'Rack 1',kind:'Rack',x:0,y:0,width:3,height:2,rotation:0,location_id:'11111111-1111-4111-8111-111111111111'},
+            {id:duplicate,name:'Duplicate rack drawing',kind:'Rack',x:3.5,y:0,width:3,height:2,rotation:0,location_id:'11111111-1111-4111-8111-111111111111'},
+            {id:unrelated,name:'Unrelated shelf',kind:'Shelf',x:5,y:0,width:2,height:1,rotation:0,location_id:'99999999-9999-4999-8999-999999999999'}
+          ]}]},locations:window.fixtureLayout?.locations||[{id:'11111111-1111-4111-8111-111111111111',name:'the Cage',parent_id:null,kind:'Rack',code:'1',updated_at:'v1'}],parents:window.fixtureLayout?.parents||[],counts:{},types:['Rack'],storage_types:['Rack']};
+          window.instance.dispose(); window.instance=window.mountFixture();
+        }""")
+        self.page.get_by_text('Show wider native coverage and search', exact=True).click()
+        overlay = self.page.get_by_role('checkbox', name='Show status overlays on map')
+        self.assertFalse(overlay.is_checked())
+        shapes = self.page.locator('[data-workshop-drawing] rect')
+        shapes.nth(1).wait_for(state='attached')
+        original_fills = shapes.evaluate_all('(nodes)=>nodes.map(node=>node.getAttribute("fill"))')
+        session = self.page.evaluate("""() => {const key=Object.keys(localStorage).find(k=>k.startsWith('workshop-room-draft:'));return JSON.parse(localStorage.getItem(key))}""")
+        overlay.evaluate('(el)=>{el.checked=true;el.dispatchEvent(new Event("change",{bubbles:true}))}')
+        on_fills = shapes.evaluate_all('(nodes)=>nodes.map(node=>node.getAttribute("fill"))')
+        self.assertIn('--destructive', on_fills[0])
+        self.assertNotIn('--destructive', on_fills[1],'an unselected drawing for the same native target must stay neutral')
+        self.assertNotIn('--destructive', on_fills[2])
+        self.page.get_by_text('Show wider native coverage and search', exact=True).click()
+        self.assertTrue(self.page.get_by_text('Status overlay coloring is limited to the selected map area.', exact=True).is_visible())
+        self.page.get_by_role('checkbox', name='Show status overlays on map').evaluate('(el)=>{el.checked=false;el.dispatchEvent(new Event("change",{bubbles:true}))}')
+        off_fills = shapes.evaluate_all('(nodes)=>nodes.map(node=>node.getAttribute("fill"))')
+        self.assertEqual(off_fills, original_fills)
+        after = self.page.evaluate("""() => {const key=Object.keys(localStorage).find(k=>k.startsWith('workshop-room-draft:'));return JSON.parse(localStorage.getItem(key))}""")
+        self.assertEqual(after['document'], session['document'])
+        self.assertEqual(after['revision'], 7)
+
+        self.page.evaluate("""() => {
+          window.fixtureSelection={entityId:'22222222-2222-4222-8222-222222222222',drawingId:'33333333-3333-4333-8333-333333333333',roomId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'};
+          window.instance.dispose();window.instance=window.mountFixture();
+        }""")
+        self.page.get_by_text('Show wider native coverage and search',exact=True).click()
+        self.page.get_by_role('checkbox',name='Show status overlays on map').evaluate('(el)=>{el.checked=true;el.dispatchEvent(new Event("change",{bubbles:true}))}')
+        item_fills=self.page.locator('[data-workshop-drawing] rect').evaluate_all('(nodes)=>nodes.map(node=>node.getAttribute("fill"))')
+        self.assertIn('--destructive',item_fills[0],'the selected item representation must color its matched drawing')
+        self.assertNotIn('--destructive',item_fills[1],'duplicate exact-target drawing must remain neutral')
+        self.assertNotIn('--destructive',item_fills[2])
+        self.assertEqual(self.errors, [])
+
+    def install_rooms4_plan(self, document, revision=7, *, selected_drawing=None, types=None):
+        self.page.evaluate("""({document,revision,selectedDrawing,types}) => {
+          const room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+          window.fixtureLayout={revision,document,layout:null,
+            locations:[{id:'11111111-1111-4111-8111-111111111111',name:'the Cage',parent_id:null,kind:'Rack',code:'1',updated_at:'v1'}],
+            parents:[{id:'11111111-1111-4111-8111-111111111111',name:'the Cage',parent_id:null,kind:'Rack',code:'1',isLocation:true}],
+            counts:{},types:types||['Rack'],storage_types:['Rack']};
+          window.fixtureSelection={entityId:selectedDrawing?'11111111-1111-4111-8111-111111111111':null,drawingId:selectedDrawing,roomId:room};
+          window.instance.dispose(); window.instance=window.mountFixture();
+        }""", {'document': document, 'revision': revision, 'selectedDrawing': selected_drawing, 'types': types})
+        self.page.locator('.planner-svg').wait_for(state='visible')
+
+    def focus_ink_bounds(self):
+        screenshot=Image.open(BytesIO(self.page.screenshot())).convert('RGB')
+        ink=[]
+        for y in range(screenshot.height):
+            for x in range(screenshot.width):
+                red,green,blue=screenshot.getpixel((x,y))
+                if red>=180 and blue>=180 and green<=90:
+                    ink.append((x,y))
+        return (min(x for x,_ in ink),min(y for _,y in ink),max(x for x,_ in ink),max(y for _,y in ink)) if ink else None
+
+    def assert_focus_ink_tracks(self, shape):
+        bounds=self.focus_ink_bounds()
+        self.assertIsNotNone(bounds,'Keyboard focus must remain visibly indicated.')
+        outside=max(shape['x']-bounds[0],shape['y']-bounds[1],bounds[2]-(shape['x']+shape['width']),bounds[3]-(shape['y']+shape['height']))
+        self.assertLessEqual(outside,4,{'focus_pixels':bounds,'shape':shape})
+
+    def test_rooms4_clean_refresh_clears_only_stale_room_history(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Original','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        self.install_rooms4_plan(document)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.page.get_by_label('Room title').fill('Draft')
+        self.page.get_by_role('button',name='Apply room changes').click()
+        undo=self.page.get_by_role('button',name='Undo',exact=True)
+        redo=self.page.get_by_role('button',name='Redo',exact=True)
+        undo.click()
+        self.assertEqual(self.page.get_by_label('Room title').input_value(),'Original')
+        self.assertTrue(redo.is_enabled())
+        self.page.evaluate('window.instance.refreshWorkshopView(null,false)')
+        self.assertTrue(redo.is_enabled(),'same-revision refresh must preserve Redo')
+        redo.click()
+        self.assertEqual(self.page.get_by_label('Room title').input_value(),'Draft')
+        undo.click()
+        self.assertEqual(self.page.get_by_label('Room title').input_value(),'Original')
+
+        remote={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Remote saved','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        self.page.evaluate('(document)=>{window.fixtureLayout.revision=8;window.fixtureLayout.document=document}',remote)
+        self.page.evaluate('window.instance.refreshWorkshopView(null,false)')
+        self.assertEqual(self.page.get_by_label('Room title').input_value(),'Remote saved')
+        self.assertFalse(undo.is_enabled())
+        self.assertFalse(redo.is_enabled())
+
+        self.page.get_by_label('Room title').fill('Local draft')
+        self.page.get_by_role('button',name='Apply room changes').click()
+        newer={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Another remote','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        self.page.evaluate('(document)=>{window.fixtureLayout.revision=9;window.fixtureLayout.document=document}',newer)
+        self.page.evaluate('window.instance.refreshWorkshopView(null,false)')
+        self.assertEqual(self.page.get_by_label('Room title').input_value(),'Local draft')
+        self.assertTrue(undo.is_enabled(),'dirty local draft and its history must survive refresh')
+        self.assertEqual(self.errors,[])
+
+    def test_rooms4_other_tab_save_recovery_preserves_this_tabs_draft_and_history(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        base={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Original','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        self.install_rooms4_plan(base)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.page.get_by_label('Room title').fill('A draft')
+        self.page.get_by_role('button',name='Apply room changes').click()
+        before=self.page.evaluate("""() => {
+          const prefix='workshop-room-draft:group-1:user-1:';
+          const token=sessionStorage.getItem('workshop-room-draft-tab');
+          const key=Object.keys(localStorage).find(k=>k.startsWith(prefix)&&k.endsWith(token));
+          window.rooms4TabAKey=key;
+          return JSON.parse(localStorage.getItem(key));
+        }""")
+        self.assertTrue(before['dirty'])
+        self.assertTrue(before['undo'][room])
+        other={'version':2,'rooms':[{'id':room,'location_id':None,'name':'B uncertain save','width':14,'height':20,'unit':'ft','approximate':False,'objects':[]}]}
+        pending_key='rooms4-b-pending'
+        self.page.evaluate("""({other,pendingKey}) => {
+          const scope='group-1:user-1',base='workshop-room-draft:'+scope;
+          localStorage.setItem(base+':tab-B',JSON.stringify({identity:'identity-1',group_id:'group-1',user_id:'user-1',revision:7,dirty:true,document:other,room_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',undo:{},redo:{},uncertain:{key:pendingKey,revision:7,document:other}}));
+          window.fixtureLayout.revision=8;window.fixtureLayout.document=structuredClone(other);
+          localStorage.setItem('workshop-pending:'+scope,JSON.stringify([{key:pendingKey,path:'workshop/save',label:'Save all room changes',subject:'',at:'2026-10-08T00:00:00Z',identity:'identity-1',group_id:'group-1',user_id:'user-1',intent:{schema_version:2,revision:7,document:other}}]));
+          window.instance.dispose();window.instance=window.mountFixture();
+        }""", {'other':other,'pendingKey':pending_key})
+        self.assertTrue(self.page.get_by_role('button',name='Edit',exact=True).is_enabled(),"another tab pending save must not lock this tab draft")
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.assertEqual(self.page.get_by_label('Room title').input_value(),'A draft')
+        after_reload=self.page.evaluate('JSON.parse(localStorage.getItem(window.rooms4TabAKey))')
+        self.assertEqual(after_reload['document'],before['document'])
+        self.assertEqual(after_reload['undo'],before['undo'])
+        self.assertEqual(after_reload['revision'],7,'the draft base revision must remain stale after B commits revision 8')
+
+        recovery=self.context.new_page()
+        self.addCleanup(recovery.close)
+        recovery.goto('https://fixture.invalid/workshop/recovery',wait_until='domcontentloaded',timeout=2500)
+        recovery.add_script_tag(content=self.css)
+        recovery.add_script_tag(content=self.source)
+        recovery.evaluate("""() => {
+          const context={value:{user:{id:'user-1',name:'Tester'},group:{id:'group-1',name:'Storage Room'},manager:true,identity:'identity-1'}};
+          const pending=()=>JSON.parse(localStorage.getItem('workshop-pending:group-1:user-1')||'[]');
+          const workshop={context,refresh:async()=>context.value,pending,forget:key=>localStorage.setItem('workshop-pending:group-1:user-1',JSON.stringify(pending().filter(row=>row.key!==key))),request:async(path)=>path==='recovery'?[]:path==='operation/status'?{status:'completed'}:{}};
+          window.recoveryInstance=window.mountWorkshopTools(document.querySelector('#root'),'recovery',workshop,()=>{},()=>{});
+        }""")
+        recovery.get_by_role('button',name='Check saved result').wait_for(state='visible')
+        recovery.get_by_role('button',name='Check saved result').click()
+        recovery.get_by_role('button',name='Return to recovery').click()
+        recovery.wait_for_function("JSON.parse(localStorage.getItem('workshop-pending:group-1:user-1')||'[]').length===1")
+        self.page.evaluate('window.instance.dispose();window.instance=window.mountFixture()')
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        self.assertEqual(self.page.get_by_label('Room title').input_value(),'A draft')
+        after_recovery=self.page.evaluate('JSON.parse(localStorage.getItem(window.rooms4TabAKey))')
+        self.assertEqual(after_recovery['document'],before['document'])
+        self.assertEqual(after_recovery['undo'],before['undo'])
+        self.assertEqual(after_recovery['revision'],7)
+        self.assertEqual(self.errors,[])
+
+    def test_rooms4_blocked_equipment_is_not_labeled_available(self):
+        self.page.evaluate("""() => {
+          window.fixtureSearchEquipment=[
+            {id:'88888888-8888-4888-8888-888888888888',name:'Blocked camera',assetId:'CAM-B',condition:'Ready',blocker:'Checkout review required',parent:{id:'11111111-1111-4111-8111-111111111111'}},
+            {id:'99999999-9999-4999-8999-999999999999',name:'Ready camera',assetId:'CAM-A',condition:'Ready',blocker:null,parent:{id:'11111111-1111-4111-8111-111111111111'}}
+          ];
+          window.instance.dispose();
+          window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment',window.fixtureWorkshop,window.fixtureNavigate,window.fixtureNotify,{entityId:null,drawingId:null,roomId:null});
+        }""")
+        self.page.get_by_role('heading',name='Equipment',exact=True).wait_for(state='visible')
+        blocked=self.page.locator('tr').filter(has_text='Blocked camera')
+        self.assertTrue(blocked.count())
+        self.assertIn('Checkout review required',blocked.inner_text())
+        self.assertNotIn('Available',blocked.inner_text())
+        ready=self.page.locator('tr').filter(has_text='Ready camera')
+        self.assertIn('Available',ready.inner_text())
+        self.page.get_by_label('Equipment filter').select_option('available')
+        self.assertFalse(self.page.locator('tr').filter(has_text='Blocked camera').count())
+        self.page.get_by_label('Equipment filter').select_option('blocked')
+        self.assertTrue(self.page.locator('tr').filter(has_text='Blocked camera').count())
+        self.assertEqual(self.errors,[])
+
+    def test_rooms4_planner_contents_inspector_preserves_checkout_blocker(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[
+            {'id':DRAWING,'name':'Rack 1','kind':'Rack','x':0,'y':0,'width':3,'height':2,'rotation':0,'location_id':LOCATION}
+        ]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.evaluate("""() => {
+          window.fixtureViews.locationView.contents=[{id:'22222222-2222-4222-8222-222222222222',name:'Blocked camera',condition:'Ready',checkout_blocker:'Checkout review required',checked_out:false,parent:{id:'11111111-1111-4111-8111-111111111111'}}];
+          window.fixtureViews.locationView.counts={assigned:1,checked_out:0,available:0,needs_attention:0};
+        }""")
+        self.page.evaluate("window.instance.refreshWorkshopView('11111111-1111-4111-8111-111111111111',false)")
+        row=self.page.locator('[aria-label="Equipment contents"] p').filter(has_text='Blocked camera')
+        row.wait_for(state='visible')
+        self.assertIn('Checkout review required',row.inner_text())
+        self.assertNotIn('Available',row.inner_text())
+        self.assertEqual(self.errors,[])
+
+    def test_query_selection_updates_without_discarding_dirty_geometry(self):
+        self.page.get_by_role('button', name='Edit layout').click()
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.locator('#dialog[open]').wait_for(state='visible', timeout=1500)
+        self.page.get_by_label('Room name').fill('Draft floor')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.get_by_role('button', name='Edit drawing properties').click()
+        self.page.get_by_label('Width in feet').fill('4.5')
+        self.page.get_by_label('Position from left').fill('2.25')
+        self.page.get_by_role('button', name='Apply drawing changes').click()
+        self.page.evaluate("""async () => window.instance.updateWorkshopSelection({
+          entityId:'22222222-2222-4222-8222-222222222222',drawingId:null,roomId:null
+        })""")
+        self.assertTrue(self.page.get_by_text('Camera · 22222222-2222-4222-8222-222222222222', exact=True).is_visible())
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.page.get_by_role('button', name='Save layout changes').click()
+        saved = self.page.evaluate('window.writes[0][1]')
+        self.assertEqual(saved['revision'], 7)
+        self.assertEqual(saved['layout']['name'], 'Draft floor')
+        self.assertEqual(saved['layout']['objects'][0]['id'], DRAWING)
+        self.assertEqual(saved['layout']['objects'][0]['x'], 2.25)
+        self.assertEqual(saved['layout']['objects'][0]['width'], 4.5)
+        self.assertEqual(self.errors, [])
+
+    def test_query_change_during_save_waits_for_commit_before_refresh(self):
+        self.page.get_by_role('button', name='Edit layout').click()
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.get_by_label('Room name').fill('Deferred draft')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.get_by_role('button', name='Edit drawing properties').click()
+        self.page.get_by_label('Width in feet').fill('4.5')
+        self.page.get_by_label('Position from left').fill('2.25')
+        self.page.get_by_role('button', name='Apply drawing changes').click()
+        self.page.evaluate('window.deferLayoutSave=true')
+        self.page.get_by_role('button', name='Save layout changes').click()
+        self.page.wait_for_function('window.layoutSaveStarted===true')
+        save_button = self.page.get_by_role('button', name='Save layout changes', exact=True)
+        self.assertTrue(save_button.is_disabled())
+        before = self.page.locator('.map + p').inner_text()
+        self.page.evaluate("""async () => window.instance.updateWorkshopSelection({
+          entityId:'22222222-2222-4222-8222-222222222222',drawingId:null,roomId:null
+        })""")
+        self.assertTrue(save_button.is_disabled())
+        self.assertEqual(self.page.locator('.map + p').inner_text(), before)
+        self.assertEqual(self.page.evaluate('window.writes.length'), 1)
+        self.page.evaluate('window.releaseLayoutSave()')
+        self.page.get_by_role('button', name='Layout saved', exact=True).wait_for()
+        self.page.get_by_text('Camera · 22222222-2222-4222-8222-222222222222', exact=True).wait_for()
+        self.assertEqual(self.page.locator('.map + p').inner_text(), 'Deferred draft · 14 × 20 ft')
+        request = self.page.evaluate('window.writes[0][1]')
+        self.assertEqual(request['revision'], 7)
+        self.assertEqual(request['layout']['name'], 'Deferred draft')
+        self.assertEqual(request['layout']['objects'][0], {
+            'id': DRAWING, 'name': 'Old drawing name', 'kind': 'Rack', 'x': 2.25, 'y': 0,
+            'width': 4.5, 'height': 2, 'location_id': LOCATION,
+        })
+        view_reads = [call for call in self.page.evaluate('window.apiCalls') if call[0].startswith('workshop/view')]
+        self.assertEqual(len(view_reads), 2, 'initial read plus exactly one deferred selected-identity refresh')
+        self.assertEqual(self.errors, [])
+
+    def test_latest_deferred_query_survives_queued_timer_and_following_save(self):
+        self.page.evaluate("""() => {
+          window.fixtureTimers=[];
+          window.fixtureOriginalTimeout=window.setTimeout.bind(window);
+          window.setTimeout=(callback,delay,...args)=>{
+            if(delay===0){window.fixtureTimers.push(()=>callback(...args));return window.fixtureTimers.length}
+            return window.fixtureOriginalTimeout(callback,delay,...args);
+          };
+          window.deferLayoutSave=true;
+        }""")
+        self.page.get_by_role('button', name='Edit layout').click()
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.get_by_label('Room name').fill('First deferred draft')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.get_by_role('button', name='Save layout changes').click()
+        self.page.wait_for_function('window.layoutSaveCount===1')
+        self.page.evaluate("""async () => window.instance.updateWorkshopSelection({
+          entityId:'22222222-2222-4222-8222-222222222222',drawingId:null,roomId:null
+        })""")
+        self.page.evaluate('window.releaseLayoutSave()')
+        self.page.get_by_role('button', name='Layout saved', exact=True).wait_for()
+        self.page.wait_for_function('window.fixtureTimers.length===1')
+        # A newer route query replaces the pending selection before its timer fires.
+        self.page.evaluate("""async () => window.instance.updateWorkshopSelection({
+          entityId:'11111111-1111-4111-8111-111111111111',drawingId:null,roomId:null
+        })""")
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.get_by_label('Room name').fill('Second deferred draft')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.get_by_role('button', name='Save layout changes').click()
+        self.page.wait_for_function('window.layoutSaveCount===2')
+        self.page.evaluate('window.fixtureTimers.shift()()')
+        self.assertTrue(self.page.get_by_role('button', name='Save layout changes', exact=True).is_disabled())
+        self.assertEqual(len([call for call in self.page.evaluate('window.apiCalls') if call[0].startswith('workshop/view')]), 1)
+        self.page.evaluate('window.releaseLayoutSave()')
+        self.page.get_by_role('button', name='Layout saved', exact=True).wait_for()
+        self.page.wait_for_function('window.fixtureTimers.length===1')
+        self.page.evaluate('window.fixtureTimers.shift()()')
+        self.page.get_by_text('Storage Room · 11111111-1111-4111-8111-111111111111', exact=True).wait_for()
+        self.assertEqual(self.page.locator('.map + p').inner_text(), 'Second deferred draft · 14 × 20 ft')
+        self.assertEqual(len([call for call in self.page.evaluate('window.apiCalls') if call[0].startswith('workshop/view')]), 2)
+        self.assertEqual([row[1]['revision'] for row in self.page.evaluate('window.writes')], [7, 8])
+        self.assertEqual(self.errors, [])
+
+    def test_refresh_finishing_during_save_cannot_repaint_enabled_edit_controls(self):
+        self.page.get_by_role('button', name='Edit layout').click()
+        self.page.get_by_role('button', name='Room settings').click()
+        self.page.get_by_label('Room name').fill('Saved geometry')
+        self.page.get_by_role('button', name='Apply room changes').click()
+        self.page.get_by_role('button', name='Edit drawing properties').click()
+        self.page.get_by_label('Width in feet').fill('4.5')
+        self.page.get_by_label('Position from left').fill('2.25')
+        self.page.get_by_role('button', name='Apply drawing changes').click()
+        self.page.evaluate("""() => {
+          window.deferWorkshopRefresh=true;
+          window.refreshPromise=window.instance.refreshWorkshopView('11111111-1111-4111-8111-111111111111',false);
+        }""")
+        self.page.wait_for_function('window.workshopRefreshStarted===true')
+        self.page.evaluate('window.deferLayoutSave=true')
+        self.page.get_by_role('button', name='Save layout changes').click()
+        self.page.wait_for_function('window.layoutSaveCount===1')
+        self.page.evaluate('window.releaseWorkshopRefresh()')
+        self.page.evaluate('window.refreshPromise')
+        save_button = self.page.get_by_role('button', name='Save layout changes', exact=True)
+        self.assertTrue(save_button.is_disabled())
+        self.assertEqual(self.page.locator('.map + p').inner_text(), 'Saved geometry · 14 × 20 ft')
+        self.assertEqual(self.page.evaluate('window.writes.length'), 1)
+        self.page.evaluate('window.releaseLayoutSave()')
+        self.page.get_by_role('button', name='Layout saved', exact=True).wait_for()
+        refresh_notice = self.page.get_by_text('A native refresh overlapped a save. Refresh native view to load current status.', exact=True)
+        refresh_notice.wait_for(state='visible')
+        self.assertEqual(self.page.evaluate('window.writes[0][1]'), {
+            'revision': 7,
+            'layout': {'name': 'Saved geometry', 'width': 14, 'height': 20, 'unit': 'ft', 'approximate': False,
+                       'objects': [{'id': DRAWING, 'name': 'Old drawing name', 'kind': 'Rack', 'x': 2.25,
+                                    'y': 0, 'width': 4.5, 'height': 2, 'location_id': LOCATION}]},
+        })
+        self.page.get_by_role('button', name='Refresh native view').click()
+        refresh_notice.wait_for(state='hidden')
+        self.assertEqual(self.errors, [])
+
+    def test_search_accessible_identity_includes_full_name_path_and_uuid(self):
+        other_cage='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        other_rack='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        other_item='cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+        self.page.evaluate("""rows => {
+          window.fixtureLayout.parents=[
+            {id:'""" + LOCATION + """',name:'Storage Room',parent_id:null,isLocation:true},
+            {id:'66666666-6666-4666-8666-666666666666',name:'The Cage',parent_id:'""" + LOCATION + """',isLocation:true},
+            {id:'""" + RACK + """',name:'North Rack',parent_id:'66666666-6666-4666-8666-666666666666',isLocation:true},
+            {id:'""" + ITEM + """',name:'Shared kit',parent_id:'""" + RACK + """',isLocation:false},
+            {id:'""" + other_cage + """',name:'The Cage',parent_id:'""" + LOCATION + """',isLocation:true},
+            {id:'""" + other_rack + """',name:'South Rack',parent_id:'""" + other_cage + """',isLocation:true},
+            {id:'""" + other_item + """',name:'Shared kit',parent_id:'""" + other_rack + """',isLocation:false}
+          ];
+          window.fixtureSearchEquipment=rows;
+          window.fixtureSearchLocations=[];
+          window.instance.dispose();
+          window.instance=window.mountFixture();
+        }""", [
+          {'id':ITEM,'name':'Shared kit','assetId':'DUP','parent':{'id':RACK}},
+          {'id':other_item,'name':'Shared kit','assetId':'DUP','parent':{'id':other_rack}}
+        ])
+        self.page.get_by_role('link', name='Storage Room / The Cage / North Rack / Shared kit', exact=True).wait_for()
+        self.page.get_by_label('Search native equipment and storage').fill('Shared kit')
+        names = self.page.get_by_role('button', name='Shared kit ·', exact=False).all()
+        self.assertEqual(len(names), 2)
+        for row, expected_path in zip(names, ['Storage Room / The Cage / North Rack / Shared kit', 'Storage Room / The Cage / South Rack / Shared kit']):
+            text = row.inner_text()
+            accessible = row.get_attribute('aria-label')
+            self.assertIn(expected_path, text)
+            self.assertIn(expected_path, accessible)
+            self.assertIn('Shared kit', accessible)
+            self.assertIn('DUP', accessible)
+        self.assertIn(ITEM, names[0].inner_text())
+        self.assertIn(other_item, names[1].inner_text())
+        self.assertEqual(self.errors, [])
+
+    def test_desktop_search_rack_coverage_photos(self):
+        self.assertTrue(self.page.get_by_role('checkbox', name='Show status overlays on map').is_visible())
+        self.assertFalse(self.page.get_by_role('checkbox', name='Show status overlays on map').is_checked())
+        self.assertTrue(self.page.get_by_role('link', name='Open native record').last.is_visible())
+        self.assertEqual(self.page.get_by_role('link', name='Edit native photos').get_attribute('href'), '/location/11111111-1111-4111-8111-111111111111/edit')
+        self.assertTrue(self.page.get_by_text('Choose a map representation', exact=True).is_visible())
+        self.assertTrue(self.page.get_by_text('No map coverage', exact=False).is_visible())
+        self.assertTrue(self.page.get_by_role('img', name='Rack shelf photo').is_visible(), str(self.page.evaluate('window.apiCalls'))+' '+self.page.locator('#view').inner_text())
+        self.page.get_by_label('Search native equipment and storage').fill('CAM-9')
+        self.page.locator('.workshop-search-results button').filter(has_text='CAM-9').click()
+        self.assertIn('/workshop/map?id=22222222-2222-4222-8222-222222222222', self.page.evaluate('window.navigate').pop())
+        self.page.get_by_text('Condition: Ready · Checked out', exact=True).wait_for()
+        self.assertTrue(self.page.get_by_text('Assigned storage: Storage Room / the Cage / Rack 1 / Rack 1-A').is_visible())
+        self.assertTrue(self.page.get_by_text('Full native path: Storage Room / the Cage / Rack 1 / Rack 1-A / Camera').is_visible())
+        self.assertTrue(self.page.get_by_role('link', name='Open native record').first.get_attribute('href').endswith('/item/22222222-2222-4222-8222-222222222222'))
+        self.assertTrue(any(call[0].startswith('workshop/view?id=22222222-2222-4222-8222-222222222222&nested=0') for call in self.page.evaluate('window.apiCalls')))
+        self.assertFalse(self.page.get_by_text('Private Borrower').count())
+        self.page.get_by_role('checkbox', name='Include nested contents').check()
+        self.assertTrue(any(call[0].startswith('workshop/view?id=22222222-2222-4222-8222-222222222222&nested=1') for call in self.page.evaluate('window.apiCalls')))
+        self.page.evaluate("async () => { window.failViewOnce=true; await window.instance.refreshWorkshopView('22222222-2222-4222-8222-222222222222', true) }")
+        self.assertTrue(self.page.get_by_text('Status unavailable', exact=True).is_visible())
+        self.assertFalse(self.page.get_by_text('Assigned storage: Storage Room / the Cage / Rack 1 / Rack 1-A').count())
+
+    def test_desktop_boxed_selection_uses_projection_status_and_full_storage_path(self):
+        self.page.evaluate("""() => {
+          const selected=window.fixtureViews.itemView;
+          selected.path.splice(-1,0,{id:'88888888-8888-4888-8888-888888888888',name:'Box 7',
+            is_location:false,parent_id:'55555555-5555-4555-8555-555555555555'});
+          selected.selection_status={condition:'Broken',checked_out:false,blocker:'Condition: Broken'};
+          selected.contents=[];
+          selected.counts={assigned:0,checked_out:0,available:0,needs_attention:0};
+        }""")
+        api_calls_before = self.page.evaluate('window.apiCalls.length')
+        self.page.evaluate("async () => await window.instance.selectWorkshopEntity('" + ITEM + "')")
+        observed = self.page.evaluate("""args => {
+          const text=document.querySelector('.workshop-selection').innerText;
+          const calls=window.apiCalls.slice(args.before).map(call=>call[0].split('?')[0]);
+          return {status:text.split('\\n').find(line=>line.startsWith('Condition:'))||null,
+            storage:text.split('\\n').find(line=>line.startsWith('Assigned storage:'))||null,
+            guidance:text.split('\\n').find(line=>line.startsWith('Stored on '))||null,
+            unscopedStatusReads:calls.filter(path=>path==='entity'||path==='loans'),
+            writes:window.writes};
+        }""", {'before': api_calls_before})
+        expected = {
+            'status': 'Condition: Broken · Not checked out · Condition: Broken',
+            'storage': 'Assigned storage: Storage Room / the Cage / Rack 1 / Rack 1-A / Box 7',
+            'guidance': 'Stored on Rack 1-A; highlighting containing area Storage Room (' + LOCATION + ').',
+            'unscopedStatusReads': [], 'writes': [],
+        }
+        self.assertEqual(observed, expected,
+                         'The selected descendant is outside direct contents; its private-free status and true storage path come from one view projection.')
+        self.assertEqual(self.errors, [])
+
+    def test_search_selection_uses_native_location_shape_for_links_and_reads(self):
+        shelf_view = json.dumps(view(SHELF))
+        self.page.evaluate("""shelfView => {
+          window.fixtureSearchLocations=[{id: '""" + SHELF + """', name: 'Rack 1-A', assetId: '1-A',
+            entityType: {isLocation: true}, parent: {id: '""" + RACK + """'}}];
+          window.fixtureViews.locationView = JSON.parse(shelfView);
+        }""", shelf_view)
+        search = self.page.get_by_label('Search native equipment and storage')
+        search.fill('Rack 1-A')
+        result = self.page.locator('.workshop-search-results button').filter(has_text='1-A')
+        result.wait_for(timeout=1500)
+        result.click()
+        self.assertIn('/workshop/map?id=' + SHELF, self.page.evaluate('window.navigate').pop())
+        open_link = self.page.get_by_role('link', name='Open native record', exact=True).last
+        self.assertEqual(open_link.get_attribute('href'), '/location/' + SHELF)
+        self.assertEqual(self.page.get_by_role('link', name='Edit native photos', exact=True).get_attribute('href'),
+                         '/location/' + SHELF + '/edit')
+        routes = [call[0].split('?')[0] for call in self.page.evaluate('window.apiCalls')]
+        self.assertNotIn('entity', routes)
+        self.assertNotIn('loans', routes)
+        self.assertNotIn('null', self.page.locator('.workshop-selection').inner_text())
+        self.assertTrue(self.page.get_by_text('Assigned storage: Storage Room / the Cage / Rack 1 / Rack 1-A').is_visible())
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.assertEqual(self.errors, [])
+
+    def test_desktop_search_unknown_and_order_recovery(self):
+        self.page.get_by_label('Search native equipment and storage').fill('UNKNOWN-MFR')
+        self.page.get_by_label('Search native equipment and storage').press('Enter')
+        self.assertTrue(self.page.get_by_text('No unique native record found.', exact=True).is_visible())
+        self.assertEqual(self.page.evaluate('window.navigate'), [])
+        self.assertEqual(self.page.evaluate('window.writes'), [])
+        self.page.evaluate('window.loseOrderResponse=true')
+        self.page.get_by_role('button', name='Review shelf order').click()
+        self.assertTrue(self.page.get_by_role('button', name='Confirm shelf order').count(), 'dialog='+self.page.locator('#dialog-body').inner_text()+' page='+self.page.locator('#view').inner_text())
+        self.page.get_by_role('button', name='Confirm shelf order').click()
+        self.page.get_by_text('fixture lost response').wait_for()
+        pending = json.loads(self.page.evaluate("localStorage.getItem('workshop-order:group-1:user-1:11111111-1111-4111-8111-111111111111')"))
+        self.assertEqual(pending['status'], 'pending')
+        self.page.get_by_role('button', name='Cancel').click()
+        self.page.get_by_role('button', name='Review shelf order').click()
+        self.assertTrue(self.page.get_by_text('A previous shelf order has an unconfirmed result.', exact=False).is_visible())
+        self.assertFalse(self.page.get_by_role('button', name='Confirm shelf order').count())
+        self.assertEqual(len(self.page.evaluate('window.writes')), 1)
+
+
+class TerminalMapBrowserTests(unittest.TestCase):
+    """Run the checked-in Terminal page, map host, and final lifecycle script."""
+
+    ITEM = '22222222-2222-4222-8222-222222222222'
+    RACK = '11111111-1111-4111-8111-111111111111'
+    DRAWING = '33333333-3333-4333-8333-333333333333'
+    PHOTO = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.index = (ROOT / 'kiosk/index.html').read_text(encoding='utf-8')
+        cls.scripts = {
+            '/import-ui.js': (ROOT / 'kiosk/import-ui.js').read_text(encoding='utf-8'),
+            '/workshop-ui.js': (ROOT / 'kiosk/workshop-ui.js').read_text(encoding='utf-8'),
+            '/checkout-ui.js': (ROOT / 'kiosk/checkout-ui.js').read_text(encoding='utf-8'),
+            '/return-ui.js': (ROOT / 'kiosk/return-ui.js').read_text(encoding='utf-8'),
+            '/workflow-ui.js': (ROOT / 'kiosk/workflow-ui.js').read_text(encoding='utf-8'),
+            '/users-ui.js': (ROOT / 'kiosk/users-ui.js').read_text(encoding='utf-8'),
+        }
+
+    def setUp(self):
+        self.playwright = sync_playwright().start()
+        self.addCleanup(self.playwright.stop)
+        self.browser = self.playwright.chromium.launch(headless=True, executable_path='/usr/bin/chromium')
+        self.addCleanup(self.browser.close)
+        self.context = self.browser.new_context(viewport={'width': 800, 'height': 480}, is_mobile=True,
+                                                has_touch=True)
+        self.page = self.context.new_page()
+        self.page.set_default_timeout(2500)
+        self.page.set_default_navigation_timeout(2500)
+        self.errors = []
+        self.failed_requests = []
+        self.error_responses = []
+        self.page.on('pageerror', lambda error: self.errors.append(str(error)))
+        self.page.on('console', lambda message: self.errors.append(message.text) if message.type == 'error' else None)
+        self.page.on('requestfailed', lambda request: self.failed_requests.append((request.method, urlsplit(request.url).path)))
+        self.page.on('response', lambda response: self.error_responses.append((urlsplit(response.url).path, response.status)) if response.status >= 400 else None)
+        self.calls = []
+        self.workshop_view_refreshes = 0
+        self.session_polls = 0
+        self.unexpected_requests = []
+        self.saved_layouts = []
+        self.pending_saves = []
+        self.defer_save = False
+        self.save_status = 200
+        self.malformed_save = False
+        self.fail_view_once = False
+        self.defer_initial_view = False
+        self.pending_views = []
+        self.defer_workshop_open = False
+        self.pending_workshop_gets = []
+        self.defer_map_resolve = False
+        self.pending_map_resolves = []
+        self.lose_order_response = False
+        self.shelf_orders = []
+        self.operation_checks = []
+        self.defer_operation_status = False
+        self.pending_operation_status = []
+        self.native_visits = []
+        self.operation_response = {'status': 'not_started'}
+        self.expire_session = False
+        self.session = {'user': {'id': 'user-1', 'name': 'Map tester'},
+                        'generation': 1, 'instance': 'session-1'}
+        self.parents = [
+            {'id': self.RACK, 'name': 'The Cage', 'parent_id': None, 'isLocation': True,
+             'kind': 'Rack', 'code': '1', 'updated_at': 'rack-v1'},
+            {'id': '55555555-5555-4555-8555-555555555555', 'name': 'Shelf 1',
+             'parent_id': self.RACK, 'isLocation': True, 'kind': 'Shelf', 'code': '1-A',
+             'updated_at': 'shelf-v1'},
+            {'id': '77777777-7777-4777-8777-777777777777', 'name': 'Shelf 2',
              'parent_id': self.RACK, 'isLocation': True, 'kind': 'Shelf', 'code': '1-B',
              'updated_at': 'shelf-2-v1'},
             {'id': '88888888-8888-4888-8888-888888888888', 'name': 'Rack B',
