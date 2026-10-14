@@ -15,14 +15,28 @@ class ChildLocationPreviewTests(unittest.TestCase):
     def test_location_detail_embeds_expandable_read_only_child_contents(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             previous_build = BUILDER.BUILD
-            BUILDER.BUILD = pathlib.Path(directory) / "homebox-ui-build"
+            build = pathlib.Path(directory) / "homebox-ui-build"
+            BUILDER.BUILD = build
+            location_page = build / "pages/location/[id]/index/index.vue"
+            location_page.parent.mkdir(parents=True)
+            location_page.write_text(
+                '  import LocationCard from "~/components/Location/Card.vue";\n'
+                '      <!-- Child locations -->\n'
+                '      <section v-if="location && location.children && location.children.length > 0" class="mt-6">\n'
+                '        <BaseSectionHeader class="mb-5"> {{ $t("locations.child_locations") }} </BaseSectionHeader>\n'
+                '        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">\n'
+                '          <LocationCard v-for="child in location.children" :key="child.id" :location="child" />\n'
+                '        </div>\n'
+                '      </section>'
+            )
             try:
-                BUILDER.prepare()
+                BUILDER.location_child_contents_frontend()
             finally:
                 BUILDER.BUILD = previous_build
 
-            page = (pathlib.Path(directory) / "homebox-ui-build/pages/location/[id]/index/index.vue").read_text()
-            component = (pathlib.Path(directory) / "homebox-ui-build/components/Location/ChildContents.vue").read_text()
+            page = location_page.read_text()
+            source_component = ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue"
+            component = source_component.read_text()
             self.assertIn("<ChildContents v-if=\"location && location.children?.length\" :locations=\"location.children\" />", page)
             self.assertNotIn('<LocationCard v-for="child in location.children"', page)
             self.assertIn('api.items.getAll({ parentIds: [locationId] })', component)
