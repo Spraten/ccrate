@@ -11,3 +11,16 @@ export function writeFeedbackDraft(storage, key, draft) {
     return false;
   }
 }
+
+export function persistFeedbackStatus(storage, key, draft, status) {
+  try {
+    if (status === "submitted") {
+      storage.removeItem(key);
+      return true;
+    }
+    storage.setItem(key, JSON.stringify(draft));
+    return true;
+  } catch {
+    return false;
+  }
+}

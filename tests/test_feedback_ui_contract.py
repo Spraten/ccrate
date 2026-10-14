@@ -22,8 +22,36 @@ class FeedbackUiContractTests(unittest.TestCase):
         self.assertIn('if (!saveDraft(capture.draftKey', page)
         self.assertIn('status.value = "idle";', page)
         self.assertLess(page.index('if (!saveDraft(capture.draftKey'), page.index('fetch("/ccrate-api/feedback"'))
+        self.assertIn('watch([reportType, description], () => saveDraft());', page)
+        self.assertIn('persistCurrentStatus(capture.draftKey);', page)
+        self.assertIn('persistFeedbackStatus(localStorage, key,', page)
         self.assertIn('"/ccrate-api/feedback"', page)
         self.assertNotIn("CCRATE_GITHUB_TOKEN", page)
+
+    def test_draft_watch_ignores_vue_new_and_old_value_arguments(self):
+        page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").resolve().as_uri()
+        script = f'''import {{ readFileSync }} from "node:fs";
+const page = readFileSync(new URL("{page}"), "utf8");
+const callbackSource = page.match(/watch\\(\\[reportType, description\\],\\s*(.*?)\\);/s)?.[1];
+if (!callbackSource) process.exit(1);
+let args;
+const callback = new Function("saveDraft", `return ${{callbackSource}};`)((...values) => args = values);
+callback(["idea", "new"], ["bug", "old"]);
+if (args.length !== 0) process.exit(2);
+'''
+        completed = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_confirmed_report_is_removed_instead_of_recreated_as_pending(self):
+        helper = (ROOT / "homebox-ui/overlay/lib/feedback-report-identity.js").resolve().as_uri()
+        script = f'''import {{ persistFeedbackStatus }} from "{helper}";
+const entries = new Map([["draft-a", JSON.stringify({{requestId:"req-a", description:"sent"}})]]);
+const storage = {{setItem(key, value) {{entries.set(key, value);}}, removeItem(key) {{entries.delete(key);}}}};
+const saved = persistFeedbackStatus(storage, "draft-a", {{requestId:"req-a", description:"sent"}}, "submitted");
+if (!saved || entries.has("draft-a")) process.exit(1);
+'''
+        completed = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_deferred_response_after_cross_tab_account_change_cannot_mutate_other_draft(self):
         helper = (ROOT / "homebox-ui/overlay/lib/feedback-report-identity.js").resolve().as_uri()

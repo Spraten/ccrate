@@ -2,7 +2,7 @@
   import BaseCard from "@/components/Base/Card.vue";
   import { Button } from "@/components/ui/button";
   import { Textarea } from "@/components/ui/textarea";
-  import { feedbackActionIsCurrent, writeFeedbackDraft } from "@/lib/feedback-report-identity.js";
+  import { feedbackActionIsCurrent, persistFeedbackStatus, writeFeedbackDraft } from "@/lib/feedback-report-identity.js";
 
   definePageMeta({ middleware: ["auth"] });
   useHead({ title: "Report feedback · C-Crate" });
@@ -25,6 +25,12 @@
   function saveDraft(key = draftKey.value, draft = { requestId: requestId.value, type: reportType.value, description: description.value }) {
     if (!import.meta.client || !key || loadingDraft) return false;
     try { return writeFeedbackDraft(localStorage, key, draft); } catch { return false; }
+  }
+  function persistCurrentStatus(key) {
+    try {
+      return persistFeedbackStatus(localStorage, key,
+        { requestId: requestId.value, type: reportType.value, description: description.value }, status.value);
+    } catch { return false; }
   }
 
   function loadDraft() {
@@ -86,7 +92,6 @@
       status.value = "submitted";
       issueUrl.value = result.issue_url || "";
       error.value = "";
-      try { localStorage.removeItem(capture.draftKey); } catch { /* The submitted result remains visible in memory. */ }
       return;
     }
     if (result.status === "rejected") status.value = "rejected";
@@ -120,7 +125,10 @@
       });
       if (!actionIsCurrent(capture)) return;
       const result = await parseResponse(response, capture);
-      if (result && actionIsCurrent(capture)) applyResult(result, capture);
+      if (result && actionIsCurrent(capture)) {
+        applyResult(result, capture);
+        persistCurrentStatus(capture.draftKey);
+      }
     } catch (cause) {
       if (!actionIsCurrent(capture)) return;
       if ((cause as { accountChanged?: boolean }).accountChanged) {
@@ -130,7 +138,10 @@
         return;
       }
       const result = (cause as { result?: { status?: string; error?: string } }).result;
-      if (result) applyResult(result, capture);
+      if (result) {
+        applyResult(result, capture);
+        persistCurrentStatus(capture.draftKey);
+      }
       else {
         status.value = postStarted ? "pending" : "idle";
         error.value = postStarted ? "C-Crate did not receive a confirmation. Check report status before trying again." : ((cause as Error).message || "C-Crate could not verify your sign-in. Your draft is still saved.");
@@ -155,7 +166,7 @@
       const result = await parseResponse(response, capture);
       if (result && actionIsCurrent(capture)) {
         applyResult(result, capture);
-        saveDraft(capture.draftKey);
+        persistCurrentStatus(capture.draftKey);
       }
     } catch (cause) {
       if (actionIsCurrent(capture)) error.value = (cause as Error).message || "C-Crate could not check the report status.";
@@ -163,7 +174,7 @@
   }
 
   watch(draftKey, loadDraft, { immediate: true, flush: "sync" });
-  watch([reportType, description], saveDraft);
+  watch([reportType, description], () => saveDraft());
 </script>
 
 <template>
