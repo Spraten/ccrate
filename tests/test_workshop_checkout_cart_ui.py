@@ -23,6 +23,62 @@ def function(source, name):
 
 
 class WorkshopCheckoutCartUiTests(unittest.TestCase):
+    def test_manual_checkout_recovery_reports_receipt_asset_count_for_kits(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable for the checkout UI fixture")
+        checkout = (ROOT / "kiosk/checkout-ui.js").read_text(encoding="utf-8")
+        workflow = (ROOT / "kiosk/workflow-ui.js").read_text(encoding="utf-8")
+        helpers = "\n".join(function(checkout, name) for name in ("checkoutAssetsForSelection", "checkoutReceiptAssetCount"))
+        recover = function(workflow, "recoveryActions")
+        script = helpers + "\n" + recover + r'''
+let checkoutCartManaged=true,checkoutKitAssets={'kit':['kit','part']},checkoutCart=[{id:'kit'}],returnCart=[],routeRevision=1,identityGeneration=1,identityInstance='session',saved={status:'completed',count:3};
+const buttons=[],counts=[];function node(){return {append(){}}}function primary(label,fn){buttons.push({label,fn});return {}};async function resolveTransaction(){return saved}async function transactionDone(mode,count){counts.push([mode,count])}
+const shell={append(){}};
+(async()=>{recoveryActions(shell,'request','checkout');await buttons.at(-2).fn();if(counts[0][1]!==3)throw Error('recovery ignored the actual receipt count');saved={status:'completed'};recoveryActions(shell,'request-2','checkout');await buttons.at(-2).fn();if(counts[1][1]!==2)throw Error('legacy fallback did not count kit assets')})().catch(error=>{console.error(error);process.exitCode=1});
+'''
+        subprocess.run([node, "-e", script], check=True, cwd=ROOT, capture_output=True, text=True)
+
+    def test_kiosk_revision_reconciliation_keeps_local_additions_and_updates_to_saved_cart(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable for the checkout UI fixture")
+        source = (ROOT / "kiosk/checkout-ui.js").read_text(encoding="utf-8")
+        helper = function(source, "checkoutCartReconciliationIds")
+        count_helper = function(source, "checkoutReceiptAssetCount")
+        script = helper + r'''
+const assert=(actual,expected,message)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw Error(message+': '+JSON.stringify(actual))};
+assert(checkoutCartReconciliationIds(['kit','desk-added'],['kit','desk-removed'],['kit','local-added']),['kit','desk-added','local-added'],'server additions and local additions survive while server removals are applied');
+assert(checkoutCartReconciliationIds(['local-removed','kept','desk-added'],['local-removed','kept'],['kept']),['kept','desk-added'],'local removals are preserved alongside desk additions');
+let checkoutCartManaged=true,checkoutKitAssets={'kit':['kit','component']};
+const checkoutAssetsForSelection=items=>{const ids=new Set(items.map(item=>item.id));if(checkoutCartManaged)for(const [root,members] of Object.entries(checkoutKitAssets))if(ids.has(root))for(const id of members)ids.add(id);return [...ids]};
+assert(checkoutReceiptAssetCount({count:3},[{id:'kit'}]),3,'completed receipt count is authoritative');
+assert(checkoutReceiptAssetCount({status:'completed'},[{id:'kit'}]),2,'legacy completion fallback counts expanded kit assets rather than cart roots');
+'''
+        script = helper + "\n" + count_helper + script[len(helper) + 1:]
+        subprocess.run([node, "-e", script], check=True, cwd=ROOT, capture_output=True, text=True)
+        self.assertIn("checkoutCartNeedsReconcile", source)
+        self.assertIn("Refresh saved cart", source)
+        self.assertIn("Your local additions are kept", source)
+        self.assertIn("checkoutReceiptAssetCount(saved,items)", source)
+        self.assertIn("confirm.disabled=!!checkoutKey||checkoutCartNeedsReconcile", source)
+
+        helper += "\n" + function(source, "reconcileCheckoutCart")
+        script = helper + r'''
+let checkoutCart=[{id:'keep',name:'Keep'},{id:'local-added',name:'Local addition'}],checkoutCartIds=new Set(['keep','desk-removed']),checkoutCartRevision=1,checkoutCartLoadedFor='1:session',checkoutCartLoading=false,checkoutCartManaged=true,checkoutCartNeedsReconcile=true,checkoutCartLoadError='',checkoutKitAssets={},checkoutKitEntities={},checkoutKitVersions={},checkoutFeedback='',checkoutMode=true,checkoutBusy=false,identityGeneration=1,identityInstance='session';
+let rendered='';const renderCheckout=message=>{rendered=message};const refreshCheckoutAvailability=async()=>{};
+const api=async path=>{if(path==='/checkout/cart')return {revision:2,items:['keep','desk-added']};throw Error('unexpected path '+path)};
+const fetch=async url=>({ok:true,json:async()=>({entity:{id:'desk-added',name:'Desk addition'}})});
+reconcileCheckoutCart().then(()=>{
+ const assert=(value,message)=>{if(!value)throw Error(message)};
+ assert(JSON.stringify(checkoutCart.map(item=>item.id))===JSON.stringify(['keep','desk-added','local-added']),'merged cart applies desk changes and keeps the local addition');
+ assert(checkoutCart.find(item=>item.id==='local-added').name==='Local addition','local item details survive refresh');
+ assert(checkoutCartRevision===2&&checkoutCartNeedsReconcile===false,'latest revision unlocks confirmation');
+ assert(rendered.includes('Your local additions are kept'),'the refreshed list is explained before review');
+}).catch(error=>{console.error(error);process.exitCode=1});
+'''
+        subprocess.run([node, "-e", script], check=True, cwd=ROOT, capture_output=True, text=True)
+
     def test_cart_page_is_valid_javascript(self):
         node = shutil.which("node")
         if not node:
