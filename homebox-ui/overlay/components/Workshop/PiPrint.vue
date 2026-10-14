@@ -3,6 +3,7 @@ import DeviceReconnect from "./DeviceReconnect.vue";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-vue-next";
 import { toast } from "@/components/ui/sonner";
+import { getPiPrintRecoveryState } from "~/lib/pi-print-state";
 const props = defineProps<{ entityId?: string; id?: string }>();
 const workshop = useWorkshop();
 const { manager, busy } = workshop;
@@ -21,7 +22,14 @@ onBeforeUnmount(() => { disposed = true; generation++; });
 function contextChanged(next: unknown[], previous: unknown[]) { preview.value = null; sending.value = false; uncertain.value = false; const changed = next[2] !== previous[2] || next[3] !== previous[3]; if (changed) { generation++; templates.value = []; templateId.value = ""; loaded.value = false; if (previous[2] != null || previous[3] != null) void loadTemplates(); } else generation++; }
 watch(() => [props.entityId, props.id, workshop.context.value?.identity, workshop.context.value?.group.id], contextChanged);
 async function review() {
-  error.value = ""; preview.value = null; const current = ++generation, identity = workshop.context.value?.identity, selectedId = templateId.value, selectedRevision = selected.value?.revision, entityId = itemId.value;
+  error.value = ""; preview.value = null;
+  const recovery = getPiPrintRecoveryState(workshop.pending(), itemId.value);
+  uncertain.value = recovery.uncertain;
+  if (!recovery.canReview) {
+    error.value = "A previous print result is unconfirmed. Check Recovery before trying again.";
+    return;
+  }
+  const current = ++generation, identity = workshop.context.value?.identity, selectedId = templateId.value, selectedRevision = selected.value?.revision, entityId = itemId.value;
   try {
     if (isItem.value) {
       if (!selected.value) throw Error("Choose a saved template first.");
@@ -36,10 +44,15 @@ async function review() {
 async function print() {
   if (sending.value) return;
   error.value = ""; sending.value = true;
+  const entityId = itemId.value;
   try {
-    await workshop.write("labels/print", { entity_id: itemId.value, review_id: preview.value?.review_id }, "Print item label", itemId.value);
+    await workshop.write("labels/print", { entity_id: entityId, review_id: preview.value?.review_id }, "Print item label", entityId);
     toast("Pi printer confirmed this request. Inspect the physical label."); preview.value = null;
-  } catch (cause) { error.value = (cause as Error).message; if (error.value.includes("Load the reviewed 40 x 28 mm SUPVAN stock")) { uncertain.value = false; preview.value = null; } else uncertain.value = true; }
+  } catch (cause) {
+    error.value = (cause as Error).message;
+    preview.value = null;
+    uncertain.value = getPiPrintRecoveryState(workshop.pending(), entityId).uncertain;
+  }
   finally { sending.value = false; }
 }
 </script>
@@ -58,3 +71,4 @@ async function print() {
     <div class="flex gap-2"><Button variant="outline" :disabled="busy || !loaded && isItem" @click="review">{{ isItem ? "Review current item" : "Preview storage QR" }}</Button><Button :disabled="busy || sending || uncertain || !preview || !preview.review_id" @click="print"><Printer class="mr-2 size-4" />Confirm one Pi print</Button></div>
   </div>
 </template>
+
