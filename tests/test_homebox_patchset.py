@@ -1,7 +1,9 @@
 import hashlib
+import io
 import json
 import pathlib
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -20,11 +22,30 @@ class HomeboxPatchsetTests(unittest.TestCase):
         self.assertIn('cameraErrorMessageKey(error)', patch)
         self.assertIn('maps missing devices to unavailable and permission failures', patch)
 
-    def test_regular_upload_keeps_camera_attachments_after_save(self):
-        patch = (ROOT / "deploy/homebox-patches/0020-Fix-item-camera-save-and-OCR-races.patch").read_text()
-        upload_hunk = patch.split("@@ -500,18 +534,18 @@", 1)[1].split("@@ -747,7 +781,7 @@", 1)[0]
+    def test_materialized_camera_dialog_imports_error_classifier(self):
+        base, patches, _ = load_patchset(ROOT)
+        upstream = ROOT / "upstream" / "homebox"
 
-        self.assertLess(upload_hunk.index("+    item.value.attachments = data.attachments"), upload_hunk.index("await saveItem(false)"))
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+            source = pathlib.Path(temporary)
+            archive = subprocess.check_output(["git", "-C", str(upstream), "archive", "--format=tar", base])
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as snapshot:
+                snapshot.extractall(source)
+            apply_patchset(source, patches)
+
+            dialog = (source / "frontend/components/Form/CameraCaptureDialog.vue").read_text()
+            page = (source / "frontend/pages/item/[id]/index/edit.vue").read_text()
+
+        self.assertIn("CameraStreamSession, cameraErrorMessageKey, canvasToPhotoFile", dialog)
+        self.assertIn("cameraErrorMessageKey(error)", dialog)
+        upload_start = page.index("async function uploadAttachment")
+        upload_end = page.index("const confirm = useConfirm()", upload_start)
+        upload = page[upload_start:upload_end]
+        self.assertLess(upload.index("item.value.attachments = data.attachments"), upload.index("await saveItem(false)"))
+        camera_save_start = page.index("async function saveCapturedPhotos")
+        camera_save_end = page.index("async function saveItem", camera_save_start)
+        camera_save = page[camera_save_start:camera_save_end]
+        self.assertIn("item.value.attachments = data.attachments", camera_save)
 
     def test_docker_build_stage_copies_homebox_patchset_inputs(self):
         dockerfile = (ROOT / "Dockerfile").read_text()

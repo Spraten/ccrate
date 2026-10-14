@@ -23,7 +23,7 @@ index 555e8bf9..113f5c13 100644
    import { DialogRoot } from "reka-ui";
    import MdiCameraOutline from "~icons/mdi/camera-outline";
 -  import { canvasToPhotoFile } from "./camera";
-+  import { CameraStreamSession, canvasToPhotoFile } from "./camera";
++  import { CameraStreamSession, cameraErrorMessageKey, canvasToPhotoFile } from "./camera";
  
    const props = defineProps<{ open: boolean }>();
    const emit = defineEmits<{
