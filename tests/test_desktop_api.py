@@ -246,6 +246,8 @@ class DesktopTests(unittest.TestCase):
         operation = self.ledger.begin(self.group, self.manager, 'check_out', [self.asset], ident())
         self.ledger.complete(operation['id'])
         request_key = operation['request_key']
+        owned = self.request('operation/status', {'request_key': request_key})
+        self.assertEqual(owned.result, {'id': operation['id'], 'status': 'completed', 'action': 'check_out'})
         member = self.request('context', headers={'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}).result
         headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true', 'X-Workshop-Identity': member['identity']}
 

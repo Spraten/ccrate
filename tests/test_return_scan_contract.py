@@ -23,7 +23,7 @@ class ReturnScanBehaviorTests(unittest.TestCase):
         import shelf_checks
         namespace={'BaseHTTPRequestHandler':BaseHTTPRequestHandler,'property':property,'urlsplit':urlsplit,'parse_qs':parse_qs,
                    'desktop_handle':lambda *args:False,'ROOT':ROOT,'lock':object(),
-                   'ledger':object(),'badges':object(),'native_jobs':object(),
+                   'ledger':object(),'checkout_cart':object(),'badges':object(),'native_jobs':object(),
                    'imports':object(),'workshop':object(),'sessions':None,
                    'shelf_checks':shelf_checks,'label_layouts':object(),'LABEL_ASSET_ROOT':ROOT}
         exec(compile(ast.Module(body=[handler],type_ignores=[]),str(ROOT/'deploy/kiosk-server.py'),'exec'),namespace)

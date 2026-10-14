@@ -62,7 +62,7 @@ from PIL import Image
 import zxingcpp, qrcode
 from urllib.parse import urlsplit, parse_qs
 from homebox import Homebox
-from checkout import confirm_checkout
+from checkout import confirm_checkout, checkout_status_actor
 from checkout_cart import CheckoutCart
 from returns import confirm_return, recover, RETURN_STATES
 from maps import list_map,save_room,save_object,remove_object
@@ -509,8 +509,6 @@ class Handler(BaseHTTPRequestHandler):
                             requested=[str(NativeUUID(value)) for value in requested]
                             if len(requested)!=len(set(requested)) or not set(requested).issubset(saved['items']):
                                 raise Conflict('Your saved checkout cart changed. Review it again.')
-                            if set(data.get('assets',[]))!=set(requested):
-                                raise Conflict('Checkout items must match the saved cart selection.')
                             cart_context={'revision':saved['revision'],'items':requested}
                         result=confirm_checkout(client,ledger,group,actor,data.get('assets',[]),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'),cart_context)
                         if cart_context is not None:
@@ -550,9 +548,11 @@ class Handler(BaseHTTPRequestHandler):
                             binding=workshop.save_binding(group,key)
                             if (prior and prior.get('kind')=='workshop/save') or binding:
                                 raise Conflict('This Workshop result requires its original collection and service actor context.')
-                        result=operation_status({'group':group,'actor':native['id'],'manager':True},globals(),data)
+                        badge_actor,generation=self.session.snapshot()
+                        key=uuid(data.get('request_key'))
+                        status_actor=checkout_status_actor(ledger,group,key,badge_actor,native['id'])
+                        result=operation_status({'group':group,'actor':status_actor,'manager':True},globals(),data)
                         if result.get('action')=='check_out' and result.get('id'):
-                            badge_actor,generation=self.session.snapshot()
                             with ledger.connection() as db:
                                 op=db.execute('SELECT actor_id FROM operations WHERE id=? AND group_id=?',(result['id'],group)).fetchone()
                             if not badge_actor or not op or op['actor_id']!=badge_actor:
