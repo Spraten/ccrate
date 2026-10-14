@@ -60,6 +60,7 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertNotIn('<!-- makes scanner accessible easily if using legacy header -->', self.output)
 
     def test_workshop_manager_routes_keep_their_access_gate(self):
+        self.assertIn('["checkout-cart", "Checkout cart"]', self.output)
         self.assertIn('...(workshop.manager.value ? [["imports"', self.output)
         self.assertIn('workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels")', self.output)
 

@@ -322,6 +322,7 @@ def navigation_frontend():
   const { selectedId: workshopGroup } = useCollections();
   const workshopLinks = computed(() => [
     ["loans", "Loans & notes"], ["map", "Workshop & storage"],
+    ["checkout-cart", "Checkout cart"],
     ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
   ]);
   const nav = computed<typeof baseNav>(() => [
