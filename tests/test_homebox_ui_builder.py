@@ -19,6 +19,36 @@ BUILDER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BUILDER)
 
 
+@contextlib.contextmanager
+def isolated_builder_prepare(build_root, materializer_work_root):
+    """Keep prepare()'s real materialization isolated from shared generated caches."""
+    import homebox_patchset
+
+    previous_build = BUILDER.BUILD
+    previous_source_lock = homebox_patchset._source_lock
+    previous_materialize_locked = homebox_patchset._materialize_locked
+
+    def source_lock(_path):
+        materializer_work_root.mkdir(parents=True, exist_ok=True)
+        return previous_source_lock(materializer_work_root / ".homebox-source-patchset.lock")
+
+    def materialize_locked(upstream, base, patches, digest, _work):
+        materializer_work_root.mkdir(parents=True, exist_ok=True)
+        return previous_materialize_locked(
+            upstream, base, patches, digest, materializer_work_root
+        )
+
+    BUILDER.BUILD = build_root
+    homebox_patchset._source_lock = source_lock
+    homebox_patchset._materialize_locked = materialize_locked
+    try:
+        yield
+    finally:
+        BUILDER.BUILD = previous_build
+        homebox_patchset._source_lock = previous_source_lock
+        homebox_patchset._materialize_locked = previous_materialize_locked
+
+
 class HomeboxUiBuilderTests(unittest.TestCase):
     def test_create_item_actions_are_after_photo_preview_without_changing_form_actions(self):
         source = '''      <PhotoUploader />
@@ -270,12 +300,12 @@ class HomeboxUiBuilderTests(unittest.TestCase):
 
     def test_generated_location_selector_preserves_hierarchy_and_parent_filtering(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            previous_build = BUILDER.BUILD
-            BUILDER.BUILD = pathlib.Path(directory) / "homebox-ui-build"
-            try:
+            test_root = pathlib.Path(directory)
+            with isolated_builder_prepare(
+                test_root / "homebox-ui-build",
+                test_root / "homebox-materializer-work",
+            ):
                 BUILDER.prepare()
-            finally:
-                BUILDER.BUILD = previous_build
 
             selector = (pathlib.Path(directory) / "homebox-ui-build/components/Location/Selector.vue").read_text()
             helper = (pathlib.Path(directory) / "homebox-ui-build/lib/location-selector-tree.js").read_text()
@@ -299,12 +329,12 @@ class HomeboxUiBuilderTests(unittest.TestCase):
 
     def test_prepare_accepts_barcode_aware_create_entity_dialog_type(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            previous_build = BUILDER.BUILD
-            BUILDER.BUILD = pathlib.Path(directory) / "homebox-ui-build"
-            try:
+            test_root = pathlib.Path(directory)
+            with isolated_builder_prepare(
+                test_root / "homebox-ui-build",
+                test_root / "homebox-materializer-work",
+            ):
                 BUILDER.prepare()
-            finally:
-                BUILDER.BUILD = previous_build
 
             dialog_utils = (pathlib.Path(directory) / "homebox-ui-build/components/ui/dialog-provider/utils.ts").read_text()
             self.assertIn("barcode?: string", dialog_utils)
@@ -393,3 +423,4 @@ class HomeboxUiBuilderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
