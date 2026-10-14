@@ -15,6 +15,32 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class HomeboxPatchsetTests(unittest.TestCase):
+    def test_theme_preference_persists_system_choice_and_has_accessible_palette_controls(self):
+        base, patches, _ = load_patchset(ROOT)
+        upstream = ROOT / "upstream" / "homebox"
+
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+            source = pathlib.Path(temporary)
+            archive = subprocess.check_output(["git", "-C", str(upstream), "archive", "--format=tar", base])
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as snapshot:
+                snapshot.extractall(source)
+            apply_patchset(source, patches)
+            picker = (source / "frontend/components/App/ThemePicker.vue").read_text()
+            preference = (source / "frontend/lib/data/theme-preference.ts").read_text()
+            theme = (source / "frontend/composables/use-theme.ts").read_text()
+            preferences = (source / "frontend/composables/use-preferences.ts").read_text()
+            startup = (source / "frontend/public/set-theme.js").read_text()
+
+        self.assertIn('themeMode: null', preferences)
+        self.assertIn('return prefersDark ? "night" : "homebox"', preference)
+        self.assertIn('preferences.value.themeMode = mode;', theme)
+        self.assertIn('preferences.value.theme = mode === "system" ? "homebox"', theme)
+        self.assertIn('window.matchMedia("(prefers-color-scheme: dark)")', startup)
+        self.assertIn('role="group" aria-labelledby="theme-mode-label"', picker)
+        self.assertIn(':aria-pressed="themeMode === mode.value"', picker)
+        self.assertIn('<button\n        v-for="theme in themes"', picker)
+        self.assertIn(':aria-pressed="selectedTheme === theme.value"', picker)
+
     def test_camera_error_mapping_distinguishes_missing_device(self):
         patch = (ROOT / "deploy/homebox-patches/0020-Fix-item-camera-save-and-OCR-races.patch").read_text()
 
@@ -57,7 +83,7 @@ class HomeboxPatchsetTests(unittest.TestCase):
         base, patches, digest = load_patchset(ROOT)
 
         self.assertEqual(base, "e01dd737238a3fa7e1a6454b37de6c6fc88c86e4")
-        self.assertEqual(len(patches), 25)
+        self.assertEqual(len(patches), 26)
         self.assertTrue(all(path.is_file() for path in patches))
         self.assertEqual(len(digest), 64)
 
