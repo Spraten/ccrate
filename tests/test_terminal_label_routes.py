@@ -68,6 +68,8 @@ class TerminalLabelRouteTests(unittest.TestCase):
         self.assertIs(args.kwargs['layouts'],self.ns['label_layouts'])
         self.assertEqual(args.args[2],self.group)
         self.assertTrue(all(tenant==self.group for path,tenant in self.client_calls if path=='/api/v1/groups'))
+
+
     def test_reviewed_print_route_passes_operator_and_review_id_without_client_raster(self):
         item='44444444-4444-4444-8444-444444444444';review='55555555-5555-4555-8555-555555555555';key='66666666-6666-4666-8666-666666666666'
         req=self.dispatch('/label/print',{'entity_id':item,'review_id':review,'request_key':key,'png':'attacker-data'})
@@ -88,6 +90,13 @@ class TerminalLabelRouteTests(unittest.TestCase):
         self.assertEqual(req.response[0],200)
         self.assertEqual([row['id'] for row in req.response[1]],['active-equipment'])
         self.assertIn(('/api/v1/entities',self.group),self.client_calls)
+
+
+class TerminalLabelHostContractTests(unittest.TestCase):
+    def test_terminal_label_designer_allows_template_save_but_not_physical_print(self):
+        source=(ROOT/'kiosk/index.html').read_text(encoding='utf-8')
+        self.assertIn("write:(action,data)=>{if(action==='labels/templates/save')return api('/label/templates/save',data);throw Error('Use the reviewed item queue to confirm physical printing.')}",source)
+        self.assertIn("context:()=>({host:'terminal',generation:editorGeneration,instance:editorInstance})",source)
 
 
 if __name__=='__main__':unittest.main()

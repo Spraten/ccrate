@@ -6,6 +6,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class LabelGeneratorContractTests(unittest.TestCase):
+    def test_template_save_recovery_checks_its_own_idempotency_result(self):
+        workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text(encoding='utf-8')
+        designer = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text(encoding='utf-8')
+        self.assertIn("p.path==='labels/templates/save'", workflow)
+        self.assertIn("api('labels/templates/result',{request_key:p.key}", workflow)
+        self.assertIn('if(result){removePending(p.key)', workflow)
+        self.assertIn('action === "labels/templates/result" && result && typeof data?.request_key === "string"', designer)
+        self.assertIn('workshop.confirmTemplateSave(data.request_key)', designer)
+
     def test_print_failures_are_visible_and_only_uncertain_outcomes_lock_retry(self):
         component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
         workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text(encoding='utf-8')

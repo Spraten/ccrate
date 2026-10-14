@@ -68,3 +68,50 @@ test('proxied selected item context is plain-cloned through the validated bridge
   assert.equal(listeners.has('resize'), false, 'dispose removes the viewport listener')
   assert.equal(listeners.has('message'), false, 'dispose keeps bridge cleanup intact')
 })
+
+test('label template saves use the write callback and preserve their idempotency key', async (t) => {
+  const prior = Object.fromEntries(['window', 'document', 'location'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
+  t.after(() => {
+    for (const [key, descriptor] of Object.entries(prior)) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else delete globalThis[key]
+    }
+  })
+
+  const listeners = new Map(), sent = [], writes = [], requests = [], style = {}
+  const iframe = { contentWindow: { postMessage: (message, origin) => sent.push([message, origin]) }, setAttribute() {}, src: '', title: '' }
+  Object.defineProperty(iframe, 'style', {
+    get: () => style,
+    set: cssText => Object.assign(style, Object.fromEntries(cssText.split(';').filter(Boolean).map(rule => {
+      const [name, value] = rule.split(':').map(part => part.trim())
+      return [name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()), value]
+    }))),
+  })
+  globalThis.location = { origin: 'https://ccrate.test' }
+  globalThis.document = { createElement: () => iframe }
+  globalThis.window = {
+    innerHeight: 800,
+    crypto: { randomUUID: () => 'nonce-test' },
+    addEventListener: (name, fn) => listeners.set(name, fn),
+    removeEventListener: name => listeners.delete(name),
+    confirm: () => false,
+  }
+  const container = { getBoundingClientRect: () => ({ top: 0 }), replaceChildren() {}, append() {}, addEventListener() {}, removeEventListener() {} }
+  mountLabelDesigner(container, {
+    src: '/editor.html',
+    context: () => ({ generation: 4, instance: 'session-a' }),
+    request: async (action, data) => { requests.push([action, data]); return null },
+    write: async (...args) => { writes.push(args); return { id: 'template-1', revision: 1 } },
+  })
+  const nonce = new URL(iframe.src, location.origin).searchParams.get('nonce')
+  const payload = { request_key: 'save-key-1', id: null, revision: 0, name: 'My label' }
+  await listeners.get('message')({ origin: location.origin, source: iframe.contentWindow, data: { channel: 'label-designer', nonce, type: 'request', id: 'save-1', action: 'labels/templates/save', data: payload } })
+
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0][0], 'labels/templates/save')
+  assert.equal(writes[0][1].request_key, 'save-key-1')
+  assert.equal(writes[0][1].session_generation, 4)
+  assert.equal(writes[0][1].session_instance, 'session-a')
+  assert.deepEqual(requests, [])
+  assert.equal(sent.at(-1)[0].ok, true)
+})

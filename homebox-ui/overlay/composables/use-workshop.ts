@@ -63,6 +63,12 @@ export function useWorkshop() {
     try { return JSON.parse(localStorage.getItem(pendingKey()) || "[]"); } catch { return []; }
   }
   function forget(key: string) { localStorage.setItem(pendingKey(), JSON.stringify(pending().filter(row => row.key !== key))); }
+  function confirmTemplateSave(key: string) {
+    const rows = pending();
+    if (!rows.some(row => row.key === key && row.path === "labels/templates/save")) return false;
+    localStorage.setItem(pendingKey(), JSON.stringify(rows.filter(row => row.key !== key || row.path !== "labels/templates/save")));
+    return true;
+  }
 
   async function write<T = any>(path: string, data: Record<string, unknown>, label: string, subject = ""): Promise<T> {
     if (busy.value) throw new Error("Wait for the current confirmation to finish.");
@@ -102,5 +108,5 @@ export function useWorkshop() {
     } finally { busy.value = false; }
   }
 
-  return { context, manager, busy, request, refresh, write, pending, forget };
+  return { context, manager, busy, request, refresh, write, pending, forget, confirmTemplateSave };
 }

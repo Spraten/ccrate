@@ -39,6 +39,9 @@ export function mountLabelDesigner(container, options) {
       else if (msg.action === 'labels/print') {
         if (typeof options.write !== 'function') throw new Error('Physical printing requires a separate reviewed-item confirmation.');
         result = await options.write(msg.action, payload, 'Print reviewed item label', payload?.entity_id || 'label');
+      } else if (msg.action === 'labels/templates/save') {
+        if (typeof options.write !== 'function') throw new Error('Template saving requires a confirmed write handler.');
+        result = await options.write(msg.action, payload, 'Save label template', payload?.id || 'labels');
       } else result = await options.request(msg.action, payload);
       if (disposed || epoch !== requestEpoch) return;
       iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'response', id: msg.id, ok: true, result }, location.origin);

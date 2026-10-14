@@ -24,7 +24,9 @@ function editorContext() {
 }
 async function request(action: string, data?: any) {
   if (action === "labels/templates") return workshop.request("labels/templates");
-  return workshop.request(action, data);
+  const result = await workshop.request(action, data);
+  if (action === "labels/templates/result" && result && typeof data?.request_key === "string") workshop.confirmTemplateSave(data.request_key);
+  return result;
 }
 watch([selectedId, () => workshop.context.value?.identity], () => { if (!frame) return; frame.dispose(); frame = null; emit('dirty', false); emit('busy', false); });
 onMounted(() => {
