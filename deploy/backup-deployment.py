@@ -79,6 +79,32 @@ def create_archive(root, target, members, manifest):
     return target
 
 
+BACKUP_SERVICES = ('homebox-native.service', 'homebox-companion.service',
+                   'homebox-workshop-gateway.service')
+
+
+def stop_backup_services(runner):
+    """Stop the request gateway before its SQLite data is checkpointed or hashed."""
+    active = {service for service in BACKUP_SERVICES
+              if runner.run(['systemctl', '--user', 'is-active', '--quiet', service],
+                            check=False).returncode == 0}
+    try:
+        runner.run(['systemctl', '--user', 'stop', 'homebox-workshop-gateway.service'], check=True)
+        runner.run(['systemctl', '--user', 'stop', 'homebox-companion.service',
+                    'homebox-native.service'], check=True)
+    except Exception:
+        resume_backup_services(runner, active)
+        raise
+    return active
+
+
+def resume_backup_services(runner, active):
+    """Restore only services that were active before the backup began."""
+    for service in BACKUP_SERVICES:
+        if service in active:
+            runner.run(['systemctl', '--user', 'start', service], check=True)
+
+
 def main():
     root = pathlib.Path('/home/user/Desktop/inventory-system')
     folder = root / 'work/backups'; folder.mkdir(mode=0o700, exist_ok=True)
@@ -93,10 +119,9 @@ def main():
                                 ('work/kiosk-ui-current', root/'work/kiosk-ui-current')):
             if directory.is_dir(): members.append(name)
         databases = database_inventory(root)
-        stopped = False
+        active_services = set()
         try:
-            subprocess.run(['systemctl', '--user', 'stop', 'homebox-companion.service', 'homebox-native.service'], check=True)
-            stopped = True
+            active_services = stop_backup_services(subprocess)
             checkpoint_databases(root, databases)
             manifest = build_backup_manifest(root, created_at=stamp,
                 commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
@@ -115,8 +140,7 @@ def main():
             (root/'work/backup-status.json').write_text(json.dumps({'status':'failed','reason':'Backup failed; inspect the local service log'}))
             raise
         finally:
-            if stopped:
-                subprocess.run(['systemctl', '--user', 'start', 'homebox-native.service', 'homebox-companion.service'], check=True)
+            resume_backup_services(subprocess, active_services)
 
 
 if __name__ == '__main__':

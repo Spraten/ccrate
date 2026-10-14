@@ -75,6 +75,13 @@ def valid_host(value):
     return valid_native_host(value, PORT, local_hosts())
 
 
+def feedback_actor_matches(expected, actual):
+    try:
+        return str(uuid.UUID(expected)) == actual
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     server_version = 'WorkshopGateway'
@@ -184,6 +191,12 @@ class Handler(BaseHTTPRequestHandler):
         if not actor_id:
             self.error(401, 'Sign in to C-Crate before submitting feedback.')
             return
+        if not feedback_actor_matches(self.headers.get('X-Crate-Actor-ID', ''), actor_id):
+            self.send_bytes(409, json.dumps({
+                'actor_id': actor_id,
+                'error': 'Your C-Crate sign-in changed. Reload the page before continuing.',
+            }).encode())
+            return
         service = FeedbackReportService(
             pathlib.Path(os.environ.get('WORKSHOP_ROOT', str(ROOT))) / 'work' / 'ops' / 'feedback-reports.db',
             os.environ.get('CCRATE_GITHUB_TOKEN', ''),
@@ -210,6 +223,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             status, result = service.submit(actor_id, self.headers.get('Idempotency-Key', ''),
                                             payload.get('type'), payload.get('description'))
+            result = {**result, 'actor_id': actor_id}
             self.send_bytes(status, json.dumps(result).encode())
             return
         prefix = '/ccrate-api/feedback/'
@@ -218,6 +232,7 @@ class Handler(BaseHTTPRequestHandler):
             self.error(404, 'Report request not found.')
             return
         status, result = service.status(actor_id, request_id)
+        result = {**result, 'actor_id': actor_id}
         self.send_bytes(status, json.dumps(result).encode())
 
     def frontend(self, path):

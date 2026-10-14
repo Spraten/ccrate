@@ -2,6 +2,7 @@
   import BaseCard from "@/components/Base/Card.vue";
   import { Button } from "@/components/ui/button";
   import { Textarea } from "@/components/ui/textarea";
+  import { feedbackActionIsCurrent, writeFeedbackDraft } from "@/lib/feedback-report-identity.js";
 
   definePageMeta({ middleware: ["auth"] });
   useHead({ title: "Report feedback · C-Crate" });
@@ -15,16 +16,22 @@
   const draftKey = computed(() => auth.user?.id ? `ccrate-feedback-draft:${auth.user.id}` : "");
   const canSubmit = computed(() => !!description.value.trim() && description.value.trim().length >= 10 && !["sending", "pending", "submitted"].includes(status.value));
 
-  function saveDraft() {
-    if (!import.meta.client || !draftKey.value || loadingDraft) return;
-    localStorage.setItem(draftKey.value, JSON.stringify({ requestId: requestId.value, type: reportType.value, description: description.value }));
+  function currentAction() {
+    return { actorId: String(auth.user?.id || ""), draftKey: draftKey.value, requestId: requestId.value };
+  }
+  function actionIsCurrent(capture) {
+    return feedbackActionIsCurrent(capture, currentAction());
+  }
+  function saveDraft(key = draftKey.value, draft = { requestId: requestId.value, type: reportType.value, description: description.value }) {
+    if (!import.meta.client || !key || loadingDraft) return false;
+    try { return writeFeedbackDraft(localStorage, key, draft); } catch { return false; }
   }
 
   function loadDraft() {
     if (!import.meta.client) return;
     loadingDraft = true;
     requestId.value = ""; reportType.value = "bug"; description.value = "";
-    status.value = "idle"; issueUrl.value = ""; error.value = "";
+    status.value = "idle"; issueUrl.value = ""; error.value = ""; checking.value = false;
     if (!draftKey.value) { loadingDraft = false; return; }
     try {
       const draft = JSON.parse(localStorage.getItem(draftKey.value) || "null") as ReportDraft | null;
@@ -34,7 +41,7 @@
         description.value = typeof draft.description === "string" ? draft.description : "";
         if (requestId.value) status.value = "pending";
       }
-    } catch { localStorage.removeItem(draftKey.value); }
+    } catch { try { localStorage.removeItem(draftKey.value); } catch { /* Storage is unavailable; keep the empty in-memory draft. */ } }
     finally { loadingDraft = false; }
   }
 
@@ -50,19 +57,36 @@
     status.value = "idle"; issueUrl.value = ""; error.value = "";
   }
 
-  async function parseResponse(response: Response) {
+  async function parseResponse(response: Response, capture) {
     const result = await response.json().catch(() => ({}));
+    if (!actionIsCurrent(capture)) return null;
+    if (String(result.actor_id || "").toLowerCase() !== capture.actorId.toLowerCase()) {
+      throw Object.assign(new Error("Your C-Crate sign-in changed. Your saved report was kept; reload the page before continuing."), { accountChanged: true });
+    }
     if (!response.ok && response.status !== 202) throw Object.assign(new Error(result.error || "C-Crate could not confirm the report."), { result, status: response.status });
     return result;
   }
 
-  function applyResult(result: { status?: string; request_id?: string; issue_url?: string; error?: string }) {
+  async function verifyCurrentActor(capture) {
+    const response = await fetch("/api/v1/users/self", { credentials: "same-origin" });
+    if (!actionIsCurrent(capture)) return false;
+    const payload = await response.json();
+    if (!actionIsCurrent(capture)) return false;
+    const actorId = String(payload?.item?.id || "").toLowerCase();
+    if (!response.ok || actorId !== capture.actorId.toLowerCase()) {
+      throw new Error("Your C-Crate sign-in changed. Your saved report was kept; reload the page before continuing.");
+    }
+    return true;
+  }
+
+  function applyResult(result: { status?: string; request_id?: string; issue_url?: string; error?: string; actor_id?: string }, capture) {
+    if (!actionIsCurrent(capture) || String(result.actor_id || "").toLowerCase() !== capture.actorId.toLowerCase()) return;
     if (result.request_id) requestId.value = result.request_id;
     if (result.status === "submitted") {
       status.value = "submitted";
       issueUrl.value = result.issue_url || "";
       error.value = "";
-      if (draftKey.value) localStorage.removeItem(draftKey.value);
+      try { localStorage.removeItem(capture.draftKey); } catch { /* The submitted result remains visible in memory. */ }
       return;
     }
     if (result.status === "rejected") status.value = "rejected";
@@ -77,40 +101,65 @@
     if (status.value === "rejected") requestId.value = "";
     if (!requestId.value) requestId.value = newRequestId();
     status.value = "sending";
-    saveDraft();
+    const capture = currentAction();
+    if (!saveDraft(capture.draftKey, { requestId: capture.requestId, type: reportType.value, description: description.value })) {
+      if (actionIsCurrent(capture)) {
+        status.value = "idle";
+        error.value = "C-Crate could not save this draft in browser storage. Your report is still here; check browser storage settings before sending.";
+      }
+      return;
+    }
+    let postStarted = false;
     try {
+      if (!await verifyCurrentActor(capture) || !actionIsCurrent(capture)) return;
+      postStarted = true;
       const response = await fetch("/ccrate-api/feedback", {
         method: "POST", credentials: "same-origin",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId.value },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": capture.requestId, "X-Crate-Actor-ID": capture.actorId },
         body: JSON.stringify({ type: reportType.value, description: description.value }),
       });
-      applyResult(await parseResponse(response));
+      if (!actionIsCurrent(capture)) return;
+      const result = await parseResponse(response, capture);
+      if (result && actionIsCurrent(capture)) applyResult(result, capture);
     } catch (cause) {
-      const result = (cause as { result?: { status?: string; error?: string } }).result;
-      if (result) applyResult(result);
-      else {
-        status.value = "pending";
-        error.value = "C-Crate did not receive a confirmation. Check report status before trying again.";
+      if (!actionIsCurrent(capture)) return;
+      if ((cause as { accountChanged?: boolean }).accountChanged) {
+        status.value = "idle";
+        error.value = (cause as Error).message;
+        saveDraft(capture.draftKey);
+        return;
       }
-      saveDraft();
+      const result = (cause as { result?: { status?: string; error?: string } }).result;
+      if (result) applyResult(result, capture);
+      else {
+        status.value = postStarted ? "pending" : "idle";
+        error.value = postStarted ? "C-Crate did not receive a confirmation. Check report status before trying again." : ((cause as Error).message || "C-Crate could not verify your sign-in. Your draft is still saved.");
+      }
+      if (actionIsCurrent(capture)) saveDraft(capture.draftKey);
     }
   }
 
   async function checkStatus() {
     if (!requestId.value || checking.value) return;
+    const capture = currentAction();
     checking.value = true; error.value = "";
     try {
-      const response = await fetch(`/ccrate-api/feedback/${encodeURIComponent(requestId.value)}`, { credentials: "same-origin" });
+      if (!await verifyCurrentActor(capture) || !actionIsCurrent(capture)) return;
+      const response = await fetch(`/ccrate-api/feedback/${encodeURIComponent(capture.requestId)}`, { credentials: "same-origin", headers: { "X-Crate-Actor-ID": capture.actorId } });
+      if (!actionIsCurrent(capture)) return;
       if (response.status === 404) {
         status.value = "idle";
         error.value = "No report was recorded for this request. Your saved draft is ready to submit.";
         return;
       }
-      applyResult(await parseResponse(response));
-      saveDraft();
+      const result = await parseResponse(response, capture);
+      if (result && actionIsCurrent(capture)) {
+        applyResult(result, capture);
+        saveDraft(capture.draftKey);
+      }
     } catch (cause) {
-      error.value = (cause as Error).message || "C-Crate could not check the report status.";
-    } finally { checking.value = false; }
+      if (actionIsCurrent(capture)) error.value = (cause as Error).message || "C-Crate could not check the report status.";
+    } finally { if (actionIsCurrent(capture)) checking.value = false; }
   }
 
   watch(draftKey, loadDraft, { immediate: true, flush: "sync" });

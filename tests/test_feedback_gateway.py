@@ -13,6 +13,13 @@ SPEC.loader.exec_module(GATEWAY)
 
 
 class FeedbackGatewayAuthTests(unittest.TestCase):
+    def test_report_requires_the_actor_id_captured_by_the_browser(self):
+        actor = "c7f51d15-7df9-4a52-9c13-399ed84509d8"
+        self.assertTrue(GATEWAY.feedback_actor_matches(actor, actor))
+        self.assertFalse(GATEWAY.feedback_actor_matches("", actor))
+        self.assertFalse(GATEWAY.feedback_actor_matches("forged", actor))
+        self.assertFalse(GATEWAY.feedback_actor_matches("6b44c74c-4a1b-4738-bc1c-b64d9ac63f44", actor))
+
     def test_actor_comes_from_native_authenticated_self_response(self):
         sent = {}
 
