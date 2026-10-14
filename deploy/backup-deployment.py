@@ -22,7 +22,8 @@ BASE_MEMBERS = [
     'label-ui/editor.html', 'label-ui/render.html', 'label-ui/vendor-manifest.json',
     'work/label-ui-build',
 ]
-OPTIONAL_DATABASES = ('work/ops/imports.db', 'work/ops/workshop.db', 'work/ops/label-layouts.db')
+OPTIONAL_DATABASES = ('work/ops/imports.db', 'work/ops/workshop.db', 'work/ops/label-layouts.db',
+                      'work/ops/feedback-reports.db')
 HASHED_BINARIES = ('work/homebox-bin/homebox', 'work/supvan-cups/target/release/examples/kiosk-label')
 
 

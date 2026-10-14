@@ -15,6 +15,7 @@ import socket
 import stat
 import tempfile
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 import sys
@@ -57,6 +58,7 @@ if FIXTURE_PROCESS:
         raise RuntimeError('Fixture gateway requires owned ephemeral native and companion ports')
 sys.path.insert(0, str(CODE_ROOT / 'ops'))
 from network_access import local_hosts, valid_native_host
+from feedback_reports import FeedbackReportService
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 WORKER = b'''// Workshop gateway: native network requests must not cache identity data.
@@ -135,6 +137,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/sw.js':
             self.send_bytes(200, WORKER, 'application/javascript', {'Service-Worker-Allowed': '/'})
             return
+        if path == '/ccrate-api/feedback' or path.startswith('/ccrate-api/feedback/'):
+            self.feedback_report(path)
+            return
         desktop = path == '/workshop-api' or path.startswith('/workshop-api/')
         if desktop and self.command not in ('GET', 'POST'):
             self.error(405, 'Workshop accepts GET and POST only.')
@@ -145,6 +150,75 @@ class Handler(BaseHTTPRequestHandler):
         if not desktop and not (path == '/api' or path.startswith('/api/')) and self.frontend(path):
             return
         self.proxy(COMPANION_PORT if desktop else NATIVE_PORT, desktop)
+
+    def feedback_actor(self):
+        # Reuse Homebox session/API-key authentication and take identity only from its response.
+        headers = {'Accept': 'application/json'}
+        for name in ('Authorization', 'Cookie'):
+            if self.headers.get(name):
+                headers[name] = self.headers[name]
+        if not any(name in headers for name in ('Authorization', 'Cookie')):
+            return None
+        connection = http.client.HTTPConnection('127.0.0.1', NATIVE_PORT, timeout=5)
+        try:
+            connection.request('GET', '/api/v1/users/self', headers=headers)
+            response = connection.getresponse()
+            if response.status != 200:
+                return None
+            payload = json.loads(response.read(64 * 1024))
+            actor_id = payload.get('item', {}).get('id') if isinstance(payload, dict) else None
+            return str(uuid.UUID(actor_id)) if actor_id else None
+        except (OSError, ValueError, TypeError, http.client.HTTPException):
+            return None
+        finally:
+            connection.close()
+
+    def feedback_report(self, path):
+        if self.command not in ('GET', 'POST'):
+            self.error(405, 'Feedback accepts GET and POST only.')
+            return
+        if self.command == 'POST' and self.headers.get('Origin') != 'http://' + self.headers['Host']:
+            self.error(403, 'Open C-Crate on this address before submitting feedback.')
+            return
+        actor_id = self.feedback_actor()
+        if not actor_id:
+            self.error(401, 'Sign in to C-Crate before submitting feedback.')
+            return
+        service = FeedbackReportService(
+            pathlib.Path(os.environ.get('WORKSHOP_ROOT', str(ROOT))) / 'work' / 'ops' / 'feedback-reports.db',
+            os.environ.get('CCRATE_GITHUB_TOKEN', ''),
+            os.environ.get('CCRATE_GITHUB_REPOSITORY', 'Spraten/ccrate'),
+        )
+        if self.command == 'POST' and path == '/ccrate-api/feedback':
+            if self.headers.get('Transfer-Encoding'):
+                self.error(411, 'Send a Content-Length for this report.')
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+            except ValueError:
+                self.error(400, 'The report request is invalid.')
+                return
+            if not 0 < length <= 8192:
+                self.error(413 if length > 8192 else 400, 'The report must be smaller than 8 KB.')
+                return
+            try:
+                payload = json.loads(self.rfile.read(length))
+                if not isinstance(payload, dict):
+                    raise ValueError
+            except (OSError, ValueError):
+                self.error(400, 'Enter a report type and description.')
+                return
+            status, result = service.submit(actor_id, self.headers.get('Idempotency-Key', ''),
+                                            payload.get('type'), payload.get('description'))
+            self.send_bytes(status, json.dumps(result).encode())
+            return
+        prefix = '/ccrate-api/feedback/'
+        request_id = path[len(prefix):] if path.startswith(prefix) else ''
+        if self.command != 'GET' or not request_id or '/' in request_id:
+            self.error(404, 'Report request not found.')
+            return
+        status, result = service.status(actor_id, request_id)
+        self.send_bytes(status, json.dumps(result).encode())
 
     def frontend(self, path):
         directory = pathlib.Path(os.environ.get('HOMEBOX_UI_ROOT', str(ROOT / 'work/homebox-ui-current'))).resolve()
