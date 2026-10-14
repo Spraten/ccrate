@@ -13,6 +13,19 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class HomeboxPatchsetTests(unittest.TestCase):
+    def test_camera_error_mapping_distinguishes_missing_device(self):
+        patch = (ROOT / "deploy/homebox-patches/0020-Fix-item-camera-save-and-OCR-races.patch").read_text()
+
+        self.assertIn('name === "NotFoundError" || name === "DevicesNotFoundError" ? "unavailable" : "permission_error"', patch)
+        self.assertIn('cameraErrorMessageKey(error)', patch)
+        self.assertIn('maps missing devices to unavailable and permission failures', patch)
+
+    def test_regular_upload_keeps_camera_attachments_after_save(self):
+        patch = (ROOT / "deploy/homebox-patches/0020-Fix-item-camera-save-and-OCR-races.patch").read_text()
+        upload_hunk = patch.split("@@ -500,18 +534,18 @@", 1)[1].split("@@ -747,7 +781,7 @@", 1)[0]
+
+        self.assertLess(upload_hunk.index("+    item.value.attachments = data.attachments"), upload_hunk.index("await saveItem(false)"))
+
     def test_docker_build_stage_copies_homebox_patchset_inputs(self):
         dockerfile = (ROOT / "Dockerfile").read_text()
 

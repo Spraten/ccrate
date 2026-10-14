@@ -65,9 +65,11 @@ index 555e8bf9..113f5c13 100644
        await video.value.play();
 +      if (!props.open || !cameraSession.isCurrent(generation)) return;
        cameraReady.value = true;
-     } catch {
+-    } catch {
++    } catch (error) {
 +      if (!cameraSession.isCurrent(generation)) return;
-       errorMessage.value = t("components.form.camera.permission_error");
+-      errorMessage.value = t("components.form.camera.permission_error");
++      errorMessage.value = t(`components.form.camera.${cameraErrorMessageKey(error)}`);
 -      stopCamera();
 +      stopCamera(generation);
      }
@@ -170,14 +172,21 @@ diff --git a/frontend/components/Form/camera.test.ts b/frontend/components/Form/
 index 6057e3a8..4d4aca05 100644
 --- a/frontend/components/Form/camera.test.ts
 +++ b/frontend/components/Form/camera.test.ts
-@@ -1,5 +1,5 @@
+@@ -1,5 +1,12 @@
  import { describe, expect, test } from "vitest";
 -import { canvasToPhotoFile, recognizeNameFromFileLocally, recognizeNameLocally } from "./camera";
-+import { CameraStreamSession, canvasToPhotoFile, recognizeNameFromFileLocally, recognizeNameLocally } from "./camera";
++import { CameraStreamSession, cameraErrorMessageKey, canvasToPhotoFile, recognizeNameFromFileLocally, recognizeNameLocally } from "./camera";
  
  describe("local camera helpers", () => {
++  test("maps missing devices to unavailable and permission failures to permission_error", () => {
++    expect(cameraErrorMessageKey({ name: "NotFoundError" })).toBe("unavailable");
++    expect(cameraErrorMessageKey({ name: "DevicesNotFoundError" })).toBe("unavailable");
++    expect(cameraErrorMessageKey({ name: "NotAllowedError" })).toBe("permission_error");
++    expect(cameraErrorMessageKey(new Error("preview failed"))).toBe("permission_error");
++  });
++
    test("converts a captured canvas to a JPEG photo file for the existing preview flow", async () => {
-@@ -21,6 +21,35 @@ describe("local camera helpers", () => {
+@@ -21,6 +28,35 @@ describe("local camera helpers", () => {
      await expect(canvasToPhotoFile(canvas, "item-photo.jpg")).rejects.toThrow("Failed to capture camera frame");
    });
  
@@ -213,7 +222,7 @@ index 6057e3a8..4d4aca05 100644
    test("returns locally recognized text as a single editable name suggestion", async () => {
      const source = {} as HTMLCanvasElement;
      class Detector {
-@@ -33,6 +62,23 @@ describe("local camera helpers", () => {
+@@ -33,6 +69,23 @@ describe("local camera helpers", () => {
      await expect(recognizeNameLocally(source, Detector)).resolves.toBe("ACME Cordless Drill");
    });
  
@@ -248,7 +257,7 @@ index ee914632..64f5f264 100644
  }
  
  export interface LocalTextDetector {
-@@ -12,6 +13,41 @@ type TextDetectorGlobal = typeof globalThis & {
+@@ -12,6 +13,46 @@ type TextDetectorGlobal = typeof globalThis & {
    TextDetector?: LocalTextDetectorConstructor;
  };
  
@@ -287,10 +296,15 @@ index ee914632..64f5f264 100644
 +  }
 +}
 +
++export function cameraErrorMessageKey(error: unknown): "unavailable" | "permission_error" {
++  const name = error && typeof error === "object" && "name" in error ? error.name : undefined;
++  return name === "NotFoundError" || name === "DevicesNotFoundError" ? "unavailable" : "permission_error";
++}
++
  export async function canvasToPhotoFile(canvas: HTMLCanvasElement, fileName: string): Promise<File> {
    const blob = await new Promise<Blob>((resolve, reject) => {
      canvas.toBlob(
-@@ -32,10 +68,25 @@ export async function recognizeNameLocally(
+@@ -32,10 +73,25 @@ export async function recognizeNameLocally(
  
    const detections = await new Detector().detect(source);
    const suggestion = detections
@@ -602,6 +616,31 @@ index 115be5db..2048bcae 100644
      if (isConvertingToLocation) {
        navigateTo("/location/" + itemId.value);
      } else if (redirect) {
+@@ -500,18 +534,18 @@
+   async function uploadAttachment(files: File[] | null, type: AttachmentTypes | null) {
+     if (!files || files.length === 0 || !files[0]) {
+       return;
+     }
+-
++
+     const { data, error } = await api.items.attachments.add(itemId.value, files[0], files[0].name, type);
+-
++
+     if (error) {
+       toast.error(t("items.toast.failed_upload_attachment"));
+       return;
+     }
+-
++
+     toast.success(t("items.toast.attachment_uploaded"));
++    item.value.attachments = data.attachments;
+-
++
+     await saveItem(false);
+-
++
+-    item.value.attachments = data.attachments;
+   }
 @@ -747,7 +781,7 @@
              <TooltipContent>{{ $t("items.show_advanced_view_options") }}</TooltipContent>
            </Tooltip>
