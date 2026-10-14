@@ -4,6 +4,7 @@ type SelectedItem = { id: string; name: string; assetId?: string; shortCode?: st
 const props = defineProps<{ selectedItem?: SelectedItem }>();
 const emit = defineEmits<{ dirty: [value: boolean]; busy: [value: boolean]; ready: [handle: ReturnType<typeof mountLabelDesigner>]; closed: [] }>();
 const workshop = useWorkshop();
+const { theme } = useTheme();
 const { selectedId } = useCollections();
 const frameRoot = ref<HTMLElement | null>(null);
 let frame: ReturnType<typeof mountLabelDesigner> | null = null;
@@ -32,6 +33,7 @@ onMounted(() => {
   emit("ready", frame);
 });
 watch(() => props.selectedItem, () => { if (frame) frame.updateContext?.(editorContext()); }, { deep: true });
+watch(theme, () => { if (frame) frame.updateContext?.(editorContext()); }, { flush: "post" });
 onBeforeUnmount(() => { frame?.dispose(); emit("closed"); });
 defineExpose({ canLeave: () => frame?.canLeave() ?? true, dispose: () => frame?.dispose() });
 </script>

@@ -99,6 +99,12 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn(":root #app .container", css)
         self.assertNotIn(":root.theme-homebox #app .container", css)
 
+    def test_label_designer_refreshes_theme_tokens_after_palette_changes(self):
+        component = (ROOT / "homebox-ui/overlay/components/Workshop/LabelDesigner.vue").read_text()
+        self.assertIn("const { theme } = useTheme()", component)
+        self.assertIn('watch(theme, () => { if (frame) frame.updateContext?.(editorContext()); }, { flush: "post" });', component)
+        self.assertIn("watch(() => props.selectedItem", component)
+
 
 if __name__ == "__main__":
     unittest.main()
