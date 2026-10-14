@@ -10,41 +10,52 @@ import (
 )
 
 func TestFormatDisplayIDUsesTypeAndFullLocationPath(t *testing.T) {
-	got := formatDisplayID("Bin", []string{"D", "GC", "C", "1"}, 17, uuid.Nil)
-	if got != "BIN-D-GC-C-1-A17-U00000000000000000000000000000000" {
+	got := formatDisplayID("Bin", []string{"D", "GC", "C", "1"}, 17, "DHP-001", uuid.Nil)
+	if got != "BIN-D-GC-C-1-A17-SDHP-001" {
 		t.Fatalf("formatDisplayID() = %q", got)
 	}
 }
 
 func TestFormatDisplayIDNormalizesWordsAndPunctuation(t *testing.T) {
-	got := formatDisplayID("Hand Tools", []string{"Garage / Cabinet", "Drawer #2"}, 17, uuid.Nil)
-	if got != "HAND-TOOLS-GARAGE-CABINET-DRAWER-2-A17-U00000000000000000000000000000000" {
+	got := formatDisplayID("Hand Tools", []string{"Garage / Cabinet", "Drawer #2"}, 17, "HTL-002", uuid.Nil)
+	if got != "HAND-TOOLS-GARAGE-CABINET-DRAWER-2-A17-SHTL-002" {
 		t.Fatalf("formatDisplayID() = %q", got)
 	}
 }
 
 func TestFormatDisplayIDMarksUnassignedLocation(t *testing.T) {
-	got := formatDisplayID("Tool", nil, 24, uuid.Nil)
-	if got != "TOOL-UNLOCATED-A24-U00000000000000000000000000000000" {
+	got := formatDisplayID("Tool", nil, 24, "ITM-003", uuid.Nil)
+	if got != "TOOL-UNLOCATED-A24-SITM-003" {
 		t.Fatalf("formatDisplayID() = %q", got)
 	}
 }
 
 func TestFormatDisplayIDUsesUUIDSuffixWhenNativeAssetIDIsUnassigned(t *testing.T) {
 	id := uuid.MustParse("812ab7d2-5040-4b2b-9182-60f5ec674efe")
-	got := formatDisplayID("Tool", []string{"Drawer"}, 0, id)
+	got := formatDisplayID("Tool", []string{"Drawer"}, 0, "", id)
 	if got != "TOOL-DRAWER-U812AB7D250404B2B918260F5EC674EFE" {
 		t.Fatalf("formatDisplayID() = %q", got)
 	}
 }
 
+func TestFormatDisplayIDUsesShortCodeAndLegacyLocationFallback(t *testing.T) {
+	id := uuid.MustParse("812ab7d2-5040-4b2b-9182-60f5ec674efe")
+	got := formatDisplayID("", []string{"C"}, 0, "", id)
+	if got != "C-U812AB7D250404B2B918260F5EC674EFE" {
+		t.Fatalf("formatDisplayID() = %q", got)
+	}
+	if !isDisplayIDSearch(got) {
+		t.Fatalf("isDisplayIDSearch(%q) = false, want true", got)
+	}
+}
+
 func TestIsDisplayIDSearchTreatsTrailingLocationNumberAsPath(t *testing.T) {
-	for _, value := range []string{"BIN-D-GC-C-1-A17-U812AB7D250404B2B918260F5EC674EFE", "bin-d-gc-c-1-a17-u812ab7d250404b2b918260f5ec674efe"} {
+	for _, value := range []string{"BIN-D-GC-C-1-A17-SDHP-001", "bin-d-gc-c-1-a17-sdhp-001", "C-U812AB7D250404B2B918260F5EC674EFE"} {
 		if !isDisplayIDSearch(value) {
 			t.Errorf("isDisplayIDSearch(%q) = false, want true", value)
 		}
 	}
-	for _, value := range []string{"123456", "A drawer", "BIN--1", "-BIN-D-C", "BIN-D-C-", "USB-C-ADAPTER", "12-34-56", "BIN-D-GC-C-1-A17"} {
+	for _, value := range []string{"123456", "A drawer", "BIN--1", "-BIN-D-C", "BIN-D-C-", "USB-C-ADAPTER", "12-34-56", "BIN-D-GC-C-1-A17", "C-DRAWER"} {
 		if isDisplayIDSearch(value) {
 			t.Errorf("isDisplayIDSearch(%q) = true, want false", value)
 		}
@@ -85,11 +96,12 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 	require.NoError(t, tRepos.Entities.SetAssetID(ctx, groupID, item.ID, assetID))
 	item, err = tRepos.Entities.GetOneByGroup(ctx, groupID, item.ID)
 	require.NoError(t, err)
-	require.Equal(t, formatDisplayID("Bin", []string{"D", "GC", "C", "1"}, assetID, item.ID), item.DisplayID)
+	require.Equal(t, formatDisplayID("Bin", []string{"D", "GC", "C", "1"}, assetID, item.ShortCode, item.ID), item.DisplayID)
 	originalUUID, originalAssetID, originalShortCode := item.ID, item.AssetID, item.ShortCode
 	require.NotEqual(t, AssetID(1), originalAssetID, "the terminal 1 is the storage path segment, not the native asset ID")
 	require.NotEmpty(t, originalShortCode)
 	require.Contains(t, item.DisplayID, "-A"+strconv.FormatInt(int64(originalAssetID), 10))
+	require.Contains(t, item.DisplayID, "-S"+item.ShortCode)
 
 	duplicateRoot := makeLocation("D", uuid.Nil)
 	duplicateMid := makeLocation("GC", duplicateRoot.ID)
@@ -104,6 +116,7 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 	require.NoError(t, tRepos.Entities.SetAssetID(ctx, groupID, duplicateItem.ID, duplicateAssetID))
 	duplicateItem, err = tRepos.Entities.GetOneByGroup(ctx, groupID, duplicateItem.ID)
 	require.NoError(t, err)
+	require.NotEqual(t, item.ShortCode, duplicateItem.ShortCode, "short codes are unique within a group")
 	require.NotEqual(t, item.DisplayID, duplicateItem.DisplayID)
 	for _, candidate := range []EntityOut{item, duplicateItem} {
 		search, err := tRepos.Entities.QueryByGroup(ctx, groupID, EntityQuery{
@@ -121,7 +134,7 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 		Archived: item.Archived, SerialNumber: item.SerialNumber, Barcode: &item.Barcode,
 	})
 	require.NoError(t, err)
-	require.Equal(t, formatDisplayID("Drawer", []string{"E"}, assetID, item.ID), updated.DisplayID)
+	require.Equal(t, formatDisplayID("Drawer", []string{"E"}, assetID, item.ShortCode, item.ID), updated.DisplayID)
 	require.NotEqual(t, item.DisplayID, updated.DisplayID)
 	require.Equal(t, originalUUID, updated.ID)
 	require.Equal(t, originalAssetID, updated.AssetID)

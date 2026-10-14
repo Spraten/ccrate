@@ -22,7 +22,7 @@ func displayIDSegment(value string) string {
 	return strings.Trim(value, "-")
 }
 
-func formatDisplayID(typeName string, locationPath []string, assetID AssetID, entityID uuid.UUID) string {
+func formatDisplayID(typeName string, locationPath []string, assetID AssetID, shortCode string, entityID uuid.UUID) string {
 	segments := make([]string, 0, len(locationPath)+2)
 	if name := displayIDSegment(typeName); name != "" {
 		segments = append(segments, name)
@@ -36,13 +36,17 @@ func formatDisplayID(typeName string, locationPath []string, assetID AssetID, en
 		segments = append(segments, "UNLOCATED")
 	}
 	// Keep native identifiers separate from the readable type/location path.
-	// AssetID is useful to people but is not unique; the full UUID guarantees
-	// uniqueness without changing the stable native identity.
+	// AssetID is useful to people but is not unique. Short codes have a
+	// group-scoped unique constraint; retain the UUID fallback for legacy items.
 	if assetID > 0 {
 		segments = append(segments, "A"+strconv.FormatInt(int64(assetID), 10))
 	}
-	compactUUID := strings.ToUpper(strings.ReplaceAll(entityID.String(), "-", ""))
-	segments = append(segments, "U"+compactUUID)
+	if code := displayIDSegment(shortCode); code != "" {
+		segments = append(segments, "S"+code)
+	} else {
+		compactUUID := strings.ToUpper(strings.ReplaceAll(entityID.String(), "-", ""))
+		segments = append(segments, "U"+compactUUID)
+	}
 	return strings.Join(segments, "-")
 }
 
@@ -57,23 +61,42 @@ func isDisplayIDSearch(value string) bool {
 		}
 	}
 	segments := strings.Split(value, "-")
-	if len(segments) < 3 {
+	if len(segments) < 2 {
 		return false
-	}
-	// Generated IDs always end in a complete compact UUID. Requiring this
-	// suffix keeps ordinary hyphenated names, barcodes, and serials on normal
-	// search paths.
-	suffix := segments[len(segments)-1]
-	if len(suffix) != 33 || suffix[0] != 'U' {
-		return false
-	}
-	for _, r := range suffix[1:] {
-		if !(r >= 'A' && r <= 'F' || r >= '0' && r <= '9') {
-			return false
-		}
 	}
 	for _, segment := range segments {
 		if segment == "" {
+			return false
+		}
+	}
+	// Legacy records without a short code use a complete compact UUID, which
+	// also permits the minimal no-type location form C-U<UUID>.
+	suffix := segments[len(segments)-1]
+	if len(suffix) == 33 && suffix[0] == 'U' {
+		for _, r := range suffix[1:] {
+			if !(r >= 'A' && r <= 'F' || r >= '0' && r <= '9') {
+				return false
+			}
+		}
+		return true
+	}
+	// New items end in S<3-character short-code prefix>-<3-digit counter>.
+	// The marker keeps numeric storage path segments unambiguous while keeping
+	// the generated code readable and compact.
+	if len(suffix) < 3 {
+		return false
+	}
+	for _, r := range suffix {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	codePrefix := segments[len(segments)-2]
+	if len(codePrefix) != 4 || codePrefix[0] != 'S' {
+		return false
+	}
+	for _, r := range codePrefix[1:] {
+		if !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
 			return false
 		}
 	}
@@ -147,7 +170,7 @@ func (r *EntityRepository) populateDisplayIDs(ctx context.Context, gid uuid.UUID
 		if items[i].EntityType != nil {
 			typeName = items[i].EntityType.Name
 		}
-		items[i].DisplayID = formatDisplayID(typeName, path, items[i].AssetID, items[i].ID)
+		items[i].DisplayID = formatDisplayID(typeName, path, items[i].AssetID, items[i].ShortCode, items[i].ID)
 	}
 	return nil
 }
