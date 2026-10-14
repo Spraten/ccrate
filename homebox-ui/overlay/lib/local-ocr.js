@@ -111,6 +111,18 @@ export async function suggestNameWithoutOverwritingEdits({ getName, getRevision 
   setName(suggestion);
   return 'applied';
 }
+
+/** @returns {Promise<'applied' | 'empty' | 'edited-during-recognition' | 'stale'>} */
+export async function applyRecognizedTextWithoutOverwritingEdits({ getText, getRevision = () => 0, setText, recognize, isCurrent = () => true, image }) {
+  const initialText = getText();
+  const initialRevision = getRevision();
+  const recognized = await recognize(image);
+  if (!isCurrent()) return 'stale';
+  if (!recognized?.trim()) return 'empty';
+  if (getText() !== initialText || getRevision() !== initialRevision) return 'edited-during-recognition';
+  setText(recognized);
+  return 'applied';
+}
 /**
  * Recognize all text in a user-selected image entirely in this browser.
  * @param {Blob} image

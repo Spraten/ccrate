@@ -448,7 +448,7 @@ def ocr_popover_frontend():
     legacy = '<SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />'
     replace('layouts/default.vue', legacy, legacy + '\n            <div id="orc-launcher-legacy" class="absolute left-14 top-2 z-30 hidden lg:flex"></div>')
     replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" />\n      </SidebarInset>')
-    replace('layouts/default.vue', '  const search = ref("");', '  const orcLauncherTarget = computed(() => preferences.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
+    replace('layouts/default.vue', '  const search = ref("");', '  const orcLauncherTarget = computed(() => preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import OcrPopover from "~/components/Workshop/OcrPopover.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
 
 

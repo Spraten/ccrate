@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { recognizeNameFromImage, recognizeTextFromImage, suggestNameWithoutOverwritingEdits } from '../homebox-ui/overlay/lib/local-ocr.js';
+import { applyRecognizedTextWithoutOverwritingEdits, recognizeNameFromImage, recognizeTextFromImage, suggestNameWithoutOverwritingEdits } from '../homebox-ui/overlay/lib/local-ocr.js';
 
 test('full-text OCR receives the image locally, normalizes whitespace, and terminates its worker', async () => {
   const image = new Blob(['private photo']);
@@ -114,4 +114,66 @@ test('full-text OCR preserves footer text and text beyond the name suggestion li
   }));
 
   assert.equal(result, `PROMINENT TITLE ${longBody.trimEnd()} Small footer text`);
+});
+
+test('full-text OCR does not replace edits made while recognition is running', async () => {
+  let currentText = 'Earlier scan';
+  let revision = 0;
+  let resolveRecognition;
+  const pending = new Promise(resolve => { resolveRecognition = resolve; });
+  const result = applyRecognizedTextWithoutOverwritingEdits({
+    getText: () => currentText,
+    getRevision: () => revision,
+    setText: value => { currentText = value; },
+    recognize: () => pending,
+    image: { local: true },
+  });
+
+  currentText = 'My corrected notes';
+  revision++;
+  resolveRecognition('OCR result');
+  assert.equal(await result, 'edited-during-recognition');
+  assert.equal(currentText, 'My corrected notes');
+});
+
+test('full-text OCR respects edits even when the user restores the previous text', async () => {
+  let currentText = 'Earlier scan';
+  let revision = 0;
+  let resolveRecognition;
+  const pending = new Promise(resolve => { resolveRecognition = resolve; });
+  const result = applyRecognizedTextWithoutOverwritingEdits({
+    getText: () => currentText,
+    getRevision: () => revision,
+    setText: value => { currentText = value; },
+    recognize: () => pending,
+    image: { local: true },
+  });
+
+  currentText = 'My corrected notes';
+  revision++;
+  currentText = 'Earlier scan';
+  revision++;
+  resolveRecognition('OCR result');
+  assert.equal(await result, 'edited-during-recognition');
+  assert.equal(currentText, 'Earlier scan');
+});
+
+test('full-text OCR discards recognition for a photo that was retaken while scanning', async () => {
+  let currentText = '';
+  let currentImage = { id: 'first' };
+  const scannedImage = currentImage;
+  let resolveRecognition;
+  const pending = new Promise(resolve => { resolveRecognition = resolve; });
+  const result = applyRecognizedTextWithoutOverwritingEdits({
+    getText: () => currentText,
+    setText: value => { currentText = value; },
+    recognize: () => pending,
+    isCurrent: () => currentImage === scannedImage,
+    image: scannedImage,
+  });
+
+  currentImage = { id: 'retake' };
+  resolveRecognition('Text from the first photo');
+  assert.equal(await result, 'stale');
+  assert.equal(currentText, '');
 });

@@ -1,13 +1,29 @@
 <script setup lang="ts">
   import { Camera, Copy, Minus, ScanText, X } from "lucide-vue-next";
-  import { recognizeTextFromImage } from "~/lib/local-ocr";
+  import { applyRecognizedTextWithoutOverwritingEdits, recognizeTextFromImage } from "~/lib/local-ocr";
+  import { nextOcrPopoverState } from "~/lib/orc-popover-state";
 
   const props = defineProps<{ launcherTarget: string }>();
-  const open = ref(false), minimized = ref(false), cameraBusy = ref(false), cameraActive = ref(false), scanning = ref(false), copying = ref(false);
-  const video = ref<HTMLVideoElement | null>(null), result = ref(""), error = ref(""), imageURL = ref("");
+  const enabled = ref(false), open = ref(false), minimized = ref(false), cameraBusy = ref(false), cameraActive = ref(false), scanning = ref(false), copying = ref(false);
+  const video = ref<HTMLVideoElement | null>(null), result = ref(""), resultRevision = ref(0), error = ref(""), imageURL = ref("");
   const position = ref({ left: 0, top: 64 });
   let stream: MediaStream | null = null, image: Blob | null = null, drag: { x: number; y: number; left: number; top: number } | null = null;
   let cameraGeneration = 0, scanGeneration = 0, disposed = false;
+
+  function transitionVisibility(action: "toggle-enabled" | "open" | "close") {
+    const next = nextOcrPopoverState({ enabled: enabled.value, open: open.value }, action);
+    enabled.value = next.enabled;
+    open.value = next.open;
+    if (!next.enabled) {
+      stopCamera();
+      minimized.value = false;
+    }
+    if (action === "open" && next.open) {
+      minimized.value = false;
+      position.value.left = Math.max(0, window.innerWidth - 416);
+      position.value.top = 64;
+    }
+  }
 
   function stopCamera() {
     cameraGeneration++;
@@ -17,13 +33,9 @@
     if (video.value) video.value.srcObject = null;
     cameraBusy.value = false;
   }
-  function show() {
-    open.value = true;
-    minimized.value = false;
-    position.value.left = Math.max(0, window.innerWidth - 416);
-    position.value.top = 64;
-  }
-  function close() { stopCamera(); open.value = false; minimized.value = false; }
+  function show() { transitionVisibility("open"); }
+  function close() { stopCamera(); minimized.value = false; transitionVisibility("close"); }
+  function toggleEnabled() { transitionVisibility("toggle-enabled"); }
   function minimize() { stopCamera(); minimized.value = true; }
   async function startCamera() {
     if (cameraBusy.value || cameraActive.value) return;
@@ -84,10 +96,17 @@
     scanning.value = true;
     error.value = "";
     try {
-      const text = await recognizeTextFromImage(scannedImage);
-      if (generation !== scanGeneration || image !== scannedImage) return;
-      if (!text?.trim()) error.value = "No text was recognized. Retake the photo or adjust it and scan again.";
-      else result.value = text;
+      const outcome = await applyRecognizedTextWithoutOverwritingEdits({
+        getText: () => result.value,
+        getRevision: () => resultRevision.value,
+        setText: text => { result.value = text; },
+        recognize: recognizeTextFromImage,
+        isCurrent: () => generation === scanGeneration && image === scannedImage && !disposed,
+        image: scannedImage,
+      });
+      if (outcome === "stale") return;
+      if (outcome === "empty") error.value = "No text was recognized. Retake the photo or adjust it and scan again.";
+      else if (outcome === "edited-during-recognition") error.value = "Your text changed while scanning. Your edits were kept.";
     } catch (cause) {
       if (generation === scanGeneration && image === scannedImage) {
         error.value = `OCR could not read this photo: ${(cause as Error)?.message || "unknown error"}. You can retry the scan.`;
@@ -136,16 +155,27 @@
 <template>
   <Teleport defer :to="props.launcherTarget">
     <button
-      v-if="!open"
       type="button"
-      class="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-medium text-foreground shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label="Open ORC camera and text tool"
-      @click="show"
+      class="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-medium shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      :class="enabled ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'border-border bg-card text-foreground hover:bg-accent'"
+      :aria-label="enabled ? 'Disable ORC text tool' : 'Enable ORC text tool'"
+      :aria-pressed="enabled"
+      @click="toggleEnabled"
     >
-      <ScanText class="size-4" /> ORC
+      <ScanText class="size-4" /> ORC {{ enabled ? "on" : "off" }}
     </button>
   </Teleport>
   <Teleport to="body">
+    <button
+      v-if="enabled && !open"
+      type="button"
+      class="fixed bottom-5 right-5 z-40 inline-flex size-12 items-center justify-center rounded-full border border-primary/40 bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      aria-label="Open ORC camera and text tool"
+      title="Open ORC camera and text tool"
+      @click="show"
+    >
+      <ScanText class="size-5" />
+    </button>
     <section
       v-if="open"
       class="fixed z-50 flex max-h-[calc(100vh-1rem)] w-[min(24rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl"
@@ -183,7 +213,7 @@
         <p v-if="error" role="alert" class="text-sm text-destructive">{{ error }}</p>
         <label class="block space-y-1 text-sm font-medium">
           Recognized text
-          <textarea v-model="result" rows="5" class="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm font-normal text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="Scan a photo to recognize text" />
+          <textarea v-model="result" @input="resultRevision++" rows="5" class="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm font-normal text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="Scan a photo to recognize text" />
         </label>
         <div class="flex justify-end">
           <button type="button" class="rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50" :disabled="!result || copying" @click="copy"><Copy class="mr-1 inline size-4" /> {{ copying ? "Copying…" : "Copy text" }}</button>
