@@ -1,3 +1,4 @@
+Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 import unittest
 from pathlib import Path
 import subprocess
@@ -7,6 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class FeedbackUiContractTests(unittest.TestCase):
+    def test_recovered_feedback_status_keeps_idle_as_a_literal_type(self):
+        helper = (ROOT / "homebox-ui/overlay/lib/feedback-report-state.js").read_text()
+        self.assertIn('@returns {{ status: "idle", error: string } | null}', helper)
+
     def test_report_is_linked_from_the_collapsed_more_navigation(self):
         builder = (ROOT / "deploy/build-homebox-ui.py").read_text()
         self.assertIn('{ id: 92, name: computed(() => "Report feedback"), to: "/feedback"', builder)
