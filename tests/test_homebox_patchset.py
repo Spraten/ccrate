@@ -38,8 +38,13 @@ class HomeboxPatchsetTests(unittest.TestCase):
         self.assertIn('window.matchMedia("(prefers-color-scheme: dark)")', startup)
         self.assertIn('role="group" aria-labelledby="theme-mode-label"', picker)
         self.assertIn(':aria-pressed="themeMode === mode.value"', picker)
-        self.assertIn('<button\n        v-for="theme in themes"', picker)
-        self.assertIn(':aria-pressed="selectedTheme === theme.value"', picker)
+        palette_start = picker.index('<button\n        v-for="theme in themes"')
+        palette_end = picker.index('</button>', palette_start)
+        palette_button = picker[palette_start:palette_end]
+        self.assertIn(':aria-pressed="selectedTheme === theme.value"', palette_button)
+        self.assertIn(':aria-label="theme.label"', palette_button)
+        self.assertNotIn('<div', palette_button)
+        self.assertIn('aria-hidden="true"', palette_button)
 
     def test_camera_error_mapping_distinguishes_missing_device(self):
         patch = (ROOT / "deploy/homebox-patches/0020-Fix-item-camera-save-and-OCR-races.patch").read_text()
