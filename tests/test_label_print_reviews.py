@@ -145,6 +145,12 @@ class LegacyRasterReviewTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'missing, expired'):
                 labels.print_label(self.client,self.jobs,self.group,self.actor,str(uuid4()),self.item,layouts=self.layouts,review_id=preview['review_id'])
         printer.assert_not_called()
+    def test_incomplete_stock_probe_fails_without_invalidating_review(self):
+        image,preview=self.review_legacy_location()
+        with patch.object(labels,'probe',return_value={}):
+            with self.assertRaisesRegex(ValueError,'Could not verify loaded label stock'):
+                labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
+        self.assertIsNotNone(self.layouts.review(self.group,self.actor,preview['review_id']))
     def test_legacy_location_print_sends_exact_reviewed_raster(self):
         image,preview=self.review_legacy_location();sent=[]
         def print_once(*args,**kwargs):sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()
