@@ -67,7 +67,7 @@ class LabelLayoutTests(unittest.TestCase):
         self.assertEqual(rendered_docs[0]['variables']['short_code'],'TMP-001')
         self.assertEqual(rendered_docs[1]['variables']['short_code'],'DHP-001')
         self.assertEqual(rendered_docs[0]['variables']['display_id'],'BIN-D-GC-C-1-A17')
-        self.assertEqual(rendered_docs[1]['variables']['display_id'],'BIN-D-GC-C-1-A17')
+        self.assertEqual(rendered_docs[1]['variables']['display_id'],'BIN-D-GC-C-1-A17-U00000000000000000000000000000000')
         self.assertIn('Text was shortened with an ellipsis.',synthetic['warnings'])
         self.assertIn('Text was shortened with an ellipsis.',draft['warnings'])
         self.assertEqual(self.store.review(self.group,self.actor,'missing'),None)
@@ -173,10 +173,11 @@ class LabelLayoutTests(unittest.TestCase):
         response=self.store.preview(FakeClient(),self.group,self.actor,{'mode':'item','entity_id':'44444444-4444-4444-8444-444444444444','template_id':'starter:supvan:left','template_revision':0})
         self.assertEqual(seen[0]['variables']['asset_code'],'')
         self.assertEqual(seen[0]['variables']['short_code'],'DHP-001')
-        self.assertEqual(seen[0]['variables']['display_id'],'BIN-D-GC-C-1-A17')
+        self.assertEqual(seen[0]['variables']['display_id'],'BIN-D-GC-C-1-A17-U00000000000000000000000000000000')
         self.assertEqual(seen[0]['elements'][0]['content'],'/item/44444444-4444-4444-8444-444444444444')
         ticket=self.store.review(self.group,self.actor,response['review_id'])
         self.assertEqual(ticket['png'],b'canonical-png')
+        self.assertEqual(ticket['item_display_id'],'BIN-D-GC-C-1-A17-U00000000000000000000000000000000')
         self.assertIsNone(self.store.review(self.other,self.actor,response['review_id']))
         self.store.attach_review(self.group,self.actor,response['review_id'],'job-1')
         self.assertEqual(self.store.review(self.group,self.actor,response['review_id'])['attached_job'],'job-1')
@@ -207,7 +208,7 @@ class LabelLayoutTests(unittest.TestCase):
 
 
 class FakeClient:
-    def entity(self,key): return {'id':key,'name':'Sample','assetId':'','shortCode':'DHP-001','displayId':'BIN-D-GC-C-1-A17','updatedAt':'2026-10-07T12:00:00Z'}
+    def entity(self,key): return {'id':key,'name':'Sample','assetId':'','shortCode':'DHP-001','displayId':'BIN-D-GC-C-1-A17-U00000000000000000000000000000000','updatedAt':'2026-10-07T12:00:00Z'}
 
 
 if __name__=='__main__': unittest.main()

@@ -15,6 +15,12 @@ class LabelGeneratorContractTests(unittest.TestCase):
         self.assertNotIn('Reviewed labels', component)
         self.assertIn('Confirm Pi label print', (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text())
 
+    def test_generated_asset_id_is_searchable_and_visible_in_label_selection(self):
+        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
+        self.assertIn('displayId?: string', component)
+        self.assertIn('${item.displayId || ""}', component)
+        self.assertIn('Generated ID · {{ item.displayId }}', component)
+
     def test_generator_uses_native_review_and_export_flow(self):
         component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
         route = (ROOT / 'homebox-ui/overlay/pages/workshop/[tool].vue').read_text()

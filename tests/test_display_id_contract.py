@@ -12,7 +12,7 @@ class DisplayIDContractTests(unittest.TestCase):
         builder = (ROOT / 'deploy/build-homebox-backend.py').read_text()
         self.assertIn('formatDisplayID(typeName, path, items[i].AssetID, items[i].ID)', source)
         self.assertIn('"A"+strconv.FormatInt(int64(assetID), 10)', source)
-        self.assertIn('"U"+compactUUID[:8]', source)
+        self.assertIn('"U"+compactUUID)', source)
         self.assertIn('func isDisplayIDSearch(value string) bool', source)
         self.assertIn('formatDisplayID(typeName, path, items[i].AssetID, items[i].ID)', source)
         self.assertIn('WithParent().WithEntityType()', source)
@@ -22,6 +22,8 @@ class DisplayIDContractTests(unittest.TestCase):
         self.assertIn('BIN-D-GC-C-1', tests)
         self.assertIn('TestFormatDisplayIDUsesUUIDSuffixWhenNativeAssetIDIsUnassigned', tests)
         self.assertIn('require.NotEqual(t, item.DisplayID, duplicateItem.DisplayID)', tests)
+        self.assertIn('duplicateAssetID := assetID', tests)
+        self.assertIn('"USB-C-ADAPTER", "12-34-56"', tests)
         self.assertIn('originalUUID, originalAssetID, originalShortCode', tests)
         self.assertIn("schemas[name]['properties']['displayId']", builder)
 
@@ -41,6 +43,8 @@ class DisplayIDContractTests(unittest.TestCase):
         self.assertIn('display_id: props.selectedItem.displayId || ""', designer)
         self.assertIn('display_id: nextDisplayId', editor)
         self.assertIn("'display_id':display_id", label_backend)
+        self.assertIn("'item_display_id':entity.get('displayId','')", label_backend)
+        self.assertIn("entity.get('displayId')!=ticket.get('item_display_id')", (ROOT / 'ops/labels.py').read_text())
         self.assertIn("createText(place, '{{display_id}}')", label_tool)
 
 

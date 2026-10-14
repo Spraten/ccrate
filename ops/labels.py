@@ -91,7 +91,7 @@ def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=N
         template=layouts.get(group,ticket['template_id'])
         if template['revision']!=ticket['template_revision'] or hashlib.sha256(json.dumps(template['document'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()!=ticket['template_hash']:raise Conflict('Saved template changed; review the label again')
         entity=client.entity(entity_id)
-        if entity.get('updatedAt')!=ticket['item_updated_at'] or entity.get('archived'):raise Conflict('Item changed since review; preview it again')
+        if entity.get('updatedAt')!=ticket['item_updated_at'] or entity.get('displayId')!=ticket.get('item_display_id') or entity.get('archived'):raise Conflict('Item or storage path changed since review; preview it again')
         material=probe()
         if (material.get('width_mm'),material.get('height_mm'))!=(40,30):raise ValueError('Load the required 40 x 30 mm SUPVAN stock')
         with Image.open(io.BytesIO(ticket['png'])) as image_file:
@@ -167,7 +167,7 @@ def paper(client,layouts,group,actor,data,*,deadline=None):
         try:entity=client.entity(ticket['item_id'])
         finally:
             if old_timeout is not None:client.timeout=old_timeout
-        if entity.get('updatedAt')!=ticket['item_updated_at'] or entity.get('archived'):raise Conflict('An item changed since review; preview the items again')
+        if entity.get('updatedAt')!=ticket['item_updated_at'] or entity.get('displayId')!=ticket.get('item_display_id') or entity.get('archived'):raise Conflict('An item or storage path changed since review; preview the items again')
         template=layouts.get(group,ticket['template_id'])
         if template['revision']!=ticket['template_revision'] or hashlib.sha256(json.dumps(template['document'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()!=ticket['template_hash']:raise Conflict('A saved template changed since review')
         if geometry.get('label_mm')!=ticket['label_mm'] or ticket['profile']!='letter' or ticket['dpi']!=300:raise ValueError('Paper geometry must match Letter reviewed labels')

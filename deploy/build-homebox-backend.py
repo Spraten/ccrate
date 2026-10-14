@@ -408,7 +408,7 @@ controller.write_text(body.replace(anchor,'`json:"parentId"     extensions:"x-nu
 def patch_contract(document):
     schemas=document.get('definitions') or document['components']['schemas']
     for name in ('repo.EntitySummary','repo.EntityOut'):
-        schemas[name]['properties']['displayId']={'type':'string','description':'Generated from item type and full current storage path, followed by a separate A<native AssetID> suffix (or a short U<UUID> suffix when AssetID is unassigned). The path changes when the item moves; the native suffix remains stable.'}
+        schemas[name]['properties']['displayId']={'type':'string','description':'Generated from item type and full current storage path, optionally followed by A<native AssetID> and always followed by U<full UUID hex>. The path changes when the item moves; native identifiers remain stable.'}
         schemas[name]['properties']['shortCode']={'type':'string','description':'Stable native item short code; empty for locations.'}
     schemas['repo.EntityCreate']['properties']['modelNumber']={'type':'string','description':'Optional model number used when assigning the new item short code.'}
     schemas['v1.EntityTemplateCreateItemRequest']['properties']['modelNumber']={'type':'string','description':'Optional model number override; omitted preserves the template default.'}

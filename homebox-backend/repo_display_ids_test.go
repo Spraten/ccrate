@@ -11,40 +11,40 @@ import (
 
 func TestFormatDisplayIDUsesTypeAndFullLocationPath(t *testing.T) {
 	got := formatDisplayID("Bin", []string{"D", "GC", "C", "1"}, 17, uuid.Nil)
-	if got != "BIN-D-GC-C-1-A17" {
-		t.Fatalf("formatDisplayID() = %q, want BIN-D-GC-C-1-A17", got)
+	if got != "BIN-D-GC-C-1-A17-U00000000000000000000000000000000" {
+		t.Fatalf("formatDisplayID() = %q", got)
 	}
 }
 
 func TestFormatDisplayIDNormalizesWordsAndPunctuation(t *testing.T) {
 	got := formatDisplayID("Hand Tools", []string{"Garage / Cabinet", "Drawer #2"}, 17, uuid.Nil)
-	if got != "HAND-TOOLS-GARAGE-CABINET-DRAWER-2-A17" {
+	if got != "HAND-TOOLS-GARAGE-CABINET-DRAWER-2-A17-U00000000000000000000000000000000" {
 		t.Fatalf("formatDisplayID() = %q", got)
 	}
 }
 
 func TestFormatDisplayIDMarksUnassignedLocation(t *testing.T) {
 	got := formatDisplayID("Tool", nil, 24, uuid.Nil)
-	if got != "TOOL-UNLOCATED-A24" {
-		t.Fatalf("formatDisplayID() = %q, want TOOL-UNLOCATED-A24", got)
+	if got != "TOOL-UNLOCATED-A24-U00000000000000000000000000000000" {
+		t.Fatalf("formatDisplayID() = %q", got)
 	}
 }
 
 func TestFormatDisplayIDUsesUUIDSuffixWhenNativeAssetIDIsUnassigned(t *testing.T) {
 	id := uuid.MustParse("812ab7d2-5040-4b2b-9182-60f5ec674efe")
 	got := formatDisplayID("Tool", []string{"Drawer"}, 0, id)
-	if got != "TOOL-DRAWER-U812AB7D2" {
-		t.Fatalf("formatDisplayID() = %q, want TOOL-DRAWER-U812AB7D2", got)
+	if got != "TOOL-DRAWER-U812AB7D250404B2B918260F5EC674EFE" {
+		t.Fatalf("formatDisplayID() = %q", got)
 	}
 }
 
 func TestIsDisplayIDSearchTreatsTrailingLocationNumberAsPath(t *testing.T) {
-	for _, value := range []string{"BIN-D-GC-C-1", "bin-d-gc-c-1"} {
+	for _, value := range []string{"BIN-D-GC-C-1-A17-U812AB7D250404B2B918260F5EC674EFE", "bin-d-gc-c-1-a17-u812ab7d250404b2b918260f5ec674efe"} {
 		if !isDisplayIDSearch(value) {
 			t.Errorf("isDisplayIDSearch(%q) = false, want true", value)
 		}
 	}
-	for _, value := range []string{"123456", "A drawer", "BIN--1", "-BIN-D-C", "BIN-D-C-"} {
+	for _, value := range []string{"123456", "A drawer", "BIN--1", "-BIN-D-C", "BIN-D-C-", "USB-C-ADAPTER", "12-34-56", "BIN-D-GC-C-1-A17"} {
 		if isDisplayIDSearch(value) {
 			t.Errorf("isDisplayIDSearch(%q) = true, want false", value)
 		}
@@ -100,7 +100,7 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, duplicateItem.ID) })
-	duplicateAssetID := assetID + 1
+	duplicateAssetID := assetID
 	require.NoError(t, tRepos.Entities.SetAssetID(ctx, groupID, duplicateItem.ID, duplicateAssetID))
 	duplicateItem, err = tRepos.Entities.GetOneByGroup(ctx, groupID, duplicateItem.ID)
 	require.NoError(t, err)

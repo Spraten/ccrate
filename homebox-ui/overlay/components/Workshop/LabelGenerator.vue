@@ -8,7 +8,7 @@ import LabelDesigner from "./LabelDesigner.vue";
 
 // Layout and generate/preview flow adapted from HomeSortStuff's label generator
 // (AGPL-3.0, commit 85b96e5060a48dd11db24addfbc63407eed4e74c).
-type Item = { id: string; name: string; assetId?: string; shortCode?: string };
+type Item = { id: string; name: string; assetId?: string; displayId?: string; shortCode?: string };
 type Template = { id: string; name: string; profile: string; revision: number };
 type Review = { entity_id: string; review_id: string; image: string; profile: string; label_mm?: number[] };
 type Workspace = {
@@ -46,7 +46,7 @@ const designerRef = ref<InstanceType<typeof LabelDesigner> | null>(null);
 const selectionNotice = ref("");
 watch(() => props.workspace, value => { if (!value) designerOpen.value = false; });
 const items = computed(() => (props.workspace?.items || []).filter(item =>
-  `${item.name} ${item.assetId || ""} ${item.shortCode || ""}`.toLowerCase().includes(search.value.toLowerCase()),
+  `${item.name} ${item.assetId || ""} ${item.displayId || ""} ${item.shortCode || ""}`.toLowerCase().includes(search.value.toLowerCase()),
 ).slice(0, 100));
 const selected = (id: string) => props.workspace?.selectedIds.includes(id) || false;
 const selectedEquipment = computed(() => {
@@ -124,7 +124,7 @@ function designerClosed() {
           <div class="mt-3 max-h-64 overflow-auto rounded-md border">
             <label v-for="item in items" :key="item.id" class="flex cursor-pointer items-center gap-3 border-b px-3 py-2 last:border-0 hover:bg-muted/50">
               <input class="h-4 w-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50" type="checkbox" :checked="selected(item.id)" :disabled="!selected(item.id) && workspace.selectedIds.length >= REVIEW_LIMIT" @change="toggleItem(item.id, ($event.target as HTMLInputElement).checked)" />
-              <span class="min-w-0"><span class="block truncate font-medium">{{ item.name }}</span><span class="text-xs text-muted-foreground">{{ item.assetId || 'No asset code' }}<span v-if="item.shortCode"> · Short code {{ item.shortCode }}</span></span></span>
+              <span class="min-w-0"><span class="block truncate font-medium">{{ item.name }}</span><span class="text-xs text-muted-foreground">{{ item.assetId || 'No asset code' }}<span v-if="item.shortCode"> · Short code {{ item.shortCode }}</span></span><span v-if="item.displayId" class="block truncate text-xs text-muted-foreground">Generated ID · {{ item.displayId }}</span></span>
             </label>
             <p v-if="!items.length" class="p-3 text-sm text-muted-foreground">No current equipment matches.</p>
           </div>

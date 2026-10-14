@@ -18,7 +18,7 @@ class Layouts:
         self.group,self.actor,self.item=group,actor,item;self.attached=None;self.resolved=False
         self.png=io.BytesIO();Image.new('L',(320,224),255).save(self.png,format='PNG');self.png=self.png.getvalue()
         self.doc={'id':str(uuid4()),'profile':'supvan'};self.fail_cleanup=False
-        self.meta={'review_id':str(uuid4()),'template_id':str(uuid4()),'template_revision':1,'template_hash':hashlib.sha256(json.dumps(self.doc,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest(),'sha256':hashlib.sha256(self.png).hexdigest(),'profile':'supvan','label_mm':[40,28],'dpi':203.2,'width':320,'height':224,'item_id':item,'item_updated_at':'v1','png':self.png,'actor_id':actor,'attached_job':None}
+        self.meta={'review_id':str(uuid4()),'template_id':str(uuid4()),'template_revision':1,'template_hash':hashlib.sha256(json.dumps(self.doc,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest(),'sha256':hashlib.sha256(self.png).hexdigest(),'profile':'supvan','label_mm':[40,28],'dpi':203.2,'width':320,'height':224,'item_id':item,'item_updated_at':'v1','item_display_id':'BIN-D-GC-C-1-A17-U1234567890ABCDEF1234567890ABCDEF','png':self.png,'actor_id':actor,'attached_job':None}
     def review(self,group,actor,review):return dict(self.meta) if (group,actor,review)==(self.group,self.actor,self.meta['review_id']) and not self.resolved else None
     def get(self,group,template):return {'revision':1,'document':self.doc}
     def attach_review(self,g,a,r,j):self.attached=j;self.meta['attached_job']=j
@@ -31,8 +31,8 @@ class PrintReviewTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.ledger=Ledger(pathlib.Path(self.temp.name)/'ledger.db');self.jobs=NativeJobs(self.ledger)
         self.group,self.actor,self.item,self.key=[str(uuid4()) for _ in range(4)]
-        self.client=Client({'id':self.item,'name':'Drill','updatedAt':'v1'})
         self.layouts=Layouts(self.group,self.actor,self.item);self.sent=[]
+        self.client=Client({'id':self.item,'name':'Drill','updatedAt':'v1','displayId':self.layouts.meta['item_display_id']})
     def tearDown(self):self.temp.cleanup()
     def send(self,*args,**kwargs):self.sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()
     def print_once(self):
@@ -44,6 +44,10 @@ class PrintReviewTests(unittest.TestCase):
         self.assertEqual(self.sent,[expected]);self.assertEqual(first['id'],second['id']);self.assertTrue(self.layouts.resolved)
     def test_changed_native_item_is_rejected_before_send(self):
         self.client.item['updatedAt']='v2'
+        with self.assertRaises(Conflict):self.print_once()
+        self.assertEqual(self.sent,[])
+    def test_changed_ancestor_display_id_is_rejected_before_send(self):
+        self.client.item['displayId']='DRILL-RELOCATED-A17-U1234567890ABCDEF1234567890ABCDEF'
         with self.assertRaises(Conflict):self.print_once()
         self.assertEqual(self.sent,[])
     def test_foreign_ticket_rejection_does_not_purge_another_actors_png(self):

@@ -35,21 +35,20 @@ func formatDisplayID(typeName string, locationPath []string, assetID AssetID, en
 	if len(locationPath) == 0 {
 		segments = append(segments, "UNLOCATED")
 	}
-	// Keep the native identifier separate from the readable type/location path.
-	// The A marker makes it clear that this trailing number is the item's native
-	// AssetID, not another storage location segment.
+	// Keep native identifiers separate from the readable type/location path.
+	// AssetID is useful to people but is not unique; the full UUID guarantees
+	// uniqueness without changing the stable native identity.
 	if assetID > 0 {
 		segments = append(segments, "A"+strconv.FormatInt(int64(assetID), 10))
-	} else {
-		compactUUID := strings.ReplaceAll(entityID.String(), "-", "")
-		segments = append(segments, "U"+compactUUID[:8])
 	}
+	compactUUID := strings.ToUpper(strings.ReplaceAll(entityID.String(), "-", ""))
+	segments = append(segments, "U"+compactUUID)
 	return strings.Join(segments, "-")
 }
 
 func isDisplayIDSearch(value string) bool {
 	value = strings.ToUpper(strings.TrimSpace(value))
-	if strings.Count(value, "-") < 2 || value == "" || strings.HasPrefix(value, "-") || strings.HasSuffix(value, "-") {
+	if value == "" || strings.HasPrefix(value, "-") || strings.HasSuffix(value, "-") {
 		return false
 	}
 	for _, r := range value {
@@ -57,7 +56,23 @@ func isDisplayIDSearch(value string) bool {
 			return false
 		}
 	}
-	for _, segment := range strings.Split(value, "-") {
+	segments := strings.Split(value, "-")
+	if len(segments) < 3 {
+		return false
+	}
+	// Generated IDs always end in a complete compact UUID. Requiring this
+	// suffix keeps ordinary hyphenated names, barcodes, and serials on normal
+	// search paths.
+	suffix := segments[len(segments)-1]
+	if len(suffix) != 33 || suffix[0] != 'U' {
+		return false
+	}
+	for _, r := range suffix[1:] {
+		if !(r >= 'A' && r <= 'F' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	for _, segment := range segments {
 		if segment == "" {
 			return false
 		}
