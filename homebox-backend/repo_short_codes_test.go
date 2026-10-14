@@ -71,7 +71,7 @@ func TestPatchToItemAllocatesShortCodeFromPersistedModelAndName(t *testing.T) {
 	locationType := useContainerEntityType(t)
 	itemType := useItemEntityType(t)
 	location, err := tRepos.Entities.Create(ctx, tGroup.ID, EntityCreate{
-		Name: "Impact Driver", ModelNumber: "M-18", EntityTypeID: locationType.ID,
+		Name: "Impact Driver", ModelNumber: "P2I-18", EntityTypeID: locationType.ID,
 	})
 	require.NoError(t, err)
 	require.Empty(t, location.ShortCode)
@@ -81,7 +81,7 @@ func TestPatchToItemAllocatesShortCodeFromPersistedModelAndName(t *testing.T) {
 	require.NoError(t, err)
 	item, err := tRepos.Entities.GetOneByGroup(ctx, tGroup.ID, location.ID)
 	require.NoError(t, err)
-	require.Equal(t, "M18-001", item.ShortCode)
+	require.Equal(t, "P2I-001", item.ShortCode)
 }
 
 func TestItemShortCodeCounterRollsBackWithCreateTransaction(t *testing.T) {

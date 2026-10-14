@@ -23,7 +23,7 @@ class HomeboxPatchsetTests(unittest.TestCase):
         base, patches, digest = load_patchset(ROOT)
 
         self.assertEqual(base, "e01dd737238a3fa7e1a6454b37de6c6fc88c86e4")
-        self.assertEqual(len(patches), 24)
+        self.assertEqual(len(patches), 25)
         self.assertTrue(all(path.is_file() for path in patches))
         self.assertEqual(len(digest), 64)
 

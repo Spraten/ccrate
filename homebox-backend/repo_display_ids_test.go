@@ -92,7 +92,7 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 	require.NoError(t, err)
 	assetID, err := tRepos.Entities.GetHighestAssetID(ctx, groupID)
 	require.NoError(t, err)
-	assetID++
+	assetID += 41
 	require.NoError(t, tRepos.Entities.SetAssetID(ctx, groupID, item.ID, assetID))
 	item, err = tRepos.Entities.GetOneByGroup(ctx, groupID, item.ID)
 	require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 	require.Equal(t, originalAssetID, updated.AssetID)
 	require.Equal(t, originalShortCode, updated.ShortCode)
 
-	search, err := tRepos.Entities.QueryByGroup(ctx, groupID, EntityQuery{
+	search, err = tRepos.Entities.QueryByGroup(ctx, groupID, EntityQuery{
 		Page: -1, PageSize: -1, Search: updated.DisplayID,
 	})
 	require.NoError(t, err)

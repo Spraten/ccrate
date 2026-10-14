@@ -24,6 +24,7 @@
     "0021-Prefer-prominent-OCR-title-candidates.patch",
     "0022-Keep-OCR-title-clusters-spatially-aligned.patch",
     "0023-Fix-frontend-item-and-camera-test-fixtures.patch",
-    "0024-show-decoded-barcode-in-scanner-status.patch"
+    "0024-show-decoded-barcode-in-scanner-status.patch",
+    "0025-test-nested-items-follow-container-location.patch"
   ]
 }

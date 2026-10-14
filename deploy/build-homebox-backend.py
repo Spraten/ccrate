@@ -40,7 +40,6 @@ setup='''\tshortCodeTx, err := client.Sql().BeginTx(context.Background(), nil)
 mb=mb.replace(anchor,anchor+setup,1)
 test_main.write_text(mb)
 source=BUILD/'internal/data/repo/repo_entities.go';text=source.read_text()
-text=text.replace('Name         string    `json:"name"         validate:"required,min=1,max=255"`','Name         string    `json:"name"         validate:"required,min=1,max=255"`\n\t\tModelNumber  string    `json:"modelNumber"`',1)
 text=text.replace('Name        string    `json:"name"`\n\t\tDescription','Name        string    `json:"name"`\n\t\tShortCode   string    `json:"shortCode"`\n\t\tDescription',1)
 # Add shortCode to the shared summary embedded by both list and detail DTOs.
 summary=text.index('\tEntitySummary struct {')
@@ -180,7 +179,8 @@ replacement='''	if data.EntityTypeID == uuid.Nil {
 	}
 	q := tx.Entity.Create().SetImportRef(data.ImportRef).SetName(data.Name).SetQuantity(data.Quantity).
 		SetDescription(data.Description).SetGroupID(gid).SetAssetID(int64(data.AssetID)).
-		SetEntityTypeID(data.EntityTypeID).SetModelNumber(data.ModelNumber)
+		SetEntityTypeID(data.EntityTypeID).SetManufacturer(data.Manufacturer).SetModelNumber(data.ModelNumber)
+	if barcode != "" { q.SetBarcode(barcode) }
 	if shortCode != "" { q.SetShortCode(shortCode) }
 	if data.ParentID != uuid.Nil { q.SetParentID(data.ParentID) }
 	if len(data.TagIDs) > 0 { q.AddTagIDs(data.TagIDs...) }
@@ -204,13 +204,11 @@ text=text.replace(anchor,'''\t// Create entity with all template data
 		if err != nil { recordSpanError(span, err); return EntityOut{}, err }
 	}''',1)
 anchor='''		SetWarrantyDetails(data.WarrantyDetails)
-
-	if data.ParentID != uuid.Nil {'''
+	if barcode != "" {'''
 assert text.count(anchor)==1
 text=text.replace(anchor,'''\t\tSetWarrantyDetails(data.WarrantyDetails)
 	if shortCode != "" { entityBuilder.SetShortCode(shortCode) }
-
-	if data.ParentID != uuid.Nil {''',1)
+	if barcode != "" {''',1)
 # Duplicate records receive fresh codes while preserving their model hint.
 anchor='''	newEntityID := uuid.New()
 	span.SetAttributes(
@@ -232,17 +230,6 @@ text=text.replace(anchor,'''\t\tSetSyncChildEntityLocations(originalEntity.SyncC
 	if shortCode != "" { entityBuilder.SetShortCode(shortCode) }
 
 	// Skip Set on zero dates''',1)
-template_controller=BUILD/'app/api/handlers/v1/v1_ctrl_entity_templates.go';tb=template_controller.read_text()
-tb=tb.replace('Name        string    `json:"name"         validate:"required,min=1,max=255"`','Name        string    `json:"name"         validate:"required,min=1,max=255"`\n\tModelNumber *string   `json:"modelNumber"`',1)
-anchor='''		// Create entity with all template data in a single transaction
-		return ctrl.repo.Entities.CreateFromTemplate'''
-assert tb.count(anchor)==1
-tb=tb.replace(anchor,'''\t\t// Create entity with all template data in a single transaction
-		modelNumber := template.DefaultModelNumber
-		if body.ModelNumber != nil { modelNumber = *body.ModelNumber }
-		return ctrl.repo.Entities.CreateFromTemplate''',1)
-tb=tb.replace('ModelNumber:      template.DefaultModelNumber,','ModelNumber:      modelNumber,',1)
-template_controller.write_text(tb)
 # CSV imports allocate from the row's model number when a new native item is made.
 service=BUILD/'internal/core/services/service_entities.go';sb=service.read_text()
 anchor='''\t\t\tnewEntity := repo.EntityCreate{
