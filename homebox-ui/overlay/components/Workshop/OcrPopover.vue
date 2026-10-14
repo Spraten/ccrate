@@ -99,7 +99,7 @@
       const outcome = await applyRecognizedTextWithoutOverwritingEdits({
         getText: () => result.value,
         getRevision: () => resultRevision.value,
-        setText: text => { result.value = text; },
+        setText: (text: string) => { result.value = text; },
         recognize: recognizeTextFromImage,
         isCurrent: () => generation === scanGeneration && image === scannedImage && !disposed,
         image: scannedImage,
