@@ -30,6 +30,7 @@ class DisplayIDContractTests(unittest.TestCase):
         self.assertIn('PART-SABC-123', tests)
         self.assertIn('displayIDOrdinarySearch = q.Search', builder)
         self.assertIn('displayIDOrdinaryMatches[item.ID]', builder)
+        self.assertIn('entity.Barcode(strings.TrimSpace(displayIDOrdinarySearch))', builder)
         self.assertIn('originalUUID, originalAssetID, originalShortCode', tests)
         self.assertIn("schemas[name]['properties']['displayId']", builder)
 

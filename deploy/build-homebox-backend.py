@@ -73,7 +73,7 @@ text=text.replace(ordinary_anchor,'''\tdisplayIDOrdinaryMatches := make(map[uuid
 			entity.ManufacturerContainsFold(displayIDOrdinarySearch),
 			entity.NotesContainsFold(displayIDOrdinarySearch),
 			entity.ShortCodeContainsFold(displayIDOrdinarySearch),
-			entity.Barcode(displayIDOrdinarySearch),
+			entity.Barcode(strings.TrimSpace(displayIDOrdinarySearch)),
 		))
 		ordinaryEntities, err := ordinaryQB.All(ctx)
 		if err != nil { recordSpanError(span, err); return PaginationResult[EntitySummary]{}, err }

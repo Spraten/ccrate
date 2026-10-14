@@ -128,12 +128,12 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 	}
 
 	ordinaryItem, err := tRepos.Entities.Create(ctx, groupID, EntityCreate{
-		Name: "PART-SABC-123", ParentID: slot.ID, EntityTypeID: binType.ID,
+		Name: "Ordinary part", Barcode: "PART-SABC-123", ParentID: slot.ID, EntityTypeID: binType.ID,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, ordinaryItem.ID) })
 	search, err := tRepos.Entities.QueryByGroup(ctx, groupID, EntityQuery{
-		Page: -1, PageSize: -1, Search: "PART-SABC-123",
+		Page: -1, PageSize: -1, Search: " PART-SABC-123 ",
 	})
 	require.NoError(t, err)
 	foundOrdinaryMatch := false
