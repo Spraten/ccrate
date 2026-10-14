@@ -94,17 +94,17 @@ assert(checkoutCartReconciliationIds(['kit','desk-added'],['kit','desk-removed']
 assert(checkoutCartReconciliationIds(['local-removed','kept','desk-added'],['local-removed','kept'],['kept']),['kept','desk-added'],'local removals and desk additions reconcile');
 assert(checkoutReceiptAssetCount({count:3},[{id:'kit'}]),3,'completed receipt count is authoritative');
 assert(checkoutReceiptAssetCount({status:'completed'},[{id:'kit'}]),2,'kit fallback counts all assets');
-let checkoutCart=[{id:'keep',name:'Keep'},{id:'local-added',name:'Local addition'}],checkoutCartIds=new Set(['keep','desk-removed']),checkoutCartRevision=1,checkoutCartLoadedFor='1:session',checkoutCartLoading=false,checkoutCartNeedsReconcile=true,checkoutCartLoadError='',checkoutKitEntities={},checkoutKitVersions={},checkoutFeedback='',checkoutMode=true,checkoutBusy=false,identityGeneration=1,identityInstance='session';
+let checkoutCart=[{id:'keep',name:'Keep'},{id:'local-added',name:'Local addition'}],checkoutCartIds=new Set(['keep','desk-removed']),checkoutCartRevision=1,checkoutCartLoadedFor='1:session',checkoutCartLoading=false,checkoutCartNeedsReconcile=true,checkoutCartLoadError='',checkoutKitEntities={},checkoutKitVersions={},checkoutFeedback='',checkoutMode=true,checkoutBusy=false,identityGeneration=1,identityInstance='session',checkoutCartTask=0,checkoutCartLoad=0;
 let rendered='';const renderCheckout=message=>{rendered=message};const refreshCheckoutAvailability=async()=>{};
 const api=async path=>{if(path==='/checkout/cart')return {revision:2,items:['keep','desk-added']};throw Error('unexpected path '+path)};
 const fetch=async url=>({ok:true,json:async()=>({entity:{id:'desk-added',name:'Desk addition'}})});
 '''
         script += '\n' + reconcile + r'''
 reconcileCheckoutCart().then(()=>{
- assert(JSON.stringify(checkoutCart.map(item=>item.id))===JSON.stringify(['keep','desk-added','local-added']),'refresh merges desk changes and keeps local additions');
- assert(checkoutCart.find(item=>item.id==='local-added').name==='Local addition','local data survives refresh');
- assert(checkoutCartRevision===2&&!checkoutCartNeedsReconcile,'latest revision unlocks confirmation');
- assert(rendered.includes('Your local additions are kept'),'updated list is explained before review');
+ assert(JSON.stringify(checkoutCart.map(item=>item.id))===JSON.stringify(['keep','desk-added','local-added']),true,'refresh merges desk changes and keeps local additions');
+ assert(checkoutCart.find(item=>item.id==='local-added').name==='Local addition',true,'local data survives refresh');
+ assert(checkoutCartRevision===2&&!checkoutCartNeedsReconcile,true,'latest revision unlocks confirmation');
+ assert(rendered.includes('Your local additions are kept'),true,'updated list is explained before review');
 }).catch(error=>{console.error(error);process.exitCode=1});
 '''
         subprocess.run([node,'-e',script],check=True,cwd=ROOT,capture_output=True,text=True)

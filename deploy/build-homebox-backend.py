@@ -5,15 +5,19 @@ from datetime import datetime,timezone
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 BUILD=ROOT/'work/homebox-backend-build'
 from homebox_patchset import load_patchset, materialize, source_commit, source_tree_digest
+from homebox_display_id_overlay import patch_display_id_delete_paths
 NATIVE_SOURCE=materialize(ROOT)
 shutil.copytree(NATIVE_SOURCE/'backend',BUILD,dirs_exist_ok=True)
 for source, destination in (
     (ROOT/'homebox-backend/shortcodes', BUILD/'internal/data/shortcodes'),
+    (ROOT/'homebox-backend/displayids', BUILD/'internal/data/displayids'),
     (ROOT/'homebox-backend/repo_short_codes.go', BUILD/'internal/data/repo/repo_short_codes.go'),
     (ROOT/'homebox-backend/ent_tx_sql.go', BUILD/'internal/data/ent/short_code_tx.go'),
     (ROOT/'homebox-backend/v1_ctrl_item_short_codes.go', BUILD/'app/api/handlers/v1/v1_ctrl_item_short_codes.go'),
     (ROOT/'homebox-backend/20260513120000_item_short_codes.go', BUILD/'internal/data/migrations/sqlite3/20260513120000_item_short_codes.go'),
     (ROOT/'homebox-backend/20260513120001_item_short_codes.go', BUILD/'internal/data/migrations/postgres/20260513120001_item_short_codes.go'),
+    (ROOT/'homebox-backend/20260514120000_display_id_bases.go', BUILD/'internal/data/migrations/sqlite3/20260514120000_display_id_bases.go'),
+    (ROOT/'homebox-backend/20260514120001_display_id_bases.go', BUILD/'internal/data/migrations/postgres/20260514120001_display_id_bases.go'),
     (ROOT/'homebox-backend/repo_short_codes_test.go', BUILD/'internal/data/repo/repo_short_codes_test.go'),
     (ROOT/'homebox-backend/repo_display_ids.go', BUILD/'internal/data/repo/repo_display_ids.go'),
     (ROOT/'homebox-backend/repo_display_ids_test.go', BUILD/'internal/data/repo/repo_display_ids_test.go'),
@@ -24,12 +28,15 @@ schema=BUILD/'internal/data/ent/schema/entity.go'; body=schema.read_text()
 anchor='\t\tfield.String("import_ref").'
 assert body.count(anchor)==1
 body=body.replace(anchor,'\t\tfield.String("short_code").Optional().Nillable().MaxLen(32),\n'+anchor)
+anchor='\t\tfield.String("short_code").Optional().Nillable().MaxLen(32),\n'
+assert body.count(anchor)==1
+body=body.replace(anchor,anchor+'\t\tfield.String("display_id_base").Default(""),\n')
 schema.write_text(body)
 go=pathlib.Path((ROOT/'work/toolchains/go-path.txt').read_text().strip())/'bin/go'
 env=dict(os.environ,CGO_ENABLED='0',GOTOOLCHAIN='local',GOPATH=str(ROOT/'work/toolchains/go-cache'),GOCACHE=str(ROOT/'work/toolchains/go-build-cache'))
 subprocess.run([str(go),'generate','./internal/data/ent'],cwd=BUILD,env=env,check=True)
 test_main=BUILD/'internal/data/repo/main_test.go';mb=test_main.read_text()
-mb=mb.replace('"github.com/sysadminsmedia/homebox/backend/internal/data/ent"','"github.com/sysadminsmedia/homebox/backend/internal/data/ent"\n\t"github.com/sysadminsmedia/homebox/backend/internal/data/shortcodes"',1)
+mb=mb.replace('"github.com/sysadminsmedia/homebox/backend/internal/data/ent"','"github.com/sysadminsmedia/homebox/backend/internal/data/ent"\n\t"github.com/sysadminsmedia/homebox/backend/internal/data/shortcodes"\n\t"github.com/sysadminsmedia/homebox/backend/internal/data/displayids"',1)
 anchor='\terr = client.Schema.Create(context.Background())\n\tif err != nil {\n\t\tlog.Fatalf("failed creating schema resources: %v", err)\n\t}\n'
 assert mb.count(anchor)==1
 setup='''\tshortCodeTx, err := client.Sql().BeginTx(context.Background(), nil)
@@ -38,6 +45,16 @@ setup='''\tshortCodeTx, err := client.Sql().BeginTx(context.Background(), nil)
 \tif err := shortCodeTx.Commit(); err != nil { log.Fatalf("failed committing short-code test setup: %v", err) }
 '''
 mb=mb.replace(anchor,anchor+setup,1)
+setup='''\tdisplayIDTx, err := client.Sql().BeginTx(context.Background(), nil)
+	if err != nil { log.Fatalf("failed starting display-ID test setup: %v", err) }
+	if err := displayids.Install(context.Background(), displayIDTx, false); err != nil { log.Fatalf("failed setting up display-ID bases: %v", err) }
+	if err := displayIDTx.Commit(); err != nil { log.Fatalf("failed committing display-ID test setup: %v", err) }
+'''
+# Install after Ent creates the schema and after the short-code integration migration.
+test_setup_anchor='''\tif err := shortCodeTx.Commit(); err != nil { log.Fatalf("failed committing short-code test setup: %v", err) }
+'''
+assert mb.count(test_setup_anchor)==1
+mb=mb.replace(test_setup_anchor,test_setup_anchor+setup,1)
 test_main.write_text(mb)
 source=BUILD/'internal/data/repo/repo_entities.go';text=source.read_text()
 text=text.replace('Name        string    `json:"name"`\n\t\tDescription','Name        string    `json:"name"`\n\t\tShortCode   string    `json:"shortCode"`\n\t\tDescription',1)
@@ -50,6 +67,10 @@ summary_end=text.index('\n\t}',summary)
 if 'DisplayID' not in text[summary:summary_end]:
     name_line=text.index('\n',text.index('\t\tName ',summary))+1
     text=text[:name_line]+'\t\tDisplayID   string    `json:"displayId"`\n'+text[name_line:]
+summary_end=text.index('\n\t}',summary)
+if 'DisplayIDBase' not in text[summary:summary_end]:
+    name_line=text.index('\n',text.index('\t\tName ',summary))+1
+    text=text[:name_line]+'\t\tDisplayIDBase string `json:"-"`\n'+text[name_line:]
 search_anchor='''\tif q.Search != "" {
 		searchPredicates := []predicate.Entity{'''
 assert text.count(search_anchor)==1
@@ -64,9 +85,8 @@ text=text.replace(search_anchor,'''\tdisplayIDSearch := ""
 		searchPredicates := []predicate.Entity{''',1)
 ordinary_anchor='''\tcountCtx, countSpan := entityTracer().Start(ctx, "repo.EntityRepository.QueryByGroup.count")'''
 assert text.count(ordinary_anchor)==1
-text=text.replace(ordinary_anchor,'''\tdisplayIDOrdinaryMatches := make(map[uuid.UUID]struct{})
-	if displayIDOrdinarySearch != "" {
-		ordinaryQB := qb.Clone().Where(entity.Or(
+text=text.replace(ordinary_anchor,'''\tif displayIDSearch != "" {
+		ordinarySearch := entity.Or(
 			entity.NameContainsFold(displayIDOrdinarySearch),
 			entity.DescriptionContainsFold(displayIDOrdinarySearch),
 			entity.SerialNumberContainsFold(displayIDOrdinarySearch),
@@ -75,15 +95,19 @@ text=text.replace(ordinary_anchor,'''\tdisplayIDOrdinaryMatches := make(map[uuid
 			entity.NotesContainsFold(displayIDOrdinarySearch),
 			entity.ShortCodeContainsFold(displayIDOrdinarySearch),
 			entity.Barcode(strings.TrimSpace(displayIDOrdinarySearch)),
-		))
-		ordinaryEntities, err := ordinaryQB.All(ctx)
-		if err != nil { recordSpanError(span, err); return PaginationResult[EntitySummary]{}, err }
-		for _, item := range ordinaryEntities { displayIDOrdinaryMatches[item.ID] = struct{}{} }
+		)
+		if exactID, found, err := r.findDisplayIDSearchMatch(ctx, gid, displayIDSearch); err != nil {
+			recordSpanError(span, err)
+			return PaginationResult[EntitySummary]{}, err
+		} else if found {
+			ordinarySearch = entity.Or(ordinarySearch, entity.ID(exactID))
+		}
+		qb = qb.Where(ordinarySearch)
 	}
 	countCtx, countSpan := entityTracer().Start(ctx, "repo.EntityRepository.QueryByGroup.count")''',1)
 page_anchor='''\tif q.Page != -1 || q.PageSize != -1 {'''
 assert text.count(page_anchor)==1
-text=text.replace(page_anchor,'''\tif displayIDSearch == "" && (q.Page != -1 || q.PageSize != -1) {''',1)
+text=text.replace(page_anchor,'''\tif q.Page != -1 || q.PageSize != -1 {''',1)
 anchor='''\tfetchSpan.SetAttributes(attribute.Int("query.results.count", len(entities)))'''
 assert text.count(anchor)==1
 text=text.replace(anchor,'''\tif err := r.populateDisplayIDs(fetchCtx, gid, entities); err != nil {
@@ -91,25 +115,6 @@ text=text.replace(anchor,'''\tif err := r.populateDisplayIDs(fetchCtx, gid, enti
 		fetchSpan.End()
 		recordSpanError(span, err)
 		return PaginationResult[EntitySummary]{}, err
-	}
-	if displayIDSearch != "" {
-		entities = lo.Filter(entities, func(item EntitySummary, _ int) bool {
-			_, ordinaryMatch := displayIDOrdinaryMatches[item.ID]
-			return strings.EqualFold(item.DisplayID, displayIDSearch) || ordinaryMatch
-		})
-		count = len(entities)
-		if q.Page != -1 || q.PageSize != -1 {
-			offset := calculateOffset(q.Page, q.PageSize)
-			if offset >= len(entities) {
-				entities = []EntitySummary{}
-			} else {
-				end := len(entities)
-				if q.PageSize != -1 && offset+q.PageSize < end {
-					end = offset + q.PageSize
-				}
-				entities = entities[offset:end]
-			}
-		}
 	}
 	fetchSpan.SetAttributes(attribute.Int("query.results.count", len(entities)))''',1)
 # Asset-code lookup is used by label selection and must return the same derived ID.
@@ -156,7 +161,7 @@ for old, new in (
     ('r.GetOne(ctx, id)', 'r.GetOneByGroup(ctx, gid, id)'),
 ):
     text=text.replace(old, new)
-text=text.replace('Name:          e.Name,','Name:          e.Name,\n\t\tShortCode:     lo.FromPtrOr(e.ShortCode, ""),',1)
+text=text.replace('Name:          e.Name,','Name:          e.Name,\n\t\tDisplayIDBase: e.DisplayIDBase,\n\t\tShortCode:     lo.FromPtrOr(e.ShortCode, ""),',1)
 text=text.replace('entity.SerialNumberContainsFold(q.Search),','entity.SerialNumberContainsFold(q.Search),\n\t\t\t\tentity.ShortCodeContainsFold(q.Search),',1)
 # Ordinary creation allocates inside the same transaction as the item insert.
 start=text.index('\tq := r.db.Entity.Create().',text.index('func (r *EntityRepository) Create('))
@@ -167,6 +172,8 @@ replacement='''	if data.EntityTypeID == uuid.Nil {
 		data.EntityTypeID = etID
 	}
 	typeInfo, err := r.db.EntityType.Get(ctx, data.EntityTypeID)
+	if err != nil { recordSpanError(span, err); return EntityOut{}, err }
+	displayIDBase, err := displayIDBaseFor(ctx, r.db, gid, data.EntityTypeID, data.ParentID)
 	if err != nil { recordSpanError(span, err); return EntityOut{}, err }
 	tx, err := r.db.Tx(ctx)
 	if err != nil { recordSpanError(span, err); return EntityOut{}, err }
@@ -179,7 +186,7 @@ replacement='''	if data.EntityTypeID == uuid.Nil {
 	}
 	q := tx.Entity.Create().SetImportRef(data.ImportRef).SetName(data.Name).SetQuantity(data.Quantity).
 		SetDescription(data.Description).SetGroupID(gid).SetAssetID(int64(data.AssetID)).
-		SetEntityTypeID(data.EntityTypeID).SetManufacturer(data.Manufacturer).SetModelNumber(data.ModelNumber)
+		SetEntityTypeID(data.EntityTypeID).SetManufacturer(data.Manufacturer).SetModelNumber(data.ModelNumber).SetDisplayIDBase(displayIDBase)
 	if barcode != "" { q.SetBarcode(barcode) }
 	if shortCode != "" { q.SetShortCode(shortCode) }
 	if data.ParentID != uuid.Nil { q.SetParentID(data.ParentID) }
@@ -196,6 +203,8 @@ anchor='''	// Create entity with all template data
 assert text.count(anchor)==1
 text=text.replace(anchor,'''\t// Create entity with all template data
 	newEntityID := uuid.New()
+	displayIDBase, err := displayIDBaseFor(ctx, r.db, gid, data.EntityTypeID, data.ParentID)
+	if err != nil { recordSpanError(span, err); return EntityOut{}, err }
 	typeInfo, err := tx.EntityType.Get(ctx, data.EntityTypeID)
 	if err != nil { recordSpanError(span, err); return EntityOut{}, err }
 	shortCode := ""
@@ -207,6 +216,7 @@ anchor='''		SetWarrantyDetails(data.WarrantyDetails)
 	if barcode != "" {'''
 assert text.count(anchor)==1
 text=text.replace(anchor,'''\t\tSetWarrantyDetails(data.WarrantyDetails)
+	entityBuilder.SetDisplayIDBase(displayIDBase)
 	if shortCode != "" { entityBuilder.SetShortCode(shortCode) }
 	if barcode != "" {''',1)
 # Duplicate records receive fresh codes while preserving their model hint.
@@ -215,6 +225,13 @@ anchor='''	newEntityID := uuid.New()
 		attribute.String("entity.new_id", newEntityID.String()),'''
 assert text.count(anchor)==1
 text=text.replace(anchor,'''\tnewEntityID := uuid.New()
+	displayIDBase := ""
+	if originalEntity.EntityType != nil {
+		parentID := uuid.Nil
+		if originalEntity.Parent != nil { parentID = originalEntity.Parent.ID }
+		displayIDBase, err = displayIDBaseFor(ctx, r.db, gid, originalEntity.EntityType.ID, parentID)
+		if err != nil { recordSpanError(span, err); return EntityOut{}, err }
+	}
 	shortCode := ""
 	if originalEntity.EntityType == nil || !originalEntity.EntityType.IsLocation {
 		shortCode, err = allocateShortCode(ctx, tx, gid, originalEntity.ModelNumber, options.CopyPrefix+originalEntity.Name)
@@ -227,6 +244,7 @@ anchor='''		SetSyncChildEntityLocations(originalEntity.SyncChildEntityLocations)
 	// Skip Set on zero dates'''
 assert text.count(anchor)==1
 text=text.replace(anchor,'''\t\tSetSyncChildEntityLocations(originalEntity.SyncChildEntityLocations)
+	if displayIDBase != "" { entityBuilder.SetDisplayIDBase(displayIDBase) }
 	if shortCode != "" { entityBuilder.SetShortCode(shortCode) }
 
 	// Skip Set on zero dates''',1)
@@ -320,6 +338,12 @@ body=body[:exec_close]+'''\n\tif err := shortCodeTx.Commit(); err != nil {
 \t\treturn EntityOut{}, err
 \t}
 \tshortCodeTxCommitted = true'''+body[exec_close:]
+refresh='''\tif err := refreshDisplayIDBasesForSubtree(ctx, shortCodeTx, gid, data.ID); err != nil {
+		recordSpanError(span, err)
+		return EntityOut{}, err
+	}
+'''
+body=body.replace('\tif err := shortCodeTx.Commit();',refresh+'\tif err := shortCodeTx.Commit();',1)
 text=text[:start]+body+text[end:]
 # Patch already owns an Ent transaction. When it changes an uncoded location
 # into an item, allocate from the persisted model/name in that same transaction.
@@ -360,6 +384,110 @@ replacement='''	current, err := tx.Entity.Query().Where(entity.ID(id), entity.Ha
 	if data.ImportRef != nil {'''
 body=body.replace(anchor,replacement,1)
 text=text[:start]+body+text[end:]
+# Recompute the changed item and all descendant path keys before Patch commits.
+start=text.index('func (r *EntityRepository) Patch(')
+end=text.index('\nfunc ',start)
+body=text[start:end]
+commit='\tif err := tx.Commit(); err != nil {'
+if commit in body:
+    body=body.replace(commit,'\tif err := refreshDisplayIDBasesForSubtree(ctx, tx, gid, id); err != nil { recordSpanError(span, err); return err }\n'+commit,1)
+text=text[:start]+body+text[end:]
+# Location creation and moves maintain the persisted display-ID key too.
+start=text.index('func (r *EntityRepository) CreateContainer(')
+end=text.index('\nfunc ',start)
+body=text[start:end]
+save='\tresult, err := q.Save(ctx)'
+assert body.count(save)==1
+body=body.replace(save,'''\ttypeID := data.EntityTypeID
+\tif typeID == uuid.Nil { resolvedTypeID, resolveErr := r.resolveDefaultEntityType(ctx, gid, true); if resolveErr != nil { return EntityOut{}, resolveErr }; typeID = resolvedTypeID }
+\tbase, err := displayIDBaseFor(ctx, r.db, gid, typeID, data.ParentID)
+\tif err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\tq.SetDisplayIDBase(base)
+'''+save,1)
+text=text[:start]+body+text[end:]
+start=text.index('func (r *EntityRepository) UpdateContainer(')
+end=text.index('\nfunc ',start)
+body=text[start:end]
+body=body.replace('\tdefer span.End()','''\tdefer span.End()
+	hierarchyWriteMu.Lock()
+	defer hierarchyWriteMu.Unlock()
+\ttx, err := r.db.Tx(ctx)
+\tif err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\tcommitted := false
+\tdefer func(){ if !committed { _ = tx.Rollback() } }()''',1)
+body=body.replace('q := r.db.Entity.Update().','q := tx.Entity.Update().',1)
+hierarchy_anchor='\tq := tx.Entity.Update().'
+assert body.count(hierarchy_anchor)==1
+body=body.replace(hierarchy_anchor,'''\tif err := r.validateHierarchyParent(ctx,gid,id,data.ParentID); err != nil { recordSpanError(span,err); return EntityOut{},err }
+'''+hierarchy_anchor,1)
+body=body.replace('''\t_, err := q.Save(ctx)
+\tif err != nil {
+\t\trecordSpanError(span, err)
+\t\treturn EntityOut{}, err
+\t}
+''','''\t_, err = q.Save(ctx)
+\tif err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\tif err := refreshDisplayIDBasesForSubtree(ctx, tx, gid, id); err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\tif err := tx.Commit(); err != nil { recordSpanError(span, err); return EntityOut{}, err }
+\tcommitted = true
+''',1)
+text=text[:start]+body+text[end:]
+for name in ('CreateContainer','Duplicate'):
+    match=re.search(r'^func \(r \*EntityRepository\) '+name+r'\([^\n]+\{',text,re.M)
+    assert match,name
+    text=text[:match.end()]+'\n\thierarchyWriteMu.Lock()\n\tdefer hierarchyWriteMu.Unlock()'+text[match.end():]
+source.write_text(text)
+type_source=BUILD/'internal/data/repo/repo_entity_types.go'; type_text=type_source.read_text()
+type_start=type_text.index('func (r *EntityTypeRepository) Update(')
+type_end=type_text.index('\nfunc ',type_start)
+type_body=type_text[type_start:type_end]
+type_header_end=type_body.index('{')+1
+type_body=type_body[:type_header_end]+'\n\thierarchyWriteMu.Lock()\n\tdefer hierarchyWriteMu.Unlock()'+type_body[type_header_end:]
+type_anchor='\tq := r.db.EntityType.Update().'
+assert type_body.count(type_anchor)==1
+type_body=type_body.replace(type_anchor,'''\ttx, err := r.db.Tx(ctx)
+\tif err != nil { return EntityTypeSummary{}, err }
+\tcommitted := false
+\tdefer func(){ if !committed { _ = tx.Rollback() } }()
+\tq := tx.EntityType.Update().''',1)
+type_save='''\t_, err := q.Save(ctx)
+\tif err != nil {
+\t\treturn EntityTypeSummary{}, err
+\t}
+'''
+assert type_body.count(type_save)==1
+type_body=type_body.replace(type_save,'''\t_, err = q.Save(ctx)
+\tif err != nil { return EntityTypeSummary{}, err }
+\tif err := refreshDisplayIDBasesForType(ctx, tx, gid, data.ID); err != nil { return EntityTypeSummary{}, err }
+\tif err := tx.Commit(); err != nil { return EntityTypeSummary{}, err }
+\tcommitted = true
+''',1)
+type_text=type_text[:type_start]+type_body+type_text[type_end:]
+type_source.write_text(type_text)
+# Container detail/create responses use the same derived ID population path.
+get_container_start=text.index('func (r *EntityRepository) GetContainerByGroup(')
+get_container_end=text.index('\nfunc ',get_container_start)
+get_container_body=text[get_container_start:get_container_end]
+get_container_anchor='\tspan.SetAttributes(attribute.Int("entity.children.count", len(out.Children)))'
+assert get_container_body.count(get_container_anchor)==1
+get_container_body=get_container_body.replace(get_container_anchor,'''\tdisplayItems := []EntitySummary{out.EntitySummary}
+	if err := r.populateDisplayIDs(ctx, gid, displayItems); err != nil { recordSpanError(span, err); return EntityOut{}, err }
+	out.EntitySummary = displayItems[0]
+	out.Parent = displayItems[0].Parent
+'''+get_container_anchor,1)
+text=text[:get_container_start]+get_container_body+text[get_container_end:]
+create_container_start=text.index('func (r *EntityRepository) CreateContainer(')
+create_container_end=text.index('\nfunc ',create_container_start)
+create_container_body=text[create_container_start:create_container_end]
+create_return='\treturn mapEntityOut(result), nil'
+assert create_container_body.count(create_return)==1
+create_container_body=create_container_body.replace(create_return,'''\tout := mapEntityOut(result)
+	displayItems := []EntitySummary{out.EntitySummary}
+	if err := r.populateDisplayIDs(ctx, gid, displayItems); err != nil { recordSpanError(span, err); return EntityOut{}, err }
+	out.EntitySummary = displayItems[0]
+	return out, nil''',1)
+text=text[:create_container_start]+create_container_body+text[create_container_end:]
+text=patch_display_id_delete_paths(text)
 source.write_text(text)
 # Native, password-free member profiles reuse the existing user/settings tables.
 users=BUILD/'internal/data/repo/repo_users.go';body=users.read_text()
@@ -419,7 +547,7 @@ controller.write_text(body.replace(anchor,'`json:"parentId"     extensions:"x-nu
 def patch_contract(document):
     schemas=document.get('definitions') or document['components']['schemas']
     for name in ('repo.EntitySummary','repo.EntityOut'):
-        schemas[name]['properties']['displayId']={'type':'string','description':'Generated from item type and full current storage path, followed by optional A<native AssetID> and unique S<shortCode> suffixes. Legacy records without short codes use U<full UUID hex>. The path changes when the item moves; native identifiers remain stable.'}
+        schemas[name]['properties']['displayId']={'type':'string','description':'Generated from item type and full current storage path; a deterministic collision counter is added only when multiple assets share the same base path. UNKNOWN is used if every type and path name normalizes to an empty segment. The path changes when the item moves; native identifiers remain stable.'}
         schemas[name]['properties']['shortCode']={'type':'string','description':'Stable native item short code; empty for locations.'}
     schemas['repo.EntityCreate']['properties']['modelNumber']={'type':'string','description':'Optional model number used when assigning the new item short code.'}
     schemas['v1.EntityTemplateCreateItemRequest']['properties']['modelNumber']={'type':'string','description':'Optional model number override; omitted preserves the template default.'}
@@ -468,7 +596,7 @@ raw=json.dumps(patch_contract(json.loads(raw)),indent=2).replace('"__CACI_SCHEME
 docs.write_text(body[:start]+raw+body[end:])
 # Embed the current verified frontend; the public gateway selects its own release.
 shutil.copytree(ROOT/'work/homebox-ui-current',BUILD/'app/api/static/public',dirs_exist_ok=True)
-subprocess.run([str(go.with_name('gofmt')),'-w',str(schema),str(source),str(source.parent/'repo_hierarchy.go'),str(BUILD/'internal/data/repo/repo_display_ids.go'),str(BUILD/'internal/data/repo/repo_display_ids_test.go'),str(controller),str(docs),str(users),str(profile_repo),str(profile_controller),str(routes),str(groups),str(service),str(BUILD/'internal/data/repo/repo_short_codes.go'),str(BUILD/'internal/data/repo/repo_short_codes_test.go'),str(BUILD/'internal/data/ent/short_code_tx.go'),str(BUILD/'internal/data/shortcodes/migration_test.go'),str(BUILD/'app/api/handlers/v1/v1_ctrl_item_short_codes.go')],check=True)
+subprocess.run([str(go.with_name('gofmt')),'-w',str(schema),str(source),str(source.parent/'repo_hierarchy.go'),str(type_source),str(BUILD/'internal/data/repo/repo_display_ids.go'),str(BUILD/'internal/data/repo/repo_display_ids_test.go'),str(BUILD/'internal/data/displayids/display_id.go'),str(BUILD/'internal/data/displayids/display_id_test.go'),str(BUILD/'internal/data/displayids/migration.go'),str(BUILD/'internal/data/migrations/sqlite3/20260514120000_display_id_bases.go'),str(BUILD/'internal/data/migrations/postgres/20260514120001_display_id_bases.go'),str(controller),str(docs),str(users),str(profile_repo),str(profile_controller),str(routes),str(groups),str(service),str(BUILD/'internal/data/repo/repo_short_codes.go'),str(BUILD/'internal/data/repo/repo_short_codes_test.go'),str(BUILD/'internal/data/ent/short_code_tx.go'),str(BUILD/'internal/data/shortcodes/migration_test.go'),str(BUILD/'app/api/handlers/v1/v1_ctrl_item_short_codes.go')],check=True)
 pin=source_commit(ROOT/'upstream/homebox')
 patch_base,_,patchset_sha256=load_patchset(ROOT)
 if patch_base!=pin:raise ValueError('Homebox patchset source pin mismatch during backend build')
