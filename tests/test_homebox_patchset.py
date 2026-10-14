@@ -15,6 +15,57 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class HomeboxPatchsetTests(unittest.TestCase):
+    def test_create_item_actions_follow_photo_preview_and_preserve_submission(self):
+        base, patches, _ = load_patchset(ROOT)
+        upstream = ROOT / "upstream" / "homebox"
+
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+            source = pathlib.Path(temporary)
+            archive = subprocess.check_output(["git", "-C", str(upstream), "archive", "--format=tar", base])
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as snapshot:
+                snapshot.extractall(source)
+            apply_patchset(source, patches)
+            modal = (source / "frontend/components/Entity/CreateModal.vue").read_text()
+
+        form_start = modal.index("<form")
+        form_end = modal.index("</form>", form_start)
+        form = modal[form_start:form_end]
+        preview = form.index("<PhotoUploaderPreview")
+        submit = form.index('type="submit"')
+        submit_tag = form.rfind("<Button", 0, submit)
+        submit_tag_text = form[submit_tag:form.index(">", submit)]
+        create_and_add = form.index('@click="create(false)"')
+        create_and_add_tag = form.rfind("<Button", 0, create_and_add)
+        create_and_add_tag_text = form[create_and_add_tag:form.index(">", create_and_add)]
+        self.assertIn('@submit.prevent="create()"', form)
+        self.assertLess(preview, submit)
+        self.assertLess(preview, create_and_add)
+        self.assertIn(':disabled="loading"', submit_tag_text)
+        self.assertIn(':disabled="loading"', create_and_add_tag_text)
+        self.assertIn('type="button"', create_and_add_tag_text)
+
+    def test_scanner_decode_callback_ignores_retryable_frames_but_handles_camera_errors(self):
+        base, patches, _ = load_patchset(ROOT)
+        upstream = ROOT / "upstream" / "homebox"
+
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+            source = pathlib.Path(temporary)
+            archive = subprocess.check_output(["git", "-C", str(upstream), "archive", "--format=tar", base])
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as snapshot:
+                snapshot.extractall(source)
+            apply_patchset(source, patches)
+            scanner = (source / "frontend/components/App/ScannerModal.vue").read_text()
+
+        callback_start = scanner.index("decodeFromVideoDevice(")
+        callback_end = scanner.index("      });", callback_start)
+        callback = scanner[callback_start:callback_end]
+        error_guard = "if (err && !isRetryableBarcodeDecodeError(err))"
+        guard_start = callback.index(error_guard)
+        guard_end = callback.index("\n        }", guard_start)
+        error_guard_block = callback[guard_start:guard_end]
+        self.assertIn("handleError(err)", error_guard_block)
+        self.assertNotIn("err instanceof NotFoundException", callback)
+
     def test_theme_preference_persists_system_choice_and_has_accessible_palette_controls(self):
         base, patches, _ = load_patchset(ROOT)
         upstream = ROOT / "upstream" / "homebox"
@@ -88,7 +139,7 @@ class HomeboxPatchsetTests(unittest.TestCase):
         base, patches, digest = load_patchset(ROOT)
 
         self.assertEqual(base, "e01dd737238a3fa7e1a6454b37de6c6fc88c86e4")
-        self.assertEqual(len(patches), 26)
+        self.assertEqual(len(patches), 27)
         self.assertTrue(all(path.is_file() for path in patches))
         self.assertEqual(len(digest), 64)
 

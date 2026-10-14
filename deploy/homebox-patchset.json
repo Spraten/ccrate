@@ -26,6 +26,7 @@
     "0023-Fix-frontend-item-and-camera-test-fixtures.patch",
     "0024-show-decoded-barcode-in-scanner-status.patch",
     "0025-test-nested-items-follow-container-location.patch",
-    "0026-Make-theme-palette-choices-accessible.patch"
+    "0026-Make-theme-palette-choices-accessible.patch",
+    "0027-fix-retryable-scanner-decode-errors.patch"
   ]
 }
