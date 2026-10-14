@@ -10,20 +10,25 @@ SPEC = importlib.util.spec_from_file_location("build_homebox_ui", ROOT / "deploy
 BUILDER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BUILDER)
 
-FIXTURES = '''    const itemUpdate = {
+FIXTURES = '''    const item = { displayId: "BIN-D-GC-C-1", shortCode: "ABC-123" };
+    const itemUpdate = {
       ...item,
+      entityTypeId: item.entityType?.id || "",
       parentId: item.parent?.id || null,
     };
     const child1ItemUpdate = {
       ...child1Item,
+      entityTypeId: child1Item.entityType?.id || "",
       parentId: parent.id,
     };
     const child2ItemUpdate = {
       ...child2Item,
+      entityTypeId: child2Item.entityType?.id || "",
       parentId: parent.id,
     };
     const itemUpdate = {
       ...parent,
+      entityTypeId: parent.entityType?.id || "",
       parentId: parentLocation.id,
     };
 '''
@@ -51,11 +56,16 @@ class ItemUpdateTypecheckTransformTests(unittest.TestCase):
         self.assertNotIn("...child2Item,", result)
         self.assertNotIn("...parent,", result)
         self.assertIn("...itemForUpdate,", result)
+        self.assertIn("...child1ForUpdate,", result)
+        self.assertIn("...child2ForUpdate,", result)
         self.assertIn("...parentForUpdate,", result)
 
     def test_fails_closed_when_an_upstream_anchor_changes(self):
         target = BUILDER.BUILD / "lib/api/__test__/user/items.test.ts"
-        target.write_text(FIXTURES.replace("...child2Item,", "...changedFixture,"))
+        target.write_text(FIXTURES.replace(
+            'entityTypeId: child2Item.entityType?.id || "",',
+            'entityTypeID: child2Item.entityType?.id || "",',
+        ))
         with self.assertRaisesRegex(RuntimeError, "exactly one item update fixture anchor"):
             BUILDER.strip_item_response_short_codes_from_update_tests()
 

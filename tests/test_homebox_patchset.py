@@ -13,6 +13,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class HomeboxPatchsetTests(unittest.TestCase):
+    def test_docker_build_stage_copies_homebox_patchset_inputs(self):
+        dockerfile = (ROOT / "Dockerfile").read_text()
+
+        self.assertIn("COPY deploy/homebox_patchset.py deploy/homebox-patchset.json /src/deploy/", dockerfile)
+        self.assertIn("COPY deploy/homebox-patches/ /src/deploy/homebox-patches/", dockerfile)
+
     def test_manifest_lists_ordered_patches_from_public_base(self):
         base, patches, digest = load_patchset(ROOT)
 

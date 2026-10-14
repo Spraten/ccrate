@@ -5,6 +5,8 @@ WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends git python3 ca-certificates && rm -rf /var/lib/apt/lists/* \
     && npm install --global pnpm@10.28.0
 COPY deploy/build-homebox-backend.py deploy/build-homebox-ui.py deploy/build-label-ui.py /src/deploy/
+COPY deploy/homebox_patchset.py deploy/homebox-patchset.json /src/deploy/
+COPY deploy/homebox-patches/ /src/deploy/homebox-patches/
 COPY homebox-ui/overlay /src/homebox-ui/overlay
 COPY homebox-ui/pnpm-lock.yaml homebox-ui/upstream-typecheck.json /src/homebox-ui/
 COPY homebox-backend/ /src/homebox-backend/
