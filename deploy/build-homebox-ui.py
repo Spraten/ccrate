@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import re
+import threading
 from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -26,6 +27,84 @@ def replace(path, old, new):
     if source.count(old) != 1:
         raise RuntimeError(f'Upstream changed: expected one patch anchor in {path}')
     target.write_text(source.replace(old, new))
+
+
+def configure_ui_component_discovery():
+    # Keep shadcn's TypeScript barrels importable while Nuxt auto-discovers only
+    # the Vue components they intentionally export. Register after shadcn-nuxt
+    # so its components:dirs hook has already appended its directory.
+    replace(
+        'nuxt.config.ts',
+        '''  modules: [
+    "@nuxtjs/tailwindcss",
+    "@pinia/nuxt",
+    "@vueuse/nuxt",
+    "@vite-pwa/nuxt",
+    "unplugin-icons/nuxt",
+    "shadcn-nuxt",
+    "@nuxt/eslint",
+  ],''',
+        '''  modules: [
+    "@nuxtjs/tailwindcss",
+    "@pinia/nuxt",
+    "@vueuse/nuxt",
+    "@vite-pwa/nuxt",
+    "unplugin-icons/nuxt",
+    "shadcn-nuxt",
+    "@nuxt/eslint",
+    (_options, nuxt) => {
+      nuxt.hook("components:dirs", dirs => {
+        for (const dir of dirs) {
+          if (dir.path.replaceAll("\\\\", "/").includes("components/ui")) {
+            dir.extensions = ["vue"];
+          }
+        }
+      });
+    },
+  ],''',
+    )
+
+
+def filter_known_wasi_warning(output):
+    """Drop only the exact Node WASI notice known to accompany the Pi fallback."""
+    return re.sub(
+        r'(?m)^ERROR \(node:\d+\) ExperimentalWarning: WASI is an experimental feature and might change at any time\r?\n?',
+        '',
+        output,
+    )
+
+
+def run_frontend_command(command, *, cwd, env):
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    def forward(source, destination):
+        for line in source:
+            line = filter_known_wasi_warning(line)
+            if line:
+                destination.write(line)
+                destination.flush()
+
+    output_threads = [
+        threading.Thread(target=forward, args=(process.stdout, sys.stdout)),
+        threading.Thread(target=forward, args=(process.stderr, sys.stderr)),
+    ]
+    for thread in output_threads:
+        thread.start()
+    returncode = process.wait()
+    for thread in output_threads:
+        thread.join()
+    if returncode:
+        raise subprocess.CalledProcessError(returncode, command)
+    return subprocess.CompletedProcess(command, returncode)
 
 
 def brand_frontend():
@@ -61,7 +140,11 @@ def item_log_frontend():
 
 def nest_frontend():
     replace('lib/api/classes/items.ts', '  orderBy?: string;', '  orderBy?: string;\n  isLocation?: boolean;')
-    replace('components/ui/dialog-provider/utils.ts', '[DialogID.CreateEntity]: { baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" };', '[DialogID.CreateEntity]: ({ baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" }) & { parentId?: string };')
+    replace(
+        'components/ui/dialog-provider/utils.ts',
+        '  [DialogID.CreateEntity]:\n    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true; resume?: true }\n    | { baseType: "location" };',
+        '  [DialogID.CreateEntity]: (\n    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true; resume?: true }\n    | { baseType: "location" }\n  ) & { parentId?: string };',
+    )
     path = 'components/Entity/CreateModal.vue'
     replace(path, ':entity-types="subItemCreate ? entityTypes.filter(t => !t.isLocation) : entityTypes"', ':entity-types="entityTypes"')
     replace(path, '      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"', '      <FormTextField v-if="!selectedEntityType?.isLocation" v-model="form.modelNumber" label="Model number" :max-length="255" />\n      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"')
@@ -78,13 +161,29 @@ def nest_frontend():
     text = text.replace('            parent.value = data;', '            parentItemLocationId = data.id;')
     start = text.index('          if (data.parent) {'); end = text.index('\n        }', start)
     text = text[:start]+text[end:]
-    start = text.index('      const locId = locationId.value ? locationId.value : parentItemLocationId;'); end = text.index('\n      if (tagId.value)', start)
-    text = text[:start]+'''      const locId = params.parentId || locationId.value || parentItemLocationId;
+    location_context_anchor = '''      const locId = locationId.value ? locationId.value : parentItemLocationId;
+      applyInitialBarcodeParamAfterContext(initialBarcode, form, lookupBarcode, () => {
+        if (locId) {
+          const found = locations.value.find(l => l.id === locId);
+          if (found) {
+            form.location = found;
+          }
+        }
+
+        if (tagId.value) {'''
+    if text.count(location_context_anchor) != 1:
+        raise RuntimeError(f'Upstream changed: expected one barcode-aware location context anchor in {path}')
+    text = text.replace(
+        location_context_anchor,
+        '''      const locId = params.parentId || locationId.value || parentItemLocationId;
       if (locId) {
         const { data } = await api.items.get(String(locId));
         if (data) form.location = data;
       }
-'''+text[end:]
+
+      applyInitialBarcodeParamAfterContext(initialBarcode, form, lookupBarcode, () => {
+        if (tagId.value) {''',
+    )
     start = text.index('    // Items must live somewhere'); end = text.index('    if (loading.value)', start)
     text = text[:start]+text[end:]
     text = text.replace('parentId: form.location.id as string', 'parentId: form.location?.id || null').replace('parentId: form.parentId || (form.location.id as string)', 'parentId: form.location?.id || null')
@@ -266,6 +365,7 @@ def prepare():
     (BUILD/'package.json').write_text(json.dumps(package, indent=2)+'\n')
     if (ROOT/'homebox-ui/pnpm-lock.yaml').exists():
         shutil.copy2(ROOT/'homebox-ui/pnpm-lock.yaml', BUILD/'pnpm-lock.yaml')
+    configure_ui_component_discovery()
     replace('nuxt.config.ts', 'css: ["@/assets/css/main.css"],', 'css: ["@/assets/css/main.css", "@/assets/css/workshop.css", "@/assets/css/ccrate.css"],')
     # The Home dashboard shows the same current custody as the equipment terminal.
     replace('pages/home/index.vue', '  import BaseCard from', '  import CheckedOutItems from "@/components/Workshop/CheckedOutItems.vue";\n  import BaseCard from')
@@ -400,7 +500,7 @@ def build():
         if anchor in source:
             binding.write_text(source.replace(anchor, 'nativeBinding = require('+repr(str(wasi))+')'))
     pnpm = TOOLCHAIN_ROOT/'pnpm/node_modules/.bin/pnpm'
-    subprocess.run([str(pnpm), 'exec', 'nuxt', 'prepare'], cwd=BUILD, env=env, check=True)
+    run_frontend_command([str(pnpm), 'exec', 'nuxt', 'prepare'], cwd=BUILD, env=env)
     if not args.prepare:
         result = subprocess.run([str(pnpm), 'exec', 'nuxi', 'typecheck'], cwd=BUILD, env=env, capture_output=True, text=True)
         (ROOT/'work/homebox-ui-typecheck.log').write_text(result.stdout+result.stderr)
@@ -413,7 +513,7 @@ def build():
                 print(result.stdout+result.stderr)
                 raise RuntimeError('Frontend typecheck introduced errors or its upstream baseline changed.')
             print(f'Typecheck: no added diagnostics; {len(diagnostics)} pre-existing upstream diagnostics.', flush=True)
-        subprocess.run([str(pnpm), 'run', 'build'], cwd=BUILD, env=env, check=True)
+        run_frontend_command([str(pnpm), 'run', 'build'], cwd=BUILD, env=env)
 
 
 if __name__ == '__main__':
