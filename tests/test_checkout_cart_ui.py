@@ -13,6 +13,7 @@ class CheckoutCartUiTests(unittest.TestCase):
         if not node:
             self.skipTest('Node.js is unavailable for the checkout UI fixture')
         source = (ROOT/'kiosk/checkout-ui.js').read_text()
+        server = (ROOT/'deploy/kiosk-server.py').read_text()
         page = (ROOT/'kiosk/index.html').read_text()
 
         def function(name):
@@ -29,6 +30,10 @@ class CheckoutCartUiTests(unittest.TestCase):
         render_kit = page[render_kit_start:render_kit_end]
         self.assertLess(add.index('await maybeKit(e,\'checkout\')'), add.index('checkoutCart.some(a=>a.id===e.id)'))
         self.assertIn('useVerifiedCheckoutKit(draft)', render_kit)
+        self.assertNotIn('This item is not in your saved checkout cart', source)
+        self.assertIn('Current availability', source)
+        self.assertIn('checkout-available', source)
+        self.assertNotIn('issubset(saved[\'items\'])', server)
 
         script = '''
 let checkoutCart=[{id:'kit-root'}],checkoutCartManaged=true,checkoutCartIds=new Set(['kit-root']);
@@ -48,6 +53,8 @@ assert(checkoutAssetsForSelection(checkoutCart).length===0,'removed roots do not
 useVerifiedCheckoutKit(draft);
 assert(checkoutCart.length===1&&checkoutCart[0].id==='kit-root','rescanning can re-add the saved root');
 assert(new Set(checkoutAssetsForSelection(checkoutCart)).has('kit-part'),'re-added root restores the expanded asset subset');
+
+checkoutCartManaged=true;checkoutCartIds=new Set(['kit-root']);
 
 checkoutCartManaged=false;checkoutCart=[root,child];checkoutKitAssets={'kit-root':['kit-root','kit-part']};
 removeCheckoutSelection(child);

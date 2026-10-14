@@ -51,6 +51,23 @@ class Tests(unittest.TestCase):
         self.assertEqual(consumed['consumed'],[self.asset])
         self.assertEqual(consumed['cart']['items'],[other])
 
+    def test_kiosk_can_confirm_items_added_beyond_the_desk_cart(self):
+        cart=CheckoutCart(self.ledger);other=str(uuid4())
+        other_entity=copy.deepcopy(self.entity);other_entity['id']=other;self.client.assets[other]=other_entity
+        saved=cart.save(self.group,self.user,[self.asset],0,str(uuid4()))
+
+        receipt=self.confirm(assets=[self.asset,other],cart_context={'revision':saved['revision'],'items':[self.asset,other]})
+
+        self.assertEqual(self.ledger.detail(self.group,receipt['id'])['assets'],sorted([self.asset,other]))
+        self.assertEqual(cart.consume_completed_receipt(self.group,self.user,receipt['id'])['cart']['items'],[])
+
+    def test_atomic_ledger_revalidation_rejects_asset_checked_out_before_confirmation(self):
+        self.ledger.begin(self.group,self.user,'check_out',[self.asset],str(uuid4()))
+
+        with self.assertRaises(Conflict):self.confirm()
+
+        self.assertEqual(len(self.ledger.unresolved()),1)
+
     def test_saved_kit_root_expands_only_to_its_current_verified_manifest(self):
         child=str(uuid4())
         self.client.assets[child]={'id':child,'name':'Kit component','quantity':1,'archived':False,

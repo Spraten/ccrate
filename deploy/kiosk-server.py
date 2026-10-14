@@ -507,7 +507,7 @@ class Handler(BaseHTTPRequestHandler):
                             if data.get('cart_revision')!=saved['revision'] or not isinstance(requested,list):
                                 raise Conflict('Your saved checkout cart changed. Review it again.')
                             requested=[str(NativeUUID(value)) for value in requested]
-                            if len(requested)!=len(set(requested)) or not set(requested).issubset(saved['items']):
+                            if len(requested)>50 or len(requested)!=len(set(requested)):
                                 raise Conflict('Your saved checkout cart changed. Review it again.')
                             cart_context={'revision':saved['revision'],'items':requested}
                         result=confirm_checkout(client,ledger,group,actor,data.get('assets',[]),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'),cart_context)
