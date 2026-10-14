@@ -1,3 +1,4 @@
+Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 """Focused regression tests for disposable Homebox UI build preparation."""
 import contextlib
 import importlib.util
@@ -90,6 +91,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertIn('getRevision: () => nameEditRevision.value', generated)
             self.assertIn('@update:model-value="nameEditRevision++"', generated)
             self.assertIn('nameOcrMessage.value = t("components.form.camera.ocr_running")', generated)
+            self.assertIn('setName: (value: string) => { item.value.name = value; }', generated)
             self.assertIn("not uploaded", camera["local_ocr_notice"])
             self.assertIn("name_preserved", camera)
             generated_modal = modal.read_text()
@@ -97,6 +99,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertIn('getRevision: () => nameEditRevision.value', generated_modal)
             self.assertIn('@update:model-value="nameEditRevision++"', generated_modal)
             self.assertIn('nameOcrMessage.value = t("components.form.camera.ocr_running")', generated_modal)
+            self.assertIn('setName: (value: string) => { form.name = value; }', generated_modal)
 
     def test_prepare_api_test_rewrite_is_idempotent_when_first_fixture_is_already_patched(self):
         source = '''    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;
