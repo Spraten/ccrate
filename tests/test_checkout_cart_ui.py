@@ -48,6 +48,11 @@ assert(checkoutAssetsForSelection(checkoutCart).length===0,'removed roots do not
 useVerifiedCheckoutKit(draft);
 assert(checkoutCart.length===1&&checkoutCart[0].id==='kit-root','rescanning can re-add the saved root');
 assert(new Set(checkoutAssetsForSelection(checkoutCart)).has('kit-part'),'re-added root restores the expanded asset subset');
+
+checkoutCartManaged=false;checkoutCart=[root,child];checkoutKitAssets={'kit-root':['kit-root','kit-part']};
+removeCheckoutSelection(child);
+assert(checkoutCart.length===1&&checkoutCart[0].id==='kit-root','ordinary cart displays only the remaining root after child removal');
+assert(JSON.stringify(checkoutAssetsForSelection(checkoutCart))===JSON.stringify(['kit-root']),'ordinary cart never submits an invisible removed kit child');
 '''
         subprocess.run([node, '-e', script], check=True, cwd=ROOT, capture_output=True, text=True)
 

@@ -10,7 +10,7 @@ async function loadCheckoutCart(key,generation,instance){
         checkoutCartRevision=saved.revision;checkoutCartIds=new Set(saved.items);checkoutCartManaged=saved.items.length>0;checkoutCart=entities;checkoutKitAssets={};checkoutCartLoading=false;renderCheckout(checkoutCartManaged?'Saved checkout cart loaded. Scan each kit to verify its contents.':'');
     }catch(error){if(generation===identityGeneration&&instance===identityInstance&&checkoutCartLoadedFor===key){checkoutCartLoading=false;checkoutCartLoadError=error.message;renderCheckout()}}
 }
-function checkoutAssetsForSelection(items){const ids=new Set(items.map(item=>item.id));for(const [root,members] of Object.entries(checkoutKitAssets))if(ids.has(root))for(const id of members)ids.add(id);return [...ids]}
+function checkoutAssetsForSelection(items){const ids=new Set(items.map(item=>item.id));if(checkoutCartManaged)for(const [root,members] of Object.entries(checkoutKitAssets))if(ids.has(root))for(const id of members)ids.add(id);return [...ids]}
 function removeCheckoutSelection(entity){checkoutCart=checkoutCart.filter(item=>item.id!==entity.id);delete checkoutKitAssets[entity.id];delete checkoutKitVersions[entity.id];checkoutKey=null;renderCheckout()}
 function useVerifiedCheckoutKit(draft){const root=draft.root;if(checkoutCartManaged){if(!checkoutCart.some(item=>item.id===root.id))checkoutCart.push(root)}else for(const entity of draft.entities)if(!checkoutCart.some(item=>item.id===entity.id))checkoutCart.push(entity);checkoutKitAssets[root.id]=draft.entities.map(entity=>entity.id);Object.assign(checkoutKitVersions,draft.versions);checkoutKey=null}
 function checkoutButton(label,fn,kind=''){const b=node('button',label,'checkout-button '+kind);b.onclick=fn;return b}
