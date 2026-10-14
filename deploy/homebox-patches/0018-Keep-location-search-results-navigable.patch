@@ -5,9 +5,9 @@ Subject: [PATCH 18/23] Keep location search results navigable
 
 ---
  frontend/components/Location/Selector.vue     | 11 +++-----
- .../composables/use-location-helpers.test.ts  | 25 +++++++++++++++++++
+ .../composables/use-location-helpers.test.ts  | 29 +++++++++++++++++++++
  frontend/composables/use-location-helpers.ts  | 10 +++++++-
- 3 files changed, 38 insertions(+), 8 deletions(-)
+ 3 files changed, 42 insertions(+), 8 deletions(-)
 
 diff --git a/frontend/components/Location/Selector.vue b/frontend/components/Location/Selector.vue
 index e89e54fb..708136fa 100644
@@ -46,10 +46,10 @@ index e89e54fb..708136fa 100644
  
    function toggleExpanded(locationId: string) {
 diff --git a/frontend/composables/use-location-helpers.test.ts b/frontend/composables/use-location-helpers.test.ts
-index e01c3160..5d1cdce1 100644
+index e01c3160..2833a6ef 100644
 --- a/frontend/composables/use-location-helpers.test.ts
 +++ b/frontend/composables/use-location-helpers.test.ts
-@@ -58,4 +58,29 @@ describe("flatTree", () => {
+@@ -58,4 +58,33 @@ describe("flatTree", () => {
        "shelf",
      ]);
    });
@@ -73,10 +73,14 @@ index e01c3160..5d1cdce1 100644
 +    ]);
 +    const searchResults = locations.filter(location => location.name === "Office");
 +
-+    expect(getVisibleLocations(searchResults, new Set(), true).map(location => location.treeString)).toEqual([
++    const collapsedResults = getVisibleLocations(searchResults, new Set(), true);
++    const expandedResults = getVisibleLocations(searchResults, new Set(["home"]), true);
++
++    expect(collapsedResults.map(location => location.treeString)).toEqual([
 +      "Home > Office",
 +      "Home > Garage > Office",
 +    ]);
++    expect(expandedResults).toEqual(collapsedResults);
 +  });
  });
 diff --git a/frontend/composables/use-location-helpers.ts b/frontend/composables/use-location-helpers.ts
