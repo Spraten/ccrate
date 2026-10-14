@@ -65,7 +65,7 @@ assert(checkoutReceiptAssetCount({status:'completed'},[{id:'kit'}]),2,'legacy co
 
         helper += "\n" + function(source, "reconcileCheckoutCart")
         script = helper + r'''
-let checkoutCart=[{id:'keep',name:'Keep'},{id:'local-added',name:'Local addition'}],checkoutCartIds=new Set(['keep','desk-removed']),checkoutCartRevision=1,checkoutCartLoadedFor='1:session',checkoutCartLoading=false,checkoutCartManaged=true,checkoutCartNeedsReconcile=true,checkoutCartLoadError='',checkoutKitAssets={},checkoutKitEntities={},checkoutKitVersions={},checkoutFeedback='',checkoutMode=true,checkoutBusy=false,identityGeneration=1,identityInstance='session';
+let checkoutCart=[{id:'keep',name:'Keep'},{id:'local-added',name:'Local addition'}],checkoutCartIds=new Set(['keep','desk-removed']),checkoutCartRevision=1,checkoutCartLoadedFor='1:session',checkoutCartLoading=false,checkoutCartManaged=true,checkoutCartNeedsReconcile=true,checkoutCartLoadError='',checkoutKitAssets={},checkoutKitEntities={},checkoutKitVersions={},checkoutFeedback='',checkoutMode=true,checkoutBusy=false,identityGeneration=1,identityInstance='session',checkoutCartTask=0,checkoutCartLoad=0;
 let rendered='';const renderCheckout=message=>{rendered=message};const refreshCheckoutAvailability=async()=>{};
 const api=async path=>{if(path==='/checkout/cart')return {revision:2,items:['keep','desk-added']};throw Error('unexpected path '+path)};
 const fetch=async url=>({ok:true,json:async()=>({entity:{id:'desk-added',name:'Desk addition'}})});
@@ -78,6 +78,70 @@ reconcileCheckoutCart().then(()=>{
 }).catch(error=>{console.error(error);process.exitCode=1});
 '''
         subprocess.run([node, "-e", script], check=True, cwd=ROOT, capture_output=True, text=True)
+
+    def test_old_cart_reconciliation_cannot_overwrite_reopened_task_for_same_badge(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable for the checkout UI fixture")
+        source = (ROOT / "kiosk/checkout-ui.js").read_text(encoding="utf-8")
+        helper = "\n".join(function(source, name) for name in (
+            "checkoutCartReconciliationIds", "refreshCheckoutAvailability",
+            "reconcileCheckoutCart", "resetCheckoutCartTask"))
+        script = helper + r'''
+let checkoutCart=[{id:'old',name:'Old selection'}],checkoutReview=false,checkoutPickerOpen=false,checkoutCartRevision=1,checkoutCartIds=new Set(['old']),checkoutCartLoadedFor='1:session',checkoutCartLoading=false,checkoutCartManaged=true,checkoutCartNeedsReconcile=true,checkoutCartLoadError='',checkoutKitAssets={},checkoutKitEntities={},checkoutKitVersions={},checkoutFeedback='',checkoutMode=true,checkoutBusy=false,identityGeneration=1,identityInstance='session',checkoutCartTask=0,checkoutCartLoad=0,checkoutAvailabilityRequest=0,checkoutAvailability=new Map([['old','Available']]);
+let releaseAvailability;const pendingAvailability=new Promise(resolve=>releaseAvailability=resolve);let availabilityRequested=false,rendered='';
+const renderCheckout=message=>{rendered=message};
+const api=async path=>{if(path==='/checkout/cart')return {revision:2,items:['old','desk-added']};if(path.startsWith('/checkout/availability?')){availabilityRequested=true;return pendingAvailability}throw Error('unexpected path '+path)};
+const fetch=async url=>({ok:true,json:async()=>({entity:{id:'desk-added',name:'Desk addition'}})});
+const assert=(value,message)=>{if(!value)throw Error(message)};
+(async()=>{
+ const oldRefresh=reconcileCheckoutCart();
+ for(let i=0;i<10&&!availabilityRequested;i++)await new Promise(resolve=>setImmediate(resolve));
+ assert(availabilityRequested,'old task reached its pending availability request');
+ resetCheckoutCartTask();checkoutCartLoadedFor='1:session';
+ checkoutCart=[{id:'fresh',name:'Fresh task item'}];checkoutCartIds=new Set(['fresh']);checkoutCartRevision=9;checkoutCartManaged=true;checkoutCartNeedsReconcile=false;checkoutCartLoadError='';checkoutAvailability.set('fresh','Fresh task status');
+ releaseAvailability([{id:'desk-added',reason:'Checked out'}]);
+ await oldRefresh;
+ assert(JSON.stringify(checkoutCart.map(item=>item.id))==='["fresh"]','old refresh cannot restore items from the prior task');
+ assert(checkoutCartRevision===9&&checkoutCartNeedsReconcile===false,'old refresh cannot replace the fresh task revision or flags');
+ assert(checkoutAvailability.get('fresh')==='Fresh task status'&&!checkoutAvailability.has('desk-added'),'old availability response cannot alter the fresh task state');
+ assert(checkoutCartLoading===false,'old refresh cannot leave the fresh task stuck loading');
+})().catch(error=>{console.error(error);process.exitCode=1});
+'''
+        result = subprocess.run([node, "-e", script], check=False, cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("if(title==='Check Out')resetCheckoutCartTask()", source)
+
+    def test_old_initial_cart_load_cannot_replace_reopened_task_for_same_badge(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable for the checkout UI fixture")
+        source = (ROOT / "kiosk/checkout-ui.js").read_text(encoding="utf-8")
+        helper = "\n".join(function(source, name) for name in (
+            "refreshCheckoutAvailability", "loadCheckoutCart", "resetCheckoutCartTask"))
+        script = helper + r'''
+let checkoutCart=[],checkoutReview=false,checkoutPickerOpen=false,checkoutCartRevision=null,checkoutCartIds=new Set(),checkoutCartLoadedFor='',checkoutCartLoading=false,checkoutCartManaged=false,checkoutCartNeedsReconcile=false,checkoutCartLoadError='',checkoutKitAssets={},checkoutKitEntities={},checkoutFeedback='',checkoutMode=true,checkoutBusy=false,identityGeneration=1,identityInstance='session',checkoutCartTask=0,checkoutCartLoad=0,checkoutAvailabilityRequest=0,checkoutAvailability=new Map();
+let releaseOldEntity;const oldEntity=new Promise(resolve=>releaseOldEntity=resolve);let oldEntityRequested=false,cartRead=0;
+const renderCheckout=()=>{};
+const api=async path=>{if(path==='/checkout/cart')return ++cartRead===1?{revision:2,items:['old']}:{revision:9,items:['fresh']};if(path.startsWith('/checkout/availability?'))return [{id:'fresh',reason:null}];throw Error('unexpected path '+path)};
+const fetch=async url=>{if(url.endsWith('old')){oldEntityRequested=true;return oldEntity}return {ok:true,json:async()=>({entity:{id:'fresh',name:'Fresh task item'}})}};
+const assert=(value,message)=>{if(!value)throw Error(message)};
+(async()=>{
+ const oldLoad=loadCheckoutCart('1:session',1,'session');
+ for(let i=0;i<10&&!oldEntityRequested;i++)await new Promise(resolve=>setImmediate(resolve));
+ assert(oldEntityRequested,'old initial load reached its pending entity lookup');
+ resetCheckoutCartTask();
+ const freshLoad=loadCheckoutCart('1:session',1,'session');
+ await freshLoad;
+ assert(checkoutCartRevision===9&&checkoutCart[0]?.id==='fresh','fresh task loaded its saved cart and revision');
+ releaseOldEntity({ok:true,json:async()=>({entity:{id:'old',name:'Old task item'}})});
+ await oldLoad;
+ assert(checkoutCartRevision===9&&checkoutCart[0]?.id==='fresh','old initial load cannot replace the fresh task cart');
+ assert(checkoutCartLoading===false,'old initial load cannot alter the fresh task loading state');
+})().catch(error=>{console.error(error);process.exitCode=1});
+'''
+        result = subprocess.run([node, "-e", script], check=False, cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_cart_page_is_valid_javascript(self):
         node = shutil.which("node")

@@ -1,5 +1,5 @@
 // A cart-first checkout flow. Native validation and kit verification remain authoritative.
-let checkoutReview=false,checkoutAdding=false,checkoutPickerOpen=false,checkoutFeedback='',checkoutCartRevision=null,checkoutCartLoadedFor='',checkoutCartLoading=false,checkoutCartLoadError='',checkoutCartNeedsReconcile=false,checkoutCartManaged=false,checkoutCartIds=new Set(),checkoutKitAssets={},checkoutKitEntities={},checkoutAvailability=new Map(),checkoutAvailabilityRefreshing=false,checkoutAvailabilityRequest=0;
+let checkoutReview=false,checkoutAdding=false,checkoutPickerOpen=false,checkoutFeedback='',checkoutCartRevision=null,checkoutCartLoadedFor='',checkoutCartLoading=false,checkoutCartLoadError='',checkoutCartNeedsReconcile=false,checkoutCartManaged=false,checkoutCartIds=new Set(),checkoutKitAssets={},checkoutKitEntities={},checkoutAvailability=new Map(),checkoutAvailabilityRefreshing=false,checkoutAvailabilityRequest=0,checkoutCartTask=0,checkoutCartLoad=0;
 function checkoutAvailabilityLabel(entity){const reasons=[];const own=checkoutAvailability.get(entity.id);if(own&&own!=='Available')reasons.push(own);for(const member of checkoutKitEntities[entity.id]||[]){if(member.id===entity.id)continue;const reason=checkoutAvailability.get(member.id);if(reason&&reason!=='Available')reasons.push('Kit component '+member.name+': '+reason)}return reasons.join('; ')||own||'Availability will be checked at confirmation'}
 async function refreshCheckoutAvailability(items=checkoutCart,generation=identityGeneration,instance=identityInstance){
     const selectedById=new Map();for(const item of items){const entities=checkoutKitEntities[item.id]||[item];for(const id of checkoutKitAssets[item.id]||[item.id])selectedById.set(id,entities.find(member=>member.id===id)||{id,name:item.name})}
@@ -15,38 +15,40 @@ async function refreshCheckoutAvailability(items=checkoutCart,generation=identit
     }
 }
 async function loadCheckoutCart(key,generation,instance){
+    const task=checkoutCartTask,load=++checkoutCartLoad;
     checkoutCartLoading=true;checkoutCartLoadedFor=key;renderCheckout('Loading your saved checkout cart…');
     try{
         const saved=await api('/checkout/cart');
-        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key)return;
+        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key||task!==checkoutCartTask||load!==checkoutCartLoad)return;
         const entities=await Promise.all(saved.items.map(async id=>{try{const response=await fetch('/api/entity?id='+encodeURIComponent(id));const data=await response.json();return response.ok?data.entity:{id,name:'Unavailable equipment',assetId:id}}catch{return{id,name:'Unavailable equipment',assetId:id}}}));
-        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key)return;
+        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key||task!==checkoutCartTask||load!==checkoutCartLoad)return;
         await refreshCheckoutAvailability(entities,generation,instance);
-        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key)return;
+        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key||task!==checkoutCartTask||load!==checkoutCartLoad)return;
         checkoutCartRevision=saved.revision;checkoutCartIds=new Set(saved.items);checkoutCartManaged=saved.items.length>0;checkoutCart=entities;checkoutKitAssets={};checkoutKitEntities={};checkoutCartLoading=false;renderCheckout(checkoutCartManaged?'Saved checkout cart loaded. Current availability shown for each item. Scan each kit to verify its contents.':'');
-    }catch(error){if(generation===identityGeneration&&instance===identityInstance&&checkoutCartLoadedFor===key){checkoutCartLoading=false;checkoutCartLoadError=error.message;renderCheckout()}}
+    }catch(error){if(generation===identityGeneration&&instance===identityInstance&&checkoutCartLoadedFor===key&&task===checkoutCartTask&&load===checkoutCartLoad){checkoutCartLoading=false;checkoutCartLoadError=error.message;renderCheckout()}}
 }
 function checkoutAssetsForSelection(items){const ids=new Set(items.map(item=>item.id));if(checkoutCartManaged)for(const [root,members] of Object.entries(checkoutKitAssets))if(ids.has(root))for(const id of members)ids.add(id);return [...ids]}
 function checkoutCartReconciliationIds(savedIds,baselineIds,localIds){const baseline=new Set(baselineIds),local=new Set(localIds),locallyRemoved=new Set([...baseline].filter(id=>!local.has(id)));return [...new Set([...savedIds.filter(id=>!locallyRemoved.has(id)),...localIds.filter(id=>!baseline.has(id))])]}
 function checkoutReceiptAssetCount(receipt,items){return Number.isInteger(receipt?.count)?receipt.count:(receipt?.assets?.length||checkoutAssetsForSelection(items).length)}
 async function reconcileCheckoutCart(){
     if(checkoutCartLoading||checkoutBusy)return;
-    const generation=identityGeneration,instance=identityInstance,key=identityGeneration+':'+identityInstance,localById=new Map(checkoutCart.map(item=>[item.id,item]));
+    const generation=identityGeneration,instance=identityInstance,key=identityGeneration+':'+identityInstance,task=checkoutCartTask,load=++checkoutCartLoad,localById=new Map(checkoutCart.map(item=>[item.id,item]));
     checkoutCartLoading=true;renderCheckout('Refreshing the saved checkout cart…');
     try{
         const saved=await api('/checkout/cart');
-        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key)return;
+        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key||task!==checkoutCartTask||load!==checkoutCartLoad)return;
         const ids=checkoutCartReconciliationIds(saved.items,[...checkoutCartIds],checkoutCart.map(item=>item.id));
         const entities=await Promise.all(ids.map(async id=>{if(localById.has(id))return localById.get(id);try{const response=await fetch('/api/entity?id='+encodeURIComponent(id));const data=await response.json();return response.ok?data.entity:{id,name:'Unavailable equipment',assetId:id}}catch{return{id,name:'Unavailable equipment',assetId:id}}}));
-        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key)return;
+        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key||task!==checkoutCartTask||load!==checkoutCartLoad)return;
         await refreshCheckoutAvailability(entities,generation,instance);
-        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key)return;
+        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key||task!==checkoutCartTask||load!==checkoutCartLoad)return;
         checkoutCartRevision=saved.revision;checkoutCartIds=new Set(saved.items);checkoutCartManaged=true;checkoutCart=entities;checkoutCartNeedsReconcile=false;checkoutCartLoadError='';
         for(const root of Object.keys(checkoutKitAssets))if(!ids.includes(root)){delete checkoutKitAssets[root];delete checkoutKitEntities[root];delete checkoutKitVersions[root]}
         checkoutFeedback='Saved cart refreshed. Your local additions are kept; review the updated list.';
-    }catch(error){if(generation===identityGeneration&&instance===identityInstance)checkoutFeedback='Could not refresh the saved cart: '+error.message}
-    finally{if(generation===identityGeneration&&instance===identityInstance){checkoutCartLoading=false;if(checkoutMode)renderCheckout(checkoutFeedback)}}
+    }catch(error){if(generation===identityGeneration&&instance===identityInstance&&task===checkoutCartTask&&load===checkoutCartLoad)checkoutFeedback='Could not refresh the saved cart: '+error.message}
+    finally{if(generation===identityGeneration&&instance===identityInstance&&task===checkoutCartTask&&load===checkoutCartLoad){checkoutCartLoading=false;if(checkoutMode)renderCheckout(checkoutFeedback)}}
 }
+function resetCheckoutCartTask(){checkoutCartTask++;checkoutCartLoad++;checkoutAvailabilityRequest++;checkoutReview=false;checkoutPickerOpen=false;checkoutFeedback='';checkoutCartRevision=null;checkoutCartLoadedFor='';checkoutCartLoading=false;checkoutCartLoadError='';checkoutCartNeedsReconcile=false;checkoutCartManaged=false;checkoutCartIds=new Set();checkoutKitAssets={};checkoutKitEntities={};checkoutCart=[]}
 function removeCheckoutSelection(entity){checkoutCart=checkoutCart.filter(item=>item.id!==entity.id);checkoutAvailability.delete(entity.id);delete checkoutKitAssets[entity.id];delete checkoutKitEntities[entity.id];delete checkoutKitVersions[entity.id];checkoutKey=null;renderCheckout()}
 function useVerifiedCheckoutKit(draft){const root=draft.root,generation=identityGeneration,instance=identityInstance;if(checkoutCartManaged){if(!checkoutCart.some(item=>item.id===root.id))checkoutCart.push(root)}else for(const entity of draft.entities)if(!checkoutCart.some(item=>item.id===entity.id))checkoutCart.push(entity);checkoutKitAssets[root.id]=draft.entities.map(entity=>entity.id);checkoutKitEntities[root.id]=draft.entities;Object.assign(checkoutKitVersions,draft.versions);checkoutKey=null;refreshCheckoutAvailability([root],generation,instance).then(()=>{if(checkoutMode&&generation===identityGeneration&&instance===identityInstance)renderCheckout(checkoutFeedback)})}
 async function reviewCheckout(){checkoutReview=true;checkoutAvailabilityRefreshing=true;renderCheckout('Refreshing current availability…');const generation=identityGeneration,instance=identityInstance;try{await refreshCheckoutAvailability(checkoutCart,generation,instance)}finally{if(generation===identityGeneration&&instance===identityInstance){checkoutAvailabilityRefreshing=false;if(checkoutMode&&checkoutReview)renderCheckout()}}}
@@ -82,7 +84,7 @@ async function checkoutPicker(message=''){
     try{const [data,custody]=await Promise.all([api('/api/stock'),api('/api/custody')]);if(!results.isConnected)return;rows=data;held=new Set(custody.map(r=>r.entity_id));paint()}catch(e){results.replaceChildren(node('p',e.message),checkoutButton('Try again',()=>checkoutPicker()))}
 }
 const checkoutOriginalAdd=addCheckout;
-const checkoutOriginalOpen=open;open=function(title){if(title==='Check Out'){checkoutReview=false;checkoutPickerOpen=false;checkoutFeedback='';checkoutCartRevision=null;checkoutCartLoadedFor='';checkoutCartLoading=false;checkoutCartLoadError='';checkoutCartNeedsReconcile=false;checkoutCartManaged=false;checkoutCartIds=new Set();checkoutKitAssets={};checkoutKitEntities={};checkoutCart=[]}return checkoutOriginalOpen(title)};
+const checkoutOriginalOpen=open;open=function(title){if(title==='Check Out')resetCheckoutCartTask();return checkoutOriginalOpen(title)};
 addCheckout=async function(e){
     clearItemActionOffer();if(checkoutAdding||checkoutBusy)return;
     if(e.entityType?.isLocation){renderCheckout('This is a storage label. Scan an equipment label instead.');return}
