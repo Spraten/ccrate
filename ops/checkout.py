@@ -4,7 +4,7 @@ from ledger import Conflict,uuid
 from kits import validate_checkout
 
 
-def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None):
+def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None, cart_context=None):
     group,actor=uuid(group),uuid(actor)
     assets=[uuid(a) for a in assets]
     if not assets or len(assets)>50 or len(assets)!=len(set(assets)):
@@ -22,6 +22,17 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
     validate_checkout(client,entities,verified,kit_versions)
     if not session_valid():
         raise Conflict('Session ended; scan your badge again')
-    operation=ledger.begin(group,actor,'check_out',assets,request_key)
+    operation_context = operation_intent = None
+    if cart_context is not None:
+        revision = cart_context.get('revision') if isinstance(cart_context, dict) else None
+        items = cart_context.get('items') if isinstance(cart_context, dict) else None
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0 or not isinstance(items, list) or len(items) > 50:
+            raise ValueError('Checkout cart changed; reload the saved selection.')
+        snapshot = {'revision': revision, 'items': sorted({uuid(item) for item in items})}
+        if len(snapshot['items']) != len(items):
+            raise ValueError('Checkout cart changed; reload the saved selection.')
+        operation_context = {'checkout_cart': snapshot}
+        operation_intent = {'checkout_cart': snapshot}
+    operation=ledger.begin(group,actor,'check_out',assets,request_key,context=operation_context,intent=operation_intent)
     ledger.complete(operation['id'])
     return {'id':operation['id'],'status':'completed','action':'check_out','count':len(assets)}

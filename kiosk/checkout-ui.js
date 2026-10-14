@@ -1,5 +1,15 @@
 // A cart-first checkout flow. Native validation and kit verification remain authoritative.
-let checkoutReview=false,checkoutAdding=false,checkoutPickerOpen=false,checkoutFeedback='';
+let checkoutReview=false,checkoutAdding=false,checkoutPickerOpen=false,checkoutFeedback='',checkoutCartRevision=null,checkoutCartLoadedFor='',checkoutCartLoading=false,checkoutCartLoadError='',checkoutCartManaged=false,checkoutCartIds=new Set();
+async function loadCheckoutCart(key,generation,instance){
+    checkoutCartLoading=true;checkoutCartLoadedFor=key;renderCheckout('Loading your saved checkout cart…');
+    try{
+        const saved=await api('/checkout/cart');
+        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key)return;
+        const entities=await Promise.all(saved.items.map(async id=>{try{const response=await fetch('/api/entity?id='+encodeURIComponent(id));const data=await response.json();return response.ok?data.entity:{id,name:'Unavailable equipment',assetId:id}}catch{return{id,name:'Unavailable equipment',assetId:id}}}));
+        if(generation!==identityGeneration||instance!==identityInstance||checkoutCartLoadedFor!==key)return;
+        checkoutCartRevision=saved.revision;checkoutCartIds=new Set(saved.items);checkoutCartManaged=saved.items.length>0;checkoutCart=entities;checkoutCartLoading=false;renderCheckout(checkoutCartManaged?'Saved checkout cart loaded. Scan each kit to verify its contents.':'');
+    }catch(error){if(generation===identityGeneration&&instance===identityInstance&&checkoutCartLoadedFor===key){checkoutCartLoading=false;checkoutCartLoadError=error.message;renderCheckout()}}
+}
 function checkoutButton(label,fn,kind=''){const b=node('button',label,'checkout-button '+kind);b.onclick=fn;return b}
 function checkoutFrame(title,step){heading(title);view.querySelector('.toolbar').remove();const shell=node('section',undefined,'checkout-shell'),top=node('div',undefined,'checkout-top'),titleBox=node('div');titleBox.append(node('h1',title),node('p',step));top.append(checkoutButton('Back',()=>{if(returnMode){if(returnKey){workflowMessage('Check the saved return result before changing the list.');return}if(returnReview){returnReview=false;renderReturn()}else leaveTask(home);return}if(checkoutKey){workflowMessage('Check the saved result or open recovery before changing this list.');return}if(checkoutReview){checkoutReview=false;renderCheckout()}else leaveTask(home)}),titleBox);if(identified)top.append(node('span',document.querySelector('#identity').textContent,'checkout-person'));shell.append(top);view.append(shell);return shell}
 function checkoutNotice(shell,message){if(message){const notice=node('div',message,'checkout-feedback');notice.setAttribute('role','status');if(!message.startsWith('Added:'))notice.classList.add('warning');shell.append(notice)}if(checkoutMode&&!checkoutBusy&&!returnBusy&&!checkoutKey&&!returnKey&&itemActionOffer&&itemActionOffer.mode==='return'&&itemActionOffer.generation===identityGeneration&&itemActionOffer.instance===identityInstance)shell.append(checkoutButton('Return this item instead',()=>beginItemActionSwitch()));if(checkoutMode&&itemActionOrigin&&itemActionOrigin.generation===identityGeneration&&itemActionOrigin.instance===identityInstance)shell.append(checkoutButton('Back to original list',backToItemActionOrigin))}
@@ -8,6 +18,10 @@ renderCheckout=function(message=''){
     if(!checkoutMode)return;
     checkoutFeedback=message;
     if(!identified){checkoutReview=false;checkoutPickerOpen=false;const shell=checkoutFrame('Check out equipment','1 · Identify yourself'),body=node('div',undefined,'checkout-identify');body.append(node('h2','Start with your badge'),node('p','Your badge records who takes the equipment.'),checkoutButton('Scan my badge',()=>document.querySelector('#scan').click(),'main'),checkoutButton('Enter badge code',manualCodeEntry));shell.append(body);checkoutNotice(shell,message);return}
+    const cartKey=identityGeneration+':'+identityInstance;
+    if(checkoutCartLoadedFor!==cartKey){loadCheckoutCart(cartKey,identityGeneration,identityInstance);return}
+    if(checkoutCartLoading){const shell=checkoutFrame('Check out equipment','Loading saved selections');shell.append(node('p','Loading your saved checkout cart…'));return}
+    if(checkoutCartLoadError){const shell=checkoutFrame('Check out equipment','Saved selections unavailable'),message=node('p','Could not load your saved cart: '+checkoutCartLoadError),retry=checkoutButton('Try again',()=>{checkoutCartLoadedFor='';checkoutCartLoadError='';renderCheckout()});shell.append(message,retry);return}
     if(checkoutPickerOpen){checkoutPicker(message);return}
     const shell=checkoutFrame(checkoutReview?'Review checkout':'Add equipment',checkoutReview?'3 · Check the list, then confirm':'2 · Scan items into your checkout list');
     checkoutNotice(shell,message);
@@ -28,9 +42,10 @@ async function checkoutPicker(message=''){
     try{const [data,custody]=await Promise.all([api('/api/stock'),api('/api/custody')]);if(!results.isConnected)return;rows=data;held=new Set(custody.map(r=>r.entity_id));paint()}catch(e){results.replaceChildren(node('p',e.message),checkoutButton('Try again',()=>checkoutPicker()))}
 }
 const checkoutOriginalAdd=addCheckout;
-const checkoutOriginalOpen=open;open=function(title){if(title==='Check Out'){checkoutReview=false;checkoutPickerOpen=false;checkoutFeedback=''}return checkoutOriginalOpen(title)};
+const checkoutOriginalOpen=open;open=function(title){if(title==='Check Out'){checkoutReview=false;checkoutPickerOpen=false;checkoutFeedback='';checkoutCartRevision=null;checkoutCartLoadedFor='';checkoutCartLoading=false;checkoutCartLoadError='';checkoutCartManaged=false;checkoutCartIds=new Set();checkoutCart=[]}return checkoutOriginalOpen(title)};
 addCheckout=async function(e){
     clearItemActionOffer();if(checkoutAdding||checkoutBusy)return;
+    if(checkoutCartManaged&&!checkoutCartIds.has(e.id)){renderCheckout('This item is not in your saved checkout cart. Add it from the desktop cart first.');return}
     if(e.entityType?.isLocation){renderCheckout('This is a storage label. Scan an equipment label instead.');return}
     checkoutPickerOpen=false;checkoutReview=false;checkoutAdding=true;renderCheckout('Checking '+e.name+'…');
     const present=checkoutCart.some(a=>a.id===e.id);
@@ -40,7 +55,7 @@ confirmCheckout=async function(){
     if(checkoutBusy||!identified||!checkoutCart.length)return;
     const generation=identityGeneration,instance=identityInstance,items=checkoutCart.map(e=>({...e})),borrower=document.querySelector('#identity').textContent;
     checkoutBusy=true;checkoutKey=checkoutKey||crypto.randomUUID();renderCheckout();
-    try{const data=await api('/checkout/confirm',{assets:items.map(e=>e.id),kit_versions:checkoutKitVersions,request_key:checkoutKey,session_generation:generation,session_instance:instance});if(generation!==identityGeneration||instance!==identityInstance)return;await transactionDone('checkout',data.count,borrower)}
+    try{const payload={assets:items.map(e=>e.id),kit_versions:checkoutKitVersions,request_key:checkoutKey,session_generation:generation,session_instance:instance};if(checkoutCartManaged){payload.cart_revision=checkoutCartRevision;payload.cart_items=items.map(e=>e.id)}const data=await api('/checkout/confirm',payload);if(generation!==identityGeneration||instance!==identityInstance)return;await transactionDone('checkout',data.count,borrower)}
     catch(e){if(generation===identityGeneration&&instance===identityInstance){const saved=await resolveTransaction(checkoutKey);if(saved.status==='completed'){await transactionDone('checkout',items.length,borrower);return}if(['not_started','cancelled'].includes(saved.status)){checkoutKey=null;checkoutBusy=false;renderCheckout(e.message+' No changes were made. Back to items lets you correct the list.')}else{checkoutBusy=false;renderCheckout(e.message+' The result is uncertain. Check its saved status or open recovery.');recoveryActions(view.querySelector('.checkout-shell'),checkoutKey,'checkout')}}}
     finally{checkoutBusy=false;if(checkoutMode){const confirm=view.querySelector('.checkout-bottom .confirm');if(confirm){confirm.disabled=!!checkoutKey;confirm.textContent=checkoutKey?'Check result below':'Confirm checkout'}const back=view.querySelector('.checkout-bottom button');if(back)back.disabled=!!checkoutKey}}
 };

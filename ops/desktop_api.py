@@ -61,6 +61,16 @@ def labels_service(deps):
     return LabelLayouts(root/'work/ops/label-layouts.db',asset_root=optional(deps,'label_asset_root',DEFAULT_ASSET_ROOT))
 
 
+def checkout_cart_service(deps):
+    service = optional(deps, 'checkout_cart')
+    if service is None:
+        from checkout_cart import CheckoutCart
+        service = CheckoutCart(dependency(deps, 'ledger'))
+        if isinstance(deps, dict):
+            deps['checkout_cart'] = service
+    return service
+
+
 def serve_label_asset(handler,root,name,asset_root=None):
     from urllib.parse import unquote
     from label_render import _check_manifest,DEFAULT_ASSET_ROOT
@@ -385,6 +395,8 @@ def get_action(route, query, ctx, deps):
     client, group = ctx['client'], ctx['group']
     if route == 'context':
         return {'user': ctx['user'], 'group': ctx['collection'], 'manager': ctx['manager'], 'identity': ctx['identity']}
+    if route == 'checkout-cart':
+        return checkout_cart_service(deps).get(group, ctx['actor'])
     if route in MANAGER_READS:
         require_manager(ctx)
     if route == 'workshop/checks/list':
@@ -518,6 +530,8 @@ def operation_status(ctx, deps, data):
             return check_request
     row = ledger.request(group, key)
     if row:
+        if row['action'] == 'check_out' and row['actor_id'] != ctx['actor']:
+            return {'status': 'not_started'}
         return {'id': row['id'], 'status': row['status'], 'action': row['action']}
     with ledger.connection() as db:
         row = db.execute('SELECT id,status,kind FROM native_jobs WHERE group_id=? AND request_key=?', (group, key)).fetchone()
@@ -548,6 +562,18 @@ def post_action(route, data, ctx, deps, address):
     ledger, jobs, badges = dependency(deps, 'ledger'), dependency(deps, 'native_jobs'), dependency(deps, 'badges')
     if route == 'operation/status':
         return operation_status(ctx, deps, data)
+    if route == 'checkout-cart':
+        items = data.get('items')
+        if not isinstance(items, list) or len(items) > 50:
+            raise ValueError('Select at most 50 distinct assets.')
+        normalized = [uuid(item) for item in items]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError('Select distinct equipment.')
+        for item in normalized:
+            entity = public_entity(client, item)
+            if entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
+                raise ValueError('Choose equipment, not a storage location.')
+        return checkout_cart_service(deps).save(group, actor, normalized, data.get('revision'), data.get('request_key'))
     if route in SHELF_CHECK_ROUTES:
         require_manager(ctx)
         store = dependency(deps, 'shelf_checks')

@@ -2,6 +2,7 @@ import copy,pathlib,tempfile,unittest
 from uuid import uuid4
 from ledger import Ledger,Conflict
 from checkout import confirm_checkout
+from checkout_cart import CheckoutCart
 
 
 class Client:
@@ -20,7 +21,7 @@ class Tests(unittest.TestCase):
         self.client=Client(self.user,{self.asset:self.entity})
     def tearDown(self):self.temp.cleanup()
     def confirm(self,**kwargs):
-        return confirm_checkout(self.client,self.ledger,self.group,self.user,kwargs.get('assets',[self.asset]),kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True))
+        return confirm_checkout(self.client,self.ledger,self.group,self.user,kwargs.get('assets',[self.asset]),kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True),cart_context=kwargs.get('cart_context'))
     def test_native_shelf_preserved_and_repeat_confirm_idempotent(self):
         original=copy.deepcopy(self.entity);key=str(uuid4())
         first=self.confirm(key=key);second=self.confirm(key=key)
@@ -38,6 +39,15 @@ class Tests(unittest.TestCase):
         with self.assertRaises(Conflict):self.confirm()
     def test_duplicate_asset_rejected(self):
         with self.assertRaises(ValueError):self.confirm(assets=[self.asset,self.asset])
+    def test_completed_checkout_receipt_consumes_only_the_saved_cart_selection(self):
+        cart=CheckoutCart(self.ledger);other=str(uuid4())
+        saved=cart.save(self.group,self.user,[self.asset,other],0,str(uuid4()))
+
+        receipt=self.confirm(cart_context={'revision':saved['revision'],'items':saved['items']})
+        consumed=cart.consume_completed_receipt(self.group,self.user,receipt['id'])
+
+        self.assertEqual(consumed['consumed'],[self.asset])
+        self.assertEqual(consumed['cart']['items'],[other])
 
 
 if __name__=='__main__':unittest.main()

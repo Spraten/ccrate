@@ -113,6 +113,7 @@ class DesktopTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.root = pathlib.Path(self.temp.name)
         self.group, self.other_group, self.manager, self.borrower, self.asset, self.shelf, self.other_shelf, self.kind = [ident() for _ in range(8)]
+        self.other_asset = ident()
         self.users = {
             'alpha': {'id': self.manager, 'name': 'Workshop Admin', 'email': 'fixture@example.invalid', 'defaultGroupId': self.group, 'groupIds': [self.group, self.other_group]},
             'member': {'id': self.borrower, 'name': 'Workshop Admin', 'email': 'member@example.invalid', 'defaultGroupId': self.group, 'groupIds': [self.group]},
@@ -121,6 +122,9 @@ class DesktopTests(unittest.TestCase):
             self.asset: {'id': self.asset, 'name': 'Fixture drill', 'assetId': '001-001', 'quantity': 1, 'archived': False,
                          'entityType': {'id': self.kind, 'isLocation': False}, 'parent': {'id': self.shelf, 'name': 'Shelf'},
                          'fields': [{'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}], 'tags': []},
+            self.other_asset: {'id': self.other_asset, 'name': 'Fixture lamp', 'assetId': '001-002', 'quantity': 1, 'archived': False,
+                               'entityType': {'id': self.kind, 'isLocation': False}, 'parent': {'id': self.shelf, 'name': 'Shelf'},
+                               'fields': [{'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}], 'tags': []},
             self.shelf: {'id': self.shelf, 'name': 'Shelf', 'archived': False, 'quantity': 0, 'entityType': {'id': self.kind, 'isLocation': True}, 'fields': []},
             self.other_shelf: {'id': self.other_shelf, 'name': 'Other shelf', 'archived': False, 'quantity': 0, 'entityType': {'id': self.kind, 'isLocation': True}, 'fields': []},
         }
@@ -212,6 +216,43 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.request('badges', headers=headers).status, 403)
         self.assertEqual(self.request('badges/issue', {'user_id': self.borrower, 'request_key': ident()}, headers).status, 403)
         self.assertEqual(self.badges.list(self.group), [])
+
+    def test_checkout_cart_uses_signed_in_actor_and_rejects_stale_or_changed_replays(self):
+        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}
+        context = self.request('context', headers=headers).result
+        headers['X-Workshop-Identity'] = context['identity']
+        key = ident()
+        payload = {'actor_id': self.manager, 'items': [self.asset], 'revision': 0, 'request_key': key}
+
+        first = self.request('checkout-cart', payload, headers)
+
+        self.assertEqual(first.status, 200)
+        self.assertEqual(first.result, {'revision': 1, 'items': [self.asset]})
+        self.assertEqual(self.request('checkout-cart', headers=headers).result, first.result)
+        self.assertEqual(self.request('checkout-cart').result, {'revision': 0, 'items': []})
+        self.assertEqual(self.request('checkout-cart', payload, headers).result, first.result)
+        changed = self.request('checkout-cart', dict(payload, items=[self.other_asset]), headers)
+        stale = self.request('checkout-cart', {'items': [self.other_asset], 'revision': 0, 'request_key': ident()}, headers)
+        self.assertEqual(changed.status, 409)
+        self.assertEqual(stale.status, 409)
+        self.assertEqual(self.request('checkout-cart', headers=headers).result, first.result)
+        self.assertEqual(self.ledger.custody(self.group), [])
+
+    def test_checkout_cart_cannot_select_another_collection(self):
+        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true', 'X-Workshop-Group': self.other_group}
+        self.assertEqual(self.request('checkout-cart', headers=headers).status, 403)
+
+    def test_checkout_status_is_hidden_from_another_member(self):
+        operation = self.ledger.begin(self.group, self.manager, 'check_out', [self.asset], ident())
+        self.ledger.complete(operation['id'])
+        request_key = operation['request_key']
+        member = self.request('context', headers={'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}).result
+        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true', 'X-Workshop-Identity': member['identity']}
+
+        response = self.request('operation/status', {'request_key': request_key}, headers)
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.result, {'status': 'not_started'})
 
     def test_collection_selection_is_member_scoped_and_manager_permission_scoped(self):
         self.assertEqual(self.request('context', headers={'X-Workshop-Group': ident()}).status, 403)
