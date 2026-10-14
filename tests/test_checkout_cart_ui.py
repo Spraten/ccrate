@@ -114,5 +114,26 @@ reconcileCheckoutCart().then(()=>{
         self.assertIn('confirm.disabled=!!checkoutKey||checkoutCartNeedsReconcile',source)
 
 
+    def test_manual_checkout_recovery_uses_completed_receipt_asset_count(self):
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node.js is unavailable for the checkout UI fixture')
+        checkout = (ROOT/'kiosk/checkout-ui.js').read_text(encoding='utf-8')
+        workflow = (ROOT/'kiosk/workflow-ui.js').read_text(encoding='utf-8')
+        def function(source, name):
+            start = source.index('function '+name+'(')
+            ends = [value for value in (source.find('\nfunction ', start+1),
+                                         source.find('\nasync function ', start+1)) if value >= 0]
+            return source[start:min(ends) if ends else len(source)]
+        helpers = function(checkout, 'checkoutAssetsForSelection')+'\n'+function(checkout, 'checkoutReceiptAssetCount')
+        recovery = function(workflow, 'recoveryActions')
+        script = helpers+'\n'+recovery+r'''
+let checkoutCartManaged=true,checkoutKitAssets={'kit':['kit','part']},checkoutCart=[{id:'kit'}],returnCart=[],routeRevision=1,identityGeneration=1,identityInstance='session',saved={status:'completed',count:3};
+const buttons=[],counts=[];function node(){return {append(){}}}function primary(label,fn){buttons.push({label,fn});return {}};async function resolveTransaction(){return saved}async function transactionDone(mode,count){counts.push([mode,count])}
+const shell={append(){}};
+(async()=>{recoveryActions(shell,'request','checkout');await buttons.at(-2).fn();if(counts[0][1]!==3)throw Error('recovery ignored receipt count');saved={status:'completed'};recoveryActions(shell,'request-2','checkout');await buttons.at(-2).fn();if(counts[1][1]!==2)throw Error('legacy fallback ignored kit assets')})().catch(error=>{console.error(error);process.exitCode=1});
+'''
+        subprocess.run([node, '-e', script], check=True, cwd=ROOT, capture_output=True, text=True)
+
 if __name__ == '__main__':
     unittest.main()
