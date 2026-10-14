@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { bindScannerInput, mountScannerCapture } = require('../kiosk/scanner_input.js');
 
 function scannerSetupFromPage(mount) {
@@ -53,6 +54,16 @@ function fakeDocument() {
       };
     },
   };
+}
+
+function routeScanFromPage(sandbox) {
+  const page = fs.readFileSync(path.join(__dirname, '../kiosk/index.html'), 'utf8');
+  const start = page.indexOf('async function routeScan(code,expectedOverlay=null){');
+  const end = page.indexOf("\ndocument.querySelector('#scan').onclick=async()=>", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const source = page.slice(start, end);
+  return new Function('sandbox', `with(sandbox){ ${source}; return routeScan; }`)(sandbox);
 }
 
 test('submits a focused scanner value only when Enter frames it', () => {
@@ -122,6 +133,54 @@ test('immediately marks the HID input unfocused when it loses keyboard focus', (
 
     assert.match(status.textContent, /Scanner input unfocused/);
     assert.doesNotMatch(status.textContent, /Ready to receive/);
+  } finally {
+    global.document = priorDocument;
+  }
+});
+
+test('routes a HID-framed equipment scan into the existing checkout cart flow', async () => {
+  const priorDocument = global.document;
+  global.document = fakeDocument();
+  const overlay = { append(panel) { panel.isConnected = true; this.panel = panel; } };
+  const entity = { id: 'asset-42', name: 'Bench supply', entityType: { isLocation: false } };
+  const checkoutCart = [];
+  const requests = [];
+  const sandbox = {
+    clearItemActionOffer() {},
+    scanPurpose: null,
+    manufacturerCodeDraft: null,
+    enrollment: null,
+    cancelScanRequest() {},
+    routeRevision: 4,
+    activeScanRequest: null,
+    scanOverlay: overlay,
+    crypto,
+    fetch: async (url, options) => {
+      requests.push({ url, options });
+      return { ok: true, json: async () => ({ entity }) };
+    },
+    checkoutMode: true,
+    kitDraft: null,
+    problemMode: false,
+    returnDestinationFor: null,
+    itemNoteMode: false,
+    returnMode: false,
+    stopScan() {},
+    addCheckout: async scanned => checkoutCart.push(scanned),
+    status: { textContent: '' },
+  };
+  try {
+    const routeScan = routeScanFromPage(sandbox);
+    const input = mountScannerCapture(overlay, code => routeScan(code, overlay));
+    input.focus();
+    input.value = 'BIN-D-GC-C-1';
+    input.key('Enter');
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/scan');
+    assert.equal(JSON.parse(requests[0].options.body).code, 'BIN-D-GC-C-1');
+    assert.deepEqual(checkoutCart, [entity]);
   } finally {
     global.document = priorDocument;
   }
