@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { LineElement, ShapeElement, StrokeStyle, TemplateElement, TableElement } from '../../core/schema/elements'
 import { dashPattern, lineArrowGeometry, shapePoints } from '../../core/shape-paths'
 import { mmToPx } from '../../core/units'
 import { ensureFontLoaded, fontStack } from '../../core/fonts'
 import { substituteVariables } from '../../core/variables'
 import { useBatchDataStore } from '../../stores/batch-data-store'
-import { watch } from 'vue'
-import { TEXT_FONT_STACK, TEXT_LINE_HEIGHT } from '../../render/text-layout'
+import { fitTextToBox, TEXT_FONT_STACK, TEXT_LINE_HEIGHT } from '../../render/text-layout'
 import { useInteractionStore } from '../../stores/interaction-store'
 import BarcodeView from './elements/BarcodeView.vue'
 import QrView from './elements/QrView.vue'
@@ -32,10 +31,25 @@ const textContent = computed(() =>
 const textFontFamily = computed(() =>
   props.element.type === 'text' ? fontStack(props.element.fontFamily, TEXT_FONT_STACK) : TEXT_FONT_STACK)
 
+const textMeasureContext = props.element.type === 'text' ? document.createElement('canvas').getContext('2d') : null
+const fontLoadVersion = ref(0)
+const fittedTextContent = computed(() => {
+  void fontLoadVersion.value
+  if (props.element.type !== 'text' || !textMeasureContext)
+    return textContent.value
+
+  const fontSize = ptToPx(props.element.fontSizePt)
+  textMeasureContext.font = `${props.element.fontWeight} ${fontSize}px ${textFontFamily.value}`
+  const fittedText = fitTextToBox(textContent.value, box.value.width, box.value.height, fontSize, {
+    measure: text => textMeasureContext.measureText(text).width,
+  })
+  return fittedText.lines.join('\n')
+})
+
 // Load lazily so imported documents render their fonts without panel visits.
 watch(
   () => (props.element.type === 'text' ? props.element.fontFamily : ''),
-  family => void ensureFontLoaded(family),
+  family => void ensureFontLoaded(family).then(() => fontLoadVersion.value++),
   { immediate: true },
 )
 
@@ -179,7 +193,7 @@ const shapePolygon = computed(() => {
         color: element.color,
         lineHeight: TEXT_LINE_HEIGHT,
       }"
-    >{{ textContent }}</div>
+    >{{ fittedTextContent }}</div>
     <!-- eslint-enable vue/multiline-html-element-content-newline -->
 
     <!-- effective (not element): table re-lays-out live during resize preview -->
