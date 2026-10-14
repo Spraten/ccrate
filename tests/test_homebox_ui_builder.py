@@ -42,12 +42,20 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertEqual(form_block.count('modelNumber: "",'), 1)
             self.assertEqual(create_modal.count("modelNumber: form.modelNumber,"), 3)
             self.assertEqual(create_modal.count('v-model="form.modelNumber"'), 1)
+            self.assertNotIn("<ItemSelector", create_modal)
+            self.assertIn('<div class="flex items-end gap-2">\n        <FormTextField', create_modal)
 
             nuxt_config = (pathlib.Path(directory) / "homebox-ui-build/nuxt.config.ts").read_text()
             self.assertEqual(nuxt_config.count("  modules: ["), 1)
             self.assertLess(nuxt_config.index('"shadcn-nuxt"'), nuxt_config.index('(_options, nuxt) =>'))
             self.assertIn('nuxt.hook("components:dirs"', nuxt_config)
             self.assertTrue((pathlib.Path(directory) / "homebox-ui-build/components/ui/button/index.ts").exists())
+
+            package = json.loads((pathlib.Path(directory) / "homebox-ui-build/package.json").read_text())
+            self.assertNotIn("pnpm", package)
+            workspace_config = (pathlib.Path(directory) / "homebox-ui-build/pnpm-workspace.yaml").read_text()
+            self.assertIn("overrides:", workspace_config)
+            self.assertIn("'@vue/runtime-core': 3.5.20", workspace_config)
 
             node = shutil.which("node")
             if not node:

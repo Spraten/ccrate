@@ -8,6 +8,7 @@
   useHead({ title: "Report feedback · C-Crate" });
 
   type ReportDraft = { requestId: string; type: string; description: string };
+  type FeedbackActionCapture = { actorId: string; draftKey: string; requestId: string };
   const auth = useAuthContext();
   const reportType = ref("bug"), description = ref(""), requestId = ref("");
   const status = ref<"idle" | "sending" | "pending" | "submitted" | "rejected">("idle");
@@ -19,14 +20,14 @@
   function currentAction() {
     return { actorId: String(auth.user?.id || ""), draftKey: draftKey.value, requestId: requestId.value };
   }
-  function actionIsCurrent(capture) {
+  function actionIsCurrent(capture: FeedbackActionCapture) {
     return feedbackActionIsCurrent(capture, currentAction());
   }
-  function saveDraft(key = draftKey.value, draft = { requestId: requestId.value, type: reportType.value, description: description.value }) {
+  function saveDraft(key: string = draftKey.value, draft: ReportDraft = { requestId: requestId.value, type: reportType.value, description: description.value }) {
     if (!import.meta.client || !key || loadingDraft) return false;
     try { return writeFeedbackDraft(localStorage, key, draft); } catch { return false; }
   }
-  function persistCurrentStatus(key) {
+  function persistCurrentStatus(key: string) {
     try {
       return persistFeedbackStatus(localStorage, key,
         { requestId: requestId.value, type: reportType.value, description: description.value }, status.value);
@@ -63,7 +64,7 @@
     status.value = "idle"; issueUrl.value = ""; error.value = "";
   }
 
-  async function parseResponse(response: Response, capture) {
+  async function parseResponse(response: Response, capture: FeedbackActionCapture) {
     const result = await response.json().catch(() => ({}));
     if (!actionIsCurrent(capture)) return null;
     if (String(result.actor_id || "").toLowerCase() !== capture.actorId.toLowerCase()) {
@@ -73,7 +74,7 @@
     return result;
   }
 
-  async function verifyCurrentActor(capture) {
+  async function verifyCurrentActor(capture: FeedbackActionCapture) {
     const response = await fetch("/api/v1/users/self", { credentials: "same-origin" });
     if (!actionIsCurrent(capture)) return false;
     const payload = await response.json();
@@ -85,7 +86,7 @@
     return true;
   }
 
-  function applyResult(result: { status?: string; request_id?: string; issue_url?: string; error?: string; actor_id?: string }, capture) {
+  function applyResult(result: { status?: string; request_id?: string; issue_url?: string; error?: string; actor_id?: string }, capture: FeedbackActionCapture) {
     if (!actionIsCurrent(capture) || String(result.actor_id || "").toLowerCase() !== capture.actorId.toLowerCase()) return;
     if (result.request_id) requestId.value = result.request_id;
     if (result.status === "submitted") {

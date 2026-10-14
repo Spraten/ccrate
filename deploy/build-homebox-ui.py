@@ -54,9 +54,13 @@ def configure_ui_component_discovery():
     "@nuxt/eslint",
     (_options, nuxt) => {
       nuxt.hook("components:dirs", dirs => {
-        for (const dir of dirs) {
+        for (let index = 0; index < dirs.length; index++) {
+          const source = dirs[index];
+          if (!source) continue;
+          const dir = typeof source === "string" ? { path: source, extensions: [] } : source;
           if (dir.path.replaceAll("\\\\", "/").includes("components/ui")) {
             dir.extensions = ["vue"];
+            dirs[index] = dir;
           }
         }
       });
@@ -163,7 +167,11 @@ def nest_frontend():
         replace(path, '    form.name = "";\n    form.quantity = 1;', '    form.name = "";\n    form.modelNumber = "";\n    form.quantity = 1;')
     target = BUILD/path
     text = target.read_text()
-    start = text.index('      <ItemSelector\n'); end = text.index('      <FormTextField', start)
+    selector = '      <ItemSelector\n'
+    if text.count(selector) != 1:
+        raise RuntimeError(f'Upstream changed: expected one sub-item selector in {path}')
+    start = text.index(selector)
+    end = text.index('\n      />', start) + len('\n      />')
     text = text[:start]+text[end:]
     import_block = text[text.index('  import type {'):text.index('  } from "~~/lib/api/types/data-contracts";')]
     if 'EntitySummary,' not in import_block:
@@ -378,10 +386,10 @@ def strip_item_response_short_codes_from_update_tests():
     target = BUILD / relative
     source = target.read_text()
     rewrites = (
-        ("    const itemUpdate = {\n      ...item,\n      parentId: item.parent?.id || null,", "    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemDisplayID;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      parentId: item.parent?.id || null,"),
-        ("    const child1ItemUpdate = {\n      ...child1Item,\n      parentId: parent.id,", "    const { displayId: omittedChild1DisplayID, shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1DisplayID;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      parentId: parent.id,"),
-        ("    const child2ItemUpdate = {\n      ...child2Item,\n      parentId: parent.id,", "    const { displayId: omittedChild2DisplayID, shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2DisplayID;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      parentId: parent.id,"),
-        ("    const itemUpdate = {\n      ...parent,\n      parentId: parentLocation.id,", "    const { displayId: omittedParentDisplayID, shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentDisplayID;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      parentId: parentLocation.id,"),
+        ("    const itemUpdate = {\n      ...item,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,", "    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemDisplayID;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,"),
+        ("    const child1ItemUpdate = {\n      ...child1Item,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild1DisplayID, shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1DisplayID;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,"),
+        ("    const child2ItemUpdate = {\n      ...child2Item,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild2DisplayID, shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2DisplayID;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,"),
+        ("    const itemUpdate = {\n      ...parent,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,", "    const { displayId: omittedParentDisplayID, shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentDisplayID;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,"),
     )
     if len(rewrites) != 4:
         raise RuntimeError('Expected four pinned item update test fixtures')
@@ -401,8 +409,10 @@ def prepare():
     shutil.copy2(ROOT/'kiosk/member-avatar.js', BUILD/'lib/member-avatar.js')
     shutil.copy2(ROOT/'kiosk/label-editor.js', BUILD/'lib/label-editor.js')
     package = json.loads((BUILD/'package.json').read_text())
-    package['pnpm'] = {'overrides': {name: '3.5.20' for name in ('vue', '@vue/runtime-core', '@vue/runtime-dom', '@vue/reactivity', '@vue/shared', '@vue/compiler-sfc', '@vue/compiler-core', '@vue/compiler-dom', '@vue/compiler-ssr', '@vue/server-renderer')}}
+    overrides = {name: '3.5.20' for name in ('vue', '@vue/runtime-core', '@vue/runtime-dom', '@vue/reactivity', '@vue/shared', '@vue/compiler-sfc', '@vue/compiler-core', '@vue/compiler-dom', '@vue/compiler-ssr', '@vue/server-renderer')}
+    package.pop('pnpm', None)
     (BUILD/'package.json').write_text(json.dumps(package, indent=2)+'\n')
+    (BUILD/'pnpm-workspace.yaml').write_text('overrides:\n'+''.join(f"  '{name}': {version}\n" for name, version in overrides.items()))
     if (ROOT/'homebox-ui/pnpm-lock.yaml').exists():
         shutil.copy2(ROOT/'homebox-ui/pnpm-lock.yaml', BUILD/'pnpm-lock.yaml')
     configure_ui_component_discovery()
