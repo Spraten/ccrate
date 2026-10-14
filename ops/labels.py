@@ -16,7 +16,9 @@ def probe():
     return json.loads(result.stdout)
 def font(size):return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',size)
 def _fit_name_lines(content,draw,name_font,available,max_lines):
-    measure=lambda text:draw.textbbox((0,0),text,font=name_font)[2]
+    def measure(text):
+        bounds=draw.textbbox((0,0),text,font=name_font)
+        return bounds[2]-bounds[0]
     graphemes=_split_graphemes(content)
     over_wide=next((index for index,grapheme in enumerate(graphemes) if measure(grapheme)>available),None)
     truncated=over_wide is not None
@@ -247,3 +249,4 @@ def print_badge(client,badges,jobs,group,actor,key,badge_id,code):
     except Exception:
         if jobs.detail(group,job['id'])['status']=='prepared':jobs.cancel(group,job['id']);raise ValueError('Printer not ready. Check the stock and connection')
         jobs.review(group,job['id'],'Badge output uncertain. Inspect it; never auto-reprint');raise Conflict('Inspect the badge output and review it in Admin')
+
