@@ -119,3 +119,43 @@ class InvalidRegisteredCodes(unittest.TestCase):
         for raw in ['', 'x'*2049, 'SN\x001234']:
             item={'id':'one','fields':[{'name':MANUFACTURER_FIELD,'type':'text','textValue':raw}]}
             self.assertNotIn('entity',resolve_equipment(raw,normalize(raw),[item]))
+
+class NativeBarcodeTests(unittest.TestCase):
+    def resolve(self,raw,items):return resolve_equipment(raw,normalize(raw),items)
+    def item(self,identifier,barcode,archived=False):
+        return {'id':identifier,'barcode':barcode,'archived':archived}
+    def test_numeric_native_barcode_resolves_exactly(self):
+        item=self.item('one','4006381333931')
+        self.assertEqual(self.resolve('4006381333931',[item])['entity'],item)
+    def test_alphanumeric_native_barcode_resolves_exactly(self):
+        item=self.item('one','NETUM-C750-YELLOW')
+        self.assertEqual(self.resolve('NETUM-C750-YELLOW',[item])['entity'],item)
+    def test_duplicate_native_barcodes_fail_closed(self):
+        result=self.resolve('NETUM-C750-YELLOW',[
+            self.item('one','NETUM-C750-YELLOW'),
+            self.item('two','NETUM-C750-YELLOW'),
+        ])
+        self.assertTrue(result['ambiguous'])
+        self.assertNotIn('entity',result)
+    def test_archived_native_barcode_does_not_resolve(self):
+        self.assertNotIn('entity',self.resolve('NETUM-C750-YELLOW',[
+            self.item('one','NETUM-C750-YELLOW',archived=True),
+        ]))
+    def test_unmatched_native_barcode_does_not_resolve(self):
+        result=self.resolve('NETUM-C750-YELLOW',[self.item('one','OTHER-CODE')])
+        self.assertNotIn('entity',result)
+    def test_native_barcode_and_product_gtin_collision_is_ambiguous(self):
+        raw='4006381333931'
+        native={'id':'native','barcode':raw,'fields':[]}
+        product={'id':'product','barcode':'OTHER-CODE','fields':[
+            {'name':'Product GTIN','textValue':'04006381333931'}]}
+        result=self.resolve(raw,[native,product])
+        self.assertTrue(result['ambiguous'])
+        self.assertNotIn('entity',result)
+    def test_native_barcode_and_url_serial_fallback_collision_is_ambiguous(self):
+        raw='https://vendor.invalid/device?serial=SERIAL-42'
+        native={'id':'native','barcode':raw,'fields':[]}
+        serial={'id':'serial','barcode':'OTHER-CODE','serialNumber':'SERIAL-42','fields':[]}
+        result=self.resolve(raw,[native,serial])
+        self.assertTrue(result['ambiguous'])
+        self.assertNotIn('entity',result)

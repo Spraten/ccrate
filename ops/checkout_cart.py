@@ -89,10 +89,11 @@ class CheckoutCart:
                 'SELECT entity_id FROM operation_assets WHERE operation_id=?', (receipt_id,))}
             selected = set(self._items(cart_intent['items']))
             consumed = sorted(receipt_assets & selected)
+            original = set(self._items(cart_intent['original_items'])) if 'original_items' in cart_intent else set(consumed)
             current = self._state(db, group, actor)
             skipped = current['revision'] != revision
-            if not skipped and consumed:
-                remaining = [item for item in current['items'] if item not in consumed]
+            if not skipped and original:
+                remaining = [item for item in current['items'] if item not in original]
                 current = {'revision': revision + 1, 'items': remaining}
                 db.execute('UPDATE checkout_carts SET revision=?,items=?,updated_at=? WHERE group_id=? AND actor_id=?',
                            (current['revision'], json.dumps(remaining), timestamp(), group, actor))

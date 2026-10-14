@@ -1,0 +1,275 @@
+From 86f9f0a4fc78b4e884732c16eb3450b4d632d26d Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 06:19:38 -0400
+Subject: [PATCH 17/23] Make location selector navigable as a tree
+
+---
+ frontend/components/Location/Selector.vue     | 83 +++++++++++++++----
+ .../composables/use-location-helpers.test.ts  | 61 ++++++++++++++
+ frontend/composables/use-location-helpers.ts  | 26 +++++-
+ 3 files changed, 153 insertions(+), 17 deletions(-)
+ create mode 100644 frontend/composables/use-location-helpers.test.ts
+
+diff --git a/frontend/components/Location/Selector.vue b/frontend/components/Location/Selector.vue
+index 62f18381..e89e54fb 100644
+--- a/frontend/components/Location/Selector.vue
++++ b/frontend/components/Location/Selector.vue
+@@ -8,7 +8,7 @@
+       <PopoverTrigger as-child>
+         <Button :id="id" variant="outline" role="combobox" :aria-expanded="open" class="w-full justify-between">
+           <span class="min-w-0 flex-auto truncate text-left">
+-            {{ value && value.name ? value.name : $t("components.location.selector.select_location") }}
++            {{ selectedLocation?.treeString ?? (value?.name || $t("components.location.selector.select_location")) }}
+           </span>
+ 
+           <span class="ml-2 flex items-center">
+@@ -37,18 +37,34 @@
+           <CommandList>
+             <CommandGroup>
+               <CommandItem
+-                v-for="location in filteredLocations"
++                v-for="location in visibleLocations"
+                 :key="location.id"
+                 :value="location.id"
+                 @select="selectLocation(location as unknown as EntitySummary)"
+               >
+-                <Check :class="cn('mr-2 h-4 w-4', value?.id === location.id ? 'opacity-100' : 'opacity-0')" />
+-                <div>
+-                  <div class="flex w-full">
+-                    {{ location.name }}
+-                  </div>
+-                  <div v-if="location.name !== location.treeString" class="mt-1 text-xs text-muted-foreground">
+-                    {{ location.treeString }}
++                <div class="flex min-w-0 items-center" :style="{ paddingLeft: `${location.depth}rem` }">
++                  <button
++                    v-if="location.hasChildren"
++                    type="button"
++                    class="mr-1 flex size-5 shrink-0 items-center justify-center rounded hover:bg-accent"
++                    :aria-expanded="expandedLocationIds.has(location.id)"
++                    :aria-label="location.treeString"
++                    @click.stop.prevent="toggleExpanded(location.id)"
++                    @keydown.stop
++                  >
++                    <ChevronDown v-if="expandedLocationIds.has(location.id)" class="size-4" />
++                    <ChevronRight v-else class="size-4" />
++                  </button>
++                  <span v-else class="mr-1 size-5 shrink-0" aria-hidden="true" />
++                  <Check :class="cn('mr-2 h-4 w-4 shrink-0', value?.id === location.id ? 'opacity-100' : 'opacity-0')" />
++                  <div class="min-w-0">
++                    <div class="truncate">{{ location.name }}</div>
++                    <div
++                      v-if="duplicateLocationNames.has(location.name)"
++                      class="mt-1 truncate text-xs text-muted-foreground"
++                    >
++                      {{ location.treeString }}
++                    </div>
+                   </div>
+                 </div>
+               </CommandItem>
+@@ -61,7 +77,7 @@
+ </template>
+ 
+ <script setup lang="ts">
+-  import { Check, ChevronsUpDown, X } from "lucide-vue-next";
++  import { Check, ChevronDown, ChevronRight, ChevronsUpDown, X } from "lucide-vue-next";
+   import fuzzysort from "fuzzysort";
+   import { Button } from "~/components/ui/button";
+   import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "~/components/ui/command";
+@@ -69,7 +85,7 @@
+   import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
+   import { cn } from "~/lib/utils";
+   import type { EntitySummary } from "~~/lib/api/types/data-contracts";
+-  import { useFlatLocations } from "~~/composables/use-location-helpers";
++  import { getVisibleLocations, useFlatLocations } from "~~/composables/use-location-helpers";
+ 
+   type Props = {
+     modelValue?: EntitySummary | null;
+@@ -84,6 +100,16 @@
+   const id = useId();
+   const locations = useFlatLocations(props.currentLocation);
+   const value = useVModel(props, "modelValue", emit);
++  const expandedLocationIds = ref(new Set<string>());
++
++  const selectedLocation = computed(() => locations.value.find(location => location.id === value.value?.id));
++  const duplicateLocationNames = computed(() => {
++    const counts = new Map<string, number>();
++    for (const location of locations.value) {
++      counts.set(location.name, (counts.get(location.name) ?? 0) + 1);
++    }
++    return new Set([...counts].filter(([, count]) => count > 1).map(([name]) => name));
++  });
+ 
+   function selectLocation(location: EntitySummary) {
+     if (value.value?.id !== location.id) {
+@@ -100,12 +126,41 @@
+     open.value = false;
+   }
+ 
+-  const filteredLocations = computed(() => {
+-    const filtered = fuzzysort.go(search.value, locations.value, { key: "name", all: true }).map(i => i.obj);
++  const matchingLocations = computed(() =>
++    fuzzysort.go(search.value, locations.value, { key: "name", all: true }).map(i => i.obj)
++  );
++
++  const visibleLocations = computed(() => {
++    if (search.value) {
++      return matchingLocations.value;
++    }
+ 
+-    return filtered;
++    return getVisibleLocations(locations.value, expandedLocationIds.value);
+   });
+ 
++  function toggleExpanded(locationId: string) {
++    const next = new Set(expandedLocationIds.value);
++    if (next.has(locationId)) {
++      next.delete(locationId);
++    } else {
++      next.add(locationId);
++    }
++    expandedLocationIds.value = next;
++  }
++
++  function expandSelectedAncestors() {
++    const locationsById = new Map(locations.value.map(location => [location.id, location]));
++    let parentId = locationsById.get(value.value?.id ?? "")?.parentId;
++    const next = new Set(expandedLocationIds.value);
++    while (parentId) {
++      next.add(parentId);
++      parentId = locationsById.get(parentId)?.parentId ?? null;
++    }
++    expandedLocationIds.value = next;
++  }
++
++  watch([() => value.value?.id, locations], expandSelectedAncestors, { immediate: true });
++
+   // Reset search when value is cleared
+   watch(
+     () => value.value,
+diff --git a/frontend/composables/use-location-helpers.test.ts b/frontend/composables/use-location-helpers.test.ts
+new file mode 100644
+index 00000000..e01c3160
+--- /dev/null
++++ b/frontend/composables/use-location-helpers.test.ts
+@@ -0,0 +1,61 @@
++import { describe, expect, test } from "vitest";
++import type { TreeItem } from "~~/lib/api/types/data-contracts";
++import { flatTree, getVisibleLocations } from "./use-location-helpers";
++
++describe("flatTree", () => {
++  test("keeps parent and depth metadata for expandable location navigation", () => {
++    const tree: TreeItem[] = [
++      {
++        id: "home",
++        name: "Home",
++        type: "location",
++        children: [
++          { id: "office", name: "Office", type: "location", children: [] },
++          {
++            id: "garage",
++            name: "Garage",
++            type: "location",
++            children: [
++              { id: "office-2", name: "Office", type: "location", children: [] },
++              { id: "shelf", name: "Shelf", type: "location", children: [] },
++            ],
++          },
++        ],
++      },
++    ];
++
++    expect(flatTree(tree)).toEqual([
++      { id: "home", name: "Home", treeString: "Home", parentId: null, depth: 0, hasChildren: true },
++      { id: "office", name: "Office", treeString: "Home > Office", parentId: "home", depth: 1, hasChildren: false },
++      { id: "garage", name: "Garage", treeString: "Home > Garage", parentId: "home", depth: 1, hasChildren: true },
++      { id: "office-2", name: "Office", treeString: "Home > Garage > Office", parentId: "garage", depth: 2, hasChildren: false },
++      { id: "shelf", name: "Shelf", treeString: "Home > Garage > Shelf", parentId: "garage", depth: 2, hasChildren: false },
++    ]);
++  });
++
++  test("shows descendants only while their parent locations are expanded", () => {
++    const locations = flatTree([
++      {
++        id: "home",
++        name: "Home",
++        type: "location",
++        children: [
++          {
++            id: "garage",
++            name: "Garage",
++            type: "location",
++            children: [{ id: "shelf", name: "Shelf", type: "location", children: [] }],
++          },
++        ],
++      },
++    ]);
++
++    expect(getVisibleLocations(locations, new Set()).map(location => location.id)).toEqual(["home"]);
++    expect(getVisibleLocations(locations, new Set(["home"])).map(location => location.id)).toEqual(["home", "garage"]);
++    expect(getVisibleLocations(locations, new Set(["home", "garage"])).map(location => location.id)).toEqual([
++      "home",
++      "garage",
++      "shelf",
++    ]);
++  });
++});
+diff --git a/frontend/composables/use-location-helpers.ts b/frontend/composables/use-location-helpers.ts
+index 2679940c..6960ae32 100644
+--- a/frontend/composables/use-location-helpers.ts
++++ b/frontend/composables/use-location-helpers.ts
+@@ -5,15 +5,18 @@ export interface FlatTreeItem {
+   id: string;
+   name: string;
+   treeString: string;
++  parentId: string | null;
++  depth: number;
++  hasChildren: boolean;
+ }
+ 
+-function flatTree(tree: TreeItem[]): FlatTreeItem[] {
++export function flatTree(tree: TreeItem[]): FlatTreeItem[] {
+   const v = [] as FlatTreeItem[];
+ 
+   // turns the nested items into a flat items array where
+   // the display is a string of the tree hierarchy separated by breadcrumbs
+ 
+-  function flatten(items: TreeItem[], display: string) {
++  function flatten(items: TreeItem[], display: string, parentId: string | null = null, depth = 0) {
+     if (!items) {
+       return;
+     }
+@@ -23,9 +26,12 @@ function flatTree(tree: TreeItem[]): FlatTreeItem[] {
+         id: item.id,
+         name: item.name,
+         treeString: display + item.name,
++        parentId,
++        depth,
++        hasChildren: item.children.length > 0,
+       });
+       if (item.children) {
+-        flatten(item.children, display + item.name + " > ");
++        flatten(item.children, display + item.name + " > ", item.id, depth + 1);
+       }
+     }
+   }
+@@ -35,6 +41,20 @@ function flatTree(tree: TreeItem[]): FlatTreeItem[] {
+   return v;
+ }
+ 
++export function getVisibleLocations(locations: FlatTreeItem[], expandedLocationIds: Set<string>): FlatTreeItem[] {
++  const locationsById = new Map(locations.map(location => [location.id, location]));
++  return locations.filter(location => {
++    let parentId = location.parentId;
++    while (parentId) {
++      if (!expandedLocationIds.has(parentId)) {
++        return false;
++      }
++      parentId = locationsById.get(parentId)?.parentId ?? null;
++    }
++    return true;
++  });
++}
++
+ function filterOutSubtree(tree: TreeItem[], excludeId: string): TreeItem[] {
+   // Recursively filters out a subtree starting from excludeId
+   const result: TreeItem[] = [];

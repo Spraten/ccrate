@@ -16,6 +16,9 @@ import threading
 from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(pathlib.Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from homebox_patchset import source_commit
 BUILD = ROOT / 'work/homebox-ui-build'
 TOOLCHAIN_ROOT = ROOT / 'work/toolchains'
 UPSTREAM_ROOT = ROOT
@@ -126,7 +129,7 @@ def brand_frontend():
         if isinstance(value, list): return [values(item) for item in value]
         return value
     for path in (BUILD/'locales').glob('*.json'):
-        path.write_text(json.dumps(values(json.loads(path.read_text())), ensure_ascii=False, indent=2)+'\n')
+        path.write_text(json.dumps(values(json.loads(path.read_text(encoding='utf-8'))), ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     logo = (ROOT/'kiosk/branding/caci-create.svg').read_text()
     (BUILD/'components/App/Logo.vue').write_text('<template>\n'+logo+'</template>\n')
     shutil.copytree(ROOT/'kiosk/branding', BUILD/'public', dirs_exist_ok=True)
@@ -139,7 +142,7 @@ def item_log_frontend():
     path = 'pages/item/[id]/index.vue'
     replace(path, '  import LabelMaker from', '  import WorkshopItemLog from "@/components/Workshop/ItemLog.vue";\n  import ItemLoans from "@/components/Workshop/ItemLoans.vue";\n  import LabelMaker from')
     details_anchor = '          </DetailsSection>\n        </BaseCard>\n\n        <!-- anything in this is not rendered if on another page -->'
-    replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Type and full storage path, followed by A-number native AssetID; U-number is a short UUID when no AssetID is assigned.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
+    replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Generated from item type and full storage path; regenerated when the item moves.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
 
 
 def nest_frontend():
@@ -385,6 +388,8 @@ def strip_item_response_short_codes_from_update_tests():
     relative = pathlib.Path('lib/api/__test__/user/items.test.ts')
     target = BUILD / relative
     source = target.read_text()
+    if not re.search(r'\b(?:displayId|shortCode)\b', source):
+        return
     rewrites = (
         ("    const itemUpdate = {\n      ...item,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,", "    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemDisplayID;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,"),
         ("    const child1ItemUpdate = {\n      ...child1Item,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild1DisplayID, shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1DisplayID;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,"),
@@ -395,17 +400,150 @@ def strip_item_response_short_codes_from_update_tests():
         raise RuntimeError('Expected four pinned item update test fixtures')
     for original, replacement in rewrites:
         count = source.count(original)
+        if count == 0 and source.count(replacement) == 1:
+            continue
         if count != 1:
             raise RuntimeError(f'Expected exactly one item update fixture anchor in {relative}, found {count}')
         source = source.replace(original, replacement)
     target.write_text(source)
 
 
+def camera_ocr_frontend():
+    path = 'pages/item/[id]/index/edit.vue'
+    replace(
+        path,
+        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
+        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
+    )
+    replace(
+        path,
+        '''  async function suggestItemNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      item.value.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+        '''  async function suggestItemNameFromPhoto(file: File) {
+    try {
+      nameOcrMessage.value = t("components.form.camera.ocr_running");
+      const outcome = await suggestNameWithoutOverwritingEdits({
+        getName: () => item.value.name,
+        getRevision: () => nameEditRevision.value,
+        setName: value => { item.value.name = value; },
+        recognize: recognizeNameFromImage,
+        image: file,
+      });
+      if (outcome === "empty") {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+      } else if (outcome === "edited-during-recognition") {
+        nameOcrMessage.value = t("components.form.camera.name_preserved");
+      } else {
+        nameOcrMessage.value = t("components.form.camera.name_suggested");
+      }
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+    )
+    replace(path, '  const nameOcrMessage = ref("");', '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);')
+    replace(
+        path,
+        '                    v-model="item[field.ref]"\n                    class="min-w-0 flex-1"',
+        '                    v-model="item[field.ref]"\n                    @update:model-value="nameEditRevision++"\n                    class="min-w-0 flex-1"',
+    )
+    replace(
+        path,
+        '''                  </Button>
+                </div>
+                <FormTextField
+                  v-else-if="field.type === 'text'"''',
+        '''                  </Button>
+                </div>
+                <p v-if="field.ref === 'name'" class="mt-1 text-xs text-muted-foreground">
+                  {{ $t("components.form.camera.local_ocr_notice") }}
+                </p>
+                <FormTextField
+                  v-else-if="field.type === 'text'"''',
+    )
+
+    modal = 'components/Entity/CreateModal.vue'
+    replace(
+        modal,
+        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
+        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
+    )
+    replace(modal, '  const nameOcrMessage = ref("");', '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);')
+    replace(
+        modal,
+        '''  async function suggestNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      form.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+        '''  async function suggestNameFromPhoto(file: File) {
+    try {
+      nameOcrMessage.value = t("components.form.camera.ocr_running");
+      const outcome = await suggestNameWithoutOverwritingEdits({
+        getName: () => form.name,
+        getRevision: () => nameEditRevision.value,
+        setName: value => { form.name = value; },
+        recognize: recognizeNameFromImage,
+        image: file,
+      });
+      if (outcome === "empty") {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+      } else if (outcome === "edited-during-recognition") {
+        nameOcrMessage.value = t("components.form.camera.name_preserved");
+      } else {
+        nameOcrMessage.value = t("components.form.camera.name_suggested");
+      }
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+    )
+    replace(
+        modal,
+        '          v-model="form.name"\n          class="min-w-0 flex-1"',
+        '          v-model="form.name"\n          @update:model-value="nameEditRevision++"\n          class="min-w-0 flex-1"',
+    )
+    replace(
+        modal,
+        '      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>',
+        '      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>\n      <p class="text-xs text-muted-foreground">{{ $t("components.form.camera.local_ocr_notice") }}</p>',
+    )
+    locale = BUILD/'locales/en.json'
+    data = json.loads(locale.read_text(encoding='utf-8'))
+    camera = data['components']['form']['camera']
+    camera['name_preserved'] = 'Your typed name was kept. OCR finished in the background.'
+    camera['ocr_running'] = 'Reading the label in this browser… first use may download OCR code and the English model.'
+    camera['local_ocr_notice'] = 'Name suggestions run in this browser, and the suggestion photo is not uploaded. OCR code and the English model download on first use.'
+    locale.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+
+
 def prepare():
-    shutil.copytree(UPSTREAM_ROOT/'upstream/homebox/frontend', BUILD, dirs_exist_ok=True,
+    from homebox_patchset import materialize
+    native_source = materialize(UPSTREAM_ROOT)
+    shutil.copytree(native_source/'frontend', BUILD, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('node_modules', '.nuxt', '.output'))
     strip_item_response_short_codes_from_update_tests()
     shutil.copytree(ROOT/'homebox-ui/overlay', BUILD, dirs_exist_ok=True)
+    camera_ocr_frontend()
     shutil.copy2(ROOT/'kiosk/member-avatar.js', BUILD/'lib/member-avatar.js')
     shutil.copy2(ROOT/'kiosk/label-editor.js', BUILD/'lib/label-editor.js')
     package = json.loads((BUILD/'package.json').read_text())
@@ -557,7 +695,7 @@ def build():
         diagnostics = [list(match.groups()) for match in re.finditer(r'^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$', result.stdout+result.stderr, re.M)]
         if result.returncode:
             baseline = json.loads((ROOT/'homebox-ui/upstream-typecheck.json').read_text())
-            pin = subprocess.check_output(['git', '-C', str(UPSTREAM_ROOT/'upstream/homebox'), 'rev-parse', 'HEAD'], text=True).strip()
+            pin = source_commit(UPSTREAM_ROOT/'upstream/homebox')
             additional = Counter(map(tuple, diagnostics))-Counter(map(tuple, baseline['diagnostics']))
             if baseline['pin'] != pin or not diagnostics or additional:
                 print(result.stdout+result.stderr)

@@ -1,0 +1,28 @@
+{
+  "base": "e01dd737238a3fa7e1a6454b37de6c6fc88c86e4",
+  "patches": [
+    "0001-feat-persist-entity-barcodes.patch",
+    "0002-feat-generate-Ent-barcode-support.patch",
+    "0003-docs-expose-nullable-entity-barcode-API.patch",
+    "0004-fix-preserve-entity-barcode-on-omitted-updates.patch",
+    "0005-feat-add-group-scoped-barcode-item-search.patch",
+    "0006-docs-publish-barcode-list-filter.patch",
+    "0007-fix-clean-barcode-query-review-findings.patch",
+    "0008-feat-integrate-barcode-capture-into-item-creation.patch",
+    "0009-fix-preserve-barcode-draft-and-sync-API-specs.patch",
+    "0010-fix-route-standalone-scanner-results-into-item-creat.patch",
+    "0011-fix-preserve-template-overrides-and-barcode-context.patch",
+    "0012-test-include-barcode-in-context-lookup-snapshot.patch",
+    "0013-fix-barcode-inventory-integration-gaps.patch",
+    "0014-preserve-inventory-search-with-barcode-lookup.patch",
+    "0015-update-existing-barcode-from-CSV-imports.patch",
+    "0016-Add-light-dark-and-system-appearance-settings.patch",
+    "0017-Make-location-selector-navigable-as-a-tree.patch",
+    "0018-Keep-location-search-results-navigable.patch",
+    "0019-Add-item-camera-capture-and-local-name-suggestions.patch",
+    "0020-Fix-item-camera-save-and-OCR-races.patch",
+    "0021-Prefer-prominent-OCR-title-candidates.patch",
+    "0022-Keep-OCR-title-clusters-spatially-aligned.patch",
+    "0023-Fix-frontend-item-and-camera-test-fixtures.patch"
+  ]
+}

@@ -1,5 +1,5 @@
 """Native QR label previews and one-shot USB printing with durable outcomes."""
-import io,base64,json,pathlib,subprocess,textwrap,hashlib,os
+import io,base64,json,pathlib,subprocess,hashlib,os,re
 import qrcode
 from PIL import Image,ImageDraw,ImageFont
 from ledger import Conflict,uuid
@@ -15,6 +15,33 @@ def probe():
     result=subprocess.run([adapter(),'probe',printer_path()],capture_output=True,timeout=15,check=True)
     return json.loads(result.stdout)
 def font(size):return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',size)
+def _fit_name_lines(content,draw,name_font,available,max_lines):
+    measure=lambda text:draw.textbbox((0,0),text,font=name_font)[2]
+    lines=[]
+    for paragraph in re.split(r'\r\n?|\n',content):
+        if paragraph=='':
+            lines.append('');continue
+        current=''
+        for word in paragraph.split(' '):
+            candidate=word if current=='' else current+' '+word
+            if measure(candidate)<=available:
+                current=candidate;continue
+            if current:lines.append(current)
+            if measure(word)<=available:
+                current=word;continue
+            chunk=''
+            for character in word:
+                if chunk and measure(chunk+character)>available:
+                    lines.append(chunk);chunk=character
+                else:chunk+=character
+            current=chunk
+        lines.append(current)
+    if len(lines)>max_lines:
+        lines=lines[:max_lines];characters=list(lines[-1])
+        while characters and measure(''.join(characters)+'…')>available:characters.pop()
+        if measure('…')>available:return []
+        lines[-1]=''.join(characters)+'…'
+    return lines
 def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=None):
     width=min(384,int(width_mm)*8);height=int(height_mm)*8-16
     if width<256 or height<208:raise ValueError('Loaded labels are too small for this QR layout (minimum 32 x 28 mm)')
@@ -29,16 +56,11 @@ def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=Non
             if black:draw.rectangle((x*scale,26+y*scale,(x+1)*scale-1,26+(y+1)*scale-1),fill=0)
     left=len(matrix)*scale+4;available=width-left-4;top=30
     # Bold, binary text avoids weak gray edge dots from thermal dithering.
-    name_font=font(18);lines=[];line=''
-    for character in ' '.join(entity['name'].split()):
-        candidate=line+character
-        if line and draw.textbbox((0,0),candidate,font=name_font)[2]>available:
-            lines.append(line.rstrip());line=character.lstrip()
-        else:line=candidate
-    if line:lines.append(line)
     max_lines=max(1,(height-74-top)//22)
+    name_font=font(18);lines=_fit_name_lines(entity['name'],draw,name_font,available,max_lines)
     for line in lines[:max_lines]:
-        draw.text((left,top),line,font=name_font,fill=0);top+=22
+        if line:draw.text((left,top),line,font=name_font,fill=0)
+        top+=22
     identifier=entity.get('assetId','');identifier_font=font(17)
     while identifier and draw.textbbox((0,0),identifier,font=identifier_font)[2]>available:identifier=identifier[:-1]
     draw.text((left,height-56),identifier,font=identifier_font,fill=0)

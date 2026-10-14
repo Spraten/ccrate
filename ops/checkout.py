@@ -27,6 +27,35 @@ def checkout_status_actor(ledger, group, request_key, badge_actor, service_actor
     return badge_actor if operation and operation['action']=='check_out' else service_actor
 
 
+def checkout_availability(client, ledger, group, entity_ids):
+    """Return current native and ledger blockers for a bounded set of checkout assets."""
+    group=uuid(group)
+    if not isinstance(entity_ids,list) or len(entity_ids)>50:
+        raise ValueError('Check at most 50 checkout assets at a time')
+    ids=[uuid(entity_id) for entity_id in entity_ids]
+    if len(ids)!=len(set(ids)):
+        raise ValueError('Check distinct checkout assets')
+    held={row['entity_id'] for row in ledger.custody(group)}
+    unresolved={}
+    for operation in ledger.unresolved():
+        if operation['group_id']!=group:
+            continue
+        action='Checkout' if operation['action']=='check_out' else 'Return'
+        reason=f"{action} operation requires recovery ({operation['status']})"
+        for entity_id in ledger.detail(group,operation['id'])['assets']:
+            unresolved[entity_id]=reason
+    result=[]
+    for entity_id in ids:
+        entity=client.entity(entity_id)
+        reason=checkout_blocker(entity)
+        if reason is None and entity_id in held:
+            reason='Already checked out'
+        if reason is None:
+            reason=unresolved.get(entity_id)
+        result.append({'id':entity_id,'name':entity['name'],'reason':reason})
+    return result
+
+
 def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None, cart_context=None):
     group,actor=uuid(group),uuid(actor)
     assets=[uuid(a) for a in assets]
@@ -45,6 +74,14 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
         if len(items)!=len(set(items)) or set(expand_cart_assets(client,items))!=set(assets):
             raise Conflict('Checkout items do not match the saved cart selection and current kit manifests.')
         snapshot={'revision':revision,'items':sorted(items)}
+        if 'original_items' in cart_context:
+            original=cart_context['original_items']
+            if not isinstance(original,list) or len(original)>50:
+                raise ValueError('Checkout cart changed; reload the saved selection.')
+            original=[uuid(item) for item in original]
+            if len(original)!=len(set(original)):
+                raise ValueError('Checkout cart changed; reload the saved selection.')
+            snapshot['original_items']=sorted(original)
     entities=[]
     for asset in assets:
         entity=client.entity(asset)

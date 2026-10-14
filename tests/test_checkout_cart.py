@@ -81,6 +81,20 @@ class CheckoutCartTests(unittest.TestCase):
         self.assertEqual(result['cart']['items'], [self.other_asset])
         self.assertEqual(result, self.cart.consume_completed_receipt(self.group, self.actor, operation['id']))
 
+    def test_kiosk_edit_receipt_does_not_overwrite_a_newer_desk_cart_revision(self):
+        saved = self.save([self.asset, self.other_asset])
+        operation = self.ledger.begin(self.group, self.actor, 'check_out', [self.asset], ident(),
+                                      context={'checkout_cart': {'revision': saved['revision'],
+                                                                 'items': [self.asset],
+                                                                 'original_items': saved['items']}})
+        self.ledger.complete(operation['id'])
+        newer = self.save([self.other_asset], revision=saved['revision'])
+
+        result = self.cart.consume_completed_receipt(self.group, self.actor, operation['id'])
+
+        self.assertTrue(result['cart_changed'])
+        self.assertEqual(result['cart'], newer)
+
     def test_receipt_cannot_consume_another_actors_or_groups_cart(self):
         saved = self.save([self.asset])
         operation = self.ledger.begin(self.group, self.actor, 'check_out', [self.asset], ident(),

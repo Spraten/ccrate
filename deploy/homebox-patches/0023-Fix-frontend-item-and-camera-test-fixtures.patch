@@ -1,0 +1,74 @@
+From 898c969dc937a46b3910963caa78835d695431ff Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 07:04:13 -0400
+Subject: [PATCH 23/23] Fix frontend item and camera test fixtures
+
+---
+ frontend/components/Form/camera.test.ts      | 2 +-
+ frontend/lib/api/__test__/user/items.test.ts | 8 ++++++++
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/frontend/components/Form/camera.test.ts b/frontend/components/Form/camera.test.ts
+index b608cf96..fe19a5c2 100644
+--- a/frontend/components/Form/camera.test.ts
++++ b/frontend/components/Form/camera.test.ts
+@@ -94,7 +94,7 @@ describe("local camera helpers", () => {
+ 
+   test("recognizes text from an image file locally and releases the decoded bitmap", async () => {
+     let closed = false;
+-    const bitmap = { close: () => (closed = true) } as ImageBitmap;
++    const bitmap = { close: () => (closed = true) } as unknown as ImageBitmap;
+     class Detector {
+       async detect() {
+         return [{ rawValue: "  Model XR-4 " }];
+diff --git a/frontend/lib/api/__test__/user/items.test.ts b/frontend/lib/api/__test__/user/items.test.ts
+index 68ae642b..073ef2b6 100644
+--- a/frontend/lib/api/__test__/user/items.test.ts
++++ b/frontend/lib/api/__test__/user/items.test.ts
+@@ -67,10 +67,14 @@ describe("user should be able to create an item and add an attachment", () => {
+   test("user should be able to create an item with an internal barcode and product details", async () => {
+     const api = await sharedUserClient();
+     const [location, cleanupLocation] = await useLocation(api);
++    const { data: entityTypes } = await api.entityTypes.getAll();
++    const entityTypeId = entityTypes.find(type => !type.isLocation)?.id;
++    expect(entityTypeId).toBeTruthy();
+     const barcode = "X9TEUJR4L";
+     const { response, data: item } = await api.items.create({
+       name: "Heat shrink tubing",
+       description: "560 piece assortment",
++      entityTypeId: entityTypeId!,
+       parentId: location.id,
+       quantity: 1,
+       tagIds: [],
+@@ -116,6 +120,7 @@ describe("user should be able to create an item and add an attachment", () => {
+     // Add fields
+     const itemUpdate = {
+       ...item,
++      entityTypeId: item.entityType?.id || "",
+       parentId: item.parent?.id || null,
+       tagIds: item.tags.map(l => l.id),
+       fields,
+@@ -248,6 +253,7 @@ describe("user should be able to create an item and add an attachment", () => {
+     expect(child1Response.status).toBe(201);
+     const child1ItemUpdate = {
+       ...child1Item,
++      entityTypeId: child1Item.entityType?.id || "",
+       parentId: parent.id,
+       tagIds: [],
+     };
+@@ -264,6 +270,7 @@ describe("user should be able to create an item and add an attachment", () => {
+     expect(child2Response.status).toBe(201);
+     const child2ItemUpdate = {
+       ...child2Item,
++      entityTypeId: child2Item.entityType?.id || "",
+       parentId: parent.id,
+       tagIds: [],
+     };
+@@ -272,6 +279,7 @@ describe("user should be able to create an item and add an attachment", () => {
+ 
+     const itemUpdate = {
+       ...parent,
++      entityTypeId: parent.entityType?.id || "",
+       parentId: parentLocation.id,
+       tagIds: [],
+       syncChildEntityLocations: true,

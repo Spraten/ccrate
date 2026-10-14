@@ -17,7 +17,7 @@ class KioskStaticAssetTests(unittest.TestCase):
             'desktop_handle': lambda *_args: False,
             'ROOT': ROOT,
             'lock': object(), 'ledger': object(), 'shelf_checks': object(), 'badges': object(),
-            'native_jobs': object(), 'imports': object(), 'workshop': object(), 'sessions': object(),
+            'checkout_cart': object(), 'native_jobs': object(), 'imports': object(), 'workshop': object(), 'sessions': object(),
             'label_layouts': object(), 'LABEL_ASSET_ROOT': ROOT,
             'urlsplit': urlsplit, 'parse_qs': parse_qs,
             'terminal_assets': lambda: ROOT / 'kiosk',

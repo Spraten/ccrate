@@ -1,0 +1,163 @@
+From 743a6ad6b7202bd49b396f31773f19a2d8ba1e9b Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 21:56:48 -0400
+Subject: [PATCH 03/23] docs: expose nullable entity barcode API
+
+---
+ backend/internal/data/repo/repo_entities.go |  4 ++--
+ docs/public/api/openapi-3.0.json            | 17 +++++++++++++++++
+ docs/public/api/swagger-2.0.json            | 17 +++++++++++++++++
+ frontend/lib/api/types/data-contracts.ts    |  6 ++++--
+ 4 files changed, 40 insertions(+), 4 deletions(-)
+
+diff --git a/backend/internal/data/repo/repo_entities.go b/backend/internal/data/repo/repo_entities.go
+index 6cf5a08c..336e16b6 100644
+--- a/backend/internal/data/repo/repo_entities.go
++++ b/backend/internal/data/repo/repo_entities.go
+@@ -98,7 +98,7 @@ type (
+ 
+ 		// Edges
+ 		TagIDs []uuid.UUID `json:"tagIds"`
+-		Barcode string `json:"barcode,omitempty" validate:"max=80"`
++		Barcode string `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
+ 	}
+ 
+ 	EntityUpdate struct {
+@@ -118,7 +118,7 @@ type (
+ 
+ 		// Identifications
+ 		SerialNumber string `json:"serialNumber"`
+-		Barcode      string `json:"barcode,omitempty" validate:"max=80"`
++		Barcode      string `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
+ 		ModelNumber  string `json:"modelNumber"`
+ 		Manufacturer string `json:"manufacturer"`
+ 
+diff --git a/docs/public/api/openapi-3.0.json b/docs/public/api/openapi-3.0.json
+index f2474084..b31e750a 100644
+--- a/docs/public/api/openapi-3.0.json
++++ b/docs/public/api/openapi-3.0.json
+@@ -3802,6 +3802,10 @@
+                     "warranty_expires": {
+                         "description": "WarrantyExpires holds the value of the \"warranty_expires\" field.",
+                         "type": "string"
++                    },
++                    "barcode": {
++                        "description": "Barcode holds the value of the \"barcode\" field.",
++                        "type": "string"
+                     }
+                 }
+             },
+@@ -5028,6 +5032,11 @@
+                         "items": {
+                             "type": "string"
+                         }
++                    },
++                    "barcode": {
++                        "type": "string",
++                        "maxLength": 80,
++                        "nullable": true
+                     }
+                 }
+             },
+@@ -5217,6 +5226,9 @@
+                     },
+                     "warrantyExpires": {
+                         "type": "string"
++                    },
++                    "barcode": {
++                        "type": "string"
+                     }
+                 }
+             },
+@@ -5804,6 +5816,11 @@
+                     },
+                     "warrantyExpires": {
+                         "type": "string"
++                    },
++                    "barcode": {
++                        "type": "string",
++                        "maxLength": 80,
++                        "nullable": true
+                     }
+                 }
+             },
+diff --git a/docs/public/api/swagger-2.0.json b/docs/public/api/swagger-2.0.json
+index 666f56c4..32927918 100644
+--- a/docs/public/api/swagger-2.0.json
++++ b/docs/public/api/swagger-2.0.json
+@@ -3560,6 +3560,10 @@
+                 "warranty_expires": {
+                     "description": "WarrantyExpires holds the value of the \"warranty_expires\" field.",
+                     "type": "string"
++                },
++                "barcode": {
++                    "description": "Barcode holds the value of the \"barcode\" field.",
++                    "type": "string"
+                 }
+             }
+         },
+@@ -4786,6 +4790,11 @@
+                     "items": {
+                         "type": "string"
+                     }
++                },
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
+                 }
+             }
+         },
+@@ -4975,6 +4984,9 @@
+                 },
+                 "warrantyExpires": {
+                     "type": "string"
++                },
++                "barcode": {
++                    "type": "string"
+                 }
+             }
+         },
+@@ -5562,6 +5574,11 @@
+                 },
+                 "warrantyExpires": {
+                     "type": "string"
++                },
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
+                 }
+             }
+         },
+diff --git a/frontend/lib/api/types/data-contracts.ts b/frontend/lib/api/types/data-contracts.ts
+index ffc3ffc6..d4697a84 100644
+--- a/frontend/lib/api/types/data-contracts.ts
++++ b/frontend/lib/api/types/data-contracts.ts
+@@ -186,6 +186,8 @@ export interface EntEntity {
+   archived: boolean;
+   /** AssetID holds the value of the "asset_id" field. */
+   asset_id: number;
++  /** Barcode holds the value of the "barcode" field. */
++  barcode: string;
+   /** CreatedAt holds the value of the "created_at" field. */
+   created_at: string;
+   /** Description holds the value of the "description" field. */
+@@ -741,7 +743,7 @@ export interface DuplicateOptions {
+ 
+ export interface EntityCreate {
+   /** @maxLength 80 */
+-  barcode?: string;
++  barcode?: string | null;
+   /** @maxLength 1000 */
+   description: string;
+   entityTypeId: string;
+@@ -994,7 +996,7 @@ export interface EntityUpdate {
+   archived: boolean;
+   assetId: string;
+   /** @maxLength 80 */
+-  barcode?: string;
++  barcode?: string | null;
+   /** @maxLength 1000 */
+   description: string;
+   entityTypeId: string;

@@ -1,7 +1,7 @@
 import copy,json,pathlib,tempfile,unittest
 from uuid import uuid4
 from ledger import Ledger,Conflict
-from checkout import checkout_status_actor, confirm_checkout, expand_cart_assets
+from checkout import checkout_availability, checkout_status_actor, confirm_checkout, expand_cart_assets
 from checkout_cart import CheckoutCart
 from kits import manifest
 
@@ -51,6 +51,18 @@ class Tests(unittest.TestCase):
         self.assertEqual(consumed['consumed'],[self.asset])
         self.assertEqual(consumed['cart']['items'],[other])
 
+    def test_completed_kiosk_edit_consumes_checked_out_and_removed_saved_rows(self):
+        cart=CheckoutCart(self.ledger);other=str(uuid4())
+        other_entity=copy.deepcopy(self.entity);other_entity['id']=other;self.client.assets[other]=other_entity
+        saved=cart.save(self.group,self.user,[self.asset,other],0,str(uuid4()))
+
+        receipt=self.confirm(assets=[self.asset],cart_context={'revision':saved['revision'],'items':[self.asset],
+                                                               'original_items':[self.asset,other]})
+
+        result=cart.consume_completed_receipt(self.group,self.user,receipt['id'])
+        self.assertEqual(result['cart']['items'],[])
+        self.assertEqual(result['cart']['revision'],saved['revision']+1)
+
     def test_kiosk_can_confirm_items_added_beyond_the_desk_cart(self):
         cart=CheckoutCart(self.ledger);other=str(uuid4())
         other_entity=copy.deepcopy(self.entity);other_entity['id']=other;self.client.assets[other]=other_entity
@@ -67,6 +79,20 @@ class Tests(unittest.TestCase):
         with self.assertRaises(Conflict):self.confirm()
 
         self.assertEqual(len(self.ledger.unresolved()),1)
+
+    def test_availability_reports_unresolved_operation_blockers(self):
+        self.ledger.begin(self.group,self.user,'check_out',[self.asset],str(uuid4()))
+
+        result=checkout_availability(self.client,self.ledger,self.group,[self.asset])
+
+        self.assertEqual(result,[{'id':self.asset,'name':'Test equipment',
+                                  'reason':'Checkout operation requires recovery (pending)'}])
+        operation=self.ledger.unresolved()[0]
+        self.ledger.review(operation['id'],'Native result needs inspection')
+
+        result=checkout_availability(self.client,self.ledger,self.group,[self.asset])
+
+        self.assertEqual(result[0]['reason'],'Checkout operation requires recovery (review)')
 
     def test_saved_kit_root_expands_only_to_its_current_verified_manifest(self):
         child=str(uuid4())

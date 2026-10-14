@@ -1,0 +1,22 @@
+From 721ff46ab4e5a537ff62adda687cd723d2eb0131 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 23:08:41 -0400
+Subject: [PATCH 12/23] test: include barcode in context lookup snapshot
+
+---
+ frontend/components/Entity/barcode.test.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+index 653333e1..8ecab58d 100644
+--- a/frontend/components/Entity/barcode.test.ts
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -211,7 +211,7 @@ describe("item barcode helpers", () => {
+     routeBarcodeScanResult({ type: "barcode", barcode: "0012345" }, () => false, openStandaloneItem);
+ 
+     expect(draft.barcode).toBe("0012345");
+-    expect(observed).toEqual([expected]);
++    expect(observed).toEqual([{ barcode: "0012345", ...expected }]);
+     expect(lookup).toHaveBeenCalledWith(1, false);
+   });
+ 

@@ -62,7 +62,7 @@ from PIL import Image
 import zxingcpp, qrcode
 from urllib.parse import urlsplit, parse_qs
 from homebox import Homebox
-from checkout import confirm_checkout, checkout_status_actor
+from checkout import confirm_checkout, checkout_availability, checkout_status_actor
 from checkout_cart import CheckoutCart
 from returns import confirm_return, recover, RETURN_STATES
 from maps import list_map,save_room,save_object,remove_object
@@ -509,7 +509,7 @@ class Handler(BaseHTTPRequestHandler):
                             requested=[str(NativeUUID(value)) for value in requested]
                             if len(requested)>50 or len(requested)!=len(set(requested)):
                                 raise Conflict('Your saved checkout cart changed. Review it again.')
-                            cart_context={'revision':saved['revision'],'items':requested}
+                            cart_context={'revision':saved['revision'],'items':requested,'original_items':saved['items']}
                         result=confirm_checkout(client,ledger,group,actor,data.get('assets',[]),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'),cart_context)
                         if cart_context is not None:
                             result['cart_consumption']=checkout_cart.consume_completed_receipt(group,actor,result['id'])
@@ -649,6 +649,25 @@ class Handler(BaseHTTPRequestHandler):
                     if self.session.snapshot()!=(actor,generation):raise Conflict('Badge session changed; reload the checkout cart')
                 self.reply_json(200,result)
             except (OSError,ValueError,Conflict) as error:self.reply_json(409,{'error':str(error)})
+            return
+        if urlsplit(self.path).path=='/checkout/availability':
+            actor,generation=self.session.snapshot()
+            if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
+            try:
+                query=parse_qs(urlsplit(self.path).query,keep_blank_values=True)
+                if set(query)!={'ids'} or len(query['ids'])!=1:raise ValueError('Choose checkout items to review')
+                ids=query['ids'][0].split(',')
+                with lock:
+                    client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId']
+                    client.tenant=group
+                    members=client.call('/api/v1/groups/members')
+                    if actor not in {member['id'] for member in members}:raise Conflict('Badge holder is no longer a collection member')
+                    result=checkout_availability(client,ledger,group,ids)
+                    if self.session.snapshot()!=(actor,generation):raise Conflict('Badge session changed; refresh checkout availability')
+                self.reply_json(200,result)
+            except (ValueError,KeyError) as error:self.reply_json(400,{'error':str(error)})
+            except Conflict as error:self.reply_json(409,{'error':str(error)})
+            except OSError as error:self.reply_json(503,{'error':str(error) or 'C-Crate unavailable'})
             return
         terminal_path=urlsplit(self.path)
         if terminal_path.path.startswith('/workshop/checks/'):

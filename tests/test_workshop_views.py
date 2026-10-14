@@ -276,6 +276,24 @@ class WorkshopViewTests(unittest.TestCase):
         self.assertIsNone(result['entity_id'])
         self.assertEqual({row['id'] for row in result['candidates']}, {item, conflict})
 
+    def test_ambiguous_native_barcode_returns_selectable_candidates(self):
+        code = 'NETUM-C750-YELLOW'
+        first = self.client.add('Scanner one', barcode=code)
+        second = self.client.add('Scanner two', barcode=code)
+        result = resolve_workshop_code(self.client, code)
+        self.assertIsNone(result['entity_id'])
+        self.assertEqual({row['id'] for row in result['candidates']}, {first, second})
+
+    def test_ambiguous_candidates_are_unique_when_one_item_matches_barcode_and_gtin(self):
+        code = '4006381333931'
+        first = self.client.add('Barcode and GTIN', barcode=code, fields=[
+            {'name': 'Product GTIN', 'type': 'text', 'textValue': code}])
+        second = self.client.add('Barcode only', barcode=code)
+        result = resolve_workshop_code(self.client, code)
+        self.assertIsNone(result['entity_id'])
+        self.assertEqual({row['id'] for row in result['candidates']}, {first, second})
+        self.assertEqual(len(result['candidates']), 2)
+
     def test_archived_short_code_is_not_resolvable(self):
         archived = self.client.add('Archived tool', archived=True, shortCode='DHP-002')
         self.assertIsNone(resolve_workshop_code(self.client, 'DHP-002')['entity_id'])

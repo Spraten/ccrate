@@ -4,7 +4,9 @@ import pathlib,shutil,subprocess,os,json,hashlib,re
 from datetime import datetime,timezone
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 BUILD=ROOT/'work/homebox-backend-build'
-shutil.copytree(ROOT/'upstream/homebox/backend',BUILD,dirs_exist_ok=True)
+from homebox_patchset import load_patchset, materialize, source_commit, source_tree_digest
+NATIVE_SOURCE=materialize(ROOT)
+shutil.copytree(NATIVE_SOURCE/'backend',BUILD,dirs_exist_ok=True)
 for source, destination in (
     (ROOT/'homebox-backend/shortcodes', BUILD/'internal/data/shortcodes'),
     (ROOT/'homebox-backend/repo_short_codes.go', BUILD/'internal/data/repo/repo_short_codes.go'),
@@ -480,9 +482,11 @@ docs.write_text(body[:start]+raw+body[end:])
 # Embed the current verified frontend; the public gateway selects its own release.
 shutil.copytree(ROOT/'work/homebox-ui-current',BUILD/'app/api/static/public',dirs_exist_ok=True)
 subprocess.run([str(go.with_name('gofmt')),'-w',str(schema),str(source),str(source.parent/'repo_hierarchy.go'),str(BUILD/'internal/data/repo/repo_display_ids.go'),str(BUILD/'internal/data/repo/repo_display_ids_test.go'),str(controller),str(docs),str(users),str(profile_repo),str(profile_controller),str(routes),str(groups),str(service),str(BUILD/'internal/data/repo/repo_short_codes.go'),str(BUILD/'internal/data/repo/repo_short_codes_test.go'),str(BUILD/'internal/data/ent/short_code_tx.go'),str(BUILD/'internal/data/shortcodes/migration_test.go'),str(BUILD/'app/api/handlers/v1/v1_ctrl_item_short_codes.go')],check=True)
-pin=subprocess.check_output(['git','-C',str(ROOT/'upstream/homebox'),'rev-parse','HEAD'],text=True).strip()
+pin=source_commit(ROOT/'upstream/homebox')
+patch_base,_,patchset_sha256=load_patchset(ROOT)
+if patch_base!=pin:raise ValueError('Homebox patchset source pin mismatch during backend build')
 flags='-s -w -X main.version=0.26.2-caci.2-shortcodes -X main.commit='+pin+'+hierarchy+members+shortcodes -X main.date='+datetime.now(timezone.utc).isoformat()
 subprocess.run([str(go),'build','-mod=readonly','-p','2','-trimpath','-ldflags',flags,'-o',str(BUILD/'homebox'),'./app/api'],cwd=BUILD,env=env,check=True)
-receipt={'upstream':pin,'hierarchy_source_sha256':hashlib.sha256((ROOT/'homebox-backend/repo_hierarchy.go').read_bytes()).hexdigest(),'member_sources_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'homebox-backend/repo_member_profiles.go',ROOT/'homebox-backend/v1_ctrl_member_profiles.go')},'short_code_sources_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'homebox-backend/repo_short_codes.go',ROOT/'homebox-backend/ent_tx_sql.go',ROOT/'homebox-backend/v1_ctrl_item_short_codes.go',ROOT/'homebox-backend/shortcodes/short_code.go',ROOT/'homebox-backend/shortcodes/migration.go',ROOT/'homebox-backend/20260513120000_item_short_codes.go',ROOT/'homebox-backend/20260513120001_item_short_codes.go')},'binary_sha256':hashlib.sha256((BUILD/'homebox').read_bytes()).hexdigest(),'version':'0.26.2-caci.2-shortcodes','deployed':False}
+receipt={'upstream':pin,'patchset_sha256':patchset_sha256,'backend_overlay_sha256':source_tree_digest(ROOT/'homebox-backend'),'backend_builder_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),'frontend_sha256':source_tree_digest(ROOT/'work/homebox-ui-current'),'hierarchy_source_sha256':hashlib.sha256((ROOT/'homebox-backend/repo_hierarchy.go').read_bytes()).hexdigest(),'member_sources_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'homebox-backend/repo_member_profiles.go',ROOT/'homebox-backend/v1_ctrl_member_profiles.go')},'short_code_sources_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'homebox-backend/repo_short_codes.go',ROOT/'homebox-backend/ent_tx_sql.go',ROOT/'homebox-backend/v1_ctrl_item_short_codes.go',ROOT/'homebox-backend/shortcodes/short_code.go',ROOT/'homebox-backend/shortcodes/migration.go',ROOT/'homebox-backend/20260513120000_item_short_codes.go',ROOT/'homebox-backend/20260513120001_item_short_codes.go')},'binary_sha256':hashlib.sha256((BUILD/'homebox').read_bytes()).hexdigest(),'version':'0.26.2-caci.2-shortcodes','deployed':False}
 (BUILD/'build-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
 print(json.dumps(receipt))

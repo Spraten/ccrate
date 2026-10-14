@@ -8,6 +8,38 @@ from ledger import Ledger,Conflict
 from native_jobs import NativeJobs
 from badges import Badges
 import labels
+
+def _drawn_name_lines(name):
+    real_draw=labels.ImageDraw.Draw;drawn=[]
+    class TrackingDraw:
+        def __init__(self,*args,**kwargs):self.inner=real_draw(*args,**kwargs)
+        def __getattr__(self,name):return getattr(self.inner,name)
+        def text(self,xy,text,*args,**kwargs):
+            if 30 <= xy[1] < 152:drawn.append(text)
+            return self.inner.text(xy,text,*args,**kwargs)
+    with patch.object(labels,'font',side_effect=lambda size:ImageFont.load_default(size=size)),patch.object(labels.ImageDraw,'Draw',side_effect=TrackingDraw):
+        labels.render({'id':str(uuid4()),'name':name},32,28,code_override='x')
+    return drawn
+
+class LegacyLabelTextTests(unittest.TestCase):
+    def test_explicit_newline_remains_a_line_break_in_the_legacy_preview(self):
+        self.assertEqual(_drawn_name_lines('Alpha\nBeta'),['Alpha','Beta'])
+
+    def test_multiword_overflow_is_marked_with_an_ellipsis(self):
+        drawn=_drawn_name_lines('alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu')
+        self.assertTrue(drawn[-1].endswith('…'),drawn)
+
+    def test_unbroken_overflow_wraps_and_is_marked_with_an_ellipsis(self):
+        drawn=_drawn_name_lines('ABCDEFGHIJKLMNOPQRSTUVWXYZ' * 5)
+        self.assertGreater(len(drawn),1,drawn)
+        self.assertTrue(drawn[-1].endswith('…'),drawn)
+
+    def test_crlf_preserves_line_breaks_and_marks_overflow(self):
+        drawn=_drawn_name_lines('Alpha\r\nBeta\r\nGamma\r\nDelta\r\nEpsilon')
+        self.assertEqual(len(drawn),4,drawn)
+        self.assertEqual(drawn[:3],['Alpha','Beta','Gamma'])
+        self.assertTrue(drawn[-1].endswith('…'),drawn)
+
 class LabelTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.ledger=Ledger(Path(self.temp.name)/'ledger.db');self.jobs=NativeJobs(self.ledger);self.badges=Badges(self.ledger);self.group=str(uuid4());self.user=str(uuid4());self.badge=self.badges.issue(self.group,self.user,[self.user]);self.prints=[]

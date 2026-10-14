@@ -60,6 +60,7 @@ class SessionFixture:
     instance = 'fixture-session'
     def __init__(self, actor): self.actor = actor
     def current(self, activity=False): return self.actor
+    def snapshot(self): return self.actor, 1
 
 
 class WorkshopRouteTests(unittest.TestCase):
@@ -95,9 +96,11 @@ class WorkshopRouteTests(unittest.TestCase):
             'ROOT': self.root, 'desktop_handle': lambda *_: False, 'sessions': type('Sessions', (), {'get': lambda _s, _c: SessionFixture(self.member)})(),
             'same_origin': lambda *_: True, 'OPEN_ADMIN': True, 'lock': threading.Lock(),
             'Homebox': lambda *_: self.native, 'workshop': self.workshop, 'ledger': self.ledger,
+            'checkout_cart': object(),
             'shelf_checks': self.shelf_checks,
             'CheckAccessDenied': CheckAccessDenied,
             'native_jobs': self.jobs, 'badges': None, 'imports': None, 'label_layouts': None,
+            'checkout_status_actor': __import__('checkout').checkout_status_actor,
             'LABEL_ASSET_ROOT': self.root, 'session': SessionFixture(self.member),
             'ApiError': desktop_api.ApiError,
             'os': os,

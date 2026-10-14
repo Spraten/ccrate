@@ -2,15 +2,16 @@
 
 **Goal:** Resolve the 15 issues currently open in `Spraten/ccrate` with small, verified changes. Preserve the existing Homebox authority, C-Crate overlay pipeline, printer recovery safeguards, badge audit semantics, and user's existing local Workshop work.
 
-**Status (2026-10-14):** The 15 feature slices are implemented locally on `codex/item-shortcodes-integration`. The production UI build succeeds, focused feedback/builder/navigation/item-log tests pass (34), checkout/return tests pass (68, one skipped), and focused scanner/label-editor bridge tests pass (16). Sol reviewed the feedback changes and the build/barcode integration as SHIP; the generated UI typecheck matches its 38-entry upstream baseline. Publishing is not complete: the branch points at local commits in the upstream Homebox submodule, which are not present in that remote. The user-owned C-Crate branch is left unchanged until the submodule can be made fetchable. GitHub issues remain open until the verified implementation is available on the remote branch.
+**Status (2026-10-14):** All 15 issue slices have implementation and focused regression coverage in this checkout. Homebox is pinned to public base `e01dd737`; the 23 private submodule commits are represented by ordered patches in `deploy/homebox-patches/`, and release staging exports a hash-verified snapshot of the exact pinned source. Focused checks pass for checkout/cart and scan flows (93 tests), label recovery and OCR/location behavior (15 Node tests), patchset/UI materialization (10 tests), label-release staging (3 tests), feedback reporting (15 tests), and legacy label text layout (4 tests). The local production Nuxt build remains unverified because this Windows checkout's package resolver fails with `EPERM` realpath under `node_modules/.pnpm`; typecheck is also blocked by the mismatched local dependency tree. GitHub issue delivery has service-level tests, but live submission requires `CCRATE_GITHUB_TOKEN` in the deployment environment. No issues have been closed and nothing has been pushed.
 
-**Execution:** One GPT-6 Luna Low coding worker at a time per `AGENTS.md`; GPT-6.1 Sol High reviews every slice; coordinator keeps the queue and checks integrations. Use the current checkout because the managed worktree attempt previously could not resolve refs. Keep unrelated dirty Workshop edits and `.serena/` untouched. Do not restart/deploy services, print physical output, mutate operational Homebox data, or close issues until changes are pushed and verified.
+**Execution:** Luna Low coding workers handle isolated issue slices in parallel; Sol High reviews each slice; coordinator integrates and verifies the combined result. Use the current checkout because the managed worktree attempt previously could not resolve refs. Keep unrelated dirty Workshop edits and `.serena/` untouched. Do not restart/deploy services, print physical output, mutate operational Homebox data, or close issues until changes are pushed and verified.
 
 ## Queue and acceptance
 
 ### 0. Build preflight and local barcode integration — #1, #8
 
 - Update `deploy/build-homebox-ui.py` anchors for the current barcode-aware `CreateEntity` dialog type; preparation must remain fail-closed when upstream structure changes.
+- Apply all native Homebox changes through the ordered C-Crate patchset on the public source pin; build and release staging must carry the patchset and use the same materialized source.
 - Fix duplicate Nuxt component registration at its source without deleting intentional barrel exports or breaking shadcn imports.
 - Keep the scoped oxc WASI fallback and distinguish its known experimental notice from build errors; real failures must keep a nonzero exit code.
 - Verify in a disposable generated workspace. This preflight is required before validating other frontend issues.
@@ -57,7 +58,7 @@
 - Each slice: add focused tests first where practical, implement, run relevant local checks, Sol review, fix findings, and record exact commits/results here or in the SDD ledger.
 - Run the isolated disposable frontend build before declaring browser/UI issues verified. Keep operational services and printers untouched.
 - Issues with unavailable external prerequisites (#13 server credential) remain visibly blocked only at those dependent decisions; finish independent work meanwhile.
-- Push the Homebox submodule commit before pushing the C-Crate pointer. The current local commits are on detached submodule history at `upstream/homebox`; `Spraten/homebox` does not exist, and the configured remote is `sysadminsmedia/homebox`. Do not publish those commits to the upstream maintainer's repository without explicit authorization. Create/use a user-owned Homebox fork, update `.gitmodules`, and verify both remote refs before pushing the C-Crate pointer.
+- Keep `upstream/homebox` pinned to the accepted public base and publish its C-Crate patchset as part of this repository. Before push, verify a clean clone can materialize the full patched source from the base plus patches, and that the submodule pointer is fetchable from the configured public remote.
 - Do not close issues while their changes are only local. Close only issues whose accepted behavior is present on the remote branch and backed by checks.
 
 ## Open issues in scope

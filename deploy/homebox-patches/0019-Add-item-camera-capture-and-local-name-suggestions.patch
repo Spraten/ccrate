@@ -1,0 +1,663 @@
+From bcef06462d9a2ac0e1aa3c19177b0f4b980890f2 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 06:23:38 -0400
+Subject: [PATCH 19/23] Add item camera capture and local name suggestions
+
+---
+ frontend/components/Entity/CreateModal.vue    |  68 ++++---
+ .../components/Form/CameraCaptureDialog.vue   | 166 ++++++++++++++++++
+ frontend/components/Form/camera.test.ts       |  71 ++++++++
+ frontend/components/Form/camera.ts            |  56 ++++++
+ frontend/locales/en.json                      |  16 ++
+ frontend/pages/item/[id]/index/edit.vue       | 133 ++++++++++++++
+ 6 files changed, 490 insertions(+), 20 deletions(-)
+ create mode 100644 frontend/components/Form/CameraCaptureDialog.vue
+ create mode 100644 frontend/components/Form/camera.test.ts
+ create mode 100644 frontend/components/Form/camera.ts
+
+diff --git a/frontend/components/Entity/CreateModal.vue b/frontend/components/Entity/CreateModal.vue
+index d67c7f48..6f6e890f 100644
+--- a/frontend/components/Entity/CreateModal.vue
++++ b/frontend/components/Entity/CreateModal.vue
+@@ -139,19 +139,27 @@
+         :is-loading="isLoading"
+         :trigger-search="triggerSearch"
+       />
+-      <FormTextField
+-        ref="nameInput"
+-        v-model="form.name"
+-        :trigger-focus="focused"
+-        :autofocus="true"
+-        :label="
+-          $t('components.entity.create_modal.entity_name', {
+-            type: selectedEntityType ? t(selectedEntityType.name) : '',
+-          })
+-        "
+-        :max-length="255"
+-        :min-length="1"
+-      />
++      <div class="flex items-end gap-2">
++        <FormTextField
++          ref="nameInput"
++          v-model="form.name"
++          class="min-w-0 flex-1"
++          :trigger-focus="focused"
++          :autofocus="true"
++          :label="
++            $t('components.entity.create_modal.entity_name', {
++              type: selectedEntityType ? t(selectedEntityType.name) : '',
++            })
++          "
++          :max-length="255"
++          :min-length="1"
++        />
++        <Button type="button" variant="outline" @click="nameCameraOpen = true">
++          <MdiCameraOutline class="mr-2 size-4" />
++          {{ $t("components.form.camera.suggest_name") }}
++        </Button>
++      </div>
++      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>
+       <FormTextField
+         v-if="!selectedEntityType?.isLocation"
+         v-model.number="form.quantity"
+@@ -253,6 +261,13 @@
+         :existing-count="form.photos.length"
+         @selected="appendPhotos"
+       />
++      <PhotoUploaderPreview
++        :photos="form.photos"
++        @delete="deletePhotoAt"
++        @rotate="rotatePhotoAt"
++        @set-primary="setPrimaryPhotoAt"
++      />
++
+       <div class="mt-4 flex flex-row-reverse">
+         <ButtonGroup>
+           <Button :disabled="loading" type="submit" class="group">
+@@ -271,14 +286,8 @@
+           </Button>
+         </ButtonGroup>
+       </div>
+-
+-      <PhotoUploaderPreview
+-        :photos="form.photos"
+-        @delete="deletePhotoAt"
+-        @rotate="rotatePhotoAt"
+-        @set-primary="setPrimaryPhotoAt"
+-      />
+     </form>
++    <CameraCaptureDialog v-model:open="nameCameraOpen" @captured="suggestNameFromPhoto" />
+   </BaseModal>
+ </template>
+ 
+@@ -302,6 +311,7 @@
+   import { useLocationStore } from "~~/stores/locations";
+   import MdiBarcode from "~icons/mdi/barcode";
+   import MdiBarcodeScan from "~icons/mdi/barcode-scan";
++  import MdiCameraOutline from "~icons/mdi/camera-outline";
+   import MdiLoading from "~icons/mdi/loading";
+   import MdiPackageVariant from "~icons/mdi/package-variant";
+   import MdiPackageVariantClosed from "~icons/mdi/package-variant-closed";
+@@ -319,6 +329,8 @@
+   import FormTextArea from "~/components/Form/TextArea.vue";
+   import PhotoUploader from "~/components/Form/PhotoUploader.vue";
+   import PhotoUploaderPreview from "~/components/Form/PhotoUploaderPreview.vue";
++  import CameraCaptureDialog from "~/components/Form/CameraCaptureDialog.vue";
++  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
+   import {
+     deletePhoto,
+     dataURLtoFile,
+@@ -395,6 +407,8 @@
+   });
+ 
+   const nameInput = ref<HTMLInputElement | null>(null);
++  const nameCameraOpen = ref(false);
++  const nameOcrMessage = ref("");
+ 
+   // Entity type selection
+   const entityTypes = computed(() => entityTypeStore.allTypes);
+@@ -855,6 +869,20 @@
+     }
+   }
+ 
++  async function suggestNameFromPhoto(file: File) {
++    try {
++      const suggestion = await recognizeNameFromFileLocally(file);
++      if (!suggestion) {
++        nameOcrMessage.value = t("components.form.camera.name_not_found");
++        return;
++      }
++      form.name = suggestion;
++      nameOcrMessage.value = t("components.form.camera.name_suggested");
++    } catch {
++      nameOcrMessage.value = t("components.form.camera.name_unavailable");
++    }
++  }
++
+   function openQrScannerPage() {
+     openDialog(DialogID.Scanner, {
+       onClose: result => {
+diff --git a/frontend/components/Form/CameraCaptureDialog.vue b/frontend/components/Form/CameraCaptureDialog.vue
+new file mode 100644
+index 00000000..555e8bf9
+--- /dev/null
++++ b/frontend/components/Form/CameraCaptureDialog.vue
+@@ -0,0 +1,166 @@
++<template>
++  <DialogRoot :open="open" @update:open="emit('update:open', $event)">
++    <DialogContent class="w-full sm:max-w-2xl">
++      <DialogHeader>
++        <DialogTitle>{{ t("components.form.camera.title") }}</DialogTitle>
++      </DialogHeader>
++
++      <p
++        v-if="errorMessage"
++        class="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
++        role="alert"
++      >
++        {{ errorMessage }}
++      </p>
++      <video
++        ref="video"
++        v-show="!capturedFile"
++        class="aspect-video w-full rounded-md bg-muted object-cover"
++        autoplay
++        muted
++        playsinline
++      />
++      <img
++        v-if="previewUrl"
++        :src="previewUrl"
++        class="aspect-video w-full rounded-md bg-muted object-contain"
++        :alt="t('components.form.camera.preview_alt')"
++      />
++
++      <DialogFooter>
++        <Button type="button" variant="outline" @click="emit('update:open', false)">
++          {{ t("global.cancel") }}
++        </Button>
++        <Button v-if="!capturedFile" type="button" :disabled="!cameraReady" @click="capturePhoto">
++          <MdiCameraOutline class="mr-2 size-4" />
++          {{ t("components.form.camera.capture") }}
++        </Button>
++        <template v-else>
++          <Button type="button" variant="outline" @click="retakePhoto">
++            {{ t("components.form.camera.retake") }}
++          </Button>
++          <Button type="button" @click="usePhoto">
++            {{ t("components.form.camera.use_photo") }}
++          </Button>
++        </template>
++      </DialogFooter>
++    </DialogContent>
++  </DialogRoot>
++</template>
++
++<script setup lang="ts">
++  import { nextTick, onBeforeUnmount, ref, watch } from "vue";
++  import { useI18n } from "vue-i18n";
++  import { Button } from "~/components/ui/button";
++  import { DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
++  import { DialogRoot } from "reka-ui";
++  import MdiCameraOutline from "~icons/mdi/camera-outline";
++  import { canvasToPhotoFile } from "./camera";
++
++  const props = defineProps<{ open: boolean }>();
++  const emit = defineEmits<{
++    (e: "update:open", open: boolean): void;
++    (e: "captured", file: File): void;
++  }>();
++
++  const { t } = useI18n();
++  const video = ref<HTMLVideoElement>();
++  const cameraReady = ref(false);
++  const errorMessage = ref("");
++  const capturedFile = ref<File>();
++  const previewUrl = ref("");
++  let stream: MediaStream | null = null;
++
++  async function startCamera() {
++    errorMessage.value = "";
++    cameraReady.value = false;
++    await nextTick();
++
++    if (!navigator.mediaDevices?.getUserMedia) {
++      errorMessage.value = t("components.form.camera.unavailable");
++      return;
++    }
++
++    try {
++      const nextStream = await navigator.mediaDevices.getUserMedia({
++        video: { facingMode: { ideal: "environment" } },
++        audio: false,
++      });
++      if (!props.open) {
++        nextStream.getTracks().forEach(track => track.stop());
++        return;
++      }
++      stream = nextStream;
++      if (!video.value) throw new Error("Camera preview is unavailable");
++      video.value.srcObject = stream;
++      await video.value.play();
++      cameraReady.value = true;
++    } catch {
++      errorMessage.value = t("components.form.camera.permission_error");
++      stopCamera();
++    }
++  }
++
++  function stopCamera() {
++    cameraReady.value = false;
++    stream?.getTracks().forEach(track => track.stop());
++    stream = null;
++    if (video.value) video.value.srcObject = null;
++  }
++
++  function clearPreview() {
++    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
++    previewUrl.value = "";
++    capturedFile.value = undefined;
++  }
++
++  async function capturePhoto() {
++    if (!video.value?.videoWidth || !video.value.videoHeight) return;
++    const canvas = document.createElement("canvas");
++    canvas.width = video.value.videoWidth;
++    canvas.height = video.value.videoHeight;
++    const context = canvas.getContext("2d");
++    if (!context) {
++      errorMessage.value = t("components.form.camera.capture_error");
++      return;
++    }
++
++    context.drawImage(video.value, 0, 0, canvas.width, canvas.height);
++    try {
++      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
++      capturedFile.value = await canvasToPhotoFile(canvas, `camera-${timestamp}.jpg`);
++      previewUrl.value = URL.createObjectURL(capturedFile.value);
++      stopCamera();
++    } catch {
++      errorMessage.value = t("components.form.camera.capture_error");
++    }
++  }
++
++  function retakePhoto() {
++    clearPreview();
++    void startCamera();
++  }
++
++  function usePhoto() {
++    if (!capturedFile.value) return;
++    emit("captured", capturedFile.value);
++    emit("update:open", false);
++  }
++
++  watch(
++    () => props.open,
++    open => {
++      if (open) void startCamera();
++      else {
++        stopCamera();
++        clearPreview();
++        errorMessage.value = "";
++      }
++    }
++  );
++
++  onBeforeUnmount(() => {
++    stopCamera();
++    clearPreview();
++  });
++</script>
+diff --git a/frontend/components/Form/camera.test.ts b/frontend/components/Form/camera.test.ts
+new file mode 100644
+index 00000000..6057e3a8
+--- /dev/null
++++ b/frontend/components/Form/camera.test.ts
+@@ -0,0 +1,71 @@
++import { describe, expect, test } from "vitest";
++import { canvasToPhotoFile, recognizeNameFromFileLocally, recognizeNameLocally } from "./camera";
++
++describe("local camera helpers", () => {
++  test("converts a captured canvas to a JPEG photo file for the existing preview flow", async () => {
++    const canvas = {
++      toBlob(callback: BlobCallback) {
++        callback(new Blob(["captured frame"], { type: "image/jpeg" }));
++      },
++    } as HTMLCanvasElement;
++
++    const file = await canvasToPhotoFile(canvas, "item-photo.jpg");
++
++    expect(file.name).toBe("item-photo.jpg");
++    expect(file.type).toBe("image/jpeg");
++    expect(file.size).toBeGreaterThan(0);
++  });
++
++  test("rejects a capture when the browser cannot create an image blob", async () => {
++    const canvas = { toBlob: (callback: BlobCallback) => callback(null) } as HTMLCanvasElement;
++    await expect(canvasToPhotoFile(canvas, "item-photo.jpg")).rejects.toThrow("Failed to capture camera frame");
++  });
++
++  test("returns locally recognized text as a single editable name suggestion", async () => {
++    const source = {} as HTMLCanvasElement;
++    class Detector {
++      async detect(image: CanvasImageSource) {
++        expect(image).toBe(source);
++        return [{ rawValue: " ACME " }, { rawValue: "Cordless Drill" }];
++      }
++    }
++
++    await expect(recognizeNameLocally(source, Detector)).resolves.toBe("ACME Cordless Drill");
++  });
++
++  test("recognizes text from an image file locally and releases the decoded bitmap", async () => {
++    let closed = false;
++    const bitmap = { close: () => (closed = true) } as ImageBitmap;
++    class Detector {
++      async detect() {
++        return [{ rawValue: "  Model XR-4 " }];
++      }
++    }
++
++    await expect(
++      recognizeNameFromFileLocally(new Blob(["image"]), Detector, async () => bitmap)
++    ).resolves.toBe("Model XR-4");
++    expect(closed).toBe(true);
++  });
++
++  test("gracefully reports when local text recognition is unavailable or finds no text", async () => {
++    const source = {} as HTMLCanvasElement;
++    await expect(recognizeNameLocally(source, undefined)).resolves.toBeNull();
++
++    let bitmapRequested = false;
++    const createBitmap = async () => {
++      bitmapRequested = true;
++      throw new Error("Unsupported");
++    };
++    await expect(recognizeNameFromFileLocally(new Blob(["image"]), undefined, createBitmap)).resolves.toBeNull();
++    expect(bitmapRequested).toBe(false);
++
++    class EmptyDetector {
++      async detect() {
++        return [{ rawValue: "  " }];
++      }
++    }
++
++    await expect(recognizeNameLocally(source, EmptyDetector)).resolves.toBeNull();
++  });
++});
+diff --git a/frontend/components/Form/camera.ts b/frontend/components/Form/camera.ts
+new file mode 100644
+index 00000000..ee914632
+--- /dev/null
++++ b/frontend/components/Form/camera.ts
+@@ -0,0 +1,56 @@
++export interface LocalTextDetection {
++  rawValue: string;
++}
++
++export interface LocalTextDetector {
++  detect(source: CanvasImageSource): Promise<LocalTextDetection[]>;
++}
++
++export type LocalTextDetectorConstructor = new () => LocalTextDetector;
++
++type TextDetectorGlobal = typeof globalThis & {
++  TextDetector?: LocalTextDetectorConstructor;
++};
++
++export async function canvasToPhotoFile(canvas: HTMLCanvasElement, fileName: string): Promise<File> {
++  const blob = await new Promise<Blob>((resolve, reject) => {
++    canvas.toBlob(
++      result => (result ? resolve(result) : reject(new Error("Failed to capture camera frame"))),
++      "image/jpeg",
++      0.9
++    );
++  });
++
++  return new File([blob], fileName, { type: blob.type || "image/jpeg" });
++}
++
++export async function recognizeNameLocally(
++  source: CanvasImageSource,
++  Detector: LocalTextDetectorConstructor | undefined = (globalThis as TextDetectorGlobal).TextDetector
++): Promise<string | null> {
++  if (!Detector) return null;
++
++  const detections = await new Detector().detect(source);
++  const suggestion = detections
++    .map(detection => detection.rawValue.trim())
++    .filter(Boolean)
++    .join(" ")
++    .replace(/\s+/g, " ")
++    .trim();
++
++  return suggestion || null;
++}
++export async function recognizeNameFromFileLocally(
++  file: Blob,
++  Detector: LocalTextDetectorConstructor | undefined = (globalThis as TextDetectorGlobal).TextDetector,
++  createBitmap: (source: ImageBitmapSource) => Promise<ImageBitmap> = globalThis.createImageBitmap
++): Promise<string | null> {
++  if (!Detector || typeof createBitmap !== "function") return null;
++
++  const bitmap = await createBitmap(file);
++  try {
++    return await recognizeNameLocally(bitmap, Detector);
++  } finally {
++    bitmap.close();
++  }
++}
+diff --git a/frontend/locales/en.json b/frontend/locales/en.json
+index 4e732bc2..6231ac68 100644
+--- a/frontend/locales/en.json
++++ b/frontend/locales/en.json
+@@ -118,6 +118,22 @@
+             "randomize": "Randomize color"
+         },
+         "form": {
++            "camera": {
++                "title": "Camera",
++                "capture": "Capture photo",
++                "retake": "Retake",
++                "use_photo": "Use photo",
++                "preview_alt": "Captured photo preview",
++                "unavailable": "This browser cannot access a camera. Check your browser and device.",
++                "permission_error": "Camera access failed. Check browser permissions and try again.",
++                "capture_error": "The photo could not be captured. Try again.",
++                "suggest_name": "Suggest name",
++                "save_photo": "Save photos",
++                "save_uncertain": "The photo save result is unknown. Refresh this item to check before trying again.",
++                "name_not_found": "No name could be read locally. You can enter or edit the name manually.",
++                "name_suggested": "Suggested name added. Review or edit it before saving.",
++                "name_unavailable": "Local text recognition is unavailable. You can enter the name manually."
++            },
+             "min_length": "min {min}",
+             "password": {
+                 "toggle_show": "Toggle Password Show"
+diff --git a/frontend/pages/item/[id]/index/edit.vue b/frontend/pages/item/[id]/index/edit.vue
+index 0da0e29d..115be5db 100644
+--- a/frontend/pages/item/[id]/index/edit.vue
++++ b/frontend/pages/item/[id]/index/edit.vue
+@@ -10,6 +10,7 @@
+   import MdiPencil from "~icons/mdi/pencil";
+   import MdiContentSaveOutline from "~icons/mdi/content-save-outline";
+   import MdiImageOutline from "~icons/mdi/image-outline";
++  import MdiCameraOutline from "~icons/mdi/camera-outline";
+   import MdiOpenInNew from "~icons/mdi/open-in-new";
+   import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+   import { Button } from "@/components/ui/button";
+@@ -32,6 +33,16 @@
+   import { Card } from "~/components/ui/card";
+   import DropZone from "~/components/global/DropZone.vue";
+   import EntitySelector from "~/components/Entity/Selector.vue";
++  import CameraCaptureDialog from "~/components/Form/CameraCaptureDialog.vue";
++  import PhotoUploaderPreview from "~/components/Form/PhotoUploaderPreview.vue";
++  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
++  import {
++    deletePhoto,
++    fileToPhotoPreview,
++    rotatePhotoPreview,
++    setPrimaryPhoto,
++    type PhotoPreview,
++  } from "~/components/Form/photo-uploader";
+   import { useEntityTypeStore } from "~/stores/entityTypes";
+ 
+   const { t } = useI18n();
+@@ -88,6 +99,84 @@
+   });
+ 
+   const saving = ref(false);
++  const nameCameraOpen = ref(false);
++  const nameOcrMessage = ref("");
++  const photoCameraOpen = ref(false);
++  const capturedPhotos = ref<PhotoPreview[]>([]);
++  const savingCapturedPhotos = ref(false);
++  const capturedPhotoSaveUncertain = ref(false);
++
++  async function suggestItemNameFromPhoto(file: File) {
++    try {
++      const suggestion = await recognizeNameFromFileLocally(file);
++      if (!suggestion) {
++        nameOcrMessage.value = t("components.form.camera.name_not_found");
++        return;
++      }
++      item.value.name = suggestion;
++      nameOcrMessage.value = t("components.form.camera.name_suggested");
++    } catch {
++      nameOcrMessage.value = t("components.form.camera.name_unavailable");
++    }
++  }
++
++  async function stageCameraPhoto(file: File) {
++    try {
++      const hasExistingPhoto = item.value.attachments.some(attachment => attachment.type === "photo");
++      const primary = !hasExistingPhoto && capturedPhotos.value.length === 0;
++      capturedPhotos.value.push(await fileToPhotoPreview(file, primary));
++    } catch {
++      toast.error(t("components.form.camera.capture_error"));
++    }
++  }
++
++  function removeCapturedPhoto(index: number) {
++    capturedPhotos.value = deletePhoto(capturedPhotos.value, index);
++  }
++
++  async function rotateCapturedPhoto(index: number) {
++    const photo = capturedPhotos.value[index];
++    if (!photo) return;
++    try {
++      capturedPhotos.value[index] = await rotatePhotoPreview(photo);
++    } catch {
++      toast.error(t("components.entity.create_modal.toast.rotate_process_failed"));
++    }
++  }
++
++  function setCapturedPhotoPrimary(index: number) {
++    capturedPhotos.value = setPrimaryPhoto(capturedPhotos.value, index);
++  }
++
++  async function saveCapturedPhotos() {
++    if (savingCapturedPhotos.value || capturedPhotoSaveUncertain.value) return;
++    savingCapturedPhotos.value = true;
++    try {
++      for (const photo of [...capturedPhotos.value]) {
++        const { data, error } = await api.items.attachments.add(
++          itemId.value,
++          photo.file,
++          photo.photoName,
++          AttachmentTypes.Photo,
++          photo.primary
++        );
++        if (error) {
++          capturedPhotoSaveUncertain.value = true;
++          toast.error(t("components.form.camera.save_uncertain"));
++          return;
++        }
++        item.value.attachments = data.attachments;
++        capturedPhotos.value = capturedPhotos.value.filter(candidate => candidate !== photo);
++        toast.success(t("items.toast.attachment_uploaded"));
++        await saveItem(false);
++      }
++    } catch {
++      capturedPhotoSaveUncertain.value = true;
++      toast.error(t("components.form.camera.save_uncertain"));
++    } finally {
++      savingCapturedPhotos.value = false;
++    }
++  }
+ 
+   async function saveItem(redirect: boolean) {
+     if (!item.value.parent?.id && !parent.value?.id) {
+@@ -714,6 +803,21 @@
+                   :max-length="field.maxLength"
+                   :min-length="field.minLength"
+                 />
++                <div v-else-if="field.type === 'text' && field.ref === 'name'" class="flex items-end gap-2">
++                  <FormTextField
++                    v-model="item[field.ref]"
++                    class="min-w-0 flex-1"
++                    :label="$t(field.label)"
++                    inline
++                    type="text"
++                    :max-length="field.maxLength"
++                    :min-length="field.minLength"
++                  />
++                  <Button type="button" variant="outline" @click="nameCameraOpen = true">
++                    <MdiCameraOutline class="mr-2 size-4" />
++                    {{ $t("components.form.camera.suggest_name") }}
++                  </Button>
++                </div>
+                 <FormTextField
+                   v-else-if="field.type === 'text'"
+                   v-model="item[field.ref]"
+@@ -723,6 +827,9 @@
+                   :max-length="field.maxLength"
+                   :min-length="field.minLength"
+                 />
++                <p v-if="field.ref === 'name' && nameOcrMessage" class="text-sm text-muted-foreground" role="status">
++                  {{ nameOcrMessage }}
++                </p>
+                 <FormTextField
+                   v-else-if="field.type === 'number'"
+                   v-model.number="item[field.ref]"
+@@ -806,6 +913,30 @@
+             </button>
+           </div>
+ 
++          <div class="mt-4 flex flex-wrap gap-2">
++            <Button type="button" variant="outline" @click="photoCameraOpen = true">
++              <MdiCameraOutline class="mr-2 size-4" />
++              {{ $t("components.form.camera.capture") }}
++            </Button>
++            <Button
++              v-if="capturedPhotos.length"
++              type="button"
++              :disabled="savingCapturedPhotos || capturedPhotoSaveUncertain"
++              @click="saveCapturedPhotos"
++            >
++              <MdiLoading v-if="savingCapturedPhotos" class="mr-2 size-4 animate-spin" />
++              {{ $t("components.form.camera.save_photo") }}
++            </Button>
++          </div>
++          <PhotoUploaderPreview
++            :photos="capturedPhotos"
++            @delete="removeCapturedPhoto"
++            @rotate="rotateCapturedPhoto"
++            @set-primary="setCapturedPhotoPrimary"
++          />
++          <p v-if="capturedPhotoSaveUncertain" class="mt-2 text-sm text-destructive" role="alert">
++            {{ $t("components.form.camera.save_uncertain") }}
++          </p>
+           <div class="border-t p-4">
+             <ul role="list" class="divide-y rounded-md border">
+               <li
+@@ -1034,6 +1165,8 @@
+           </div>
+         </Card>
+       </div>
++      <CameraCaptureDialog v-model:open="nameCameraOpen" @captured="suggestItemNameFromPhoto" />
++      <CameraCaptureDialog v-model:open="photoCameraOpen" @captured="stageCameraPhoto" />
+     </section>
+   </div>
+ </template>

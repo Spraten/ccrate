@@ -1,0 +1,259 @@
+From 7e5b33fad4b29fd43015d5f182cf902e1b4753a2 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 05:48:54 -0400
+Subject: [PATCH 14/23] preserve inventory search with barcode lookup
+
+---
+ .../app/api/handlers/v1/v1_ctrl_entities.go   | 24 ++++----
+ .../api/handlers/v1/v1_ctrl_entities_test.go  | 17 ++++++
+ backend/internal/data/repo/repo_entities.go   | 22 +++----
+ .../internal/data/repo/repo_entities_test.go  | 58 +++++++++++++++++++
+ frontend/components/Entity/barcode.test.ts    |  9 ---
+ frontend/components/Entity/barcode.ts         |  5 --
+ frontend/pages/items.vue                      |  3 +-
+ 7 files changed, 101 insertions(+), 37 deletions(-)
+
+diff --git a/backend/app/api/handlers/v1/v1_ctrl_entities.go b/backend/app/api/handlers/v1/v1_ctrl_entities.go
+index 65153a0e..1e562c7e 100644
+--- a/backend/app/api/handlers/v1/v1_ctrl_entities.go
++++ b/backend/app/api/handlers/v1/v1_ctrl_entities.go
+@@ -47,6 +47,16 @@ func entityBarcodeQueryValue(r *http.Request) string {
+ 	return strings.TrimSpace(r.URL.Query().Get("barcode"))
+ }
+ 
++func entitySearchQuery(r *http.Request) (string, repo.AssetID) {
++	search := r.URL.Query().Get("q")
++	if strings.HasPrefix(search, "#") {
++		if assetID, ok := repo.ParseAssetID(strings.TrimPrefix(search, "#")); ok {
++			return "", assetID
++		}
++	}
++	return search, 0
++}
++
+ // HandleEntitiesGetAll godoc
+ //
+ //	@Summary	Query All Entities
+@@ -78,11 +88,13 @@ func (ctrl *V1Controller) HandleEntitiesGetAll() errchain.HandlerFunc {
+ 			})
+ 		}
+ 
++		search, assetID := entitySearchQuery(r)
+ 		v := repo.EntityQuery{
+ 			Page:             queryIntOrNegativeOne(params.Get("page")),
+ 			PageSize:         queryIntOrNegativeOne(params.Get("pageSize")),
+-			Search:           params.Get("q"),
++			Search:           search,
+ 			Barcode:          entityBarcodeQueryValue(r),
++			AssetID:          assetID,
+ 			ParentIDs:        queryUUIDList(params, "parentIds"),
+ 			TagIDs:           queryUUIDList(params, "tags"),
+ 			NegateTags:       queryBool(params.Get("negateTags")),
+@@ -101,16 +113,6 @@ func (ctrl *V1Controller) HandleEntitiesGetAll() errchain.HandlerFunc {
+ 
+ 		v.FilterChildren = queryBool(params.Get("filterChildren"))
+ 
+-		if strings.HasPrefix(v.Search, "#") {
+-			aidStr := strings.TrimPrefix(v.Search, "#")
+-
+-			aid, ok := repo.ParseAssetID(aidStr)
+-			if ok {
+-				v.Search = ""
+-				v.AssetID = aid
+-			}
+-		}
+-
+ 		return v
+ 	}
+ 
+diff --git a/backend/app/api/handlers/v1/v1_ctrl_entities_test.go b/backend/app/api/handlers/v1/v1_ctrl_entities_test.go
+index 465d1523..4f16959d 100644
+--- a/backend/app/api/handlers/v1/v1_ctrl_entities_test.go
++++ b/backend/app/api/handlers/v1/v1_ctrl_entities_test.go
+@@ -18,3 +18,20 @@ func TestEntityBarcodeQueryValueTreatsWhitespaceAsAbsent(t *testing.T) {
+ 		t.Fatalf("expected blank barcode to be omitted, got %q", got)
+ 	}
+ }
++
++func TestEntitySearchQueryParsesAssetIDWithoutChangingSearch(t *testing.T) {
++	req := httptest.NewRequest("GET", "/v1/entities?q=%23001234", nil)
++	search, assetID := entitySearchQuery(req)
++	if search != "" {
++		t.Fatalf("expected asset ID query to clear text search, got %q", search)
++	}
++	if assetID != 1234 {
++		t.Fatalf("expected asset ID 1234, got %d", assetID)
++	}
++
++	req = httptest.NewRequest("GET", "/v1/entities?q=001234", nil)
++	search, assetID = entitySearchQuery(req)
++	if search != "001234" || !assetID.Nil() {
++		t.Fatalf("expected numeric text query to remain a text search, got %q with asset ID %d", search, assetID)
++	}
++}
+diff --git a/backend/internal/data/repo/repo_entities.go b/backend/internal/data/repo/repo_entities.go
+index 0f7d7a37..5086ff4b 100644
+--- a/backend/internal/data/repo/repo_entities.go
++++ b/backend/internal/data/repo/repo_entities.go
+@@ -616,16 +616,18 @@ func (r *EntityRepository) QueryByGroup(ctx context.Context, gid uuid.UUID, q En
+ 	}
+ 
+ 	if q.Search != "" {
+-		qb.Where(
+-			entity.Or(
+-				entity.NameContainsFold(q.Search),
+-				entity.DescriptionContainsFold(q.Search),
+-				entity.SerialNumberContainsFold(q.Search),
+-				entity.ModelNumberContainsFold(q.Search),
+-				entity.ManufacturerContainsFold(q.Search),
+-				entity.NotesContainsFold(q.Search),
+-			),
+-		)
++		searchPredicates := []predicate.Entity{
++			entity.NameContainsFold(q.Search),
++			entity.DescriptionContainsFold(q.Search),
++			entity.SerialNumberContainsFold(q.Search),
++			entity.ModelNumberContainsFold(q.Search),
++			entity.ManufacturerContainsFold(q.Search),
++			entity.NotesContainsFold(q.Search),
++		}
++		if barcode := strings.TrimSpace(q.Search); barcode != "" {
++			searchPredicates = append(searchPredicates, entity.Barcode(barcode))
++		}
++		qb = qb.Where(entity.Or(searchPredicates...))
+ 	}
+ 
+ 	if !q.AssetID.Nil() {
+diff --git a/backend/internal/data/repo/repo_entities_test.go b/backend/internal/data/repo/repo_entities_test.go
+index 73cd0385..f8167aad 100644
+--- a/backend/internal/data/repo/repo_entities_test.go
++++ b/backend/internal/data/repo/repo_entities_test.go
+@@ -990,6 +990,64 @@ func TestEntityRepository_BarcodeQuery(t *testing.T) {
+ 	assert.ElementsMatch(t, []uuid.UUID{first.ID, second.ID}, pagedIDs)
+ }
+ 
++func TestEntityRepository_SearchMatchesExactBarcodeAndPreservesTextSearch(t *testing.T) {
++	ctx := context.Background()
++	itemType := useItemEntityType(t)
++	foreignGID, _, foreignTypeID := makeForeignGroup(t)
++
++	create := func(gid uuid.UUID, typeID uuid.UUID, data EntityCreate) EntityOut {
++		t.Helper()
++		data.EntityTypeID = typeID
++		item, err := tRepos.Entities.Create(ctx, gid, data)
++		require.NoError(t, err)
++		t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, item.ID) })
++		return item
++	}
++
++	alphanumeric := create(tGroup.ID, itemType.ID, EntityCreate{
++		Name:    "Alphanumeric code item",
++		Barcode: "X9TEUJR4L",
++	})
++	leadingZero := create(tGroup.ID, itemType.ID, EntityCreate{
++		Name:    "Leading zero code item",
++		Barcode: "0012345",
++	})
++	metadata := create(tGroup.ID, itemType.ID, EntityCreate{
++		Name:       "Voltage adapter",
++		ModelNumber: "123",
++	})
++	foreign := create(foreignGID, foreignTypeID, EntityCreate{
++		Name:    "Foreign barcode item",
++		Barcode: "X9TEUJR4L",
++	})
++
++	search := func(gid uuid.UUID, value string) []EntitySummary {
++		t.Helper()
++		result, err := tRepos.Entities.QueryByGroup(ctx, gid, EntityQuery{
++			Page: -1, PageSize: -1, Search: value,
++		})
++		require.NoError(t, err)
++		return result.Items
++	}
++
++	assertIDs := func(gid uuid.UUID, value string, want ...uuid.UUID) {
++		t.Helper()
++		items := search(gid, value)
++		got := make([]uuid.UUID, len(items))
++		for i, item := range items {
++			got[i] = item.ID
++		}
++		assert.ElementsMatch(t, want, got, "search %q in group %s", value, gid)
++	}
++
++	assertIDs(tGroup.ID, " X9TEUJR4L ", alphanumeric.ID)
++	assertIDs(tGroup.ID, "0012345", leadingZero.ID)
++	assertIDs(tGroup.ID, "12345")
++	assertIDs(tGroup.ID, "123", metadata.ID)
++	assertIDs(tGroup.ID, "X9TEUJR4L", alphanumeric.ID)
++	assertIDs(foreignGID, "X9TEUJR4L", foreign.ID)
++}
++
+ func TestEntityRepository_DuplicateCopiesBarcode(t *testing.T) {
+ 	ctx := context.Background()
+ 	itemType := useItemEntityType(t)
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+index 70a1a9ef..8ecab58d 100644
+--- a/frontend/components/Entity/barcode.test.ts
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -12,7 +12,6 @@ import {
+   duplicatePageCount,
+   handleBarcodeEnter,
+   handleBarcodeLookupClick,
+-  inventorySearchQuery,
+   isBarcodeLookupCurrent,
+   loadNextBarcodePage,
+   lookupBarcodeItems,
+@@ -27,14 +26,6 @@ import {
+ } from "./barcode";
+ 
+ describe("item barcode helpers", () => {
+-  test("normal inventory search treats a numeric query as an exact barcode and keeps leading zeroes", () => {
+-    expect(inventorySearchQuery(" 0012345 ")).toEqual({ q: "", barcode: "0012345" });
+-  });
+-
+-  test("normal inventory search leaves nonnumeric queries as text searches", () => {
+-    expect(inventorySearchQuery("cordless drill")).toEqual({ q: "cordless drill" });
+-  });
+-
+   test("keeps a manually entered alphanumeric code and leading zeroes in create data", () => {
+     expect(attachBarcode({ name: "Heat shrink tubing" }, "  X9TEUJR4L ")).toEqual({
+       name: "Heat shrink tubing",
+diff --git a/frontend/components/Entity/barcode.ts b/frontend/components/Entity/barcode.ts
+index 7a45b2db..46a97773 100644
+--- a/frontend/components/Entity/barcode.ts
++++ b/frontend/components/Entity/barcode.ts
+@@ -11,11 +11,6 @@ export type BarcodeDraft = {
+ export type ScannerStatus = "starting" | "scanning" | "detected" | "error";
+ export type BarcodeScanResult = { type: "barcode"; barcode: string } | { type: "navigate" };
+ 
+-export function inventorySearchQuery(value: string): { q: string; barcode?: string } {
+-  const query = value.trim();
+-  if (/^\d+$/.test(query)) return { q: "", barcode: query };
+-  return { q: query };
+-}
+ export type BarcodePageLookup = (page: number, append: boolean) => unknown;
+ 
+ export function attachBarcode<T extends object>(payload: T, value: string): T & { barcode?: string } {
+diff --git a/frontend/pages/items.vue b/frontend/pages/items.vue
+index e54cab41..99762bb2 100644
+--- a/frontend/pages/items.vue
++++ b/frontend/pages/items.vue
+@@ -18,7 +18,6 @@
+   import SearchFilter from "~/components/Search/Filter.vue";
+   import ItemViewSelectable from "~/components/Item/View/Selectable.vue";
+   import type { LocationQueryRaw } from "vue-router";
+-  import { inventorySearchQuery } from "~/components/Entity/barcode";
+ 
+   const { t } = useI18n();
+ 
+@@ -309,7 +308,7 @@
+     await router.push({ query: push_query as LocationQueryRaw });
+ 
+     const { data, error } = await api.items.getAll({
+-      ...inventorySearchQuery(query.value),
++      q: query.value || "",
+       parentIds: locIDs.value,
+       tags: tagIDs.value,
+       negateTags: negateTags.value,

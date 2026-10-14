@@ -1,0 +1,989 @@
+From 53995cd2804f64168df6ee670e002f698f301d3b Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 22:51:22 -0400
+Subject: [PATCH 09/23] fix: preserve barcode draft and sync API specs
+
+---
+ .../task-3-report.md                          |  35 ----
+ backend/app/api/static/docs/docs.go           |  21 +++
+ backend/app/api/static/docs/openapi-3.json    |  23 ++-
+ backend/app/api/static/docs/openapi-3.yaml    |  22 +++
+ backend/app/api/static/docs/swagger.json      |  23 ++-
+ backend/app/api/static/docs/swagger.yaml      |  16 ++
+ docs/public/api/openapi-3.0.json              |  23 ++-
+ docs/public/api/openapi-3.0.yaml              |  22 +++
+ docs/public/api/swagger-2.0.json              |  23 ++-
+ docs/public/api/swagger-2.0.yaml              |  16 ++
+ frontend/components/App/ScannerModal.vue      |  12 +-
+ frontend/components/Entity/CreateModal.vue    | 159 +++++++++++++++---
+ frontend/components/Entity/barcode.test.ts    |  78 +++++++++
+ frontend/components/Entity/barcode.ts         |  66 +++++++-
+ .../components/ui/dialog-provider/utils.ts    |   3 +-
+ frontend/locales/en.json                      |   3 +-
+ 16 files changed, 475 insertions(+), 70 deletions(-)
+ delete mode 100644 .superpowers/sdd/2026-10-13-ccrate-item-barcode/task-3-report.md
+
+diff --git a/.superpowers/sdd/2026-10-13-ccrate-item-barcode/task-3-report.md b/.superpowers/sdd/2026-10-13-ccrate-item-barcode/task-3-report.md
+deleted file mode 100644
+index 7b69ec5c..00000000
+--- a/.superpowers/sdd/2026-10-13-ccrate-item-barcode/task-3-report.md
++++ /dev/null
+@@ -1,35 +0,0 @@
+-# Task 3 report: barcode capture and item details
+-
+-## Implemented
+-
+-- Added an optional barcode field to item create, edit, and detail views, including copied display and validation at 80 characters.
+-- Routed the camera scanner result into the regular item form. Added scanning/detected/error feedback and retained manual entry when camera access or catalog lookup is unavailable.
+-- Added optional numeric barcode catalog lookup, explicit candidate selection, and duplicate-item navigation. Candidate fields only prefill empty values; internal alphanumeric codes and leading zeroes remain supported.
+-- Persisted manufacturer and model number on standard item creation. Extended template-based item creation to persist barcode while keeping omitted fields optional and preserving template defaults.
+-- Added frontend helper/API tests and focused repository tests.
+-
+-## Verification
+-
+-- `git diff --check`: passed.
+-- `frontend/locales/en.json` JSON parse using PowerShell `ConvertFrom-Json`: passed.
+-- Go tests: not run successfully. The previous focused invocation stopped before tests because the required Go modules were absent locally and `proxy.golang.org` DNS/network access was unavailable. The cached Go executable path was also not present in this checkout.
+-- Frontend Vitest, `pnpm typecheck`, and `pnpm lint:ci`: blocked before project scripts load. pnpm cannot resolve the nested frontend workspace path (`EPERM: operation not permitted, realpath ...\frontend`) and attempts to install dependencies; no local node_modules/test binaries are present. No network retry or permission escalation was used.
+-
+-The test assertions were added before implementation, but RED/GREEN execution could not be observed because of the tooling limitations above.
+-
+-## Files
+-
+-- `backend/app/api/handlers/v1/v1_ctrl_entity_templates.go`
+-- `backend/internal/data/repo/repo_entities.go`
+-- `backend/internal/data/repo/repo_entities_test.go`
+-- `frontend/components/App/ScannerModal.vue`
+-- `frontend/components/Entity/CreateModal.vue`
+-- `frontend/components/Entity/barcode.ts`
+-- `frontend/components/Entity/barcode.test.ts`
+-- `frontend/components/ui/dialog-provider/utils.ts`
+-- `frontend/lib/api/__test__/user/items.test.ts`
+-- `frontend/lib/api/classes/items.ts`
+-- `frontend/lib/api/types/data-contracts.ts`
+-- `frontend/locales/en.json`
+-- `frontend/pages/item/[id]/index.vue`
+-- `frontend/pages/item/[id]/index/edit.vue`
+diff --git a/backend/app/api/static/docs/docs.go b/backend/app/api/static/docs/docs.go
+index 40d48381..ac713a55 100644
+--- a/backend/app/api/static/docs/docs.go
++++ b/backend/app/api/static/docs/docs.go
+@@ -4804,6 +4804,14 @@ const docTemplate = `{
+                     "items": {
+                         "type": "string"
+                     }
++                },
++                "manufacturer": {
++                    "type": "string",
++                    "maxLength": 255
++                },
++                "modelNumber": {
++                    "type": "string",
++                    "maxLength": 255
+                 }
+             }
+         },
+@@ -6426,6 +6434,19 @@ const docTemplate = `{
+                     "items": {
+                         "type": "string"
+                     }
++                },
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
++                "manufacturer": {
++                    "type": "string",
++                    "maxLength": 255
++                },
++                "modelNumber": {
++                    "type": "string",
++                    "maxLength": 255
+                 }
+             }
+         },
+diff --git a/backend/app/api/static/docs/openapi-3.json b/backend/app/api/static/docs/openapi-3.json
+index 92cda16d..d4daeb44 100644
+--- a/backend/app/api/static/docs/openapi-3.json
++++ b/backend/app/api/static/docs/openapi-3.json
+@@ -5045,6 +5045,14 @@
+                         "items": {
+                             "type": "string"
+                         }
++                    },
++                    "manufacturer": {
++                        "type": "string",
++                        "maxLength": 255
++                    },
++                    "modelNumber": {
++                        "type": "string",
++                        "maxLength": 255
+                     }
+                 }
+             },
+@@ -6667,6 +6675,19 @@
+                         "items": {
+                             "type": "string"
+                         }
++                    },
++                    "barcode": {
++                        "type": "string",
++                        "maxLength": 80,
++                        "nullable": true
++                    },
++                    "manufacturer": {
++                        "type": "string",
++                        "maxLength": 255
++                    },
++                    "modelNumber": {
++                        "type": "string",
++                        "maxLength": 255
+                     }
+                 }
+             },
+@@ -6859,4 +6880,4 @@
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/backend/app/api/static/docs/openapi-3.yaml b/backend/app/api/static/docs/openapi-3.yaml
+index 2c8bce6a..8275457c 100644
+--- a/backend/app/api/static/docs/openapi-3.yaml
++++ b/backend/app/api/static/docs/openapi-3.yaml
+@@ -3176,6 +3176,12 @@ components:
+           type: array
+           items:
+             type: string
++        manufacturer:
++          type: string
++          maxLength: 255
++        modelNumber:
++          type: string
++          maxLength: 255
+     repo.EntityFieldData:
+       type: object
+       properties:
+@@ -3717,6 +3723,12 @@ components:
+           type: array
+           items:
+             type: string
++        manufacturer:
++          type: string
++          maxLength: 255
++        modelNumber:
++          type: string
++          maxLength: 255
+         warrantyDetails:
+           type: string
+         warrantyExpires:
+@@ -4265,6 +4277,10 @@ components:
+         - name
+         - parentId
+       properties:
++        barcode:
++          type: string
++          maxLength: 80
++          nullable: true
+         description:
+           type: string
+           maxLength: 1000
+@@ -4287,6 +4303,12 @@ components:
+           type: array
+           items:
+             type: string
++        manufacturer:
++          type: string
++          maxLength: 255
++        modelNumber:
++          type: string
++          maxLength: 255
+     v1.ForgotPasswordRequest:
+       type: object
+       required:
+diff --git a/backend/app/api/static/docs/swagger.json b/backend/app/api/static/docs/swagger.json
+index 0feecbaa..85b09278 100644
+--- a/backend/app/api/static/docs/swagger.json
++++ b/backend/app/api/static/docs/swagger.json
+@@ -4801,6 +4801,14 @@
+                     "items": {
+                         "type": "string"
+                     }
++                },
++                "manufacturer": {
++                    "type": "string",
++                    "maxLength": 255
++                },
++                "modelNumber": {
++                    "type": "string",
++                    "maxLength": 255
+                 }
+             }
+         },
+@@ -6423,6 +6431,19 @@
+                     "items": {
+                         "type": "string"
+                     }
++                },
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
++                "manufacturer": {
++                    "type": "string",
++                    "maxLength": 255
++                },
++                "modelNumber": {
++                    "type": "string",
++                    "maxLength": 255
+                 }
+             }
+         },
+@@ -6622,4 +6643,4 @@
+             "in": "header"
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/backend/app/api/static/docs/swagger.yaml b/backend/app/api/static/docs/swagger.yaml
+index ba286763..e4cc3dae 100644
+--- a/backend/app/api/static/docs/swagger.yaml
++++ b/backend/app/api/static/docs/swagger.yaml
+@@ -1118,6 +1118,12 @@ definitions:
+         items:
+           type: string
+         type: array
++      manufacturer:
++        maxLength: 255
++        type: string
++      modelNumber:
++        maxLength: 255
++        type: string
+     required:
+     - name
+     type: object
+@@ -2206,6 +2212,10 @@ definitions:
+     type: object
+   v1.EntityTemplateCreateItemRequest:
+     properties:
++      barcode:
++        maxLength: 80
++        type: string
++        x-nullable: true
+       description:
+         maxLength: 1000
+         type: string
+@@ -2226,6 +2236,12 @@ definitions:
+         items:
+           type: string
+         type: array
++      manufacturer:
++        maxLength: 255
++        type: string
++      modelNumber:
++        maxLength: 255
++        type: string
+     required:
+     - name
+     - parentId
+diff --git a/docs/public/api/openapi-3.0.json b/docs/public/api/openapi-3.0.json
+index 92cda16d..d4daeb44 100644
+--- a/docs/public/api/openapi-3.0.json
++++ b/docs/public/api/openapi-3.0.json
+@@ -5045,6 +5045,14 @@
+                         "items": {
+                             "type": "string"
+                         }
++                    },
++                    "manufacturer": {
++                        "type": "string",
++                        "maxLength": 255
++                    },
++                    "modelNumber": {
++                        "type": "string",
++                        "maxLength": 255
+                     }
+                 }
+             },
+@@ -6667,6 +6675,19 @@
+                         "items": {
+                             "type": "string"
+                         }
++                    },
++                    "barcode": {
++                        "type": "string",
++                        "maxLength": 80,
++                        "nullable": true
++                    },
++                    "manufacturer": {
++                        "type": "string",
++                        "maxLength": 255
++                    },
++                    "modelNumber": {
++                        "type": "string",
++                        "maxLength": 255
+                     }
+                 }
+             },
+@@ -6859,4 +6880,4 @@
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/docs/public/api/openapi-3.0.yaml b/docs/public/api/openapi-3.0.yaml
+index 2c8bce6a..8275457c 100644
+--- a/docs/public/api/openapi-3.0.yaml
++++ b/docs/public/api/openapi-3.0.yaml
+@@ -3176,6 +3176,12 @@ components:
+           type: array
+           items:
+             type: string
++        manufacturer:
++          type: string
++          maxLength: 255
++        modelNumber:
++          type: string
++          maxLength: 255
+     repo.EntityFieldData:
+       type: object
+       properties:
+@@ -3717,6 +3723,12 @@ components:
+           type: array
+           items:
+             type: string
++        manufacturer:
++          type: string
++          maxLength: 255
++        modelNumber:
++          type: string
++          maxLength: 255
+         warrantyDetails:
+           type: string
+         warrantyExpires:
+@@ -4265,6 +4277,10 @@ components:
+         - name
+         - parentId
+       properties:
++        barcode:
++          type: string
++          maxLength: 80
++          nullable: true
+         description:
+           type: string
+           maxLength: 1000
+@@ -4287,6 +4303,12 @@ components:
+           type: array
+           items:
+             type: string
++        manufacturer:
++          type: string
++          maxLength: 255
++        modelNumber:
++          type: string
++          maxLength: 255
+     v1.ForgotPasswordRequest:
+       type: object
+       required:
+diff --git a/docs/public/api/swagger-2.0.json b/docs/public/api/swagger-2.0.json
+index 0feecbaa..85b09278 100644
+--- a/docs/public/api/swagger-2.0.json
++++ b/docs/public/api/swagger-2.0.json
+@@ -4801,6 +4801,14 @@
+                     "items": {
+                         "type": "string"
+                     }
++                },
++                "manufacturer": {
++                    "type": "string",
++                    "maxLength": 255
++                },
++                "modelNumber": {
++                    "type": "string",
++                    "maxLength": 255
+                 }
+             }
+         },
+@@ -6423,6 +6431,19 @@
+                     "items": {
+                         "type": "string"
+                     }
++                },
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
++                "manufacturer": {
++                    "type": "string",
++                    "maxLength": 255
++                },
++                "modelNumber": {
++                    "type": "string",
++                    "maxLength": 255
+                 }
+             }
+         },
+@@ -6622,4 +6643,4 @@
+             "in": "header"
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/docs/public/api/swagger-2.0.yaml b/docs/public/api/swagger-2.0.yaml
+index ba286763..e4cc3dae 100644
+--- a/docs/public/api/swagger-2.0.yaml
++++ b/docs/public/api/swagger-2.0.yaml
+@@ -1118,6 +1118,12 @@ definitions:
+         items:
+           type: string
+         type: array
++      manufacturer:
++        maxLength: 255
++        type: string
++      modelNumber:
++        maxLength: 255
++        type: string
+     required:
+     - name
+     type: object
+@@ -2206,6 +2212,10 @@ definitions:
+     type: object
+   v1.EntityTemplateCreateItemRequest:
+     properties:
++      barcode:
++        maxLength: 80
++        type: string
++        x-nullable: true
+       description:
+         maxLength: 1000
+         type: string
+@@ -2226,6 +2236,12 @@ definitions:
+         items:
+           type: string
+         type: array
++      manufacturer:
++        maxLength: 255
++        type: string
++      modelNumber:
++        maxLength: 255
++        type: string
+     required:
+     - name
+     - parentId
+diff --git a/frontend/components/App/ScannerModal.vue b/frontend/components/App/ScannerModal.vue
+index 1f8e989d..b08450a6 100644
+--- a/frontend/components/App/ScannerModal.vue
++++ b/frontend/components/App/ScannerModal.vue
+@@ -73,7 +73,7 @@
+   import { scannerStatusAfterFrame, type ScannerStatus } from "~/components/Entity/barcode";
+ 
+   const { t } = useI18n();
+-  const { activeDialog, openDialog, closeDialog } = useDialog();
++  const { activeDialog, closeDialog } = useDialog();
+   const open = computed(() => activeDialog && activeDialog.value === DialogID.Scanner);
+ 
+   const sources = ref<MediaDeviceInfo[]>([]);
+@@ -86,7 +86,9 @@
+   const detectedBarcodeType = ref<string>("");
+   const scannerStatus = ref<ScannerStatus>("starting");
+   const scannerStatusMessage = computed(() => {
+-    if (scannerStatus.value === "error") return errorMessage.value || t("scanner.camera_error_action");
++    if (scannerStatus.value === "error") {
++      return `${errorMessage.value || t("scanner.error")} ${t("scanner.camera_error_action")}`;
++    }
+     if (scannerStatus.value === "detected") return t("scanner.detected_status");
+     return t(`scanner.${scannerStatus.value}`);
+   });
+@@ -100,11 +102,11 @@
+   };
+ 
+   const handleButtonClick = () => {
+-    openDialog(DialogID.CreateEntity, { params: { baseType: "item", barcode: detectedBarcode.value } });
++    closeDialog(DialogID.Scanner, { type: "barcode", barcode: detectedBarcode.value });
+   };
+ 
+   const openArMode = () => {
+-    closeDialog(DialogID.Scanner);
++    closeDialog(DialogID.Scanner, { type: "navigate" });
+     navigateTo("/scanner-ar");
+   };
+ 
+@@ -198,7 +200,7 @@
+               throw new Error(t("scanner.invalid_url"));
+             }
+             const sanitizedPath = url.pathname.replace(/[^a-zA-Z0-9-_/]/g, "");
+-            closeDialog(DialogID.Scanner);
++            closeDialog(DialogID.Scanner, { type: "navigate" });
+             navigateTo(sanitizedPath);
+           } catch (err) {
+             // Check if it's a barcode for a new element
+diff --git a/frontend/components/Entity/CreateModal.vue b/frontend/components/Entity/CreateModal.vue
+index ce9d0c90..89afe8b6 100644
+--- a/frontend/components/Entity/CreateModal.vue
++++ b/frontend/components/Entity/CreateModal.vue
+@@ -179,7 +179,7 @@
+           :label="$t('items.barcode')"
+           :max-length="80"
+           autocomplete="off"
+-          @keyup.enter="lookupBarcode"
++          @keydown.enter="handleBarcodeEnter($event, lookupBarcode)"
+         />
+         <Button type="button" variant="outline" :disabled="barcodeSearching || !form.barcode.trim()" @click="lookupBarcode">
+           <MdiBarcode v-if="!barcodeSearching" class="mr-2 size-4" />
+@@ -225,6 +225,16 @@
+             {{ item.name }}
+           </Button>
+         </div>
++        <Button
++          v-if="duplicatePage < duplicatePageCount(duplicateTotal, duplicatePageSize)"
++          type="button"
++          variant="outline"
++          class="mt-2 w-full"
++          :disabled="barcodeSearching"
++          @click="loadMoreDuplicates"
++        >
++          {{ $t("components.entity.create_modal.barcode_lookup.load_more") }}
++        </Button>
+         <p class="mt-2 text-xs text-muted-foreground">{{ $t("components.entity.create_modal.barcode_lookup.duplicate_save_allowed") }}</p>
+       </div>
+       <TagSelector v-model="form.tags" :tags="tags ?? []" />
+@@ -268,6 +278,7 @@
+ </template>
+ 
+ <script setup lang="ts">
++  import { nextTick } from "vue";
+   import { useI18n } from "vue-i18n";
+   import { DialogID } from "@/components/ui/dialog-provider/utils";
+   import { toast } from "@/components/ui/sonner";
+@@ -312,7 +323,19 @@
+   } from "~/components/Form/photo-uploader";
+   import { useEntityTypeStore } from "~~/stores/entityTypes";
+   import EntitySelector from "~/components/Entity/Selector.vue";
+-  import { applyBarcodeCandidate, attachBarcode, lookupBarcodeItems, lookupBarcodeProducts } from "./barcode";
++  import {
++    appendDuplicatePage,
++    applyBarcodeCandidate,
++    applyBarcodeLookupIfCurrent,
++    attachBarcode,
++    barcodeDraftKey,
++    duplicatePageCount,
++    handleBarcodeEnter,
++    lookupBarcodePage,
++    lookupBarcodeProducts,
++    openBarcodeDuplicate,
++    prefillBarcodeDraft,
++  } from "./barcode";
+ 
+   const { t } = useI18n();
+   const { openDialog, closeDialog, registerOpenDialogCallback } = useDialog();
+@@ -435,6 +458,29 @@
+   const duplicateItems = ref<EntitySummary[]>([]);
+   const barcodeSearching = ref(false);
+   const barcodeLookupMessage = ref("");
++  const duplicatePage = ref(0);
++  const duplicateTotal = ref(0);
++  const duplicatePageSize = 25;
++  const barcodeDraftRevision = ref(0);
++  let barcodeRequestId = 0;
++
++  function invalidateBarcodeResults() {
++    barcodeDraftRevision.value++;
++    barcodeRequestId++;
++    barcodeProducts.value = [];
++    duplicateItems.value = [];
++    duplicatePage.value = 0;
++    duplicateTotal.value = 0;
++    barcodeLookupMessage.value = "";
++    barcodeSearching.value = false;
++  }
++
++  watch(form, invalidateBarcodeResults, { deep: true, flush: "sync" });
++  watch(
++    () => [selectedEntityType.value?.id, selectedTemplate.value?.id, templateData.value?.id, parent.value?.id, subItemCreate.value],
++    invalidateBarcodeResults,
++    { flush: "sync" }
++  );
+ 
+   async function handleTemplateSelected(template: EntityTemplateSummary | null) {
+     if (!template) {
+@@ -573,6 +619,8 @@
+ 
+   onMounted(() => {
+     const cleanup = registerOpenDialogCallback(DialogID.CreateEntity, async params => {
++      if (params.baseType === "item" && params.resume) return;
++      invalidateBarcodeResults();
+       subItemCreate.value = false;
+       let parentItemLocationId = null;
+       parent.value = {};
+@@ -616,11 +664,6 @@
+           }
+         }
+ 
+-        if (params.barcode) {
+-          form.barcode = params.barcode;
+-          void lookupBarcode();
+-        }
+-
+         // Restore last used template if available
+         await restoreLastTemplate();
+       } else {
+@@ -801,10 +844,19 @@
+   }
+ 
+   function openQrScannerPage() {
+-    openDialog(DialogID.Scanner);
++    openDialog(DialogID.Scanner, {
++      onClose: result => {
++        if (result?.type === "navigate") return;
++        if (result?.type === "barcode") prefillBarcodeDraft(form, result.barcode);
++        nextTick(() => {
++          openDialog(DialogID.CreateEntity, { params: { baseType: "item", resume: true } });
++          if (result?.type === "barcode") void lookupBarcode();
++        });
++      },
++    });
+   }
+ 
+-  async function lookupBarcode() {
++  async function lookupBarcode(page = 1, append = false) {
+     const barcode = form.barcode.trim();
+     if (!barcode) return;
+ 
+@@ -815,28 +867,89 @@
+       return;
+     }
+ 
+-    form.barcode = barcode;
++    prefillBarcodeDraft(form, barcode);
++    const requestId = ++barcodeRequestId;
++    const requestRevision = barcodeDraftRevision.value;
++    const getDraftKey = () =>
++      barcodeDraftKey({
++        barcode: form.barcode,
++        name: form.name,
++        description: form.description,
++        manufacturer: form.manufacturer,
++        modelNumber: form.modelNumber,
++        quantity: form.quantity,
++        parentId: form.parentId,
++        locationId: form.location?.id,
++        tags: [...form.tags],
++        photos: form.photos.map(photo => ({ name: photo.photoName, primary: photo.primary })),
++        selectedEntityTypeId: selectedEntityType.value?.id,
++        selectedTemplateId: selectedTemplate.value?.id,
++        templateId: templateData.value?.id,
++        parentItemId: parent.value?.id,
++        subItemCreate: subItemCreate.value,
++      });
++    const requestDraft = getDraftKey();
+     barcodeSearching.value = true;
+-    barcodeProducts.value = [];
+-    duplicateItems.value = [];
+-    barcodeLookupMessage.value = "";
+-
+-    const productLookup = await lookupBarcodeProducts(barcode, value => api.products.searchFromBarcode(value));
+-    barcodeProducts.value = productLookup.products;
+-    if (productLookup.status !== "found") {
+-      barcodeLookupMessage.value = t(`components.entity.create_modal.barcode_lookup.${productLookup.status}`);
++    if (!append) {
++      barcodeProducts.value = [];
++      duplicateItems.value = [];
++      duplicatePage.value = 0;
++      duplicateTotal.value = 0;
++      barcodeLookupMessage.value = "";
+     }
+ 
+-    duplicateItems.value = await lookupBarcodeItems(barcode, value => api.items.getAll({ barcode: value, page: 1, pageSize: 25 }));
+-    barcodeSearching.value = false;
++    let productLookup: Awaited<ReturnType<typeof lookupBarcodeProducts>>;
++    let duplicateResult: Awaited<ReturnType<typeof lookupBarcodePage>>;
++    [productLookup, duplicateResult] = await Promise.all([
++      append ? Promise.resolve({ status: "found" as const, products: [] }) : lookupBarcodeProducts(barcode, value => api.products.searchFromBarcode(value)),
++      lookupBarcodePage(barcode, page, duplicatePageSize, (value, pageNumber, pageLimit) =>
++        api.items.getAll({ barcode: value, page: pageNumber, pageSize: pageLimit })
++      ),
++    ]);
++
++    if (requestRevision !== barcodeDraftRevision.value) return;
++    const applied = applyBarcodeLookupIfCurrent(requestId, barcodeRequestId, requestDraft, getDraftKey(), () => {
++      if (!append) {
++        barcodeProducts.value = productLookup.products;
++        if (productLookup.status !== "found") {
++          barcodeLookupMessage.value = t(`components.entity.create_modal.barcode_lookup.${productLookup.status}`);
++        }
++      }
++      if (!duplicateResult.error) {
++        duplicateItems.value = append
++          ? appendDuplicatePage(duplicateItems.value, duplicateResult.items)
++          : duplicateResult.items;
++        duplicateTotal.value = duplicateResult.total;
++        duplicatePage.value = duplicateResult.page;
++      } else if (productLookup.status === "found") {
++        barcodeLookupMessage.value = t("components.entity.create_modal.barcode_lookup.error");
++      }
++      barcodeSearching.value = false;
++    });
++    if (!applied) return;
+   }
+ 
+   function selectBarcodeProduct(product: BarcodeProduct) {
+-    openDialog(DialogID.CreateEntity, { params: { baseType: "item", product } });
++    applyBarcodeCandidate(form, product);
++    if (product.imageURL && !form.photos.length) {
++      appendPhotos([
++        {
++          photoName: "product_view.jpg",
++          fileBase64: product.imageBase64,
++          primary: true,
++          file: dataURLtoFile(product.imageBase64, "product_view.jpg"),
++        },
++      ]);
++    }
++  }
++
++  function loadMoreDuplicates() {
++    if (duplicatePage.value < duplicatePageCount(duplicateTotal.value, duplicatePageSize)) {
++      void lookupBarcode(duplicatePage.value + 1, true);
++    }
+   }
+ 
+   function openDuplicate(id: string) {
+-    closeDialog(DialogID.CreateEntity);
+-    navigateTo(`/item/${id}`);
++    openBarcodeDuplicate(id, () => closeDialog(DialogID.CreateEntity), navigateTo);
+   }
+ </script>
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+index 1a98f98c..2b420012 100644
+--- a/frontend/components/Entity/barcode.test.ts
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -3,9 +3,18 @@ import { NotFoundException } from "@zxing/library";
+ import type { BarcodeProduct, EntitySummary } from "~~/lib/api/types/data-contracts";
+ import {
+   applyBarcodeCandidate,
++  applyBarcodeLookupIfCurrent,
+   attachBarcode,
++  appendDuplicatePage,
++  barcodeDraftKey,
++  duplicatePageCount,
++  handleBarcodeEnter,
++  isBarcodeLookupCurrent,
+   lookupBarcodeItems,
++  lookupBarcodePage,
+   lookupBarcodeProducts,
++  openBarcodeDuplicate,
++  prefillBarcodeDraft,
+   scannerStatusAfterFrame,
+   type BarcodeDraft,
+ } from "./barcode";
+@@ -94,4 +103,73 @@ describe("item barcode helpers", () => {
+     expect(scannerStatusAfterFrame("scanning", true)).toBe("detected");
+     expect(scannerStatusAfterFrame("scanning", false, new Error("camera failure"))).toBe("error");
+   });
++
++  test("selecting a candidate updates the same current draft and preserves existing edits", () => {
++    const draft = { name: "My name", description: "My description", manufacturer: "", modelNumber: "", barcode: "0012345" };
++    const sameDraft = draft;
++    const product = {
++      barcode: "0012345",
++      item: { name: "Catalog name", description: "Catalog description" },
++      manufacturer: "Eventronic",
++      modelNumber: "ET1001",
++    } as BarcodeProduct;
++    applyBarcodeCandidate(draft, product);
++    expect(draft).toBe(sameDraft);
++    expect(draft).toMatchObject({ name: "My name", description: "My description", manufacturer: "Eventronic" });
++  });
++
++  test("Enter is prevented and routed to lookup without invoking form creation", () => {
++    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() };
++    const lookup = vi.fn();
++    const create = vi.fn();
++    handleBarcodeEnter(event, lookup);
++    expect(event.preventDefault).toHaveBeenCalledOnce();
++    expect(event.stopPropagation).toHaveBeenCalledOnce();
++    expect(lookup).toHaveBeenCalledOnce();
++    expect(create).not.toHaveBeenCalled();
++  });
++
++  test("scanner handoff pre-fills the still-active item draft", () => {
++    const draft = { barcode: "", name: "Already typed" };
++    prefillBarcodeDraft(draft, " X9TEUJR4L ");
++    expect(draft).toEqual({ barcode: "X9TEUJR4L", name: "Already typed" });
++  });
++
++  test("ignores a delayed lookup after the draft changes", () => {
++    const initial = { barcode: "0012345", name: "Before" };
++    const requestKey = barcodeDraftKey(initial);
++    const current = barcodeDraftKey({ ...initial, name: "Edited while loading" });
++    expect(isBarcodeLookupCurrent(4, 4, requestKey, current)).toBe(false);
++    expect(isBarcodeLookupCurrent(4, 5, requestKey, requestKey)).toBe(false);
++    const apply = vi.fn();
++    expect(applyBarcodeLookupIfCurrent(4, 4, requestKey, current, apply)).toBe(false);
++    expect(apply).not.toHaveBeenCalled();
++    expect(applyBarcodeLookupIfCurrent(4, 4, requestKey, requestKey, apply)).toBe(true);
++    expect(apply).toHaveBeenCalledOnce();
++  });
++
++  test("duplicate continuation keeps all pages reachable without duplicate rows", () => {
++    const pageOne = [{ id: "one" }, { id: "two" }];
++    const pageTwo = [{ id: "two" }, { id: "three" }];
++    expect(appendDuplicatePage(pageOne, pageTwo)).toEqual([{ id: "one" }, { id: "two" }, { id: "three" }]);
++    expect(duplicatePageCount(52, 25)).toBe(3);
++  });
++
++  test("duplicate page lookup keeps later pages and degrades safely when inventory search fails", async () => {
++    const search = vi.fn().mockResolvedValue({ data: { items: [{ id: "one" }], page: 2, pageSize: 25, total: 27 } });
++    await expect(lookupBarcodePage("0012345", 2, 25, search)).resolves.toEqual({
++      items: [{ id: "one" }],
++      total: 27,
++      page: 2,
++      error: false,
++    });
++    const offline = vi.fn().mockRejectedValue(new Error("offline"));
++    await expect(lookupBarcodePage("0012345", 2, 25, offline)).resolves.toMatchObject({ error: true, page: 2 });
++  });
++
++  test("duplicate selection closes Add Item then navigates to the matching item", () => {
++    const actions: string[] = [];
++    openBarcodeDuplicate("item-123", () => actions.push("close"), path => actions.push(path));
++    expect(actions).toEqual(["close", "/item/item-123"]);
++  });
+ });
+diff --git a/frontend/components/Entity/barcode.ts b/frontend/components/Entity/barcode.ts
+index c6aabb9c..a7e2eb94 100644
+--- a/frontend/components/Entity/barcode.ts
++++ b/frontend/components/Entity/barcode.ts
+@@ -1,4 +1,4 @@
+-import type { BarcodeProduct, EntitySummary } from "~~/lib/api/types/data-contracts";
++import type { BarcodeProduct, EntityListResult, EntitySummary } from "~~/lib/api/types/data-contracts";
+ import { NotFoundException } from "@zxing/library";
+ 
+ export type BarcodeDraft = {
+@@ -45,6 +45,21 @@ export async function lookupBarcodeItems(
+   }
+ }
+ 
++export async function lookupBarcodePage(
++  barcode: string,
++  page: number,
++  pageSize: number,
++  search: (barcode: string, page: number, pageSize: number) => Promise<{ data?: EntityListResult; error?: unknown }>
++): Promise<{ items: EntitySummary[]; total: number; page: number; error: boolean }> {
++  try {
++    const result = await search(barcode, page, pageSize);
++    if (result.error || !result.data) return { items: [], total: 0, page, error: true };
++    return { items: result.data.items, total: result.data.total, page: result.data.page, error: false };
++  } catch {
++    return { items: [], total: 0, page, error: true };
++  }
++}
++
+ export function applyBarcodeCandidate(draft: BarcodeDraft, product: BarcodeProduct) {
+   if (!draft.name.trim()) draft.name = product.item.name;
+   if (!draft.description.trim()) draft.description = product.item.description;
+@@ -52,6 +67,55 @@ export function applyBarcodeCandidate(draft: BarcodeDraft, product: BarcodeProdu
+   if (!draft.modelNumber.trim()) draft.modelNumber = product.modelNumber;
+ }
+ 
++export function prefillBarcodeDraft(draft: { barcode: string }, barcode: string) {
++  draft.barcode = barcode.trim();
++}
++
++export function handleBarcodeEnter(event: Pick<KeyboardEvent, "preventDefault" | "stopPropagation">, lookup: () => unknown) {
++  event.preventDefault();
++  event.stopPropagation();
++  void lookup();
++}
++
++export function barcodeDraftKey(draft: Record<string, unknown>): string {
++  return JSON.stringify(draft);
++}
++
++export function isBarcodeLookupCurrent(
++  requestId: number,
++  latestRequestId: number,
++  requestDraftKey: string,
++  currentDraftKey: string
++): boolean {
++  return requestId === latestRequestId && requestDraftKey === currentDraftKey;
++}
++
++export function applyBarcodeLookupIfCurrent(
++  requestId: number,
++  latestRequestId: number,
++  requestDraftKey: string,
++  currentDraftKey: string,
++  apply: () => void
++): boolean {
++  if (!isBarcodeLookupCurrent(requestId, latestRequestId, requestDraftKey, currentDraftKey)) return false;
++  apply();
++  return true;
++}
++
++export function appendDuplicatePage<T extends { id: string }>(current: T[], next: T[]): T[] {
++  const seen = new Set(current.map(item => item.id));
++  return [...current, ...next.filter(item => !seen.has(item.id))];
++}
++
++export function duplicatePageCount(total: number, pageSize: number): number {
++  return Math.ceil(total / pageSize);
++}
++
++export function openBarcodeDuplicate(id: string, close: () => void, navigate: (path: string) => unknown) {
++  close();
++  navigate(`/item/${id}`);
++}
++
+ export function scannerStatusAfterFrame(
+   current: ScannerStatus,
+   hasResult: boolean,
+diff --git a/frontend/components/ui/dialog-provider/utils.ts b/frontend/components/ui/dialog-provider/utils.ts
+index 5ff8c5c0..4ae44e64 100644
+--- a/frontend/components/ui/dialog-provider/utils.ts
++++ b/frontend/components/ui/dialog-provider/utils.ts
+@@ -64,7 +64,7 @@ export type DialogParamsMap = {
+     attachmentId: string;
+   };
+   [DialogID.CreateEntity]:
+-    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true }
++    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true; resume?: true }
+     | { baseType: "location" };
+   [DialogID.ProductImport]?: { barcode?: string };
+   [DialogID.EditMaintenance]:
+@@ -85,6 +85,7 @@ export type DialogParamsMap = {
+  * Defines the payload type for a dialog's onClose callback.
+  */
+ export type DialogResultMap = {
++  [DialogID.Scanner]?: { type: "barcode"; barcode: string } | { type: "navigate" };
+   [DialogID.ItemImage]?: { action: "delete"; id: string };
+   [DialogID.EditMaintenance]?: boolean;
+   [DialogID.ItemChangeDetails]?: boolean;
+diff --git a/frontend/locales/en.json b/frontend/locales/en.json
+index f41083d2..25880313 100644
+--- a/frontend/locales/en.json
++++ b/frontend/locales/en.json
+@@ -189,6 +189,7 @@
+                     "action": "Look up",
+                     "candidates": "Possible products — choose one to prefill",
+                     "duplicates": "Items already using this barcode",
++                    "load_more": "Load more matches",
+                     "duplicate_save_allowed": "You can still save this item with the same barcode.",
+                     "error": "Product lookup is unavailable. You can continue entering the item manually.",
+                     "found": "Product matches found. Choose one to prefill fields.",
+@@ -911,7 +912,7 @@
+     },
+     "scanner": {
+         "barcode_detected_message": "product barcode detected",
+-        "camera_error_action": "Check camera permissions or connection, or close the scanner and enter the barcode manually.",
++        "camera_error_action": "Check camera permissions or connection. You can close the scanner and enter the barcode manually instead.",
+         "detected_status": "Barcode recognized. Use it to add an item.",
+         "error": "An error occurred while scanning",
+         "invalid_url": "Invalid barcode URL",

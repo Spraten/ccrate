@@ -1,0 +1,147 @@
+From 871cf36a96ae52ce42ee2b6cca5fad1ec4ed68b3 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 06:36:32 -0400
+Subject: [PATCH 21/23] Prefer prominent OCR title candidates
+
+---
+ frontend/components/Form/camera.test.ts | 26 ++++++---
+ frontend/components/Form/camera.ts      | 75 +++++++++++++++++++------
+ 2 files changed, 77 insertions(+), 24 deletions(-)
+
+diff --git a/frontend/components/Form/camera.test.ts b/frontend/components/Form/camera.test.ts
+index 4d4aca05..d53a760c 100644
+--- a/frontend/components/Form/camera.test.ts
++++ b/frontend/components/Form/camera.test.ts
+@@ -62,21 +62,33 @@ describe("local camera helpers", () => {
+     await expect(recognizeNameLocally(source, Detector)).resolves.toBe("ACME Cordless Drill");
+   });
+ 
+-  test("prefers prominent text, tolerates missing geometry, and caps suggestions at 255 characters", async () => {
++  test("selects only adjacent prominent title lines and excludes small label details", async () => {
+     const source = {} as HTMLCanvasElement;
+     class Detector {
+       async detect() {
+         return [
+-          { rawValue: "tiny serial", boundingBox: { width: 5, height: 4 } },
+-          { rawValue: "Main product title", boundingBox: { width: 200, height: 40 } },
+-          { rawValue: "x".repeat(300) },
++          { rawValue: "Cordless Drill", boundingBox: { x: 30, y: 20, width: 180, height: 32 } },
++          { rawValue: "Warranty and address", boundingBox: { x: 30, y: 360, width: 220, height: 9 } },
++          { rawValue: "Series 4", boundingBox: { x: 30, y: 61, width: 100, height: 30 } },
++          { rawValue: "Tiny serial", boundingBox: { x: 30, y: 400, width: 65, height: 8 } },
++          { rawValue: "Unplaced footer" },
+         ];
+       }
+     }
+ 
+-    await expect(recognizeNameLocally(source, Detector)).resolves.toBe(
+-      `Main product title tiny serial ${"x".repeat(224)}`
+-    );
++    await expect(recognizeNameLocally(source, Detector)).resolves.toBe("Cordless Drill Series 4");
++  });
++
++  test("uses geometry-free OCR as a bounded editable fallback", async () => {
++    class Detector {
++      async detect() {
++        return [{ rawValue: " First line " }, { rawValue: " second line " }, { rawValue: "x".repeat(300) }];
++      }
++    }
++
++    const suggestion = await recognizeNameLocally({} as HTMLCanvasElement, Detector);
++    expect(suggestion).toBe(`First line second line ${"x".repeat(232)}`);
++    expect(suggestion).toHaveLength(255);
+   });
+ 
+   test("recognizes text from an image file locally and releases the decoded bitmap", async () => {
+diff --git a/frontend/components/Form/camera.ts b/frontend/components/Form/camera.ts
+index 64f5f264..a9bd3aae 100644
+--- a/frontend/components/Form/camera.ts
++++ b/frontend/components/Form/camera.ts
+@@ -1,6 +1,6 @@
+ export interface LocalTextDetection {
+   rawValue: string;
+-  boundingBox?: { width: number; height: number };
++  boundingBox?: { x?: number; y?: number; width: number; height: number };
+ }
+ 
+ export interface LocalTextDetector {
+@@ -67,22 +67,63 @@ export async function recognizeNameLocally(
+   if (!Detector) return null;
+ 
+   const detections = await new Detector().detect(source);
+-  const suggestion = detections
+-    .map((detection, index) => ({
+-      index,
+-      area:
+-        detection.boundingBox &&
+-        Number.isFinite(detection.boundingBox.width) &&
+-        Number.isFinite(detection.boundingBox.height) &&
+-        detection.boundingBox.width > 0 &&
+-        detection.boundingBox.height > 0
+-          ? detection.boundingBox.width * detection.boundingBox.height
+-          : 0,
+-      text: detection.rawValue.trim(),
+-    }))
+-    .sort((a, b) => b.area - a.area || a.index - b.index)
+-    .map(detection => detection.text)
+-    .filter(Boolean)
++  const textDetections = detections
++    .map((detection, index) => ({ detection, index, text: detection.rawValue.trim() }))
++    .filter(result => result.text);
++  const measured = textDetections.filter(({ detection }) => {
++    const box = detection.boundingBox;
++    return !!box && Number.isFinite(box.width) && Number.isFinite(box.height) && box.width > 0 && box.height > 0;
++  });
++
++  let selected = textDetections;
++  if (measured.length) {
++    const maxHeight = Math.max(...measured.map(({ detection }) => detection.boundingBox!.height));
++    const prominent = measured.filter(({ detection }) => detection.boundingBox!.height >= maxHeight * 0.72);
++    const positioned = prominent.filter(({ detection }) =>
++      Number.isFinite(detection.boundingBox!.x) && Number.isFinite(detection.boundingBox!.y)
++    );
++    if (positioned.length) {
++      const ordered = positioned.sort(
++        (a, b) =>
++          a.detection.boundingBox!.y! - b.detection.boundingBox!.y! ||
++          a.detection.boundingBox!.x! - b.detection.boundingBox!.x! ||
++          a.index - b.index
++      );
++      const anchor = ordered.reduce((best, candidate) =>
++        candidate.detection.boundingBox!.height > best.detection.boundingBox!.height ||
++        (candidate.detection.boundingBox!.height === best.detection.boundingBox!.height &&
++          candidate.detection.boundingBox!.width * candidate.detection.boundingBox!.height >
++            best.detection.boundingBox!.width * best.detection.boundingBox!.height)
++          ? candidate
++          : best
++      );
++      const anchorIndex = ordered.indexOf(anchor);
++      let first = anchorIndex;
++      let last = anchorIndex;
++      while (first > 0) {
++        const previous = ordered[first - 1]!;
++        const current = ordered[first]!;
++        const gap = current.detection.boundingBox!.y! -
++          previous.detection.boundingBox!.y! - previous.detection.boundingBox!.height;
++        if (gap > Math.max(previous.detection.boundingBox!.height, current.detection.boundingBox!.height) * 1.5) break;
++        first--;
++      }
++      while (last + 1 < ordered.length) {
++        const current = ordered[last]!;
++        const next = ordered[last + 1]!;
++        const gap = next.detection.boundingBox!.y! -
++          current.detection.boundingBox!.y! - current.detection.boundingBox!.height;
++        if (gap > Math.max(current.detection.boundingBox!.height, next.detection.boundingBox!.height) * 1.5) break;
++        last++;
++      }
++      selected = ordered.slice(first, last + 1);
++    } else {
++      selected = prominent.sort((a, b) => a.index - b.index);
++    }
++  }
++
++  const suggestion = selected
++    .map(result => result.text)
+     .join(" ")
+     .replace(/\s+/g, " ")
+     .trim()
