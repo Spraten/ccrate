@@ -132,6 +132,7 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 		}
 	}
 	require.True(t, foundOrdinaryMatch, "a code-shaped ordinary name must remain searchable alongside exact display-ID matching")
+	require.NoError(t, tRepos.Entities.DeleteByGroup(ctx, groupID, ordinaryItem.ID))
 
 	updated, err := tRepos.Entities.UpdateByGroup(ctx, groupID, EntityUpdate{
 		ID: item.ID, Name: item.Name, ParentID: other.ID, EntityTypeID: drawerType.ID,
@@ -223,11 +224,14 @@ func TestEntityTypeRenameSerializesWithConcurrentAssetCreate(t *testing.T) {
 	require.NoError(t, created.err)
 	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, created.item.ID) })
 
+	displayIDs := make([]string, 0, 2)
 	for _, id := range []uuid.UUID{existing.ID, created.item.ID} {
 		item, err := tRepos.Entities.GetOneByGroup(ctx, gid, id)
 		require.NoError(t, err)
-		require.Equal(t, "NEW-BIN-D", item.DisplayID)
+		require.Equal(t, "NEW-BIN-D", item.DisplayIDBase)
+		displayIDs = append(displayIDs, item.DisplayID)
 	}
+	require.ElementsMatch(t, []string{"NEW-BIN-D-1", "NEW-BIN-D-2"}, displayIDs)
 }
 
 func TestDisplayIDBasesRefreshWhenDeletingLocationParent(t *testing.T) {
