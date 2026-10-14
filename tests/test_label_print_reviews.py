@@ -141,6 +141,10 @@ class LegacyRasterReviewTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'40 x 28 mm SUPVAN stock'):
                 labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
         self.assertEqual(sent,[])
+        with patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':28}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once) as printer:
+            with self.assertRaisesRegex(ValueError,'missing, expired'):
+                labels.print_label(self.client,self.jobs,self.group,self.actor,str(uuid4()),self.item,layouts=self.layouts,review_id=preview['review_id'])
+        printer.assert_not_called()
     def test_legacy_location_print_sends_exact_reviewed_raster(self):
         image,preview=self.review_legacy_location();sent=[]
         def print_once(*args,**kwargs):sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()

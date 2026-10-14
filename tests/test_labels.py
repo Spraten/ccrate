@@ -64,16 +64,15 @@ class LegacyLabelTextTests(unittest.TestCase):
         self.assertEqual(labels._fit_name_lines('e\u0301🧰',_FixedWidthDraw(1),None,3,1),['…'])
 
 class LegacyLabelPreviewTests(unittest.TestCase):
-    def test_legacy_preview_uses_measured_stock_dimensions_once(self):
+    def test_legacy_preview_uses_fixed_stock_dimensions_without_probing(self):
         user=str(uuid4())
         entity={'id':user,'name':'Multiword storage location','entityType':{'isLocation':True}}
         class Client:
             def entity(self,entity_id):return entity
         image=SimpleNamespace(width=320,height=208,save=lambda stream,format:stream.write(b'png'))
-        measured={'width_mm':40,'height_mm':28}
-        with patch.object(labels,'probe',return_value=measured) as probe,patch.object(labels,'render',return_value=(image,'location-code')) as render:
+        with patch.object(labels,'probe',side_effect=AssertionError('offline preview must not probe')) as probe,patch.object(labels,'render',return_value=(image,'location-code')) as render:
             result=labels.preview(Client(),user)
-        probe.assert_called_once_with()
+        probe.assert_not_called()
         render.assert_called_once_with(entity,40,28)
         self.assertEqual((result['width'],result['height']),(320,208))
 
