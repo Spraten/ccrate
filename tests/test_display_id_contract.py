@@ -1,59 +1,86 @@
-import pathlib
-import unittest
+Û^š›bh¥êß¢¹­…â'ŠØš–,ŞçÚº[C®+Ş²Š^­«b¢z'¶…ŠW’ÊË^ššè¾'^­ö¢•çZ[\Ü]X‚š[\Ü[š]\İ‚‚”“ÓÕH]X‹”]
+×Ùš[W×ÊKœ™\ÛÛ™J
+Kœ\™[ÖÌWB‚‚˜Û\ÜÈ\Ü^RQÛÛ˜Xİ\İÊ[š]\İ•\İØ\ÙJN‚ˆYˆ\İØ˜XÚÙ[™ØZ[\—Ú[œÙ\×ÜÚÜØÛÙWÚ[×İ[\]WÙ[]WØZ[\ŠÙ[ŠN‚ˆZ[\ˆH
+“ÓÕÈ	Ù\ŞKØZ[ZÛYX›ŞX˜XÚÙ[™œIÊKœ™XYİ^
+[˜ÛÙ[™ÏIİ]‹N	ÊBˆÙ[‹˜\ÜÙ\[Šˆ	ÔÙ]Ø\œ˜[Q]Z[Ê]K•Ø\œ˜[Q]Z[ÊW—YˆÚÜÛÙHOHˆˆÈ[]PZ[\‹”Ù]ÚÜÛÙJÚÜÛÙJHW—Yˆ˜\˜ÛÙHOHˆˆÉËˆZ[\‹ˆ
+B‚ˆYˆ\İØ˜XÚÙ[™ØZ[\—ÚÙY\×Ù^\İ[™×Û[Ù[Û[X™\—ÙšY[
+Ù[ŠN‚ˆZ[\ˆH
+“ÓÕÈ	Ù\ŞKØZ[ZÛYX›ŞX˜XÚÙ[™œIÊKœ™XYİ^
+[˜ÛÙ[™ÏIİ]‹N	ÊBˆÙ[‹˜\ÜÙ\›İ[Š	Ó[Ù[[X™\ˆİš[™ÈœÛÛˆ›[Ù[[X™\ˆ˜	ËZ[\ŠB‚ˆYˆ\İØ˜XÚÙ[™ØZ[\—Ü™\Ù\™\×Û›Ü›X[^™YØ˜\˜ÛÙWÛÛ—Ú][WØÜ™X]JÙ[ŠN‚ˆZ[\ˆH
+“ÓÕÈ	Ù\ŞKØZ[ZÛYX›ŞX˜XÚÙ[™œIÊKœ™XYİ^
+[˜ÛÙ[™ÏIİ]‹N	ÊBˆÙ[‹˜\ÜÙ\[Š	ÚYˆ˜\˜ÛÙHOHˆˆÈK”Ù]˜\˜ÛÙJ˜\˜ÛÙJHIËZ[\ŠBˆÙ[‹˜\ÜÙ\[Š	Ë”Ù]X[Y˜Xİ\™\Š]K“X[Y˜Xİ\™\ŠIËZ[\ŠB‚ˆYˆ\İØ˜XÚÙ[™ØZ[\—ÙÙ\×Û›İÙ\XØ]Wİ[\]WÛY]Y]WÚ[™[™ÊÙ[ŠN‚ˆZ[\ˆH
+“ÓÕÈ	Ù\ŞKØZ[ZÛYX›ŞX˜XÚÙ[™œIÊKœ™XYİ^
+[˜ÛÙ[™ÏIİ]‹N	ÊBˆÙ[‹˜\ÜÙ\›İ[Š	Û[Ù[[X™\ˆH[\]K‘Y˜][[Ù[[X™\‰ËZ[\ŠB‚ˆYˆ\İØ˜XÚÙ[™Ù\š]™\×Ù[Ü]Ø[™ÚÙY\×Û˜]]™WÚY[]WÜÙ\\˜]JÙ[ŠN‚ˆÛİ\˜ÙHH
+“ÓÕÈ	ÚÛYX›ŞX˜XÚÙ[™Ü™\×Ù\Ü^WÚYË™ÛÉÊKœ™XYİ^
 
+Bˆ\İÈH
+“ÓÕÈ	ÚÛYX›ŞX˜XÚÙ[™Ü™\×Ù\Ü^WÚY×İ\İ™ÛÉÊKœ™XYİ^
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+BˆZ[\ˆH
+“ÓÕÈ	Ù\ŞKØZ[ZÛYX›ŞX˜XÚÙ[™œIÊKœ™XYİ^
 
+BˆÙ[‹˜\ÜÙ\[Š	Ù›Ü›X]\Ü^RQ
+\S˜[YK]][\ÖÚWK\ÜÙ]Q][\ÖÚWK”ÚÜÛÙK][\ÖÚWK’Q
+IËÛİ\˜ÙJBˆÙ[‹˜\ÜÙ\[Š	ÈHŠÜİ˜ÛÛ‹‘›Ü›X][
+[
+\ÜÙ]Q
+KL
+IËÛİ\˜ÙJBˆÙ[‹˜\ÜÙ\[Š	È•HŠØÛÛ\XİURQ
+IËÛİ\˜ÙJBˆÙ[‹˜\ÜÙ\[Š	È”ÈŠØÛÙIËÛİ\˜ÙJBˆÙ[‹˜\ÜÙ\[Š	Ù[˜È\Ñ\Ü^RQÙX\˜Ú
+˜[YHİš[™ÊH›ÛÛ	ËÛİ\˜ÙJBˆÙ[‹˜\ÜÙ\[Š	Ù›Ü›X]\Ü^RQ
+\S˜[YK]][\ÖÚWK\ÜÙ]Q][\ÖÚWK”ÚÜÛÙK][\ÖÚWK’Q
+IËÛİ\˜ÙJBˆÙ[‹˜\ÜÙ\[Š	ÕÚ]\™[
 
-class DisplayIDContractTests(unittest.TestCase):
-    def test_backend_derives_full_path_and_keeps_native_identity_separate(self):
-        source = (ROOT / 'homebox-backend/repo_display_ids.go').read_text()
-        tests = (ROOT / 'homebox-backend/repo_display_ids_test.go').read_text()
-        builder = (ROOT / 'deploy/build-homebox-backend.py').read_text()
-        self.assertIn('formatDisplayID(typeName, path, items[i].AssetID, items[i].ShortCode, items[i].ID)', source)
-        self.assertIn('"A"+strconv.FormatInt(int64(assetID), 10)', source)
-        self.assertIn('"U"+compactUUID)', source)
-        self.assertIn('"S"+code', source)
-        self.assertIn('func isDisplayIDSearch(value string) bool', source)
-        self.assertIn('formatDisplayID(typeName, path, items[i].AssetID, items[i].ShortCode, items[i].ID)', source)
-        self.assertIn('WithParent().WithEntityType()', source)
-        self.assertIn('entity.HasGroupWith(group.ID(gid))', source)
-        self.assertIn("r.GetOneByGroup(ctx, gid, result.ID)", builder)
-        self.assertIn("r.GetOneByGroup(ctx, gid, newEntityID)", builder)
-        self.assertIn('BIN-D-GC-C-1', tests)
-        self.assertIn('TestFormatDisplayIDUsesUUIDSuffixWhenNativeAssetIDIsUnassigned', tests)
-        self.assertIn('require.NotEqual(t, item.DisplayID, duplicateItem.DisplayID)', tests)
-        self.assertIn('duplicateAssetID := assetID', tests)
-        self.assertIn('require.NotEqual(t, item.ShortCode, duplicateItem.ShortCode', tests)
-        self.assertIn('"USB-C-ADAPTER", "12-34-56"', tests)
-        self.assertIn('C-U812AB7D250404B2B918260F5EC674EFE', tests)
-        self.assertIn('PART-SABC-123', tests)
-        self.assertIn('displayIDOrdinarySearch = q.Search', builder)
-        self.assertIn('displayIDOrdinaryMatches[item.ID]', builder)
-        self.assertIn('entity.Barcode(strings.TrimSpace(displayIDOrdinarySearch))', builder)
-        self.assertIn('originalUUID, originalAssetID, originalShortCode', tests)
-        self.assertIn("schemas[name]['properties']['displayId']", builder)
+K•Ú][]U\J
+IËÛİ\˜ÙJBˆÙ[‹˜\ÜÙ\[Š	Ù[]K’\ÑÜ›İ\Ú]
+Ü›İ\’Q
+ÚY
+JIËÛİ\˜ÙJBˆÙ[‹˜\ÜÙ\[Šœ‹‘Ù]Û™PQÜ›İ\
+İÚY™\İ[’Q
+H‹Z[\ŠBˆÙ[‹˜\ÜÙ\[Šœ‹‘Ù]Û™PQÜ›İ\
+İÚY™]Ñ[]RQ
+H‹Z[\ŠBˆÙ[‹˜\ÜÙ\[Š	Ğ’S‹QQĞËPËLIË\İÊBˆÙ[‹˜\ÜÙ\[Š	Õ\İ›Ü›X]\Ü^RQ\Ù\ÕURQİY™š^Ú[“˜]]™P\ÜÙ]Q\Õ[˜\ÜÚYÛ™Y	Ë\İÊBˆÙ[‹˜\ÜÙ\[Š	Ü™\]Z\™K“›İ\]X[
+][K‘\Ü^RQ\XØ]R][K‘\Ü^RQ
+IË\İÊBˆÙ[‹˜\ÜÙ\[Š	Ù\XØ]P\ÜÙ]QH\ÜÙ]Q	Ë\İÊBˆÙ[‹˜\ÜÙ\[Š	Ü™\]Z\™K“›İ\]X[
+][K”ÚÜÛÙK\XØ]R][K”ÚÜÛÙIË\İÊBˆÙ[‹˜\ÜÙ\[Š	È•TĞ‹PËPQTTˆ‹ŒL‹LÍMMˆ‰Ë\İÊBˆÙ[‹˜\ÜÙ\[Š	ĞËUNLPÑLŒLNŒQPÍÍQ‘IË\İÊBˆÙ[‹˜\ÜÙ\[Š	ÔT•TĞPËLLŒÉË\İÊBˆÙ[‹˜\ÜÙ\[Š	Ù\Ü^RQÜ™[˜\TÙX\˜ÚHK”ÙX\˜Ú	ËZ[\ŠBˆÙ[‹˜\ÜÙ\[Š	Ù\Ü^RQÜ™[˜\SX]Ú\ÖÚ][K’QIËZ[\ŠBˆÙ[‹˜\ÜÙ\[Š	Ù[]K˜\˜ÛÙJİš[™ÜË•š[TÜXÙJ\Ü^RQÜ™[˜\TÙX\˜Ú
+JIËZ[\ŠBˆÙ[‹˜\ÜÙ\[Š	ÛÜšYÚ[˜[URQÜšYÚ[˜[\ÜÙ]QÜšYÚ[˜[ÚÜÛÙIË\İÊBˆÙ[‹˜\ÜÙ\[ŠœØÚ[X\ÖÛ˜[YWVÉÜ›Ü\Y\É×VÉÙ\Ü^RY	×H‹Z[\ŠB‚ˆYˆ\İÚ][WÙ]Z[×ÜÙX\˜ÚØ[™ÛX™[Ù\ÚYÛ™\—İ\ÙWÙ\Ü^WÚY
+Ù[ŠN‚ˆ˜XÚÙ[™H
+“ÓÕÈ	Ù\ŞKØZ[ZÛYX›ŞX˜XÚÙ[™œIÊKœ™XYİ^
 
-    def test_item_details_search_and_label_designer_use_display_id(self):
-        backend = (ROOT / 'deploy/build-homebox-backend.py').read_text()
-        details = (ROOT / 'deploy/build-homebox-ui.py').read_text()
-        designer = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text()
-        editor = (ROOT / 'label-ui/src/editor-host.ts').read_text()
-        label_backend = (ROOT / 'ops/label_layouts.py').read_text()
-        label_tool = (ROOT / 'label-ui/patches/0002-label-editor-controls.patch').read_text()
-        self.assertIn('isDisplayIDSearch(q.Search)', backend)
-        self.assertNotIn('q.AssetID = id', backend)
-        self.assertIn('EqualFold(item.DisplayID, displayIDSearch)', backend)
-        self.assertIn('displayIDSearch == "" && (q.Page != -1 || q.PageSize != -1)', backend)
-        self.assertIn('entities[offset:end]', backend)
-        self.assertIn('item.displayId', details)
-        self.assertIn('display_id: props.selectedItem.displayId || ""', designer)
-        self.assertIn('display_id: nextDisplayId', editor)
-        self.assertIn("'display_id':display_id", label_backend)
-        self.assertIn("'item_display_id':entity.get('displayId','')", label_backend)
-        self.assertIn("entity.get('displayId')!=ticket.get('item_display_id')", (ROOT / 'ops/labels.py').read_text())
-        self.assertIn("createText(place, '{{display_id}}')", label_tool)
+Bˆ]Z[ÈH
+“ÓÕÈ	Ù\ŞKØZ[ZÛYX›Ş]ZKœIÊKœ™XYİ^
 
+Bˆ\ÚYÛ™\ˆH
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KØÛÛ\Û™[ËÕÛÜšÜÚÜÓX™[\ÚYÛ™\‹YIÊKœ™XYİ^
 
-if __name__ == '__main__':
-    unittest.main()
+BˆY]ÜˆH
+“ÓÕÈ	ÛX™[]ZKÜÜ˜ËÙY]Ü‹ZÜİÉÊKœ™XYİ^
+
+BˆX™[Ø˜XÚÙ[™H
+“ÓÕÈ	ÛÜËÛX™[Û^[İ]ËœIÊKœ™XYİ^
+
+BˆX™[İÛÛH
+“ÓÕÈ	ÛX™[]ZKÜ]Ú\ËÌ‹[X™[YY]Ü‹XÛÛ›ÛËœ]Ú	ÊKœ™XYİ^
+
+BˆÙ[‹˜\ÜÙ\[Š	Ú\Ñ\Ü^RQÙX\˜Ú
+K”ÙX\˜Ú
+IË˜XÚÙ[™
+BˆÙ[‹˜\ÜÙ\›İ[Š	ÜK\ÜÙ]QHY	Ë˜XÚÙ[™
+BˆÙ[‹˜\ÜÙ\[Š	Ñ\]X[›Û
+][K‘\Ü^RQ\Ü^RQÙX\˜Ú
+IË˜XÚÙ[™
+BˆÙ[‹˜\ÜÙ\[Š	Ù\Ü^RQÙX\˜ÚOHˆˆ	‰ˆ
+K”YÙHOHLHK”YÙTÚ^™HOHLJIË˜XÚÙ[™
+BˆÙ[‹˜\ÜÙ\[Š	Ù[]Y\ÖÛÙ™œÙ]™[™IË˜XÚÙ[™
+BˆÙ[‹˜\ÜÙ\[Š	Ú][K™\Ü^RY	Ë]Z[ÊBˆÙ[‹˜\ÜÙ\[Š	Ù\Ü^WÚYˆ›ÜËœÙ[XİY][K™\Ü^RYˆ‰Ë\ÚYÛ™\ŠBˆÙ[‹˜\ÜÙ\[Š	Ù\Ü^WÚYˆ™^\Ü^RY	ËY]ÜŠBˆÙ[‹˜\ÜÙ\[Š‰Ù\Ü^WÚY	Î™\Ü^WÚY‹X™[Ø˜XÚÙ[™
+BˆÙ[‹˜\ÜÙ\[Š‰Ú][WÙ\Ü^WÚY	Î™[]K™Ù]
+	Ù\Ü^RY	Ë	ÉÊH‹X™[Ø˜XÚÙ[™
+BˆÙ[‹˜\ÜÙ\[Š™[]K™Ù]
+	Ù\Ü^RY	ÊHO]XÚÙ]™Ù]
+	Ú][WÙ\Ü^WÚY	ÊH‹
+“ÓÕÈ	ÛÜËÛX™[ËœIÊKœ™XYİ^
+
+JBˆÙ[‹˜\ÜÙ\[Š˜Ü™X]U^
+XÙK	ŞŞÙ\Ü^WÚY_IÊH‹X™[İÛÛ
+B‚‚šYˆ×Û˜[YW×ÈOH	××ÛXZ[—×ÉÎ‚ˆ[š]\İ›XZ[Š
+B

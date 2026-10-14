@@ -1,98 +1,101 @@
-import pathlib
-import unittest
+Û^š›bh¥êß¢¹­…â'ŠØš–,ŞçÚº[C®+Ş²Š^­«b¢z'¶…ŠW’ÊË^ššè¾'^­ö¢•çZ[\Ü]X‚š[\Ü[š]\İ‚‚”“ÓÕH]X‹”]
+×Ùš[W×ÊKœ™\ÛÛ™J
+Kœ\™[ÖÌWB‚‚˜Û\ÜÈX™[Ù[™\˜]ÜÛÛ˜Xİ\İÊ[š]\İ•\İØ\ÙJN‚ˆYˆ\İÜš[Ù˜Z[\™\×Ø\™Wİš\ÚX›WØ[™ÛÛ›Wİ[˜Ù\Z[—Ûİ]ÛÛY\×ÛØÚ×Ü™]JÙ[ŠN‚ˆÛÛ\Û™[H
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KØÛÛ\Û™[ËÕÛÜšÜÚÜÓX™[Ù[™\˜]Ü‹YIÊKœ™XYİ^
 
+BˆÛÜšÙ›İÈH
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KÛX‹İÛÜšÜÚÜ]ÛÛËšœÉÊKœ™XYİ^
+[˜ÛÙ[™ÏIİ]‹N	ÊBˆÙ[‹˜\ÜÙ\[Š	İÛÜšÜÜXÙKœš[\œ›Ü‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	İÛÜšÜÜXÙKœš[[˜Ù\Z[‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	İÛÜšÜÜXÙKœš[ØÚÙYÛÜšÜÜXÙKœš[Y™]šY]ÒYËš[˜ÛY\Ê›İËœ™]šY]×ÚY
+IËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[ŠÛÜšÜÜXÙKœš[\œ›Üˆ	‰ˆ]ÛÜšÜÜXÙKœš[[˜Ù\Z[ˆÈ	Ô™]Hš[	È‹ÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	Ü[™[™ÓX™[š[
+[™[™Ê
+JIËÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š	ÛX™[š[˜Z[\™J\œ›Ü‹[™[™Ê
+K™\]Y\İÙ^JIËÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š	İÛÜšÜÜXÙK˜Xİ[ÛœËœ™XÛİ™\J
+IËÛÛ\Û™[
+B‚ˆYˆ\İÜ›İ][™WÜš[[™×ÚÙY\×Ú[—ØÛÛ^Ü™]šY]×Ø[™Ü\ÚXØ[ØÛÛ™š\›X][ÛŠÙ[ŠN‚ˆÛÛ\Û™[H
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KØÛÛ\Û™[ËÕÛÜšÜÚÜÓX™[Ù[™\˜]Ü‹YIÊKœ™XYİ^
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+BˆÛÜšÙ›İÈH
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KÛX‹İÛÜšÜÚÜ]ÛÛËšœÉÊKœ™XYİ^
+[˜ÛÙ[™ÏIİ]‹N	ÊBˆÙ[‹˜\ÜÙ\[Š	Ô™]šY]ÈÙ[XİYX™[ÉËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	Ô™]šY]È[™š[	ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	Ôš[X™[	ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\›İ[Š	Ô™]šY]ÈÙ[XİYX™[ÉËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\›İ[Š	Ô™]šY]ÙYX™[ÉËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ĞÛXÚÏHÛÜšÜÜXÙK˜Xİ[ÛœËœš[][J›İË™[]WÚY›İËœ™]šY]×ÚY
+H‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	Î™\ØX›YHÛÜšÜÜXÙK˜\ŞHÛÜšÜÜXÙKœš[ØÚÙYÛÜšÜÜXÙKœš[Y™]šY]ÒYËš[˜ÛY\Ê›İËœ™]šY]×ÚY
+H‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	Ô™]šY]ÈX™[È\™K[ˆš[XXÚÛ™Hœ›ÛH]ÈØ\™‰ËÛÛ\Û™[
+Bˆš[ØXİ[ÛˆHÛÜšÙ›İËœÜ]
+	Üš[][J[]RY™]šY]ÒY
+^ÉËJVÌWKœÜ]
+	Ø\Ş[˜ÈÛÛ\ÜÙJ
+^ÉËJVÌBˆÙ[‹˜\ÜÙ\[Š›Ü[‘X[ÙÊ	ĞÛÛ™š\›HHX™[š[	È‹š[ØXİ[ÛŠBˆÙ[‹˜\ÜÙ\[Š˜]ÛŠ	ĞØ[˜Ù[	Ë
 
+OO˜ÛÜÙQX[ÙÊ
+JH‹š[ØXİ[ÛŠBˆÙ[‹˜\ÜÙ\[Š˜]ÛŠ	ĞÛÛ™š\›HÛ™HHš[	È‹š[ØXİ[ÛŠBˆÙ[‹˜\ÜÙ\\ÜÊš[ØXİ[Û‹š[™^
+˜]ÛŠ	ĞÛÛ™š\›HÛ™HHš[	ÈŠKš[ØXİ[Û‹š[™^
+Üš]J	ÛX™[ËÜš[	ÈŠJBˆÙ[‹˜\ÜÙ\[Š	İ™\œÚ[ÛˆOO\™]šY]Ô™]š\Ú[ÛŸY[]P]™]šY]ÈOOXÛÛ^ËšY[]IËš[ØXİ[ÛŠBˆÙ[‹˜\ÜÙ\\ÜÊš[ØXİ[Û‹š[™^
+	İ™\œÚ[ÛˆOO\™]šY]Ô™]š\Ú[ÛŸY[]P]™]šY]ÈOOXÛÛ^ËšY[]IÊKš[ØXİ[Û‹š[™^
+Üš]J	ÛX™[ËÜš[	ÈŠJBˆÙ[‹˜\ÜÙ\[Š	Ü]Y]YTİÜY]Y]YTÙ[™[™ÉËš[ØXİ[ÛŠBˆÙ[‹˜\ÜÙ\[Š	İÛÜšÜÜXÙKœš[Y™]šY]ÒYËš[˜ÛY\Ê™]šY]ÒY
+IËš[ØXİ[ÛŠBˆÙ[‹˜\ÜÙ\[Š	Ü™\]Y\İÚÙ^Nœ™\]Y\İÙ^IËš[ØXİ[ÛŠBˆÙ[‹˜\ÜÙ\[ŠÜš]J	ÛX™[ËÜš[	È‹š[ØXİ[ÛŠB‚ˆYˆ\İÙÙ[™\˜]YØ\ÜÙ]ÚYÚ\×ÜÙX\˜ÚX›WØ[™İš\ÚX›WÚ[—ÛX™[ÜÙ[Xİ[ÛŠÙ[ŠN‚ˆÛÛ\Û™[H
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KØÛÛ\Û™[ËÕÛÜšÜÚÜÓX™[Ù[™\˜]Ü‹YIÊKœ™XYİ^
 
-class LabelGeneratorContractTests(unittest.TestCase):
-    def test_print_failures_are_visible_and_only_uncertain_outcomes_lock_retry(self):
-        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
-        workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text(encoding='utf-8')
-        self.assertIn('workspace.printError', component)
-        self.assertIn('workspace.printUncertain', component)
-        self.assertIn('workspace.printLocked || workspace.printedReviewIds.includes(row.review_id)', component)
-        self.assertIn("workspace.printError && !workspace.printUncertain ? 'Retry print'", component)
-        self.assertIn('pendingLabelPrint(pending())', workflow)
-        self.assertIn('labelPrintFailure(error,pending(),requestKey)', workflow)
-        self.assertIn('workspace.actions.recovery()', component)
+BˆÙ[‹˜\ÜÙ\[Š	Ù\Ü^RYÎˆİš[™ÉËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ÉÚ][K™\Ü^RYˆŸIËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ÑÙ[™\˜]YQ0­ÈŞÈ][K™\Ü^RY_IËÛÛ\Û™[
+B‚ˆYˆ\İÙÙ[™\˜]Ü—İ\Ù\×Û˜]]™WÜ™]šY]×Ø[™Ù^ÜÙ›İÊÙ[ŠN‚ˆÛÛ\Û™[H
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KØÛÛ\Û™[ËÕÛÜšÜÚÜÓX™[Ù[™\˜]Ü‹YIÊKœ™XYİ^
 
-    def test_routine_printing_uses_preview_then_direct_per_label_print_action(self):
-        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
-        workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text(encoding='utf-8')
-        self.assertIn('Preview selected labels', component)
-        self.assertIn('Preview and print', component)
-        self.assertIn('Print label', component)
-        self.assertNotIn('Review selected labels', component)
-        self.assertNotIn('Reviewed labels', component)
-        self.assertIn('@click="workspace.actions.printItem(row.entity_id, row.review_id)"', component)
-        self.assertIn(':disabled="workspace.busy || workspace.printLocked || workspace.printedReviewIds.includes(row.review_id)"', component)
-        self.assertIn('Preview labels here, then print each one from its card.', component)
-        print_action = workflow.split('printItem(entityId,reviewId){', 1)[1].split('async compose(){', 1)[0]
-        self.assertNotIn('openDialog(', print_action)
-        self.assertIn('version!==reviewRevision||identityAtReview!==context?.identity', print_action)
-        self.assertLess(print_action.index('version!==reviewRevision||identityAtReview!==context?.identity'), print_action.index("write('labels/print'"))
-        self.assertIn('queueStopped||queueSending', print_action)
-        self.assertIn('workspace.printedReviewIds.includes(reviewId)', print_action)
-        self.assertIn('request_key:requestKey', print_action)
-        self.assertIn("write('labels/print'", print_action)
+Bˆ›İ]HH
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KÜYÙ\ËİÛÜšÜÚÜÖİÛÛKYIÊKœ™XYİ^
 
-    def test_generated_asset_id_is_searchable_and_visible_in_label_selection(self):
-        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
-        self.assertIn('displayId?: string', component)
-        self.assertIn('${item.displayId || ""}', component)
-        self.assertIn('Generated ID Â· {{ item.displayId }}', component)
+BˆÛÜšÙ›İÈH
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KÛX‹İÛÜšÜÚÜ]ÛÛËšœÉÊKœ™XYİ^
 
-    def test_generator_uses_native_review_and_export_flow(self):
-        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
-        route = (ROOT / 'homebox-ui/overlay/pages/workshop/[tool].vue').read_text()
-        workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text()
-        self.assertIn('Preview selected labels', component)
-        self.assertIn('Compose Letter sheet', component)
-        self.assertIn('Download Letter PDF', component)
-        self.assertIn(':disabled="!canReview"', component)
-        self.assertIn(':disabled="!canCompose || workspace.busy"', component)
-        self.assertIn(':disabled="!workspace.pages.length || workspace.busy"', component)
-        self.assertIn('LabelDesigner', component)
-        self.assertIn('shortCode?: string', component)
-        self.assertIn('Short code', component)
-        self.assertIn('HomeSortStuff', component)
-        self.assertIn('<LabelGenerator v-if="tool === \'labels\'"', route)
-        self.assertIn("api('labels/preview'", workflow)
-        self.assertIn("api('labels/paper'", workflow)
-        self.assertIn("write('labels/print'", workflow)
-        self.assertIn('labelWorkspace=labelWorkspaceChanged(labelWorkspace)||labelWorkspace', workflow)
-        self.assertIn('workspace.selectedIds=[...ids]', workflow)
-        self.assertIn("entity_id:ids[index]", workflow)
-        self.assertIn('workspace.printedReviewIds.includes(reviewId)', workflow)
-        self.assertIn('labelWorkspaceChanged(null', workflow)
-        self.assertIn("if (action !== \"labels/templates/save\")", (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text())
-        editor = (ROOT / 'label-ui/src/editor-host.ts').read_text()
-        self.assertIn('nextShortCode', editor)
-        self.assertIn('nextShortCode !== sampleShortCode.value', editor)
-        self.assertIn('draftPreview.invalidate(); closePreview()', editor)
-        self.assertIn('short_code', editor)
-        designer = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text()
-        self.assertIn('shortCode?: string', designer)
-        self.assertIn('short_code:', designer)
-        patch = (ROOT / 'label-ui/patches/0002-label-editor-controls.patch').read_text()
-        self.assertIn("key: 'short-code'", patch)
-        self.assertIn("createText(place, '{{short_code}}')", patch)
-        self.assertIn("labelKey: 'palette.shortCode'", patch)
-        self.assertIn("shortCode:item.shortCode||''", workflow)
-        self.assertIn("'Blank design'", editor)
-        self.assertIn("Paper size: ${document.value.page.widthMm} Ã— ${document.value.page.heightMm} mm", editor)
-        self.assertIn("label: 'Starter designs'", editor)
-        self.assertIn("templateProfile(t) === profile.value", editor)
+BˆÙ[‹˜\ÜÙ\[Š	Ô™]šY]ÈÙ[XİYX™[ÉËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ĞÛÛ\ÜÙH]\ˆÚY]	ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ÑİÛ›ØY]\ˆ‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	Î™\ØX›YHˆXØ[”™]šY]È‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	Î™\ØX›YHˆXØ[ÛÛ\ÜÙHÛÜšÜÜXÙK˜\ŞH‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	Î™\ØX›YHˆ]ÛÜšÜÜXÙKœYÙ\Ë›[™İÛÜšÜÜXÙK˜\ŞH‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ÓX™[\ÚYÛ™\‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ÜÚÜÛÙOÎˆİš[™ÉËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ÔÚÜÛÙIËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ÒÛYTÛÜİY™‰ËÛÛ\Û™[
+BˆÙ[‹˜\ÜÙ\[Š	ÏX™[Ù[™\˜]Üˆ‹ZYHÛÛOOH	ÛX™[×	È‰Ë›İ]JBˆÙ[‹˜\ÜÙ\[Š˜\J	ÛX™[ËÜ™]šY]ÉÈ‹ÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š˜\J	ÛX™[ËÜ\\‰È‹ÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[ŠÜš]J	ÛX™[ËÜš[	È‹ÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š	ÛX™[ÛÜšÜÜXÙO[X™[ÛÜšÜÜXÙPÚ[™ÙY
+X™[ÛÜšÜÜXÙJ_X™[ÛÜšÜÜXÙIËÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š	İÛÜšÜÜXÙKœÙ[XİYYÏVË‹‹šY×IËÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š™[]WÚYšYÖÚ[™^H‹ÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š	İÛÜšÜÜXÙKœš[Y™]šY]ÒYËš[˜ÛY\Ê™]šY]ÒY
+IËÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š	ÛX™[ÛÜšÜÜXÙPÚ[™ÙY
+[	ËÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[ŠšYˆ
+Xİ[ÛˆOOH›X™[Ëİ[\]\ËÜØ]™WŠH‹
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KØÛÛ\Û™[ËÕÛÜšÜÚÜÓX™[\ÚYÛ™\‹YIÊKœ™XYİ^
 
-    def test_reference_license_and_attribution_are_retained(self):
-        license_file = ROOT / 'homebox-ui/HOMESORTSTUFF-LICENSE.txt'
-        self.assertTrue(license_file.is_file())
-        self.assertIn('GNU AFFERO GENERAL PUBLIC LICENSE', license_file.read_text())
-        readme = (ROOT / 'homebox-ui/README.md').read_text()
-        self.assertIn('HomeSortStuff', readme)
-        self.assertIn('85b96e5060a48dd11db24addfbc63407eed4e74c', readme)
+JBˆY]ÜˆH
+“ÓÕÈ	ÛX™[]ZKÜÜ˜ËÙY]Ü‹ZÜİÉÊKœ™XYİ^
 
+BˆÙ[‹˜\ÜÙ\[Š	Û™^ÚÜÛÙIËY]ÜŠBˆÙ[‹˜\ÜÙ\[Š	Û™^ÚÜÛÙHOOHØ[\TÚÜÛÙK˜[YIËY]ÜŠBˆÙ[‹˜\ÜÙ\[Š	Ù˜Y™]šY]Ëš[˜[Y]J
+NÈÛÜÙT™]šY]Ê
+IËY]ÜŠBˆÙ[‹˜\ÜÙ\[Š	ÜÚÜØÛÙIËY]ÜŠBˆ\ÚYÛ™\ˆH
+“ÓÕÈ	ÚÛYX›Ş]ZKÛİ™\›^KØÛÛ\Û™[ËÕÛÜšÜÚÜÓX™[\ÚYÛ™\‹YIÊKœ™XYİ^
 
-if __name__ == '__main__':
-    unittest.main()
+BˆÙ[‹˜\ÜÙ\[Š	ÜÚÜÛÙOÎˆİš[™ÉË\ÚYÛ™\ŠBˆÙ[‹˜\ÜÙ\[Š	ÜÚÜØÛÙN‰Ë\ÚYÛ™\ŠBˆ]ÚH
+“ÓÕÈ	ÛX™[]ZKÜ]Ú\ËÌ‹[X™[YY]Ü‹XÛÛ›ÛËœ]Ú	ÊKœ™XYİ^
+
+BˆÙ[‹˜\ÜÙ\[ŠšÙ^Nˆ	ÜÚÜXÛÙIÈ‹]Ú
+BˆÙ[‹˜\ÜÙ\[Š˜Ü™X]U^
+XÙK	ŞŞÜÚÜØÛÙ__IÊH‹]Ú
+BˆÙ[‹˜\ÜÙ\[Š›X™[Ù^Nˆ	Ü[]KœÚÜÛÙIÈ‹]Ú
+BˆÙ[‹˜\ÜÙ\[ŠœÚÜÛÙNš][KœÚÜÛÙ_	ÉÈ‹ÛÜšÙ›İÊBˆÙ[‹˜\ÜÙ\[Š‰Ğ›[šÈ\ÚYÛ‰È‹Y]ÜŠBˆÙ[‹˜\ÜÙ\[Š”\\ˆÚ^™Nˆ	ÙØİ[Y[˜[YKœYÙKÚY[_H0åÈ	ÙØİ[Y[˜[YKœYÙKšZYÚ[_H[H‹Y]ÜŠBˆÙ[‹˜\ÜÙ\[Š›X™[ˆ	Ôİ\\ˆ\ÚYÛœÉÈ‹Y]ÜŠBˆÙ[‹˜\ÜÙ\[Š[\]T›Ùš[J
+HOOH›Ùš[K˜[YH‹Y]ÜŠB‚ˆYˆ\İÜ™Y™\™[˜ÙWÛXÙ[œÙWØ[™Ø]šX][Û—Ø\™WÜ™]Z[™Y
+Ù[ŠN‚ˆXÙ[œÙWÙš[HH“ÓÕÈ	ÚÛYX›Ş]ZKÒÓQTÓÔ•ÕQ‘‹SPÑS”ÑK	ÂˆÙ[‹˜\ÜÙ\YJXÙ[œÙWÙš[Kš\×Ùš[J
+JBˆÙ[‹˜\ÜÙ\[Š	ÑÓ•HQ‘‘T“ÈÑS‘TSP“PÈPÑS”ÑIËXÙ[œÙWÙš[Kœ™XYİ^
+
+JBˆ™XYYHH
+“ÓÕÈ	ÚÛYX›Ş]ZKÔ‘PQQK›Y	ÊKœ™XYİ^
+
+BˆÙ[‹˜\ÜÙ\[Š	ÒÛYTÛÜİY™‰Ë™XYYJBˆÙ[‹˜\ÜÙ\[Š	ÎXM™MLŒMLYŒY˜˜ÍŒÍÙYYMÍÉË™XYYJB‚‚šYˆ×Û˜[YW×ÈOH	××ÛXZ[—×ÉÎ‚ˆ[š]\İ›XZ[Š
+B
