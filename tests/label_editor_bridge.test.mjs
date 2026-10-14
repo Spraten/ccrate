@@ -101,7 +101,7 @@ test('label template saves use the write callback and preserve their idempotency
     src: '/editor.html',
     context: () => ({ generation: 4, instance: 'session-a' }),
     request: async (action, data) => { requests.push([action, data]); return null },
-    write: async (...args) => { writes.push(args); return { id: 'template-1', revision: 1 } },
+    write: async (...args) => { writes.push(args); if (args[1].request_key === 'save-key-2') throw Object.assign(new Error('Template revision conflict'), { status: 409 }); return { id: 'template-1', revision: 1 } },
   })
   const nonce = new URL(iframe.src, location.origin).searchParams.get('nonce')
   const payload = { request_key: 'save-key-1', id: null, revision: 0, name: 'My label' }
@@ -114,4 +114,7 @@ test('label template saves use the write callback and preserve their idempotency
   assert.equal(writes[0][1].session_instance, 'session-a')
   assert.deepEqual(requests, [])
   assert.equal(sent.at(-1)[0].ok, true)
+  await listeners.get('message')({ origin: location.origin, source: iframe.contentWindow, data: { channel: 'label-designer', nonce, type: 'request', id: 'save-2', action: 'labels/templates/save', data: { ...payload, request_key: 'save-key-2' } } })
+  assert.equal(sent.at(-1)[0].ok, false)
+  assert.equal(sent.at(-1)[0].status, 409, 'the iframe bridge preserves an authoritative rejection status for recovery')
 })

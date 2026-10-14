@@ -14,6 +14,7 @@ function editorContext() {
   const token = (name: string, fallback: string) => `hsl(${css.getPropertyValue(name).trim() || fallback})`;
   return {
     ...workshop.context.value,
+    pending_template_save: workshop.pendingTemplateSave(),
     selected_item: props.selectedItem ? { entity_id: props.selectedItem.id, name: props.selectedItem.name, asset_code: props.selectedItem.assetId || "", short_code: props.selectedItem.shortCode || "", display_id: props.selectedItem.displayId || "" } : null,
     theme: {
       background: token("--background", "0 0% 100%"), foreground: token("--foreground", "222 47% 11%"),

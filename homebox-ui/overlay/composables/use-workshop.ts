@@ -62,10 +62,23 @@ export function useWorkshop() {
   function pending(): PendingAction[] {
     try { return JSON.parse(localStorage.getItem(pendingKey()) || "[]"); } catch { return []; }
   }
+  function pendingTemplateSave(): PendingAction | null {
+    const ctx = context.value;
+    if (!ctx) return null;
+    return pending().find(row => row.path === "labels/templates/save" && (
+      row.identity === ctx.identity && row.group_id === ctx.group.id && row.user_id === ctx.user.id && row.intent?.request_key === row.key ||
+      !row.identity && !row.group_id && !row.user_id && !row.intent && !!row.key
+    )) || null;
+  }
   function forget(key: string) { localStorage.setItem(pendingKey(), JSON.stringify(pending().filter(row => row.key !== key))); }
   function confirmTemplateSave(key: string) {
+    const ctx = context.value;
+    if (!ctx) return false;
     const rows = pending();
-    if (!rows.some(row => row.key === key && row.path === "labels/templates/save")) return false;
+    if (!rows.some(row => row.key === key && row.path === "labels/templates/save" && (
+      row.identity === ctx.identity && row.group_id === ctx.group.id && row.user_id === ctx.user.id && row.intent?.request_key === key ||
+      !row.identity && !row.group_id && !row.user_id && !row.intent
+    ))) return false;
     localStorage.setItem(pendingKey(), JSON.stringify(rows.filter(row => row.key !== key || row.path !== "labels/templates/save")));
     return true;
   }
@@ -85,7 +98,7 @@ export function useWorkshop() {
       const badgePrint = (value: string) => ["badges/print", "badges/reprint"].includes(value);
       if (pending().some(row => row.subject === subject && (row.path === path || (badgePrint(row.path) && badgePrint(path))))) throw new Error("This action has an unconfirmed result. Check Recovery before trying again.");
       const pendingAction: PendingAction = { key, path, label, subject, at: new Date().toISOString() };
-      if (path === "workshop/save") Object.assign(pendingAction, {
+      if (path === "workshop/save" || path === "labels/templates/save") Object.assign(pendingAction, {
         intent, identity: expected.identity, group_id: expected.group.id, user_id: expected.user.id,
       });
       if (path.startsWith("workshop/checks/")) Object.assign(pendingAction, {
@@ -98,7 +111,9 @@ export function useWorkshop() {
       localStorage.setItem(storageKey, JSON.stringify(rows.filter(row => row.key !== key)));
       return result;
     } catch (error) {
-      if (sent && [400, 409].includes((error as { status?: number }).status || 0)) {
+      const status = (error as { status?: number }).status || 0;
+      if (sent && path === "labels/templates/save" && [400, 409].includes(status)) confirmTemplateSave(key);
+      if (sent && path !== "labels/templates/save" && [400, 409].includes(status)) {
         try {
           const result = await request<{ status: string }>("operation/status", { request_key: key }, expected.identity);
           if (["not_started", "cancelled"].includes(result.status)) forget(key);
@@ -108,5 +123,5 @@ export function useWorkshop() {
     } finally { busy.value = false; }
   }
 
-  return { context, manager, busy, request, refresh, write, pending, forget, confirmTemplateSave };
+  return { context, manager, busy, request, refresh, write, pending, pendingTemplateSave, forget, confirmTemplateSave };
 }

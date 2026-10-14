@@ -47,7 +47,7 @@ export function mountLabelDesigner(container, options) {
       iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'response', id: msg.id, ok: true, result }, location.origin);
     } catch (error) {
       if (disposed || epoch !== requestEpoch) return;
-      iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'response', id: msg.id, ok: false, error: error.message || String(error) }, location.origin);
+      iframe.contentWindow?.postMessage({ channel: 'label-designer', nonce, type: 'response', id: msg.id, ok: false, error: error.message || String(error), status: Number.isInteger(error?.status) ? error.status : undefined }, location.origin);
     }
   };
   window.addEventListener('message', onMessage); container.addEventListener('pointerdown', options.activity || (()=>{}), true); container.append(iframe);
