@@ -68,7 +68,7 @@ def configure_ui_component_discovery():
 def filter_known_wasi_warning(output):
     """Drop only the exact Node WASI notice known to accompany the Pi fallback."""
     return re.sub(
-        r'(?m)^ERROR \(node:\d+\) ExperimentalWarning: WASI is an experimental feature and might change at any time\r?\n?',
+        r'(?m)^ERROR \(node:\d+\) ExperimentalWarning: WASI is an experimental feature and might change at any time(?:\r?\n|$)',
         '',
         output,
     )
@@ -147,14 +147,31 @@ def nest_frontend():
     )
     path = 'components/Entity/CreateModal.vue'
     replace(path, ':entity-types="subItemCreate ? entityTypes.filter(t => !t.isLocation) : entityTypes"', ':entity-types="entityTypes"')
-    replace(path, '      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"', '      <FormTextField v-if="!selectedEntityType?.isLocation" v-model="form.modelNumber" label="Model number" :max-length="255" />\n      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"')
-    replace(path, '    name: "",\n    quantity: 1,', '    name: "",\n    modelNumber: "",\n    quantity: 1,')
-    replace(path, '    form.name = "";\n    form.quantity = 1;', '    form.name = "";\n    form.modelNumber = "";\n    form.quantity = 1;')
+    target = BUILD/path
+    source = target.read_text()
+    # Older frontend pins did not yet include model-number handling. Add it
+    # only when absent; barcode-aware pins already supply the complete flow.
+    if 'v-model="form.modelNumber"' not in source:
+        replace(path, '      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"', '      <FormTextField v-if="!selectedEntityType?.isLocation" v-model="form.modelNumber" label="Model number" :max-length="255" />\n      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"')
+    elif source.count('v-model="form.modelNumber"') != 1:
+        raise RuntimeError(f'Upstream changed: expected one model-number control in {path}')
+    if 'modelNumber: "",' not in source:
+        replace(path, '    name: "",\n    quantity: 1,', '    name: "",\n    modelNumber: "",\n    quantity: 1,')
+    elif source.count('modelNumber: "",') != 1:
+        raise RuntimeError(f'Upstream changed: expected one model-number form field in {path}')
+    if 'form.modelNumber = "";' not in source:
+        replace(path, '    form.name = "";\n    form.quantity = 1;', '    form.name = "";\n    form.modelNumber = "";\n    form.quantity = 1;')
     target = BUILD/path
     text = target.read_text()
     start = text.index('      <ItemSelector\n'); end = text.index('      <FormTextField', start)
     text = text[:start]+text[end:]
-    text = text.replace('    EntityCreate,', '    EntityCreate,\n    EntitySummary,')
+    import_block = text[text.index('  import type {'):text.index('  } from "~~/lib/api/types/data-contracts";')]
+    if 'EntitySummary,' not in import_block:
+        if text.count('    EntityCreate,') != 1:
+            raise RuntimeError(f'Upstream changed: expected one EntityCreate import in {path}')
+        text = text.replace('    EntityCreate,', '    EntityCreate,\n    EntitySummary,')
+    elif import_block.count('EntitySummary,') != 1:
+        raise RuntimeError(f'Upstream changed: expected one EntitySummary import in {path}')
     text = text.replace('const found = locations.value.find(l => l.id === data.defaultLocation!.id);', 'const { data: found } = await api.items.get(data.defaultLocation.id);')
     text = text.replace('location: locations.value && locations.value.length > 0 ? locations.value[0] : ({} as EntityOut)', 'location: null as EntitySummary | null')
     text = text.replace('      form.parentId = null;', '      form.parentId = null;\n      form.location = null;')
@@ -187,8 +204,25 @@ def nest_frontend():
     start = text.index('    // Items must live somewhere'); end = text.index('    if (loading.value)', start)
     text = text[:start]+text[end:]
     text = text.replace('parentId: form.location.id as string', 'parentId: form.location?.id || null').replace('parentId: form.parentId || (form.location.id as string)', 'parentId: form.location?.id || null')
-    text = text.replace('const templateRequest = {', 'const templateRequest = {\n        modelNumber: form.modelNumber?.trim() || undefined,')
-    text = text.replace('        name: form.name,\n        quantity: form.quantity,\n        description: form.description,', '        name: form.name,\n        modelNumber: form.modelNumber?.trim() || undefined,\n        quantity: form.quantity,\n        description: form.description,')
+    # Barcode-aware upstream already owns the model-number field, state and
+    # create payloads. Keep the overlay from reinserting duplicate keys/imports.
+    existing_model_number_payloads = text.count('modelNumber: form.modelNumber,')
+    if existing_model_number_payloads not in (0, 3):
+        raise RuntimeError(f'Upstream changed: expected zero or three model-number payloads in {path}')
+    if existing_model_number_payloads == 0:
+        if text.count('const templateRequest = {') != 1:
+            raise RuntimeError(f'Upstream changed: expected one template request in {path}')
+        text = text.replace('const templateRequest = {', 'const templateRequest = {\n        modelNumber: form.modelNumber?.trim() || undefined,')
+        payload_anchor = '        name: form.name,\n        quantity: form.quantity,\n        description: form.description,'
+        if text.count(payload_anchor) != 1:
+            raise RuntimeError(f'Upstream changed: expected one normal item payload in {path}')
+        text = text.replace(payload_anchor, '        name: form.name,\n        modelNumber: form.modelNumber?.trim() || undefined,\n        quantity: form.quantity,\n        description: form.description,')
+    import_block = text[text.index('  import type {'):text.index('  } from "~~/lib/api/types/data-contracts";')]
+    form_block = text[text.index('  const form = reactive({'):text.index('\n  });', text.index('  const form = reactive({'))]
+    if import_block.count('EntitySummary,') != 1 or form_block.count('modelNumber: "",') != 1:
+        raise RuntimeError(f'Upstream changed: expected one EntitySummary import and modelNumber form field in {path}')
+    if text.count('modelNumber: form.modelNumber,') != 3:
+        raise RuntimeError(f'Upstream changed: expected modelNumber in each native create payload in {path}')
     target.write_text(text)
     path = 'pages/item/[id]/index/edit.vue'; target=BUILD/path; text=target.read_text()
     start=text.index('    if (data.parent && data.parent.entityType'); end=text.index('\n    return data;',start)
@@ -219,7 +253,12 @@ def nest_frontend():
       </section>
       <ItemViewSelectable v-if="items && items.length" :items="items || []" @refresh="refreshItemList" />''')
 
-    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  shortCode: string;').replace('export interface EntityCreate {','export interface EntityCreate {\n  modelNumber?: string;').replace('export interface EntityTemplateCreateItemRequest {','export interface EntityTemplateCreateItemRequest {\n  modelNumber?: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  shortCode: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    for interface_name in ('EntityCreate', 'EntityTemplateCreateItemRequest'):
+        start = text.index(f'export interface {interface_name} {{')
+        end = text.index('\n}', start)
+        if 'modelNumber?: string;' not in text[start:end]:
+            text = text[:start] + text[start:end].replace('{', '{\n  modelNumber?: string;', 1) + text[end:]
     start=text.index('export interface EntityTemplateCreateItemRequest {');end=text.index('\n}',start)
     text=text[:start]+text[start:end].replace('parentId: string;','parentId: string | null;')+text[end:];target.write_text(text)
     replace('composables/use-barcode-detector.ts','api.items.getAll({ locations: [id] })','api.items.getAll({ parentIds: [id] })')
