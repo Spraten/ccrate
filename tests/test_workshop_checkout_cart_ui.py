@@ -23,6 +23,20 @@ def function(source, name):
 
 
 class WorkshopCheckoutCartUiTests(unittest.TestCase):
+    def test_cart_page_is_valid_javascript(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable for the workshop cart fixture")
+        source = (ROOT / "homebox-ui/overlay/lib/workshop-tools.js").read_text(encoding="utf-8")
+        cart_page = function(source, "checkoutCartPage")
+        result = subprocess.run(
+            [node, "-e", "new Function(require('fs').readFileSync(0, 'utf8'))"],
+            input=cart_page,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_cart_is_a_native_workshop_route_and_navigation_entry(self):
         page = (ROOT / "homebox-ui/overlay/pages/workshop/[tool].vue").read_text(encoding="utf-8")
         redirect = (ROOT / "homebox-ui/overlay/pages/workshop/index.vue").read_text(encoding="utf-8")
@@ -100,3 +114,4 @@ const assert=(value,message)=>{if(!value)throw Error(message)};
 
 if __name__ == "__main__":
     unittest.main()
+
