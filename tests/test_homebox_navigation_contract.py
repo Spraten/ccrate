@@ -94,6 +94,11 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn('"@/assets/css/ccrate.css"', builder)
         self.assertNotIn(".theme-dark", css)
 
+    def test_container_geometry_is_independent_of_the_selected_theme(self):
+        css = (ROOT / "homebox-ui/overlay/assets/css/ccrate.css").read_text()
+        self.assertIn(":root #app .container", css)
+        self.assertNotIn(":root.theme-homebox #app .container", css)
+
 
 if __name__ == "__main__":
     unittest.main()

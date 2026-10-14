@@ -33,7 +33,7 @@
   background: hsl(var(--background-accent));
 }
 
-:root.theme-homebox #app .container {
+:root #app .container {
   width: 100%;
   max-width: 88rem;
   padding-inline: clamp(1rem, 2.5vw, 2rem);
