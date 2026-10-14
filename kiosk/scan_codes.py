@@ -41,6 +41,7 @@ def resolve_serial(code, items):
     """Match native serial metadata exactly; ambiguity never selects an asset."""
     matches=[e for e in items if not e.get('entityType',{}).get('isLocation')
              and not e.get('archived') and e.get('serialNumber')==code['serial']]
+    matches=unique_entities(matches)
     if len(matches)==1:
         return {**code,'entity':matches[0]}
     if matches:
@@ -49,6 +50,20 @@ def resolve_serial(code, items):
 
 MANUFACTURER_FIELD='Manufacturer QR code'
 GTIN_FIELD='Product GTIN'
+
+def unique_entities(items):
+    """Collapse duplicate native records by UUID while keeping distinct records separate."""
+    unique={}
+    unkeyed=[]
+    for entity in items:
+        identifier=entity.get('id')
+        if not isinstance(identifier,str) or not identifier:
+            unkeyed.append(entity)
+            continue
+        try:key=str(UUID(identifier))
+        except ValueError:key=identifier
+        unique.setdefault(key,entity)
+    return [*unique.values(),*unkeyed]
 
 def manufacturer_code(raw):
     if not isinstance(raw,str) or not raw.strip() or len(raw)>2048 or any(ord(c)<32 for c in raw):
@@ -69,10 +84,10 @@ def resolve_equipment(raw,code,items):
         matches=[e for e in active if isinstance(e.get('shortCode'),str) and e['shortCode'].strip().upper()==canonical]
         metadata=[e for e in active if isinstance(e.get('serialNumber'),str) and e['serialNumber'].strip().upper()==canonical or
                   any(v.strip().upper()==canonical for v in field(e,MANUFACTURER_FIELD) if isinstance(v,str))]
-        owners={e.get('id') or id(e):e for e in matches+metadata}
+        owners=unique_entities(matches+metadata)
         if len(owners)>1:
             return {**code,'ambiguous':True,'reason':'This code matches multiple item identifiers. Check the item short code, serial number, or manufacturer code.'}
-        if owners:return {**code,'entity':next(iter(owners.values()))}
+        if owners:return {**code,'entity':owners[0]}
         return {**code,'reason':'No equipment is registered with this short code.'}
     matches=[e for e in active if value in field(e,MANUFACTURER_FIELD)]
     if code['kind']=='serial':
@@ -85,6 +100,7 @@ def resolve_equipment(raw,code,items):
     if not matches and code['kind']=='product':
         canonical=code['gtin'].zfill(14)
         matches=[e for e in active if any(v.zfill(14)==canonical for v in field(e,GTIN_FIELD))]
+    matches=unique_entities(matches)
     if len(matches)==1:return {**code,'entity':matches[0]}
     if matches:return {**code,'ambiguous':True,'reason':'This manufacturer code matches multiple items. Scan the individual C-Crate label or serial number.'}
     if code['kind'] in ('manufacturer','product'):return {**code,'reason':'No equipment is registered with this manufacturer code. Add its code in C-Crate or when adding equipment.'}

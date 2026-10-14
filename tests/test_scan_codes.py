@@ -86,6 +86,23 @@ class EquipmentCodeTests(unittest.TestCase):
     def test_legacy_cross_kind_matches_for_one_item_are_deduplicated(self):
         item=self.item(serial='DHP-001',code='DHP-001')
         self.assertEqual(self.resolve('DHP-001',[item])['entity'],item)
+    def test_repeated_native_uuid_is_one_match_for_linked_code(self):
+        from uuid import uuid4
+        item=self.item(identifier=str(uuid4()),code='NETUM-LABEL-42')
+        repeated={**item,'id':item['id'].upper(),'fields':[dict(field) for field in item['fields']]}
+        self.assertEqual(self.resolve('NETUM-LABEL-42',[item,repeated])['entity']['id'],item['id'])
+    def test_repeated_native_uuid_is_one_match_for_barcode(self):
+        from uuid import uuid4
+        item=self.item(identifier=str(uuid4()),gtin='4006381333931')
+        repeated={**item,'fields':[dict(field) for field in item['fields']]}
+        self.assertEqual(self.resolve('4006381333931',[item,repeated])['entity']['id'],item['id'])
+    def test_distinct_native_uuids_remain_ambiguous_for_linked_code(self):
+        from uuid import uuid4
+        items=[self.item(identifier=str(uuid4()),code='NETUM-LABEL-42'),
+               self.item(identifier=str(uuid4()),code='NETUM-LABEL-42')]
+        result=self.resolve('NETUM-LABEL-42',items)
+        self.assertTrue(result['ambiguous'])
+        self.assertNotIn('entity',result)
     def test_case_folded_code_collision_is_ambiguous(self):
         items=[self.item(shortCode='DHP-001'),self.item('two',code='dhp-001')]
         result=self.resolve('DHP-001',items)
