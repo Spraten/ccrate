@@ -13,6 +13,10 @@ describe('wrapText', () => {
     expect(wrapText('a\n\nb', 10, mono)).toEqual(['a', '', 'b'])
   })
 
+  it('treats Windows and legacy carriage-return line endings as explicit breaks', () => {
+    expect(wrapText('first\r\nsecond\rthird', 10, mono)).toEqual(['first', 'second', 'third'])
+  })
+
   it('greedy-wraps on spaces', () => {
     // "aa bb cc" with width 5: "aa bb" fits, "cc" wraps.
     expect(wrapText('aa bb cc', 5, mono)).toEqual(['aa bb', 'cc'])

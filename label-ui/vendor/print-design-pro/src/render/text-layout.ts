@@ -26,7 +26,7 @@ export interface TextMeasurer {
 export function wrapText(content: string, maxWidth: number, measurer: TextMeasurer): string[] {
   const lines: string[] = []
 
-  for (const paragraph of content.split('\n')) {
+  for (const paragraph of content.replace(/\r\n?/g, '\n').split('\n')) {
     if (paragraph === '') {
       lines.push('')
       continue
