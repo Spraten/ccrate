@@ -108,6 +108,25 @@ test('mounts a focused HID capture field with pairing help and last-scan status'
   }
 });
 
+test('immediately marks the HID input unfocused when it loses keyboard focus', () => {
+  const priorDocument = global.document;
+  global.document = fakeDocument();
+  const overlay = { append(panel) { panel.isConnected = true; this.panel = panel; } };
+  try {
+    const input = mountScannerCapture(overlay, async () => true);
+    const [, , , , status] = overlay.panel.children;
+    input.focus();
+    assert.match(status.textContent, /Ready to receive/);
+
+    input.blur();
+
+    assert.match(status.textContent, /Scanner input unfocused/);
+    assert.doesNotMatch(status.textContent, /Ready to receive/);
+  } finally {
+    global.document = priorDocument;
+  }
+});
+
 test('keeps unfocused status when a delayed scan result arrives', async () => {
   const priorDocument = global.document;
   global.document = fakeDocument();
