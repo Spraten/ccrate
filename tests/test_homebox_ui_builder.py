@@ -40,9 +40,26 @@ class HomeboxUiBuilderTests(unittest.TestCase):
 
         self.assertLess(generated.index("<PhotoUploaderPreview"), generated.index('type="submit"'))
         self.assertLess(generated.index("<PhotoUploaderPreview"), generated.index('@click="create(false)"'))
+        actions = source[source.index('      <div class="mt-4 flex flex-row-reverse">'):source.index('\n\n      <PhotoUploaderPreview')]
+        self.assertEqual(generated.count(actions), 1)
         self.assertEqual(generated.count('type="submit"'), 1)
         self.assertEqual(generated.count('@click="create(false)"'), 1)
         self.assertEqual(BUILDER.move_create_actions_after_photo_preview(generated), generated)
+
+    def test_create_action_move_fails_clearly_when_photo_preview_markup_shifts(self):
+        source = '''      <div class="mt-4 flex flex-row-reverse">
+        <ButtonGroup>
+          <Button type="submit">Create</Button>
+          <Button @click="create(false)">Create & Add</Button>
+        </ButtonGroup>
+      </div>
+
+      <PhotoUploaderPreview
+        :photos="form.photos"
+      >
+'''
+        with self.assertRaisesRegex(RuntimeError, "photo preview"):
+            BUILDER.move_create_actions_after_photo_preview(source)
 
     def test_create_action_move_rejects_paired_photo_preview_markup(self):
         source = '''      <div class="mt-4 flex flex-row-reverse">
