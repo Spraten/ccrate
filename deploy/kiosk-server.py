@@ -782,7 +782,7 @@ class Handler(BaseHTTPRequestHandler):
             body=(terminal_assets()/'checkout-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/workshop-ui.js':
             body=(terminal_assets()/'workshop-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
-        elif self.path in ('/workflow-ui.js','/return-ui.js','/member-avatar.js','/users-ui.js','/label-editor.js'):
+        elif self.path in ('/workflow-ui.js','/return-ui.js','/member-avatar.js','/users-ui.js','/label-editor.js','/scanner_input.js'):
             body=(terminal_assets()/self.path.lstrip('/')).read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/import-ui.js':
             body=(terminal_assets()/'import-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200

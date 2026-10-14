@@ -1,6 +1,22 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { bindScannerInput, mountScannerCapture } = require('../kiosk/scanner_input.js');
+
+function scannerSetupFromPage(mount) {
+  const page = fs.readFileSync(path.join(__dirname, '../kiosk/index.html'), 'utf8');
+  const start = page.indexOf('function setupScannerInput(overlay,onScan){');
+  const end = page.indexOf('\nfunction focusScannerInput', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const source = page.slice(start, end);
+  const node = (tag, text = '') => ({
+    tag, textContent: text, attributes: {}, isConnected: false,
+    setAttribute(name, value) { this.attributes[name] = value; },
+  });
+  return new Function('node', 'mountScannerCapture', `return (${source})`)(node, mount);
+}
 
 function captureInput() {
   const listeners = {};
@@ -83,5 +99,87 @@ test('mounts a focused HID capture field with pairing help and last-scan status'
     focusButton.onclick();
   } finally {
     global.document = priorDocument;
+  }
+});
+
+test('scanner helper load or initialization failure leaves a clear fallback status', () => {
+  for (const mount of [undefined, () => { throw new Error('init failed'); }]) {
+    const overlay = { children: [], append(status) { status.isConnected = true; this.children.push(status); } };
+    const capture = scannerSetupFromPage(mount)(overlay, () => {});
+    assert.equal(capture.input, null);
+    assert.match(capture.status.textContent, /Bluetooth scanner input unavailable/);
+    assert.match(capture.status.textContent, /webcam/i);
+    assert.equal(overlay.children[0], capture.status);
+  }
+});
+
+test('scanner setup is caught before the overlay starts its webcam and manual paths', () => {
+  const page = fs.readFileSync(path.join(__dirname, '../kiosk/index.html'), 'utf8');
+  const start = page.indexOf("document.querySelector('#scan').onclick=async()=>");
+  const end = page.indexOf("window.addEventListener('pagehide',stopScan)", start);
+  const scanner = page.slice(start, end);
+  const setup = scanner.indexOf('setupScannerInput(');
+  assert.ok(setup >= 0);
+  assert.ok(setup < scanner.indexOf('document.body.append(overlay)'));
+  assert.ok(scanner.indexOf('document.body.append(overlay)') < scanner.indexOf('openBrowserCamera('));
+  assert.match(scanner, /Enter code/);
+  assert.match(scanner, /Reconnect webcam/);
+});
+
+test('scan handler keeps camera and manual controls usable when scanner setup or focus fails', async () => {
+  const page = fs.readFileSync(path.join(__dirname, '../kiosk/index.html'), 'utf8');
+  const start = page.indexOf("document.querySelector('#scan').onclick=async()=>{");
+  const end = page.indexOf("\nwindow.addEventListener('pagehide',stopScan)", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const source = page.slice(start, end).replace("document.querySelector('#scan').onclick=async()=>{", 'async function scanClick(){');
+  const setupStart = page.indexOf('function setupScannerInput(overlay,onScan){');
+  const setupEnd = page.indexOf('\nlet manufacturerCodeDraft', setupStart);
+  const setupSource = page.slice(setupStart, setupEnd);
+
+  for (const failure of ['missing', 'initialization', 'focus']) {
+    const mounted = [];
+    let cameraStarts = 0;
+    const ui = {
+      createElement(tag) {
+        return {
+          tag, children: [], style: {}, disabled: false, readyState: 0,
+          append(...children) { this.children.push(...children); },
+          setAttribute() {}, getContext() { return { clearRect() {}, strokeRect() {}, beginPath() {}, lineTo() {}, moveTo() {}, closePath() {}, stroke() {}, setLineDash() {} }; },
+          focus() { if (failure === 'focus') throw Error('focus failed'); },
+          remove() {},
+        };
+      },
+      body: { append(element) { mounted.push(element); } },
+      querySelector() { return { disabled: false, click() {} }; },
+    };
+    const overlay = { children: [], style: {}, append(...children) { this.children.push(...children); }, remove() {} };
+    const makeNode = (tag, text) => ({ tag, textContent: text, style: {}, children: [], disabled: false, append(...children) { this.children.push(...children); }, setAttribute() {}, remove() {} });
+    const mount = failure === 'missing' ? undefined : failure === 'initialization' ? () => { throw Error('init failed'); } : () => ({ focus() { throw Error('focus failed'); } });
+    const startCamera = async () => {
+      cameraStarts++;
+      throw Error('Camera needs a secure browser connection');
+    };
+    const sandbox = {
+      document: ui, node: makeNode, mountScannerCapture: mount,
+      closeKeyboard() {}, stopScan() {}, manualCodeEntry() {},
+      openBrowserCamera: startCamera, cameraHelp: error => error.message,
+      scanOverlay: null, scanStream: null, scanTimer: null, scanBusy: false,
+      navigator: { userAgent: '', platform: '', mediaDevices: {} },
+      editorMode: false, setTimeout() { return 1; }, clearTimeout() {},
+      console,
+    };
+    const run = new Function('sandbox', `with(sandbox){ ${setupSource}; ${source}; return scanClick; }`)(sandbox);
+    await run();
+
+    assert.equal(cameraStarts, 1, `${failure}: camera startup should still run`);
+    assert.equal(mounted.length, 1, `${failure}: overlay should mount`);
+    const scanOverlay = mounted[0];
+    const descendants = [];
+    const visit = item => { if (!item || typeof item !== 'object') return; descendants.push(item); for (const child of item.children || []) visit(child); };
+    visit(scanOverlay);
+    assert.ok(descendants.some(item => item.textContent === 'Enter code'), `${failure}: manual entry should remain available`);
+    assert.ok(descendants.some(item => item.textContent === 'Reconnect webcam'), `${failure}: reconnect should remain available`);
+    assert.ok(descendants.some(item => /Bluetooth scanner input unavailable/.test(item.textContent || '')), `${failure}: clear scanner status should be visible`);
   }
 });
