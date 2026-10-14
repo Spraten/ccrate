@@ -13,6 +13,8 @@ for source, destination in (
     (ROOT/'homebox-backend/20260513120000_item_short_codes.go', BUILD/'internal/data/migrations/sqlite3/20260513120000_item_short_codes.go'),
     (ROOT/'homebox-backend/20260513120001_item_short_codes.go', BUILD/'internal/data/migrations/postgres/20260513120001_item_short_codes.go'),
     (ROOT/'homebox-backend/repo_short_codes_test.go', BUILD/'internal/data/repo/repo_short_codes_test.go'),
+    (ROOT/'homebox-backend/repo_display_ids.go', BUILD/'internal/data/repo/repo_display_ids.go'),
+    (ROOT/'homebox-backend/repo_display_ids_test.go', BUILD/'internal/data/repo/repo_display_ids_test.go'),
 ):
     if source.is_dir(): shutil.copytree(source,destination,dirs_exist_ok=True)
     else: shutil.copy2(source,destination)
@@ -43,6 +45,94 @@ summary=text.index('\tEntitySummary struct {')
 name_line=text.index('\n',text.index('\t\tName ',summary))+1
 if 'ShortCode' not in text[summary:text.index('\n\t}',summary)]:
     text=text[:name_line]+'\t\tShortCode   string    `json:"shortCode"`\n'+text[name_line:]
+summary_end=text.index('\n\t}',summary)
+if 'DisplayID' not in text[summary:summary_end]:
+    name_line=text.index('\n',text.index('\t\tName ',summary))+1
+    text=text[:name_line]+'\t\tDisplayID   string    `json:"displayId"`\n'+text[name_line:]
+search_anchor='''\tif q.Search != "" {
+		searchPredicates := []predicate.Entity{'''
+assert text.count(search_anchor)==1
+text=text.replace(search_anchor,'''\tdisplayIDSearch := ""
+	if q.AssetID.Nil() && isDisplayIDSearch(q.Search) {
+		displayIDSearch = strings.ToUpper(strings.TrimSpace(q.Search))
+		q.Search = ""
+	}
+	if q.Search != "" {
+		searchPredicates := []predicate.Entity{''',1)
+page_anchor='''\tif q.Page != -1 || q.PageSize != -1 {'''
+assert text.count(page_anchor)==1
+text=text.replace(page_anchor,'''\tif displayIDSearch == "" && (q.Page != -1 || q.PageSize != -1) {''',1)
+anchor='''\tfetchSpan.SetAttributes(attribute.Int("query.results.count", len(entities)))'''
+assert text.count(anchor)==1
+text=text.replace(anchor,'''\tif err := r.populateDisplayIDs(fetchCtx, gid, entities); err != nil {
+		recordSpanError(fetchSpan, err)
+		fetchSpan.End()
+		recordSpanError(span, err)
+		return PaginationResult[EntitySummary]{}, err
+	}
+	if displayIDSearch != "" {
+		entities = lo.Filter(entities, func(item EntitySummary, _ int) bool {
+			return strings.EqualFold(item.DisplayID, displayIDSearch)
+		})
+		count = len(entities)
+		if q.Page != -1 || q.PageSize != -1 {
+			offset := calculateOffset(q.Page, q.PageSize)
+			if offset >= len(entities) {
+				entities = []EntitySummary{}
+			} else {
+				end := len(entities)
+				if q.PageSize != -1 && offset+q.PageSize < end {
+					end = offset + q.PageSize
+				}
+				entities = entities[offset:end]
+			}
+		}
+	}
+	fetchSpan.SetAttributes(attribute.Int("query.results.count", len(entities)))''',1)
+# Asset-code lookup is used by label selection and must return the same derived ID.
+asset_anchor='''\tspan.SetAttributes(attribute.Int("query.results.count", len(entities)))
+	return PaginationResult[EntitySummary]{
+		Page:     page,'''
+assert text.count(asset_anchor)==1
+text=text.replace(asset_anchor,'''\tif err := r.populateDisplayIDs(ctx, gid, entities); err != nil {
+		recordSpanError(span, err)
+		return PaginationResult[EntitySummary]{}, err
+	}
+	span.SetAttributes(attribute.Int("query.results.count", len(entities)))
+	return PaginationResult[EntitySummary]{
+		Page:     page,''',1)
+# Detail and write responses expose the full path. Keep internal transaction reads
+# alone; their callers may still be before commit.
+detail_anchor='''\tout, err := r.getOne(ctx, entity.ID(id), entity.HasGroupWith(group.ID(gid)))
+	recordSpanError(span, err)
+	return out, err
+}
+
+func entityQuerySpanAttrs'''
+assert text.count(detail_anchor)==1
+text=text.replace(detail_anchor,'''\tout, err := r.getOne(ctx, entity.ID(id), entity.HasGroupWith(group.ID(gid)))
+	recordSpanError(span, err)
+	if err == nil {
+		displayItems := []EntitySummary{out.EntitySummary}
+		if displayErr := r.populateDisplayIDs(ctx, gid, displayItems); displayErr != nil {
+			return EntityOut{}, displayErr
+		}
+		out.EntitySummary = displayItems[0]
+		out.Parent = displayItems[0].Parent
+	}
+	return out, err
+}
+
+func entityQuerySpanAttrs''',1)
+# Write responses use the tenant-scoped detail mapper so newly created and
+# moved items immediately include their current derived display ID.
+for old, new in (
+    ('r.GetOne(ctx, result.ID)', 'r.GetOneByGroup(ctx, gid, result.ID)'),
+    ('r.GetOne(ctx, newEntityID)', 'r.GetOneByGroup(ctx, gid, newEntityID)'),
+    ('r.GetOne(ctx, data.ID)', 'r.GetOneByGroup(ctx, gid, data.ID)'),
+    ('r.GetOne(ctx, id)', 'r.GetOneByGroup(ctx, gid, id)'),
+):
+    text=text.replace(old, new)
 text=text.replace('Name:          e.Name,','Name:          e.Name,\n\t\tShortCode:     lo.FromPtrOr(e.ShortCode, ""),',1)
 text=text.replace('entity.SerialNumberContainsFold(q.Search),','entity.SerialNumberContainsFold(q.Search),\n\t\t\t\tentity.ShortCodeContainsFold(q.Search),',1)
 # Ordinary creation allocates inside the same transaction as the item insert.
@@ -318,6 +408,7 @@ controller.write_text(body.replace(anchor,'`json:"parentId"     extensions:"x-nu
 def patch_contract(document):
     schemas=document.get('definitions') or document['components']['schemas']
     for name in ('repo.EntitySummary','repo.EntityOut'):
+        schemas[name]['properties']['displayId']={'type':'string','description':'Generated from item type and full current storage path, followed by a separate A<native AssetID> suffix (or a short U<UUID> suffix when AssetID is unassigned). The path changes when the item moves; the native suffix remains stable.'}
         schemas[name]['properties']['shortCode']={'type':'string','description':'Stable native item short code; empty for locations.'}
     schemas['repo.EntityCreate']['properties']['modelNumber']={'type':'string','description':'Optional model number used when assigning the new item short code.'}
     schemas['v1.EntityTemplateCreateItemRequest']['properties']['modelNumber']={'type':'string','description':'Optional model number override; omitted preserves the template default.'}
@@ -366,7 +457,7 @@ raw=json.dumps(patch_contract(json.loads(raw)),indent=2).replace('"__CACI_SCHEME
 docs.write_text(body[:start]+raw+body[end:])
 # Embed the current verified frontend; the public gateway selects its own release.
 shutil.copytree(ROOT/'work/homebox-ui-current',BUILD/'app/api/static/public',dirs_exist_ok=True)
-subprocess.run([str(go.with_name('gofmt')),'-w',str(schema),str(source),str(source.parent/'repo_hierarchy.go'),str(controller),str(docs),str(users),str(profile_repo),str(profile_controller),str(routes),str(groups),str(service),str(BUILD/'internal/data/repo/repo_short_codes.go'),str(BUILD/'internal/data/repo/repo_short_codes_test.go'),str(BUILD/'internal/data/ent/short_code_tx.go'),str(BUILD/'internal/data/shortcodes/migration_test.go'),str(BUILD/'app/api/handlers/v1/v1_ctrl_item_short_codes.go')],check=True)
+subprocess.run([str(go.with_name('gofmt')),'-w',str(schema),str(source),str(source.parent/'repo_hierarchy.go'),str(BUILD/'internal/data/repo/repo_display_ids.go'),str(BUILD/'internal/data/repo/repo_display_ids_test.go'),str(controller),str(docs),str(users),str(profile_repo),str(profile_controller),str(routes),str(groups),str(service),str(BUILD/'internal/data/repo/repo_short_codes.go'),str(BUILD/'internal/data/repo/repo_short_codes_test.go'),str(BUILD/'internal/data/ent/short_code_tx.go'),str(BUILD/'internal/data/shortcodes/migration_test.go'),str(BUILD/'app/api/handlers/v1/v1_ctrl_item_short_codes.go')],check=True)
 pin=subprocess.check_output(['git','-C',str(ROOT/'upstream/homebox'),'rev-parse','HEAD'],text=True).strip()
 flags='-s -w -X main.version=0.26.2-caci.2-shortcodes -X main.commit='+pin+'+hierarchy+members+shortcodes -X main.date='+datetime.now(timezone.utc).isoformat()
 subprocess.run([str(go),'build','-mod=readonly','-p','2','-trimpath','-ldflags',flags,'-o',str(BUILD/'homebox'),'./app/api'],cwd=BUILD,env=env,check=True)

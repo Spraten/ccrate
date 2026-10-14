@@ -135,7 +135,7 @@ def item_log_frontend():
     path = 'pages/item/[id]/index.vue'
     replace(path, '  import LabelMaker from', '  import WorkshopItemLog from "@/components/Workshop/ItemLog.vue";\n  import ItemLoans from "@/components/Workshop/ItemLoans.vue";\n  import LabelMaker from')
     details_anchor = '          </DetailsSection>\n        </BaseCard>\n\n        <!-- anything in this is not rendered if on another page -->'
-    replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
+    replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Type and full storage path, followed by A-number native AssetID; U-number is a short UUID when no AssetID is assigned.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
 
 
 def nest_frontend():
@@ -253,7 +253,7 @@ def nest_frontend():
       </section>
       <ItemViewSelectable v-if="items && items.length" :items="items || []" @refresh="refreshItemList" />''')
 
-    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  shortCode: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  displayId: string;\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  displayId: string;\n  shortCode: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
     for interface_name in ('EntityCreate', 'EntityTemplateCreateItemRequest'):
         start = text.index(f'export interface {interface_name} {{')
         end = text.index('\n}', start)
@@ -372,15 +372,15 @@ def shell_frontend():
 
 
 def strip_item_response_short_codes_from_update_tests():
-    """Keep response-only shortCode out of update payloads in the pinned API tests."""
+    """Keep response-only identifiers out of update payloads in pinned API tests."""
     relative = pathlib.Path('lib/api/__test__/user/items.test.ts')
     target = BUILD / relative
     source = target.read_text()
     rewrites = (
-        ("    const itemUpdate = {\n      ...item,\n      parentId: item.parent?.id || null,", "    const { shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      parentId: item.parent?.id || null,"),
-        ("    const child1ItemUpdate = {\n      ...child1Item,\n      parentId: parent.id,", "    const { shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      parentId: parent.id,"),
-        ("    const child2ItemUpdate = {\n      ...child2Item,\n      parentId: parent.id,", "    const { shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      parentId: parent.id,"),
-        ("    const itemUpdate = {\n      ...parent,\n      parentId: parentLocation.id,", "    const { shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      parentId: parentLocation.id,"),
+        ("    const itemUpdate = {\n      ...item,\n      parentId: item.parent?.id || null,", "    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemDisplayID;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      parentId: item.parent?.id || null,"),
+        ("    const child1ItemUpdate = {\n      ...child1Item,\n      parentId: parent.id,", "    const { displayId: omittedChild1DisplayID, shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1DisplayID;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      parentId: parent.id,"),
+        ("    const child2ItemUpdate = {\n      ...child2Item,\n      parentId: parent.id,", "    const { displayId: omittedChild2DisplayID, shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2DisplayID;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      parentId: parent.id,"),
+        ("    const itemUpdate = {\n      ...parent,\n      parentId: parentLocation.id,", "    const { displayId: omittedParentDisplayID, shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentDisplayID;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      parentId: parentLocation.id,"),
     )
     if len(rewrites) != 4:
         raise RuntimeError('Expected four pinned item update test fixtures')

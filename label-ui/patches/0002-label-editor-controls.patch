@@ -65,13 +65,14 @@ index fee9758..3a31d29 100644
  import {
    createBarcode,
    createCircle,
-@@ -32,8 +33,9 @@ const TOOLS = [
+@@ -32,8 +33,10 @@ const TOOLS = [
    { key: 'line', glyph: '—', labelKey: 'palette.line', create: createLine },
    { key: 'circle', glyph: '◯', labelKey: 'palette.circle', create: createCircle },
    { key: 'text', glyph: 'Aa', labelKey: 'palette.text', create: createText },
 -  { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: createQr },
 -  { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: createBarcode },
 +  { key: 'short-code', glyph: '#', labelKey: 'palette.shortCode', create: (place: { centerXMm: number, centerYMm: number }) => createText(place, '{{short_code}}') },
++  { key: 'display-id', glyph: 'ID', labelKey: 'palette.displayId', create: (place: { centerXMm: number, centerYMm: number }) => createText(place, '{{display_id}}') },
 +  { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: (place: { centerXMm: number, centerYMm: number }) => createQr(place, '{{item_path}}') },
 +  { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: (place: { centerXMm: number, centerYMm: number }) => createBarcode(place, '{{asset_code}}') },
    { key: 'table', glyph: '⊞', labelKey: 'palette.table', create: createTable },
@@ -247,27 +248,30 @@ diff --git a/packages/editor/src/locales/messages.ts b/packages/editor/src/local
 index 742dd85..c2992e0 100644
 --- a/packages/editor/src/locales/messages.ts
 +++ b/packages/editor/src/locales/messages.ts
-@@ -8,6 +8,7 @@ export const messages = {
+@@ -8,6 +8,8 @@ export const messages = {
      'palette.line': 'Line',
      'palette.circle': 'Circle',
      'palette.text': 'Text',
 +    'palette.shortCode': 'Short code',
++    'palette.displayId': 'Display ID',
      'palette.image': 'Image',
      'palette.soon': 'Soon',
      'palette.imageTooLarge': 'Image is too large (max 2MB)',
-@@ -161,6 +162,7 @@ export const messages = {
+@@ -161,6 +162,8 @@ export const messages = {
      'palette.line': 'Đường kẻ',
      'palette.circle': 'Hình tròn',
      'palette.text': 'Văn bản',
 +    'palette.shortCode': 'Mã ngắn',
++    'palette.displayId': 'Mã hiển thị',
      'palette.image': 'Hình ảnh',
      'palette.soon': 'Sắp có',
      'palette.imageTooLarge': 'Ảnh quá lớn (tối đa 2MB)',
-@@ -314,6 +316,7 @@ export const messages = {
+@@ -314,6 +316,8 @@ export const messages = {
      'palette.line': '直线',
      'palette.circle': '圆形',
      'palette.text': '文本',
 +    'palette.shortCode': '短码',
++    'palette.displayId': '显示编号',
      'palette.image': '图片',
      'palette.soon': '即将推出',
      'palette.imageTooLarge': '图片过大（最大 2MB）',

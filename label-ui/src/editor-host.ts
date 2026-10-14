@@ -70,7 +70,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
     setup() {
       const doc = useDocumentStore(), history = useHistoryStore(), selection = useSelectionStore(), viewport = useViewportStore(), batchData = useBatchDataStore()
       const document = ref(starter('supvan')), revision = ref(0), profile = ref<Profile>('supvan'), selectedId = ref<string | null>('starter:supvan:left')
-      const templates = ref<any[]>([]), message = ref(''), preview = ref<any>(null), sampleName = ref('Sample item'), sampleCode = ref(''), sampleShortCode = ref(''), selectedItem = ref('')
+      const templates = ref<any[]>([]), message = ref(''), preview = ref<any>(null), sampleName = ref('Sample item'), sampleCode = ref(''), sampleShortCode = ref(''), sampleDisplayId = ref(''), selectedItem = ref('')
       const previewDialog = ref<HTMLDialogElement | null>(null)
       let baseline = ''
       let previewOpener: HTMLElement | null = null
@@ -114,9 +114,10 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         const nextName = typeof item?.name === 'string' ? item.name : 'Sample item'
         const nextCode = typeof item?.asset_code === 'string' ? item.asset_code : ''
         const nextShortCode = typeof item?.short_code === 'string' ? item.short_code : ''
-        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value || nextShortCode !== sampleShortCode.value) { draftPreview.invalidate(); closePreview() }
-        selectedItem.value = nextId; sampleName.value = nextName; sampleCode.value = nextCode; sampleShortCode.value = nextShortCode
-        batchData.setPreviewOverrides(nextId ? { item_name: nextName, asset_code: nextCode, short_code: nextShortCode, item_path: `/item/${nextId}` } : null)
+        const nextDisplayId = typeof item?.display_id === 'string' ? item.display_id : ''
+        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value || nextShortCode !== sampleShortCode.value || nextDisplayId !== sampleDisplayId.value) { draftPreview.invalidate(); closePreview() }
+        selectedItem.value = nextId; sampleName.value = nextName; sampleCode.value = nextCode; sampleShortCode.value = nextShortCode; sampleDisplayId.value = nextDisplayId
+        batchData.setPreviewOverrides(nextId ? { item_name: nextName, asset_code: nextCode, short_code: nextShortCode, display_id: nextDisplayId, item_path: `/item/${nextId}` } : null)
       }
       const invoke = async (action: string, data: any, write = false) => {
         busy = true; bridge.busy?.(true); send({ type: 'busy', data: { busy: true } })
@@ -146,7 +147,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
       const previewDraft = async () => {
         const version = draftPreview.begin()
         const opener = window.document.activeElement instanceof HTMLElement ? window.document.activeElement : null
-        const data = selectedItem.value ? { mode: 'item_draft', entity_id: selectedItem.value, profile: profile.value, document: snapshot() } : { mode: 'synthetic', profile: profile.value, document: snapshot(), sample: { item_name: sampleName.value, asset_code: sampleCode.value, short_code: sampleShortCode.value } }
+        const data = selectedItem.value ? { mode: 'item_draft', entity_id: selectedItem.value, profile: profile.value, document: snapshot() } : { mode: 'synthetic', profile: profile.value, document: snapshot(), sample: { item_name: sampleName.value, asset_code: sampleCode.value, short_code: sampleShortCode.value, display_id: sampleDisplayId.value } }
         const result = await invoke('labels/preview', data)
         if (!draftPreview.accepts(version, disposed)) return
         previewOpener = opener
@@ -168,7 +169,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         h('button', { onClick: () => loadList().catch((e: Error) => notify(e.message)) }, 'Refresh designs'),
         h('button', { onClick: () => save(false).catch((e: Error) => notify(e.message)) }, 'Save'), h('button', { onClick: () => save(true).catch((e: Error) => notify(e.message)) }, 'Duplicate'),
         h('button', { onClick: () => { if (dirty && !window.confirm('Discard unsaved label design changes?')) return; selectedId.value ? loadTemplate(selectedId.value).catch((e: Error) => notify(e.message)) : load(blankDesign(profile.value), null) } }, 'Reset design'),
-        h('span', { class: 'label-host-selected-item', role: 'status' }, selectedItem.value ? `Draft preview for ${sampleName.value}${sampleShortCode.value ? ` · ${sampleShortCode.value}` : ''}` : 'Draft preview with a sample item'),
+        h('span', { class: 'label-host-selected-item', role: 'status' }, selectedItem.value ? `Draft preview for ${sampleName.value}${sampleDisplayId.value ? ` · ${sampleDisplayId.value}` : ''}` : 'Draft preview with a sample item'),
         h('button', { onClick: () => previewDraft().catch((e: Error) => notify(e.message)) }, 'Preview draft'),
       ])
       watch(() => history.editVersion, changed, { flush: 'sync' })
