@@ -158,11 +158,11 @@
       type="button"
       class="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-medium shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       :class="enabled ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'border-border bg-card text-foreground hover:bg-accent'"
-      :aria-label="enabled ? 'Disable ORC text tool' : 'Enable ORC text tool'"
+      :aria-label="enabled ? 'Disable OCR text tool' : 'Enable OCR text tool'"
       :aria-pressed="enabled"
       @click="toggleEnabled"
     >
-      <ScanText class="size-4" /> ORC {{ enabled ? "on" : "off" }}
+      <ScanText class="size-4" /> OCR {{ enabled ? "on" : "off" }}
     </button>
   </Teleport>
   <Teleport to="body">
@@ -170,8 +170,8 @@
       v-if="enabled && !open"
       type="button"
       class="fixed bottom-5 right-5 z-40 inline-flex size-12 items-center justify-center rounded-full border border-primary/40 bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      aria-label="Open ORC camera and text tool"
-      title="Open ORC camera and text tool"
+      aria-label="Open OCR camera and text tool"
+      title="Open OCR camera and text tool"
       @click="show"
     >
       <ScanText class="size-5" />
@@ -180,7 +180,7 @@
       v-if="open"
       class="fixed z-50 flex max-h-[calc(100vh-1rem)] w-[min(24rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl"
       :style="{ left: `${position.left}px`, top: `${position.top}px`, maxHeight: `calc(100vh - ${position.top}px - 1rem)` }"
-      aria-label="ORC camera and text tool"
+      aria-label="OCR camera and text tool"
     >
       <header
         class="flex shrink-0 cursor-move touch-none items-center justify-between border-b border-border bg-muted/60 px-3 py-2"
@@ -189,13 +189,14 @@
         @pointerup="endDrag"
         @pointercancel="endDrag"
       >
-        <div class="flex items-center gap-2 text-sm font-semibold"><ScanText class="size-4 text-primary" /> ORC <span class="text-xs font-normal text-muted-foreground">· C-Crate</span></div>
+        <div class="flex items-center gap-2 text-sm font-semibold"><ScanText class="size-4 text-primary" /> OCR <span class="text-xs font-normal text-muted-foreground">· C-Crate</span></div>
         <div class="flex items-center gap-1">
-          <button type="button" class="rounded p-1 hover:bg-accent" aria-label="Minimize ORC" @click="minimize"><Minus class="size-4" /></button>
-          <button type="button" class="rounded p-1 hover:bg-accent" aria-label="Close ORC" @click="close"><X class="size-4" /></button>
+          <button type="button" class="rounded p-1 hover:bg-accent" aria-label="Minimize OCR" @click="minimize"><Minus class="size-4" /></button>
+          <button type="button" class="rounded p-1 hover:bg-accent" aria-label="Close OCR" @click="close"><X class="size-4" /></button>
         </div>
       </header>
       <div v-if="!minimized" class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+        <p class="text-xs text-muted-foreground">Photos stay on this device. OCR runs in this browser. On first scan, the OCR code and English model download here.</p>
         <div class="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-muted">
           <img v-if="imageURL" :src="imageURL" alt="Captured image for OCR" class="h-full w-full object-contain" />
           <video v-else ref="video" autoplay muted playsinline class="h-full w-full object-cover" />
@@ -212,14 +213,14 @@
         </div>
         <p v-if="error" role="alert" class="text-sm text-destructive">{{ error }}</p>
         <label class="block space-y-1 text-sm font-medium">
-          Recognized text
+          Editable recognized text
           <textarea v-model="result" @input="resultRevision++" rows="5" class="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm font-normal text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="Scan a photo to recognize text" />
         </label>
         <div class="flex justify-end">
           <button type="button" class="rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50" :disabled="!result || copying" @click="copy"><Copy class="mr-1 inline size-4" /> {{ copying ? "Copying…" : "Copy text" }}</button>
         </div>
       </div>
-      <button v-else type="button" class="w-full px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent" @click="minimized = false">ORC minimized · click to restore</button>
+      <button v-else type="button" class="w-full px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent" @click="minimized = false">OCR minimized · click to restore</button>
     </section>
   </Teleport>
 </template>
