@@ -4,6 +4,7 @@ import {
   buildLocationTree,
   getLocationLabel,
   getVisibleLocationTree,
+  handleLocationTreeButtonKeydown,
   toggleLocationExpanded,
 } from '../homebox-ui/overlay/lib/location-selector-tree.js';
 
@@ -74,4 +75,35 @@ test('exclusions and current location remove their subtrees, and archived or cyc
   assert.ok(!ids.includes('cycle-b'));
   assert.ok(!ids.includes('cycle-child'));
   assert.ok(ids.includes('south-rack'));
+});
+
+test('identical full paths include stable IDs in both visible and selected labels', () => {
+  const duplicatePaths = [
+    { id: 'root-a', name: 'Workshop', archived: false },
+    { id: 'root-b', name: 'Workshop', archived: false },
+    { id: 'shelf-a', name: 'Shelf', archived: false, parent: { id: 'root-a' } },
+    { id: 'shelf-b', name: 'Shelf', archived: false, parent: { id: 'root-a' } },
+  ];
+  const tree = buildLocationTree(duplicatePaths);
+  assert.equal(tree.find(row => row.id === 'shelf-a').treeString, 'Workshop / Shelf [shelf-a]');
+  assert.equal(tree.find(row => row.id === 'shelf-b').treeString, 'Workshop / Shelf [shelf-b]');
+  assert.equal(getLocationLabel(tree, 'shelf-a'), 'Workshop / Shelf [shelf-a]');
+  assert.equal(getLocationLabel(tree, 'shelf-b'), 'Workshop / Shelf [shelf-b]');
+});
+
+test('tree expand buttons stop activation keys but let Escape dismiss the popover', () => {
+  for (const key of ['Enter', ' ']) {
+    const state = { stopped: false, prevented: false, closed: false };
+    handleLocationTreeButtonKeydown({ key, stopPropagation() { state.stopped = true; }, preventDefault() { state.prevented = true; } }, () => { state.closed = true; });
+    assert.equal(state.stopped, true, `${JSON.stringify(key)} should not activate the parent row`);
+    assert.equal(state.prevented, false);
+    assert.equal(state.closed, false);
+  }
+  const escape = { stopped: false, prevented: false, closed: false };
+  handleLocationTreeButtonKeydown({ key: 'Escape', stopPropagation() { escape.stopped = true; }, preventDefault() { escape.prevented = true; } }, () => { escape.closed = true; });
+  assert.deepEqual(escape, { stopped: true, prevented: true, closed: true });
+
+  const arrow = { stopped: false, prevented: false, closed: false };
+  handleLocationTreeButtonKeydown({ key: 'ArrowRight', stopPropagation() { arrow.stopped = true; }, preventDefault() { arrow.prevented = true; } }, () => { arrow.closed = true; });
+  assert.deepEqual(arrow, { stopped: false, prevented: false, closed: false });
 });

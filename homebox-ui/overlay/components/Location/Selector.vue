@@ -50,7 +50,7 @@
                     :aria-expanded="expandedLocationIds.has(location.id)"
                     :aria-label="location.treeString"
                     @click.stop.prevent="toggleExpanded(location.id)"
-                    @keydown.stop
+                    @keydown="event => handleLocationTreeButtonKeydown(event, () => { open = false; })"
                   >
                     <ChevronDown v-if="expandedLocationIds.has(location.id)" class="size-4" />
                     <ChevronRight v-else class="size-4" />
@@ -86,6 +86,7 @@
     buildLocationTree,
     getDuplicateLocationNames,
     getLocationLabel,
+    handleLocationTreeButtonKeydown,
     getVisibleLocationTree,
     toggleLocationExpanded,
   } from "~~/lib/location-selector-tree";

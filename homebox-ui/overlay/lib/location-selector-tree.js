@@ -44,7 +44,9 @@ export function buildLocationTree(rows, options = {}) {
     for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
   }
   const childIds = new Set(childrenByParent.keys());
-  return ordered.map(row => {
+  const pathLabels = new Map();
+  const pathCounts = new Map();
+  for (const row of ordered) {
     const path = [], seen = new Set();
     /** @type {LocationEntity | undefined} */
     let current = row;
@@ -53,6 +55,12 @@ export function buildLocationTree(rows, options = {}) {
       path.unshift(current.name);
       current = current.parent?.id ? byId.get(current.parent.id) : undefined;
     }
+    const label = path.join(" / ");
+    pathLabels.set(row.id, label);
+    pathCounts.set(label, (pathCounts.get(label) ?? 0) + 1);
+  }
+  return ordered.map(row => {
+    const path = pathLabels.get(row.id) ?? row.name;
     let depth = 0, parentId = row.parent?.id;
     const ancestors = new Set([row.id]);
     while (parentId && candidateIds.has(parentId) && !ancestors.has(parentId)) {
@@ -62,12 +70,23 @@ export function buildLocationTree(rows, options = {}) {
     }
     return {
       ...row,
-      treeString: path.join(" / "),
+      treeString: (pathCounts.get(path) ?? 0) > 1 ? `${path} [${row.id}]` : path,
       parentId: row.parent?.id && candidateIds.has(row.parent.id) ? row.parent.id : null,
       depth,
       hasChildren: childIds.has(row.id),
     };
   });
+}
+
+/** @param {{ key: string, stopPropagation: () => void, preventDefault: () => void }} event @param {() => void} closePopover */
+export function handleLocationTreeButtonKeydown(event, closePopover) {
+  if (event.key === "Escape") {
+    event.stopPropagation();
+    event.preventDefault();
+    closePopover();
+  } else if (event.key === "Enter" || event.key === " ") {
+    event.stopPropagation();
+  }
 }
 
 /** @param {TreeLocation[]} locations @param {Set<string>} expandedIds @param {boolean} [searchMode] */
