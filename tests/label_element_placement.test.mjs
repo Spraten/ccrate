@@ -107,6 +107,17 @@ test('short-code insertion stays centered on blank SUPVAN and keeps 1000-growth 
   assert.deepEqual(fitTextToBox('WWW-1000', letterStarter.widthMm, letterStarter.heightMm, letterStarter.fontSizePt * 25.4 / 72, { measure }), { lines: ['WWW-1000'], truncated: false })
 })
 
+test('marks a grapheme wider than its text box as truncated without emitting it', () => {
+  assert.deepEqual(
+    fitTextToBox('W', 1, 10, 2, { measure: value => [...value].length * 2 }),
+    { lines: [], truncated: true },
+  )
+  assert.deepEqual(
+    fitTextToBox('e\u0301', 1, 10, 2, { measure: value => value === 'e\u0301' ? 2 : 0.5 }),
+    { lines: ['…'], truncated: true },
+  )
+})
+
 test('preserves square QR and tall-image proportions when another element occupies the center', () => {
   const page = { widthMm: 40, heightMm: 28 }
   const occupied = [{ type: 'rect', xMm: 10, yMm: 5, widthMm: 20, heightMm: 18, visible: true }]

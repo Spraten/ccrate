@@ -75,8 +75,12 @@ export function fitTextToBox(
   measurer: TextMeasurer,
 ): { lines: string[], truncated: boolean } {
   const maxLines = Math.floor(height / (fontSize * TEXT_LINE_HEIGHT) + 1e-7)
-  const wrapped = wrapText(content, width, measurer)
-  if (wrapped.length <= maxLines) return { lines: wrapped, truncated: false }
+  const graphemes = Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(content), part => part.segment)
+  const overWideIndex = graphemes.findIndex(grapheme => measurer.measure(grapheme) > width)
+  const truncated = overWideIndex !== -1
+  const fittingContent = truncated ? graphemes.slice(0, overWideIndex).join('') : content
+  const wrapped = wrapText(fittingContent, width, measurer)
+  if (!truncated && wrapped.length <= maxLines) return { lines: wrapped, truncated: false }
   if (maxLines < 1) return { lines: [], truncated: content.length > 0 }
   const lines = wrapped.slice(0, maxLines)
   const chars = Array.from(lines[lines.length - 1] ?? '')
