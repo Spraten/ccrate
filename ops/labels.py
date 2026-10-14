@@ -90,30 +90,17 @@ def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=Non
     draw.text((left,height-32),'C-Crate',font=font(13),fill=0)
     return image,code
 def preview(client,entity_id,*,layouts=None,group=None,actor=None,template_id=None,template_revision=None):
-    if layouts is not None:
+    if layouts is not None and (template_id is not None or template_revision is not None):
         return layouts.preview(client,group,actor,{'mode':'item','entity_id':entity_id,'template_id':template_id,'template_revision':template_revision})
     entity=client.entity(uuid(entity_id))
-    try:material=probe()
-    except Exception as error:raise ValueError('Printer not ready. Check connection and loaded stock') from error
-    image,code=render(entity,material['width_mm'],material['height_mm']);stream=io.BytesIO();image.save(stream,format='PNG')
-    return {'entity_id':entity['id'],'name':entity['name'],'code':code,'width':image.width,'height':image.height,'image':'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()}
+    if not (entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation')):raise ValueError('Select a saved storage location to preview its QR label')
+    image,code=render(entity,40,28);stream=io.BytesIO();image.save(stream,format='PNG');png=stream.getvalue()
+    response={'entity_id':entity['id'],'name':entity['name'],'code':code,'width':image.width,'height':image.height,'image':'data:image/png;base64,'+base64.b64encode(png).decode()}
+    if layouts is not None:response['review_id']=layouts.save_legacy_review(group,actor,entity,png,image.width,image.height)
+    return response
 def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=None,valid_context=None):
     entity_id=uuid(entity_id)
-    if layouts is None:
-        entity=client.entity(entity_id)
-        if not (entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation')):raise ValueError('Select and review a saved label template before printing')
-        job=jobs.prepare(group,actor,'print_label',key,{'entity_id':entity_id})
-        if job['status']=='completed':return {'id':job['id'],'status':'completed','entity_id':entity_id}
-        if job['status']!='prepared':raise Conflict('Printer outcome needs Admin review. Do not retry automatically')
-        try:
-            material=probe();image,_=render(entity,material['width_mm'],material['height_mm']);jobs.sent(group,job['id']);jobs.bind(group,job['id'],entity_id)
-            result=subprocess.run([adapter(),'print',printer_path(),str(image.width),str(image.height)],input=image.tobytes(),capture_output=True,timeout=60,check=True)
-            if json.loads(result.stdout).get('status')!='printed':raise OSError('Printer did not confirm completion')
-            jobs.record(group,job['id'],'printer_completion',{'entity_id':entity_id});jobs.complete(group,job['id'])
-            return {'id':job['id'],'status':'completed','entity_id':entity_id}
-        except Exception:
-            if jobs.detail(group,job['id'])['status']=='prepared':jobs.cancel(group,job['id']);raise ValueError('Printer not ready. Check connection and loaded stock')
-            jobs.review(group,job['id'],'Printer outcome uncertain. Inspect the label; never auto-reprint');raise Conflict('Printing outcome is uncertain. Inspect the label and review in Admin')
+    if layouts is None:raise ValueError('Review the location label again before printing')
     if review_id is None:raise ValueError('Select and review a saved label template before printing')
     review_id=uuid(review_id)
     with jobs.ledger.connection() as db:
@@ -136,6 +123,24 @@ def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=N
         ticket=layouts.review(group,actor,review_id)
         if not ticket or ticket['item_id']!=entity_id:raise ValueError('Reviewed label is missing, expired, or belongs to another item')
         if ticket.get('attached_job') not in (None,job['id']):raise Conflict('Reviewed label is already attached to another print')
+        if ticket.get('kind')=='legacy_location':
+            entity=client.entity(entity_id)
+            if not (entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation')):raise Conflict('This item is no longer a storage location; review it again')
+            if entity.get('updatedAt')!=ticket.get('item_updated_at') or entity.get('displayId','')!=ticket.get('item_display_id') or entity.get('archived'):raise Conflict('Storage location changed since preview; review it again')
+            material=probe()
+            if (material.get('width_mm'),material.get('height_mm'))!=(40,28):raise ValueError('Load the reviewed 40 x 28 mm SUPVAN stock and preview the location again')
+            with Image.open(io.BytesIO(ticket['png'])) as image_file:
+                image_file.load()
+                if image_file.mode!='L' or image_file.size!=(ticket['width'],ticket['height']):raise ValueError('Reviewed label raster is invalid')
+                frozen=image_file.copy()
+            if hashlib.sha256(ticket['png']).hexdigest()!=ticket['sha256']:raise ValueError('Reviewed label raster failed its integrity check')
+            if valid_context and not valid_context():raise Conflict('Label manager or session changed; review the location again')
+            layouts.attach_review(group,actor,review_id,job['id']);attached=True
+            jobs.sent(group,job['id']);jobs.bind(group,job['id'],entity_id)
+            result=subprocess.run([adapter(),'print',printer_path(),str(frozen.width),str(frozen.height)],input=frozen.tobytes(),capture_output=True,timeout=60,check=True)
+            if json.loads(result.stdout).get('status')!='printed':raise OSError('Printer did not confirm completion')
+            jobs.record(group,job['id'],'printer_completion',{'entity_id':entity_id});jobs.complete(group,job['id']);layouts.resolve_review(group,review_id)
+            return {'id':job['id'],'status':'completed','entity_id':entity_id}
         template=layouts.get(group,ticket['template_id'])
         if template['revision']!=ticket['template_revision'] or hashlib.sha256(json.dumps(template['document'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()!=ticket['template_hash']:raise Conflict('Saved template changed; review the label again')
         entity=client.entity(entity_id)

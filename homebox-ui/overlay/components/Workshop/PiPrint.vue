@@ -37,9 +37,9 @@ async function print() {
   if (sending.value) return;
   error.value = ""; sending.value = true;
   try {
-    await workshop.write("labels/print", { entity_id: itemId.value, ...(isItem.value ? { review_id: preview.value?.review_id } : {}) }, "Print item label", itemId.value);
+    await workshop.write("labels/print", { entity_id: itemId.value, review_id: preview.value?.review_id }, "Print item label", itemId.value);
     toast("Pi printer confirmed this request. Inspect the physical label."); preview.value = null;
-  } catch (cause) { uncertain.value = true; error.value = (cause as Error).message; }
+  } catch (cause) { error.value = (cause as Error).message; if (error.value.includes("Load the reviewed 40 x 28 mm SUPVAN stock")) { uncertain.value = false; preview.value = null; } else uncertain.value = true; }
   finally { sending.value = false; }
 }
 </script>
@@ -55,6 +55,6 @@ async function print() {
     <p v-if="isItem" class="text-sm text-muted-foreground">Preview uses current native item values. Printing requires the separate confirmation below.</p>
     <p v-if="error" role="alert" class="text-sm text-destructive">{{ error }} <NuxtLink v-if="uncertain" to="/workshop/recovery" class="underline">Open recovery</NuxtLink></p>
     <DeviceReconnect device="printer" />
-    <div class="flex gap-2"><Button variant="outline" :disabled="busy || !loaded && isItem" @click="review">{{ isItem ? "Review current item" : "Preview storage QR" }}</Button><Button :disabled="busy || sending || uncertain || !preview || (isItem && !preview.review_id)" @click="print"><Printer class="mr-2 size-4" />Confirm one Pi print</Button></div>
+    <div class="flex gap-2"><Button variant="outline" :disabled="busy || !loaded && isItem" @click="review">{{ isItem ? "Review current item" : "Preview storage QR" }}</Button><Button :disabled="busy || sending || uncertain || !preview || !preview.review_id" @click="print"><Printer class="mr-2 size-4" />Confirm one Pi print</Button></div>
   </div>
 </template>

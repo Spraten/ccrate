@@ -699,6 +699,24 @@ class DesktopTests(unittest.TestCase):
         member=self.request('context',headers={'Cookie':'hb.auth.token=member; hb.auth.remember=true'}).result
         self.assertEqual(self.request('labels/templates',headers={'Cookie':'hb.auth.token=member; hb.auth.remember=true','X-Workshop-Identity':member['identity']}).status,403)
 
+    def test_legacy_location_preview_uses_the_scoped_review_store(self):
+        service=object();self.deps['label_layouts']=service
+        with patch('desktop_api.native_op',return_value={'review_id':ident(),'image':'fixture'}) as operation:
+            response=self.request('labels/preview',{'entity_id':self.shelf})
+        self.assertEqual(response.status,200)
+        self.assertEqual(operation.call_args.args[:2],('labels','preview'))
+        self.assertEqual(operation.call_args.args[3],self.shelf)
+        self.assertIs(operation.call_args.kwargs['layouts'],service)
+        self.assertEqual(operation.call_args.kwargs['group'],self.group)
+        self.assertEqual(operation.call_args.kwargs['actor'],self.manager)
+
+    def test_legacy_location_print_requires_the_review_id(self):
+        self.deps['label_layouts']=object()
+        with patch('desktop_api.native_op') as operation:
+            response=self.request('labels/print',{'entity_id':self.shelf,'request_key':ident()})
+        self.assertEqual(response.status,400)
+        operation.assert_not_called()
+
     def test_label_print_dispatch_passes_only_review_identity_to_service(self):
         self.deps['label_layouts']=object()
         review_id=ident()

@@ -116,4 +116,38 @@ class PrintReviewTests(unittest.TestCase):
         with store._conn() as db:self.assertEqual(db.execute('SELECT count(*) FROM reviews WHERE attached_job=? AND resolved=0',(job2['id'],)).fetchone()[0],1)
 
 
+class LegacyRasterReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();root=pathlib.Path(self.temp.name)
+        self.ledger=Ledger(root/'ledger.db');self.jobs=NativeJobs(self.ledger);self.layouts=LabelLayouts(root/'layouts.db')
+        self.group,self.actor,self.item,self.key=[str(uuid4()) for _ in range(4)]
+        self.client=Client({'id':self.item,'name':'Long multiword storage location','updatedAt':'v1','isLocation':True})
+    def tearDown(self):self.temp.cleanup()
+    def review_legacy_location(self):
+        image=Image.new('L',(320,208),255)
+        with patch.object(labels,'render',return_value=(image,'location-code')) as render,patch.object(labels,'probe',side_effect=AssertionError('preview must not require a printer')) as probe:
+            preview=labels.preview(self.client,self.item,layouts=self.layouts,group=self.group,actor=self.actor)
+        probe.assert_not_called();render.assert_called_once_with(self.client.item,40,28)
+        return image,preview
+    def test_legacy_location_preview_works_offline_at_fixed_supvan_dimensions(self):
+        image,preview=self.review_legacy_location()
+        self.assertEqual((preview['width'],preview['height']),(320,208))
+        self.assertIn('review_id',preview)
+    def test_stock_change_after_legacy_review_requires_a_fresh_preview(self):
+        image,preview=self.review_legacy_location();sent=[]
+        def print_once(*args,**kwargs):
+            sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()
+        with patch.object(labels,'render',side_effect=AssertionError('print must use the reviewed raster')),patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':30}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once):
+            with self.assertRaisesRegex(ValueError,'40 x 28 mm SUPVAN stock'):
+                labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
+        self.assertEqual(sent,[])
+    def test_legacy_location_print_sends_exact_reviewed_raster(self):
+        image,preview=self.review_legacy_location();sent=[]
+        def print_once(*args,**kwargs):sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()
+        with patch.object(labels,'render',side_effect=AssertionError('print must use the reviewed raster')),patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':28}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once):
+            printed=labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
+        self.assertEqual(printed['status'],'completed')
+        self.assertEqual(sent,[image.tobytes()])
+
+
 if __name__=='__main__':unittest.main()

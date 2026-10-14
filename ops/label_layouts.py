@@ -401,6 +401,17 @@ class LabelLayouts:
             return {'reviews':responses} if len(responses)>1 or data.get('entity_ids') is not None else responses[0]
         finally:self._lock.release()
 
+    def save_legacy_review(self,group,actor,entity,png,width,height):
+        group,actor,entity_id=_uuid(group),_uuid(actor),_uuid(entity.get('id'))
+        if not isinstance(png,bytes) or len(png)>MAX_BODY:raise ValueError('Legacy label preview is too large')
+        if (width,height)!=(320,208):raise ValueError('Legacy location previews require 40 x 28 mm SUPVAN stock')
+        review_id=str(uuid4())
+        metadata={'kind':'legacy_location','profile':'supvan','label_mm':[40,28],'dpi':203.2,'width':width,'height':height,'sha256':hashlib.sha256(png).hexdigest(),'item_id':entity_id,'item_updated_at':entity.get('updatedAt'),'item_display_id':entity.get('displayId','')}
+        with self._conn(timeout=2) as db:
+            db.execute('BEGIN IMMEDIATE');self._purge_expired(db)
+            db.execute('INSERT INTO reviews(id,group_id,actor_id,created,metadata,png) VALUES(?,?,?,?,?,?)',(review_id,group,actor,time.time(),_canonical(metadata),png))
+        return review_id
+
     @staticmethod
     def _response(rendered,profile,warnings):
         image=base64.b64encode(rendered['png']).decode('ascii')

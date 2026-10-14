@@ -642,14 +642,14 @@ def post_action(route, data, ctx, deps, address):
             if not data.get('mode') and data.get('entity_id'):
                 entity=public_entity(client,data.get('entity_id'))
                 if entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
-                    return native_op('labels','preview',client,data.get('entity_id'))
+                    return native_op('labels','preview',client,data.get('entity_id'),layouts=layouts,group=group,actor=actor)
                 raise ValueError('Choose a saved template and review the item before printing')
             return layouts.preview(client,group,actor,data,deadline=ctx.get('label_deadline'))
         if route=='labels/print':
             if not data.get('review_id'):
                 entity=public_entity(client,data.get('entity_id'))
                 if entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
-                    return native_op('labels','print_label',client,jobs,group,actor,data.get('request_key'),data.get('entity_id'))
+                    raise ValueError('Review the location label again before printing')
             return native_op('labels','print_label',client,jobs,group,actor,data.get('request_key'),data.get('entity_id'),layouts=layouts,review_id=data.get('review_id'))
         if route=='labels/paper':return native_op('labels','paper',client,layouts,group,actor,data,deadline=ctx.get('label_deadline'))
         raise ApiError(404,'Unknown label action.')
