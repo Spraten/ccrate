@@ -25,6 +25,8 @@ class FeedbackUiContractTests(unittest.TestCase):
         self.assertIn('watch([reportType, description], () => saveDraft());', page)
         self.assertIn('persistCurrentStatus(capture.draftKey);', page)
         self.assertIn('persistFeedbackStatus(localStorage, key,', page)
+        self.assertIn('if (actionIsCurrent(capture)) persistCurrentStatus(capture.draftKey);', page)
+        self.assertNotIn('if (actionIsCurrent(capture)) saveDraft(capture.draftKey);', page)
         self.assertIn('"/ccrate-api/feedback"', page)
         self.assertNotIn("CCRATE_GITHUB_TOKEN", page)
 
@@ -49,6 +51,26 @@ const entries = new Map([["draft-a", JSON.stringify({{requestId:"req-a", descrip
 const storage = {{setItem(key, value) {{entries.set(key, value);}}, removeItem(key) {{entries.delete(key);}}}};
 const saved = persistFeedbackStatus(storage, "draft-a", {{requestId:"req-a", description:"sent"}}, "submitted");
 if (!saved || entries.has("draft-a")) process.exit(1);
+'''
+        completed = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_409_confirmed_submission_path_keeps_the_draft_cleared(self):
+        page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
+        catch_block = page[page.index("    } catch (cause) {", page.index("async function submit")):page.index("  async function checkStatus")]
+        self.assertIn('const result = (cause as { result?', catch_block)
+        self.assertIn('if (result) {\n        applyResult(result, capture);\n        persistCurrentStatus(capture.draftKey);', catch_block)
+        self.assertIn('if (actionIsCurrent(capture)) persistCurrentStatus(capture.draftKey);', catch_block)
+        self.assertNotIn('if (actionIsCurrent(capture)) saveDraft(capture.draftKey);', catch_block)
+
+        helper = (ROOT / "homebox-ui/overlay/lib/feedback-report-identity.js").resolve().as_uri()
+        script = f'''import {{ persistFeedbackStatus }} from "{helper}";
+const entries = new Map([["draft-a", JSON.stringify({{requestId:"req-a"}})]]);
+const storage = {{setItem(key, value) {{entries.set(key, value);}}, removeItem(key) {{entries.delete(key);}}}};
+const statusFrom409 = "submitted";
+persistFeedbackStatus(storage, "draft-a", {{requestId:"req-a"}}, statusFrom409);
+persistFeedbackStatus(storage, "draft-a", {{requestId:"req-a"}}, statusFrom409);
+if (entries.has("draft-a")) process.exit(1);
 '''
         completed = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)

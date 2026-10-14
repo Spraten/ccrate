@@ -146,7 +146,7 @@
         status.value = postStarted ? "pending" : "idle";
         error.value = postStarted ? "C-Crate did not receive a confirmation. Check report status before trying again." : ((cause as Error).message || "C-Crate could not verify your sign-in. Your draft is still saved.");
       }
-      if (actionIsCurrent(capture)) saveDraft(capture.draftKey);
+      if (actionIsCurrent(capture)) persistCurrentStatus(capture.draftKey);
     }
   }
 
