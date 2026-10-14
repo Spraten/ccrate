@@ -29,7 +29,16 @@ class _FixedWidthDraw:
         width=sum(10 if ord(character)>0xffff else self.width for character in text)
         return (0,0,width,1)
 
+class _NegativeBearingDraw:
+    def textbbox(self,xy,text,font=None):
+        if text=='…':return (0,0,3,1)
+        if text=='J':return (-2,0,5,1)
+        return (0,0,len(text),1)
+
 class LegacyLabelTextTests(unittest.TestCase):
+    def test_single_glyph_wider_than_box_due_to_negative_bearing_is_truncated(self):
+        self.assertEqual(labels._fit_name_lines('J',_NegativeBearingDraw(),None,6,1),['…'])
+
     def test_explicit_newline_remains_a_line_break_in_the_legacy_preview(self):
         self.assertEqual(_drawn_name_lines('Alpha\nBeta'),['Alpha','Beta'])
 
@@ -99,3 +108,4 @@ class LabelTests(unittest.TestCase):
             with self.assertRaises(Conflict):labels.print_badge(self.client,self.badges,self.jobs,self.group,self.user,key,self.badge['id'],self.badge['code'])
         with self.assertRaises(Conflict):self.run_print(str(uuid4()),reprint=True)
         self.assertFalse(self.prints)
+
