@@ -59,7 +59,9 @@ if (!saved || entries.has("draft-a")) process.exit(1);
         page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
         catch_block = page[page.index("    } catch (cause) {", page.index("async function submit")):page.index("  async function checkStatus")]
         self.assertIn('const result = (cause as { result?', catch_block)
-        self.assertIn('if (result) {\n        applyResult(result, capture);\n        persistCurrentStatus(capture.draftKey);', catch_block)
+        self.assertIn('const recovered = recoverFeedbackSubmissionError(result,', catch_block)
+        self.assertIn('} else applyResult(result, capture);', catch_block)
+        self.assertIn('persistCurrentStatus(capture.draftKey);', catch_block)
         self.assertIn('if (actionIsCurrent(capture)) persistCurrentStatus(capture.draftKey);', catch_block)
         self.assertNotIn('if (actionIsCurrent(capture)) saveDraft(capture.draftKey);', catch_block)
 
@@ -71,6 +73,33 @@ const statusFrom409 = "submitted";
 persistFeedbackStatus(storage, "draft-a", {{requestId:"req-a"}}, statusFrom409);
 persistFeedbackStatus(storage, "draft-a", {{requestId:"req-a"}}, statusFrom409);
 if (entries.has("draft-a")) process.exit(1);
+'''
+        completed = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_413_response_is_handled_as_a_report_error_before_actor_comparison(self):
+        page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
+        parse_response = page[page.index("async function parseResponse"):page.index("async function verifyCurrentActor")]
+        self.assertLess(parse_response.index('response.status === 413'), parse_response.index('result.actor_id'))
+        self.assertIn('status: response.status', parse_response)
+
+    def test_413_without_actor_id_leaves_submission_idle_and_draft_editable(self):
+        helper = (ROOT / "homebox-ui/overlay/lib/feedback-report-state.js").resolve().as_uri()
+        identity = (ROOT / "homebox-ui/overlay/lib/feedback-report-identity.js").resolve().as_uri()
+        page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
+        self.assertIn("recoverFeedbackSubmissionError", page)
+        script = f'''import {{ recoverFeedbackSubmissionError }} from "{helper}";
+import {{ persistFeedbackStatus }} from "{identity}";
+const capturedResult = {{error:"The report request is too large."}};
+const recovered = recoverFeedbackSubmissionError(capturedResult, 413);
+const ui = {{status:"sending", error:""}};
+if (recovered) Object.assign(ui, recovered);
+const entries = new Map();
+const storage = {{setItem(key, value) {{entries.set(key, value);}}, removeItem(key) {{entries.delete(key);}}}};
+const draft = {{requestId:"req-a",type:"bug",description:"A saved report description"}};
+persistFeedbackStatus(storage, "draft-a", draft, ui.status);
+if (ui.status !== "idle" || ui.error !== "The report request is too large.") process.exit(1);
+if (entries.get("draft-a") !== JSON.stringify(draft)) process.exit(2);
 '''
         completed = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)

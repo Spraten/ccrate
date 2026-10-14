@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 import unittest
 from pathlib import Path
@@ -55,6 +56,42 @@ class FeedbackGatewayAuthTests(unittest.TestCase):
 
         with patch.object(GATEWAY.http.client, "HTTPConnection", side_effect=AssertionError("must not call Homebox")):
             self.assertIsNone(GATEWAY.Handler.feedback_actor(handler))
+
+    def test_authenticated_report_accepts_3000_cjk_characters(self):
+        payload = json.dumps({"type": "bug", "description": "界" * 3000}, ensure_ascii=False).encode()
+        response = self._post_report(payload)
+        self.assertEqual(response[0], 202)
+        self.assertEqual(response[1], "界" * 3000)
+
+    def test_authenticated_report_rejects_body_over_hard_limit(self):
+        response = self._post_report(b" " * (GATEWAY.MAX_FEEDBACK_BODY_BYTES + 1))
+        self.assertEqual(response[0], 413)
+        self.assertEqual(json.loads(response[1])["error"], "The report request is too large.")
+
+    def _post_report(self, body):
+        captured = {}
+
+        class Handler(GATEWAY.Handler):
+            def send_bytes(self, status, body, *_args, **_kwargs):
+                captured.update(status=status, body=body)
+
+        request = Handler.__new__(Handler)
+        request.command = "POST"
+        request.headers = {"Origin": "http://localhost", "Host": "localhost",
+                           "Content-Length": str(len(body)), "X-Crate-Actor-ID": "c7f51d15-7df9-4a52-9c13-399ed84509d8"}
+        request.rfile = io.BytesIO(body)
+        request.feedback_actor = lambda: "c7f51d15-7df9-4a52-9c13-399ed84509d8"
+        request.path = "/ccrate-api/feedback"
+
+        class Service:
+            def __init__(self, *_args): pass
+            def submit(self, actor_id, _request_id, report_type, description):
+                captured["description"] = description
+                return 202, {"status": "pending"}
+
+        with patch.object(GATEWAY, "FeedbackReportService", Service):
+            request.feedback_report(request.path)
+        return captured["status"], captured.get("description", captured["body"])
 
 
 if __name__ == "__main__":

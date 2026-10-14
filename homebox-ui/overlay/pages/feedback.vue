@@ -3,6 +3,7 @@
   import { Button } from "@/components/ui/button";
   import { Textarea } from "@/components/ui/textarea";
   import { feedbackActionIsCurrent, persistFeedbackStatus, writeFeedbackDraft } from "@/lib/feedback-report-identity.js";
+  import { recoverFeedbackSubmissionError } from "@/lib/feedback-report-state.js";
 
   definePageMeta({ middleware: ["auth"] });
   useHead({ title: "Report feedback · C-Crate" });
@@ -67,6 +68,7 @@
   async function parseResponse(response: Response, capture: FeedbackActionCapture) {
     const result = await response.json().catch(() => ({}));
     if (!actionIsCurrent(capture)) return null;
+    if (response.status === 413) throw Object.assign(new Error(result.error || "The report is too large to send."), { result, status: response.status });
     if (String(result.actor_id || "").toLowerCase() !== capture.actorId.toLowerCase()) {
       throw Object.assign(new Error("Your C-Crate sign-in changed. Your saved report was kept; reload the page before continuing."), { accountChanged: true });
     }
@@ -140,7 +142,11 @@
       }
       const result = (cause as { result?: { status?: string; error?: string } }).result;
       if (result) {
-        applyResult(result, capture);
+        const recovered = recoverFeedbackSubmissionError(result, (cause as { status?: number }).status);
+        if (recovered) {
+          status.value = recovered.status;
+          error.value = recovered.error;
+        } else applyResult(result, capture);
         persistCurrentStatus(capture.draftKey);
       }
       else {

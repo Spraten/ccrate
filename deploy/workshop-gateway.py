@@ -59,6 +59,7 @@ if FIXTURE_PROCESS:
 sys.path.insert(0, str(CODE_ROOT / 'ops'))
 from network_access import local_hosts, valid_native_host
 from feedback_reports import FeedbackReportService
+MAX_FEEDBACK_BODY_BYTES = 64 * 1024
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 WORKER = b'''// Workshop gateway: native network requests must not cache identity data.
@@ -211,8 +212,9 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 self.error(400, 'The report request is invalid.')
                 return
-            if not 0 < length <= 8192:
-                self.error(413 if length > 8192 else 400, 'The report must be smaller than 8 KB.')
+            if not 0 < length <= MAX_FEEDBACK_BODY_BYTES:
+                self.error(413 if length > MAX_FEEDBACK_BODY_BYTES else 400,
+                           'The report request is too large.' if length > MAX_FEEDBACK_BODY_BYTES else 'The report request is invalid.')
                 return
             try:
                 payload = json.loads(self.rfile.read(length))
