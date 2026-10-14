@@ -74,5 +74,45 @@ assert(JSON.stringify(checkoutAssetsForSelection(checkoutCart))===JSON.stringify
         subprocess.run([node, '-e', script], check=True, cwd=ROOT, capture_output=True, text=True)
 
 
+    def test_kiosk_revision_reconciliation_and_receipt_asset_count(self):
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node.js is unavailable for the checkout UI fixture')
+        source = (ROOT/'kiosk/checkout-ui.js').read_text(encoding='utf-8')
+        ids_start=source.index('function checkoutCartReconciliationIds(')
+        ids_helper=source[ids_start:source.index('\n',ids_start)]
+        count_start=source.index('function checkoutReceiptAssetCount(')
+        count_helper=source[count_start:source.index('\n',count_start)]
+        assets_start=source.index('function checkoutAssetsForSelection(')
+        assets_helper=source[assets_start:source.index('\n',assets_start)]
+        reconcile_start=source.index('async function reconcileCheckoutCart(')
+        reconcile=source[reconcile_start:source.index('\nfunction removeCheckoutSelection',reconcile_start)]
+        script='\n'.join([ids_helper,count_helper,assets_helper])+r'''
+let checkoutCartManaged=true,checkoutKitAssets={'kit':['kit','component']};
+const assert=(actual,expected,message)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw Error(message+': '+JSON.stringify(actual))};
+assert(checkoutCartReconciliationIds(['kit','desk-added'],['kit','desk-removed'],['kit','local-added']),['kit','desk-added','local-added'],'server and local additions survive while server removals apply');
+assert(checkoutCartReconciliationIds(['local-removed','kept','desk-added'],['local-removed','kept'],['kept']),['kept','desk-added'],'local removals and desk additions reconcile');
+assert(checkoutReceiptAssetCount({count:3},[{id:'kit'}]),3,'completed receipt count is authoritative');
+assert(checkoutReceiptAssetCount({status:'completed'},[{id:'kit'}]),2,'kit fallback counts all assets');
+let checkoutCart=[{id:'keep',name:'Keep'},{id:'local-added',name:'Local addition'}],checkoutCartIds=new Set(['keep','desk-removed']),checkoutCartRevision=1,checkoutCartLoadedFor='1:session',checkoutCartLoading=false,checkoutCartNeedsReconcile=true,checkoutCartLoadError='',checkoutKitEntities={},checkoutKitVersions={},checkoutFeedback='',checkoutMode=true,checkoutBusy=false,identityGeneration=1,identityInstance='session';
+let rendered='';const renderCheckout=message=>{rendered=message};const refreshCheckoutAvailability=async()=>{};
+const api=async path=>{if(path==='/checkout/cart')return {revision:2,items:['keep','desk-added']};throw Error('unexpected path '+path)};
+const fetch=async url=>({ok:true,json:async()=>({entity:{id:'desk-added',name:'Desk addition'}})});
+'''
+        script += '\n' + reconcile + r'''
+reconcileCheckoutCart().then(()=>{
+ assert(JSON.stringify(checkoutCart.map(item=>item.id))===JSON.stringify(['keep','desk-added','local-added']),'refresh merges desk changes and keeps local additions');
+ assert(checkoutCart.find(item=>item.id==='local-added').name==='Local addition','local data survives refresh');
+ assert(checkoutCartRevision===2&&!checkoutCartNeedsReconcile,'latest revision unlocks confirmation');
+ assert(rendered.includes('Your local additions are kept'),'updated list is explained before review');
+}).catch(error=>{console.error(error);process.exitCode=1});
+'''
+        subprocess.run([node,'-e',script],check=True,cwd=ROOT,capture_output=True,text=True)
+        self.assertIn('checkoutCartNeedsReconcile',source)
+        self.assertIn('Refresh saved cart',source)
+        self.assertIn('checkoutReceiptAssetCount(saved,items)',source)
+        self.assertIn('confirm.disabled=!!checkoutKey||checkoutCartNeedsReconcile',source)
+
+
 if __name__ == '__main__':
     unittest.main()

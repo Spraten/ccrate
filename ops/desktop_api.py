@@ -532,7 +532,10 @@ def operation_status(ctx, deps, data):
     if row:
         if row['action'] == 'check_out' and row['actor_id'] != ctx['actor']:
             return {'status': 'not_started'}
-        return {'id': row['id'], 'status': row['status'], 'action': row['action']}
+        result = {'id': row['id'], 'status': row['status'], 'action': row['action']}
+        if row['action'] == 'check_out' and row['status'] == 'completed':
+            result['count'] = len(ledger.detail(group, row['id'])['assets'])
+        return result
     with ledger.connection() as db:
         row = db.execute('SELECT id,status,kind FROM native_jobs WHERE group_id=? AND request_key=?', (group, key)).fetchone()
     if row:

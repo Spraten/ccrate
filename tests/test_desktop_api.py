@@ -243,11 +243,11 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.request('checkout-cart', headers=headers).status, 403)
 
     def test_checkout_status_is_hidden_from_another_member(self):
-        operation = self.ledger.begin(self.group, self.manager, 'check_out', [self.asset], ident())
+        operation = self.ledger.begin(self.group, self.manager, 'check_out', [self.asset, self.other_asset], ident())
         self.ledger.complete(operation['id'])
         request_key = operation['request_key']
         owned = self.request('operation/status', {'request_key': request_key})
-        self.assertEqual(owned.result, {'id': operation['id'], 'status': 'completed', 'action': 'check_out'})
+        self.assertEqual(owned.result, {'id': operation['id'], 'status': 'completed', 'action': 'check_out', 'count': 2})
         member = self.request('context', headers={'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}).result
         headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true', 'X-Workshop-Identity': member['identity']}
 
