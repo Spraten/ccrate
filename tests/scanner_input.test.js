@@ -44,6 +44,7 @@ function fakeDocument() {
         addEventListener(type, listener) { listeners[type] = listener; },
         setAttribute(name, value) { this.attributes[name] = value; },
         focus() { listeners.focus?.(); },
+        blur() { listeners.blur?.(); },
         key(key) {
           let prevented = false;
           listeners.keydown({ key, preventDefault() { prevented = true; } });
@@ -96,7 +97,35 @@ test('mounts a focused HID capture field with pairing help and last-scan status'
     assert.deepEqual(scans, ['NETUM-42']);
     assert.match(status.textContent, /No item matched/);
     assert.match(status.textContent, /Last scan: NETUM-42/);
+    input.blur();
+    assert.match(status.textContent, /Scanner input unfocused/);
+    assert.match(status.textContent, /Last scan: NETUM-42/);
     focusButton.onclick();
+    assert.match(status.textContent, /Ready to receive/);
+    assert.match(status.textContent, /Last scan: NETUM-42/);
+  } finally {
+    global.document = priorDocument;
+  }
+});
+
+test('keeps unfocused status when a delayed scan result arrives', async () => {
+  const priorDocument = global.document;
+  global.document = fakeDocument();
+  const overlay = { append(panel) { panel.isConnected = true; this.panel = panel; } };
+  let finishScan;
+  try {
+    const input = mountScannerCapture(overlay, () => new Promise(resolve => { finishScan = resolve; }));
+    const [, , captureInput, , status] = overlay.panel.children;
+    input.focus();
+    captureInput.value = 'NETUM-42';
+    captureInput.key('Enter');
+    captureInput.blur();
+    finishScan('No item matched');
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.match(status.textContent, /No item matched/);
+    assert.match(status.textContent, /Scanner input unfocused/);
+    assert.match(status.textContent, /Last scan: NETUM-42/);
   } finally {
     global.document = priorDocument;
   }

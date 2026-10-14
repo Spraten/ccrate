@@ -1,5 +1,5 @@
 """Native QR label previews and one-shot USB printing with durable outcomes."""
-import io,base64,json,pathlib,subprocess,hashlib,os,re
+import io,base64,json,pathlib,subprocess,hashlib,os,re,unicodedata
 import qrcode
 from PIL import Image,ImageDraw,ImageFont
 from ledger import Conflict,uuid
@@ -17,8 +17,12 @@ def probe():
 def font(size):return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',size)
 def _fit_name_lines(content,draw,name_font,available,max_lines):
     measure=lambda text:draw.textbbox((0,0),text,font=name_font)[2]
+    graphemes=_split_graphemes(content)
+    over_wide=next((index for index,grapheme in enumerate(graphemes) if measure(grapheme)>available),None)
+    truncated=over_wide is not None
+    if truncated:graphemes=graphemes[:over_wide]
     lines=[]
-    for paragraph in re.split(r'\r\n?|\n',content):
+    for paragraph in re.split(r'\r\n?|\n',''.join(graphemes)):
         if paragraph=='':
             lines.append('');continue
         current=''
@@ -30,18 +34,35 @@ def _fit_name_lines(content,draw,name_font,available,max_lines):
             if measure(word)<=available:
                 current=word;continue
             chunk=''
-            for character in word:
-                if chunk and measure(chunk+character)>available:
-                    lines.append(chunk);chunk=character
-                else:chunk+=character
+            for grapheme in _split_graphemes(word):
+                if chunk and measure(chunk+grapheme)>available:
+                    lines.append(chunk);chunk=grapheme
+                else:chunk+=grapheme
             current=chunk
         lines.append(current)
-    if len(lines)>max_lines:
-        lines=lines[:max_lines];characters=list(lines[-1])
-        while characters and measure(''.join(characters)+'…')>available:characters.pop()
-        if measure('…')>available:return []
-        lines[-1]=''.join(characters)+'…'
+    if not truncated and len(lines)<=max_lines:return lines
+    if max_lines<1:return []
+    lines=lines[:max_lines];characters=_split_graphemes(lines[-1] if lines else '')
+    while characters and measure(''.join(characters)+'…')>available:characters.pop()
+    if measure('…')>available:return []
+    lines[-1]=''.join(characters)+'…'
     return lines
+
+def _split_graphemes(content):
+    graphemes=[];join_next=False;regional_count=0
+    for character in content:
+        codepoint=ord(character);category=unicodedata.category(character)
+        modifier=0x1F3FB<=codepoint<=0x1F3FF
+        variation=0xFE00<=codepoint<=0xFE0F or 0xE0100<=codepoint<=0xE01EF
+        regional=0x1F1E6<=codepoint<=0x1F1FF
+        extending=category in ('Mn','Mc','Me') or modifier or variation or character=='\u200d'
+        if graphemes and (extending or join_next or (regional and regional_count%2==1)):
+            graphemes[-1]+=character
+        else:
+            graphemes.append(character)
+        join_next=character=='\u200d'
+        regional_count=regional_count+1 if regional else 0
+    return graphemes
 def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=None):
     width=min(384,int(width_mm)*8);height=int(height_mm)*8-16
     if width<256 or height<208:raise ValueError('Loaded labels are too small for this QR layout (minimum 32 x 28 mm)')

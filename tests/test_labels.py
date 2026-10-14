@@ -21,6 +21,14 @@ def _drawn_name_lines(name):
         labels.render({'id':str(uuid4()),'name':name},32,28,code_override='x')
     return drawn
 
+class _FixedWidthDraw:
+    def __init__(self,width):self.width=width
+    def textbbox(self,xy,text,font=None):
+        if text=='e\u0301':return (0,0,3,1)
+        if text=='e\u0301…':return (0,0,4,1)
+        width=sum(10 if ord(character)>0xffff else self.width for character in text)
+        return (0,0,width,1)
+
 class LegacyLabelTextTests(unittest.TestCase):
     def test_explicit_newline_remains_a_line_break_in_the_legacy_preview(self):
         self.assertEqual(_drawn_name_lines('Alpha\nBeta'),['Alpha','Beta'])
@@ -39,6 +47,12 @@ class LegacyLabelTextTests(unittest.TestCase):
         self.assertEqual(len(drawn),4,drawn)
         self.assertEqual(drawn[:3],['Alpha','Beta','Gamma'])
         self.assertTrue(drawn[-1].endswith('…'),drawn)
+
+    def test_overwide_grapheme_is_omitted_from_name_lines(self):
+        self.assertEqual(labels._fit_name_lines('🧰',_FixedWidthDraw(10),None,5,1),[])
+
+    def test_truncation_does_not_split_combining_grapheme(self):
+        self.assertEqual(labels._fit_name_lines('e\u0301🧰',_FixedWidthDraw(1),None,3,1),['…'])
 
 class LabelTests(unittest.TestCase):
     def setUp(self):

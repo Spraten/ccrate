@@ -19,7 +19,7 @@
     help.textContent = 'Power on the scanner. In your computer’s Bluetooth settings, pair “NETUM 2D-C750-Yellow” and choose HID/keyboard mode if prompted. If it does not appear, scan the Bluetooth HID setup barcode in the NETUM guide, then pair again. Click Focus scanner input, then scan. This page cannot read pairing or connection state.';
     const status = document.createElement('p');
     status.setAttribute('role', 'status');
-    status.textContent = 'Ready to receive. Last scan: none';
+    status.textContent = 'Scanner input unfocused. Click Focus scanner input to receive scans. Last scan: none';
     const input = document.createElement('input');
     input.type = 'text';
     input.autocomplete = 'off';
@@ -29,8 +29,14 @@
     input.setAttribute('aria-label', 'Focused barcode scanner input');
     input.placeholder = 'Focus here, then scan';
     let lastScan = 'none';
+    let isFocused = false;
     input.addEventListener('focus', () => {
+      isFocused = true;
       status.textContent = 'Ready to receive. Last scan: ' + lastScan;
+    });
+    input.addEventListener('blur', () => {
+      isFocused = false;
+      status.textContent = 'Scanner input unfocused. Click Focus scanner input to receive scans. Last scan: ' + lastScan;
     });
     const focusButton = document.createElement('button');
     focusButton.type = 'button';
@@ -42,12 +48,13 @@
       try {
         const result = await onScan(code);
         if (!panel.isConnected) return;
+        const unfocused = isFocused ? '' : ' · Scanner input unfocused. Click Focus scanner input to receive scans.';
         status.textContent = result === true
-          ? 'Ready to receive. Last scan: ' + lastScan
-          : String(result || 'Code not recognized') + ' · Last scan: ' + lastScan;
+          ? (isFocused ? 'Ready to receive. Last scan: ' : 'Scanner input unfocused. Click Focus scanner input to receive scans. Last scan: ') + lastScan
+          : String(result || 'Code not recognized') + unfocused + ' · Last scan: ' + lastScan;
       } catch (error) {
         if (panel.isConnected) {
-          status.textContent = error.message + ' · Last scan: ' + lastScan;
+          status.textContent = error.message + (isFocused ? '' : ' · Scanner input unfocused. Click Focus scanner input to receive scans.') + ' · Last scan: ' + lastScan;
         }
       }
     });
