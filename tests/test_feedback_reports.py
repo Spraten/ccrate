@@ -40,6 +40,16 @@ class FeedbackReportServiceTests(unittest.TestCase):
         self.assertEqual(sum(call[0] == "POST" for call in self.calls), 1)
         self.assertIn("server-only-test-token", self.calls[0][2]["Authorization"])
 
+    def test_tweak_category_is_accepted_by_the_existing_report_api(self):
+        request_id = "f04d2e76-57db-4da3-87a8-51e5c804d5db"
+
+        status, result = self.service.submit("actor-a", request_id, "tweak", "Make the report form easier to use.")
+
+        self.assertEqual(status, 201)
+        self.assertEqual(result["status"], "submitted")
+        payload = json.loads(self.calls[0][3])
+        self.assertEqual(payload["title"], "C-Crate feedback: tweak")
+
     def test_uncertain_create_is_reconciled_without_a_second_post(self):
         request_id = "226ad684-01a7-44b8-9f89-6e09914c9861"
         post_attempts = 0

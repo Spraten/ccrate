@@ -17,7 +17,7 @@ MAX_DESCRIPTION = 5000
 RATE_WINDOW_SECONDS = 60 * 60
 RATE_LIMIT = 5
 STATUS_CHECK_SECONDS = 15
-REPORT_TYPES = {"bug", "idea", "question", "other"}
+REPORT_TYPES = {"bug", "idea", "tweak", "question", "other"}
 
 
 def _github_request(method, url, headers, body):

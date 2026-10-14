@@ -7,6 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class FeedbackUiContractTests(unittest.TestCase):
+    def test_tweak_category_uses_the_existing_type_payload_field(self):
+        page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
+        self.assertIn('<option value="tweak">Tweak / improvement</option>', page)
+        self.assertIn('body: JSON.stringify({ type: reportType.value, description: description.value })', page)
+
     def test_recovered_feedback_status_keeps_idle_as_a_literal_type(self):
         helper = (ROOT / "homebox-ui/overlay/lib/feedback-report-state.js").read_text()
         self.assertIn('@returns {{ status: "idle", error: string } | null}', helper)
@@ -18,7 +23,10 @@ class FeedbackUiContractTests(unittest.TestCase):
     def test_submission_status_uses_a_theme_aware_success_color(self):
         page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
         submitted = page[page.index("<p v-if=\"status === 'submitted'\""):page.index("Report submitted.")]
-        self.assertIn("dark:text-green-300", submitted)
+        self.assertIn("ccrate-feedback-submitted", submitted)
+        self.assertNotIn("dark:text-green-300", submitted)
+        styles = (ROOT / "homebox-ui/overlay/assets/css/ccrate.css").read_text()
+        self.assertIn(":root.theme-night #app .ccrate-feedback-submitted", styles)
 
     def test_page_keeps_request_identity_per_native_user_and_never_contains_a_github_token(self):
         page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()

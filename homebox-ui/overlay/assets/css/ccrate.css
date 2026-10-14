@@ -56,3 +56,7 @@
 :root.theme-homebox #app .shadow-md {
   box-shadow: 0 1px 3px rgb(31 52 39 / 7%);
 }
+
+:root.theme-night #app .ccrate-feedback-submitted {
+  color: rgb(134 239 172);
+}

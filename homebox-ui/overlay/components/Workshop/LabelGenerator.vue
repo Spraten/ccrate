@@ -159,7 +159,7 @@ function designerClosed() {
             </div>
           </div>
           <p v-if="selectedTemplate?.profile === 'letter'" class="mt-3 text-sm text-muted-foreground">Letter sheets follow the selected design’s physical label size. Print at Actual Size / 100%.</p>
-          <p v-else class="mt-3 text-sm text-muted-foreground">Preview labels here, then confirm each print sent to the workshop printer.</p>
+          <p v-else class="mt-3 text-sm text-muted-foreground">Preview labels here, then print each one from its card.</p>
           <Button class="mt-4 w-full" :disabled="!canReview" @click="workspace.actions.review()">Preview selected labels</Button>
         </section>
       </div>
