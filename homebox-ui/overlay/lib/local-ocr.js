@@ -111,3 +111,19 @@ export async function suggestNameWithoutOverwritingEdits({ getName, getRevision 
   setName(suggestion);
   return 'applied';
 }
+/**
+ * Recognize all text in a user-selected image entirely in this browser.
+ * @param {Blob} image
+ * @param {() => Promise<TesseractEngine>} [loadEngine]
+ * @returns {Promise<string>}
+ */
+export async function recognizeTextFromImage(image, loadEngine = loadTesseract) {
+  const engine = await loadEngine();
+  const worker = await engine.createWorker('eng');
+  try {
+    const result = await worker.recognize(image);
+    return normalizeText(result.data?.text);
+  } finally {
+    await worker.terminate();
+  }
+}

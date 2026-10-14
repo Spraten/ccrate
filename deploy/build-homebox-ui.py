@@ -348,6 +348,8 @@ def navigation_frontend():
     replace('layouts/default.vue', '    collapsible?: {\n      active: ComputedRef<boolean>;', '    collapsible?: {\n      action?: () => void;\n      active: ComputedRef<boolean>;')
     replace('layouts/default.vue', '<SidebarMenuLink\n                            :href="c.to"', '<SidebarMenuLink v-if="!c.action"\n                            :href="c.to"')
     replace('layouts/default.vue', '                          </SidebarMenuLink>\n                        </SidebarMenuSubItem>', '                          </SidebarMenuLink>\n                          <SidebarMenuButton v-else @click.prevent="c.action?.()"><span>{{ c.name.value }}</span></SidebarMenuButton>\n                        </SidebarMenuSubItem>')
+
+
     layout = BUILD/'layouts/default.vue'
     source = layout.read_text()
     start = source.index('              <!-- makes scanner accessible easily if using legacy header -->')
@@ -388,6 +390,26 @@ def navigation_frontend():
     target.write_text(target.read_text().replace('text: computed(() => v.name.value),', 'text: v.name.value,'))
 
 
+def location_child_contents_frontend():
+    replace(
+        'pages/location/[id]/index/index.vue',
+        '  import LocationCard from "~/components/Location/Card.vue";',
+        '  import ChildContents from "~/components/Location/ChildContents.vue";',
+    )
+    replace(
+        'pages/location/[id]/index/index.vue',
+        '''      <!-- Child locations -->
+      <section v-if="location && location.children && location.children.length > 0" class="mt-6">
+        <BaseSectionHeader class="mb-5"> {{ $t("locations.child_locations") }} </BaseSectionHeader>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <LocationCard v-for="child in location.children" :key="child.id" :location="child" />
+        </div>
+      </section>''',
+        '''      <!-- Expandable, read-only previews for child locations -->
+      <ChildContents v-if="location && location.children?.length" :locations="location.children" />''',
+    )
+
+
 def shell_frontend():
     layout = BUILD/'layouts/default.vue'
     source = layout.read_text()
@@ -418,6 +440,16 @@ def shell_frontend():
   const terminalURL = computed(() => { const url = new URL(window.location.href); url.port = "17749"; url.pathname = "/"; url.search = "?mode=editor"; url.hash = ""; return url.href; });
   const search = ref("");''')
     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import DeviceStatus from "~/components/Workshop/DeviceStatus.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
+
+
+def ocr_popover_frontend():
+    regular = '<DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="shrink-0" />'
+    replace('layouts/default.vue', regular, regular + '\n              <div id="orc-launcher-toolbar" class="contents"></div>')
+    legacy = '<SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />'
+    replace('layouts/default.vue', legacy, legacy + '\n            <div id="orc-launcher-legacy" class="absolute left-14 top-2 z-30 hidden lg:flex"></div>')
+    replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" />\n      </SidebarInset>')
+    replace('layouts/default.vue', '  const search = ref("");', '  const orcLauncherTarget = computed(() => preferences.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
+    replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import OcrPopover from "~/components/Workshop/OcrPopover.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
 
 
 def strip_item_response_short_codes_from_update_tests():
@@ -598,6 +630,8 @@ def prepare():
     # Native sidebar and quick menu, with manager-only entries hidden for members.
     navigation_frontend()
     shell_frontend()
+    ocr_popover_frontend()
+    location_child_contents_frontend()
     replace('layouts/default.vue', 'class="h-9 grow sm:max-w-sm"', 'class="h-9 min-w-0 grow sm:max-w-sm"')
     # Put badges on the actual existing Collection members table.
     path = 'pages/collection/index/members.vue'

@@ -1,6 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from '../homebox-ui/overlay/lib/local-ocr.js';
+import { recognizeNameFromImage, recognizeTextFromImage, suggestNameWithoutOverwritingEdits } from '../homebox-ui/overlay/lib/local-ocr.js';
+
+test('full-text OCR receives the image locally, normalizes whitespace, and terminates its worker', async () => {
+  const image = new Blob(['private photo']);
+  let receivedImage;
+  let terminated = false;
+  const result = await recognizeTextFromImage(image, async () => ({
+    createWorker: async language => {
+      assert.equal(language, 'eng');
+      return {
+        recognize: async source => {
+          receivedImage = source;
+          return { data: { text: '  First line\n\n Second\tline  ' } };
+        },
+        terminate: async () => { terminated = true; },
+      };
+    },
+  }));
+
+  assert.equal(result, 'First line Second line');
+  assert.equal(receivedImage, image);
+  assert.equal(terminated, true);
+});
 
 test('late OCR results never replace a name the user typed while recognition was running', async () => {
   let currentName = '';
@@ -80,4 +102,16 @@ test('OCR prefers a prominent, spatially aligned title and leaves small serial/f
 
   assert.deepEqual(outputOptions, { text: true, blocks: true });
   assert.equal(suggestion, 'EVENTRONIC ET1001 560-Piece Heat Shrink Tube Assortment');
+});
+test('full-text OCR preserves footer text and text beyond the name suggestion limit', async () => {
+  const longBody = '0123456789 '.repeat(30);
+  const recognizedText = `PROMINENT TITLE\n${longBody}\nSmall footer text`;
+  const result = await recognizeTextFromImage(new Blob(['label']), async () => ({
+    createWorker: async () => ({
+      recognize: async () => ({ data: { text: recognizedText } }),
+      terminate: async () => undefined,
+    }),
+  }));
+
+  assert.equal(result, `PROMINENT TITLE ${longBody.trimEnd()} Small footer text`);
 });

@@ -196,6 +196,35 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertIn('nameOcrMessage.value = t("components.form.camera.ocr_running")', generated_modal)
             self.assertIn('setName: (value: string) => { form.name = value; }', generated_modal)
 
+    def test_orc_popover_is_mounted_globally_and_uses_local_ocr_helper(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            previous_build = BUILDER.BUILD
+            BUILDER.BUILD = pathlib.Path(directory)
+            layout = BUILDER.BUILD / "layouts/default.vue"
+            layout.parent.mkdir(parents=True)
+            layout.write_text('''<template>\n  <Sidebar />\n  <SidebarInset class="min-h-dvh max-w-full overflow-hidden bg-background-accent">\n    <div v-if="preferences.displayLegacyHeader">\n      <AppHeaderDecor />\n      <SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />\n      <DeviceStatus v-if="preferences.displayLegacyHeader && terminalHeader" :enabled="preferences.displayLegacyHeader && terminalHeader" class="absolute right-6 top-3 z-30 hidden lg:flex" />\n    </div>\n    <div class="flex min-w-0 grow items-center justify-end gap-2">\n      <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="shrink-0" />\n      <button>Header action</button>\n    </div>\n    <NuxtPage />\n      </SidebarInset>\n</template>\n<script lang="ts" setup>\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";\n  const search = ref("");\n</script>\n''')
+            try:
+                BUILDER.ocr_popover_frontend()
+            finally:
+                BUILDER.BUILD = previous_build
+
+            generated = layout.read_text()
+            self.assertEqual(generated.count("<OcrPopover"), 1)
+            device_status = generated.index('<DeviceStatus v-if="!preferences.displayLegacyHeader')
+            regular_target = generated.index('<div id="orc-launcher-toolbar"')
+            self.assertGreater(regular_target, device_status)
+            sidebar_trigger = generated.index('<SidebarTrigger class="absolute left-2 top-2 hidden lg:flex"')
+            legacy_target = generated.index('<div id="orc-launcher-legacy"')
+            self.assertGreater(legacy_target, sidebar_trigger)
+            self.assertEqual(generated.count('<OcrPopover :launcher-target="orcLauncherTarget" />'), 1)
+            self.assertIn('preferences.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar"', generated)
+            self.assertIn('import OcrPopover from "~/components/Workshop/OcrPopover.vue";', generated)
+            component = (ROOT / "homebox-ui/overlay/components/Workshop/OcrPopover.vue").read_text()
+            self.assertIn('from "~/lib/local-ocr"', component)
+            self.assertIn('<Teleport defer :to="props.launcherTarget">', component)
+            self.assertIn('<Teleport to="body">\n    <section', component)
+            self.assertIn('class="relative flex aspect-[4/3]', component)
+
     def test_prepare_api_test_rewrite_is_idempotent_when_first_fixture_is_already_patched(self):
         source = '''    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;
     void omittedItemDisplayID;

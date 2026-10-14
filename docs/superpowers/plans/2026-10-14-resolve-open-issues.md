@@ -4,7 +4,7 @@
 
 **Current delivery state (2026-10-14):** Draft PR #17 is at `9e5cae57509fa458a3f7140a0a0a1c93e2a8ddab`. The latest commits restored four unreadable GitHub blobs from the exact local readable sources and added the missing checkout-cart regression tests. Sol reviewed both commits; the repaired files' blob hashes match local and GitHub reports them as UTF-8. Current focused checks pass: 52 Python display-ID, builder, navigation, feedback, and cart tests; all 43 Node tests; 17 patchset/builder tests; and JavaScript syntax validation. The 46-test desktop API suite still has Windows hard-link permission failures; GitHub reports no workflow runs. Keep the PR draft until the broader supported-platform checks and remaining product verification are complete. Browser automation remains unavailable here because Playwright is not installed and Bash cannot start in the sandbox. Browser camera flows, physical label printing, NETUM C750 hardware, Raspberry Pi runtime, and live theme changes remain hands-on verification gates.
 
-Issue #9's browser-local name suggestion is in the PR, but its later-requested header toggle and OCR overlay are a separate UX upgrade and are not implemented. The selected direction is a draggable, chat-style pop-out that stays above the app, with camera capture and editable/copyable OCR results. A themed mockup has been shown and approval is pending before implementation. GitHub issue submission requires `CCRATE_GITHUB_TOKEN` in the deployment environment. All 15 issues remain open until the PR is reviewed, merged, and each applicable external gate is satisfied; the Pi release build remains paused.
+Issue #9's browser-local name suggestion is in the PR. The user approved the follow-up header launcher and draggable, chat-style OCR pop-out. The source now mounts one persistent popout, moves its launcher across header modes, captures images locally, supports editable/copyable OCR text, and discards stale scans. Vue 3.5.20 review caught an initial Teleport timing defect; `defer` is now added and the actual Vue renderer confirmed the corrected mount and header-switch behavior. A screenshot is still pending because the local browser is serving an older frontend build. GitHub issue submission requires `CCRATE_GITHUB_TOKEN` in the deployment environment. Issue #18 was added after the original 15-issue audit. The Pi release build remains paused.
 
 **Follow-up audit (2026-10-14):** Sol found no additional source blocker across #3–16. Two edge cases found in the audit were fixed: the legacy Python label renderer truncates at grapheme boundaries and omits over-wide glyphs (#3), and NETUM status retains its unfocused warning when a delayed scan result arrives (#16). The #8 decoded-value omission is fixed in patch 0024, with a focused regression test. A follow-up review found Letter margin/gap edits cleared valid item previews (#5); the fix preserves the item reviews and print records, clears only the composed sheet, and rejects stale in-flight compositions. The full Python suite ran 582 tests: 5 failures, 103 errors, and 9 skips, primarily from the Windows environment (missing `qrcode`/`fcntl`, unsupported symlinks/POSIX mode bits, and unstaged Linux label assets). The 12-test Nuxt builder/patchset group passes. Direct Nuxt preparation succeeds, but production build and Vitest stop before compilation/test collection on Windows with `EPERM` native-realpath failures; typecheck output is invalidated by missing package links. Camera/scanner browser flows, physical output, live Pi behavior, and GitHub delivery remain external verification gates. The isolated staged-snapshot materialization test passes.
 
@@ -34,15 +34,16 @@ Issue #9's browser-local name suggestion is in the PR, but its later-requested h
 ### 2. Add Item capture and form usability — #6, #9, #11
 
 - #6: extract/reuse the existing webcam capture flow in a Vue component, add it to item edit, and reuse the same preview/save path as uploaded photos.
-- #9: current item-form OCR suggestion flow is implemented and its four local OCR tests pass. Queue the UX upgrade: add a header-bar toggle that enables a movable, chat-style pop-out which stays above the app. Let the user drag it around, capture a photo, scan text, then edit or copy the result. Keep recognition browser-local and do not upload photos externally or silently overwrite item text. Show the revised interaction mockup for review before implementing the new overlay.
+- #9: current item-form OCR suggestion and the approved header launcher/chat-style pop-out are implemented in the current working tree. Keep recognition browser-local; allow photo capture and editable/copyable full-text results; never replace edited item text. The renderer-level launcher mount and breakpoint-switch checks pass. Actual running-app preview and screenshot remain pending until a current frontend build can run.
 - #11: move Create Item below photo controls without changing form validation/submission.
 - Verify capture permission failures, retake/use/cancel, persistence on edit, long/multiline OCR candidates, and exact form submission behavior.
 
-### 3. Desktop inventory navigation and theme — #10, #12
+### 3. Desktop inventory navigation, theme, and location previews — #10, #12, #18
 
 - #10: make parent/location selection hierarchical with clear expand/collapse and selected-path context; preserve current selection/save behavior.
 - #12: add a clear light/dark/system choice, persist it, honor system preference only when no saved preference exists, and keep C-Crate layout structure and label-editor theme tokens consistent.
 - Verify accessible controls, similar names, persistence, initial system preference, and live theme changes in the label editor.
+- #18: on a location detail page, allow several child locations to expand independently and preview their direct items inline. Fetch child items and each expanded location's children through the existing authenticated API; recurse for deeper locations; distinguish loading, error/retry, and empty states; keep location/item names navigable and the preview read-only. The first implementation is in the working tree; builder contract tests pass and a fresh Vue review is in progress.
 
 ### 4. Asset identity — #4
 
@@ -70,4 +71,4 @@ Issue #9's browser-local name suggestion is in the PR, but its later-requested h
 
 ## Open issues in scope
 
-`#1, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16`.
+`#1, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #18`.
