@@ -1,0 +1,80 @@
+diff --git a/frontend/components/App/ScannerModal.vue b/frontend/components/App/ScannerModal.vue
+--- a/frontend/components/App/ScannerModal.vue
++++ b/frontend/components/App/ScannerModal.vue
+@@ -70,7 +70,12 @@
+   import MdiAlertCircleOutline from "~icons/mdi/alert-circle-outline";
+   import MdiCameraOutline from "~icons/mdi/camera-outline";
+   import { useDialog } from "@/components/ui/dialog-provider";
+-  import { routeBarcodeScanResult, scannerStatusAfterFrame, type ScannerStatus } from "~/components/Entity/barcode";
++  import {
++    routeBarcodeScanResult,
++    scannerStatusAfterFrame,
++    scannerStatusMessage as formatScannerStatusMessage,
++    type ScannerStatus,
++  } from "~/components/Entity/barcode";
+ 
+   const { t } = useI18n();
+   const { activeDialog, closeDialog, openDialog } = useDialog();
+@@ -89,8 +94,7 @@
+     if (scannerStatus.value === "error") {
+       return `${errorMessage.value || t("scanner.error")} ${t("scanner.camera_error_action")}`;
+     }
+-    if (scannerStatus.value === "detected") return t("scanner.detected_status");
+-    return t(`scanner.${scannerStatus.value}`);
++    return formatScannerStatusMessage(scannerStatus.value, detectedBarcode.value, t);
+   });
+ 
+   const LAST_USED_DEVICE_ID_KEY = "homebox:lastUsedDeviceId";
+diff --git a/frontend/components/Entity/barcode.ts b/frontend/components/Entity/barcode.ts
+--- a/frontend/components/Entity/barcode.ts
++++ b/frontend/components/Entity/barcode.ts
+@@ -178,3 +178,13 @@
+   if (error) return "error";
+   return current === "starting" ? "scanning" : current;
+ }
++
++export function scannerStatusMessage(
++  status: ScannerStatus,
++  barcode: string,
++  translate: (key: string, values?: { barcode: string }) => string
++): string {
++  return status === "detected"
++    ? translate("scanner.detected_status", { barcode })
++    : translate(`scanner.${status}`);
++}
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+--- a/frontend/components/Entity/barcode.test.ts
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -19,6 +19,7 @@
+   lookupBarcodeProducts,
+   openBarcodeDuplicate,
+   routeBarcodeScanResult,
++  scannerStatusMessage,
+   scannerStatusAfterFrame,
+   startBarcodeLookup,
+   type BarcodeDraft,
+@@ -110,6 +111,12 @@
+     expect(scannerStatusAfterFrame("scanning", false, new Error("camera failure"))).toBe("error");
+   });
+ 
++  test("includes the decoded barcode in the visible detected status", () => {
++    const translate = vi.fn((key: string, values?: { barcode: string }) => `${key}:${values?.barcode ?? ""}`);
++    expect(scannerStatusMessage("detected", "X9TEUJR4L", translate)).toBe("scanner.detected_status:X9TEUJR4L");
++    expect(translate).toHaveBeenCalledWith("scanner.detected_status", { barcode: "X9TEUJR4L" });
++  });
++
+   test("selecting a candidate updates the same current draft and preserves existing edits", () => {
+     const draft = { name: "My name", description: "My description", manufacturer: "", modelNumber: "", barcode: "0012345" };
+     const sameDraft = draft;
+diff --git a/frontend/locales/en.json b/frontend/locales/en.json
+--- a/frontend/locales/en.json
++++ b/frontend/locales/en.json
+@@ -933,7 +933,7 @@
+     "scanner": {
+         "barcode_detected_message": "product barcode detected",
+         "camera_error_action": "Check camera permissions or connection. You can close the scanner and enter the barcode manually instead.",
+-        "detected_status": "Barcode recognized. Use it to add an item.",
++        "detected_status": "Barcode detected: {barcode}. Use it to add an item.",
+         "error": "An error occurred while scanning",
+         "invalid_url": "Invalid barcode URL",
+         "no_sources": "No video sources available",
