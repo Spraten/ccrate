@@ -1,742 +1,655 @@
-#!/usr/bin/env python3
-"""Build a native Homebox frontend overlay without modifying the upstream checkout.
+Û^š›bh¥êß¢¹­…â'ŠØš–,ŞçÚº[C®+Ş²Š^­«b¢z'¶…ŠW’ÊË^ššè¾'^­ö¢•çHÈKİ\Ü‹Øš[‹Ù[ˆ]ÛŒÂˆˆˆZ[H˜]]™HÛYX›Şœ›Û[™İ™\›^HÚ]İ][ÙYZ[™ÈH\İ™X[HÚXÚÛİ]‚‚’[œİ[H[›™Yœ›Û[™\[™[˜ÚY\È[ˆÛÜšËÚÛYX›Ş]ZKXZ[š\œİˆİ]]œİ^\ÈİYÙY[[H™\šYšYY™[X\ÙH\ÈÙ[XİYHÛÜšËÚÛYX›Ş]ZKXİ\œ™[‚ˆˆˆ‚š[\Ü\™Ü\œÙBš[\ÜÜÂš[\ÜœÛÛ‚š[\Ü]X‚š[\ÜÚ][š[\ÜİXœ›ØÙ\ÜÂš[\ÜŞ\Âš[\Ü™Bš[\Ü™XY[™Â™œ›ÛHÛÛXİ[ÛœÈ[\ÜÛİ[\‚‚”“ÓÕH]X‹”]
+×Ùš[W×ÊKœ™\ÛÛ™J
+Kœ\™[ÖÌWBšYˆİŠ]X‹”]
+×Ùš[W×ÊKœ™\ÛÛ™J
+Kœ\™[
+H›İ[ˆŞ\Ëœ]‚ˆŞ\Ëœ]š[œÙ\
+İŠ]X‹”]
+×Ùš[W×ÊKœ™\ÛÛ™J
+Kœ\™[
+JB™œ›ÛHÛYX›ŞÜ]ÚÙ][\ÜÛİ\˜ÙWØÛÛ[Z]•RSH“ÓÕÈ	İÛÜšËÚÛYX›Ş]ZKXZ[	Â•ÓÓÒRS—Ô“ÓÕH“ÓÕÈ	İÛÜšËİÛÛÚZ[œÉÂ•TÕ‘PSWÔ“ÓÕH“ÓÕ‚‚™Yˆ™\XÙJ]Û™]ÊN‚ˆ\™Ù]H•RSÈ]ˆÛİ\˜ÙHH\™Ù]œ™XYİ^
 
-Install the pinned frontend dependencies in work/homebox-ui-build first. Output
-stays staged until a verified release is selected by work/homebox-ui-current.
-"""
-import argparse
-import os
-import json
-import pathlib
-import shutil
-import subprocess
-import sys
-import re
-import threading
-from collections import Counter
+BˆYˆÛİ\˜ÙK˜Ûİ[
+Û
+HOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H]Ú[˜ÚÜˆ[ˆÜ]IÊBˆ\™Ù]Üš]Wİ^
+Ûİ\˜ÙKœ™\XÙJÛ™]ÊJB‚‚™YˆÛÛ™šYİ\™WİZWØÛÛ\Û™[Ù\ØÛİ™\J
+N‚ˆÈÙY\ÚYÛ‰ÜÈ\TØÜš\˜\œ™[È[\ÜX›HÚ[H^]]ËY\ØÛİ™\œÈÛ›BˆÈHYHÛÛ\Û™[È^H[[[Û˜[H^Üˆ™YÚ\İ\ˆY\ˆÚYÛ‹[^ˆÈÛÈ]ÈÛÛ\Û™[Î™\œÈÛÚÈ\È[™XYH\[™Y]È\™XİÜK‚ˆ™\XÙJˆ	Û^˜ÛÛ™šYËÉËˆ	ÉÉÈ[Ù[\ÎˆÂˆ^œËİZ[Ú[™ÜÜÈ‹ˆ[šXKÛ^‹ˆY]\ÙKÛ^‹ˆš]K\ØKÛ^‹ˆ[œYÚ[‹ZXÛÛœËÛ^‹ˆœÚYÛ‹[^‹ˆ^Ù\Û[‹ˆK	ÉÉËˆ	ÉÉÈ[Ù[\ÎˆÂˆ^œËİZ[Ú[™ÜÜÈ‹ˆ[šXKÛ^‹ˆY]\ÙKÛ^‹ˆš]K\ØKÛ^‹ˆ[œYÚ[‹ZXÛÛœËÛ^‹ˆœÚYÛ‹[^‹ˆ^Ù\Û[‹ˆ
+ÛÜ[ÛœË^
+HOˆÂˆ^šÛÚÊ˜ÛÛ\Û™[Î™\œÈ‹\œÈOˆÂˆ›Üˆ
+][™^HÈ[™^\œË›[™İÈ[™^
+ÊÊHÂˆÛÛœİÛİ\˜ÙHH\œÖÚ[™^NÂˆYˆ
+\Ûİ\˜ÙJHÛÛ[YNÂˆÛÛœİ\ˆH\[ÙˆÛİ\˜ÙHOOHœİš[™ÈˆÈÈ]ˆÛİ\˜ÙK^[œÚ[ÛœÎˆ×HHˆÛİ\˜ÙNÂˆYˆ
+\‹œ]œ™\XÙP[
+—‹‹ÈŠKš[˜ÛY\Ê˜ÛÛ\Û™[ËİZHŠJHÂˆ\‹™^[œÚ[ÛœÈHÈYH—NÂˆ\œÖÚ[™^HH\ÂˆBˆBˆJNÂˆKˆK	ÉÉËˆ
+B‚‚™Yˆš[\—ÚÛ›İÛ—İØ\ÚWİØ\›š[™Êİ]]
+N‚ˆˆˆ‘›ÜÛ›HH^Xİ›ÙHĞTÒH›İXÙHÛ›İÛˆÈXØÛÛ\[HHH˜[˜XÚËˆˆˆ‚ˆ™]\›ˆ™KœİXŠˆ‰ÊÛJW‘T”“Ôˆ
+›ÙN—
+×
+H^\š[Y[[Ø\›š[™ÎˆĞTÒH\È[ˆ^\š[Y[[™X]\™H[™ZYÚÚ[™ÙH][H[YJÎ—×Ÿ	
+IËˆ	ÉËˆİ]]ˆ
+B‚‚™Yˆ[—Ùœ›Û[™ØÛÛ[X[™
+ÛÛ[X[™
+‹İÙ[ŠN‚ˆ›ØÙ\ÜÈHİXœ›ØÙ\ÜË”Ü[ŠˆÛÛ[X[™ˆİÙXİÙˆ[Y[‹ˆİİ]\İXœ›ØÙ\ÜË”TKˆİ\œ\İXœ›ØÙ\ÜË”TKˆ^UYKˆ[˜ÛÙ[™ÏH]‹N‹ˆ\œ›ÜœÏHœ™\XÙH‹ˆ
+B‚ˆYˆ›ÜØ\™
+Ûİ\˜ÙK\İ[˜][ÛŠN‚ˆ›Üˆ[™H[ˆÛİ\˜ÙN‚ˆ[™HHš[\—ÚÛ›İÛ—İØ\ÚWİØ\›š[™Ê[™JBˆYˆ[™N‚ˆ\İ[˜][Û‹Üš]J[™JBˆ\İ[˜][Û‹™›\Ú
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-if str(pathlib.Path(__file__).resolve().parent) not in sys.path:
-    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from homebox_patchset import source_commit
-BUILD = ROOT / 'work/homebox-ui-build'
-TOOLCHAIN_ROOT = ROOT / 'work/toolchains'
-UPSTREAM_ROOT = ROOT
+B‚ˆİ]]İ™XYÈHÂˆ™XY[™Ë•™XY
+\™Ù]Y›ÜØ\™\™ÜÏJ›ØÙ\ÜËœİİ]Ş\Ëœİİ]
+JKˆ™XY[™Ë•™XY
+\™Ù]Y›ÜØ\™\™ÜÏJ›ØÙ\ÜËœİ\œ‹Ş\Ëœİ\œŠJKˆBˆ›Üˆ™XY[ˆİ]]İ™XYÎ‚ˆ™XYœİ\
 
+Bˆ™]\›˜ÛÙHH›ØÙ\ÜËØZ]
 
-def replace(path, old, new):
-    target = BUILD / path
-    source = target.read_text()
-    if source.count(old) != 1:
-        raise RuntimeError(f'Upstream changed: expected one patch anchor in {path}')
-    target.write_text(source.replace(old, new))
+Bˆ›Üˆ™XY[ˆİ]]İ™XYÎ‚ˆ™XYš›Ú[Š
+BˆYˆ™]\›˜ÛÙN‚ˆ˜Z\ÙHİXœ›ØÙ\ÜËØ[Y›ØÙ\ÜÑ\œ›ÜŠ™]\›˜ÛÙKÛÛ[X[™
+Bˆ™]\›ˆİXœ›ØÙ\ÜËÛÛ\]Y›ØÙ\ÜÊÛÛ[X[™™]\›˜ÛÙJB‚‚™Yˆœ˜[™Ùœ›Û[™
 
+N‚ˆÈœ˜[™˜[Y\È[™\ÜÙ]ÈÚ[™ÙNÈTHY[YšY\œË[YHÙ^\È[™T“Èİ^H˜]]™K‚ˆ›Üˆ›Û\ˆ[ˆ
+	ÜYÙ\ÉË	ØÛÛ\Û™[ÉË	Û^[İ]ÉÊN‚ˆ›Üˆ][ˆ
+•RSÙ›Û\ŠKœ™ÛØŠ	Ê‹YIÊN‚ˆ^H™KœİXŠ‰×’ÛYJÎ›Ş›Ş
+W‰Ë	ĞËPÜ˜]IË]œ™XYİ^
 
-def configure_ui_component_discovery():
-    # Keep shadcn's TypeScript barrels importable while Nuxt auto-discovers only
-    # the Vue components they intentionally export. Register after shadcn-nuxt
-    # so its components:dirs hook has already appended its directory.
-    replace(
-        'nuxt.config.ts',
-        '''  modules: [
-    "@nuxtjs/tailwindcss",
-    "@pinia/nuxt",
-    "@vueuse/nuxt",
-    "@vite-pwa/nuxt",
-    "unplugin-icons/nuxt",
-    "shadcn-nuxt",
-    "@nuxt/eslint",
-  ],''',
-        '''  modules: [
-    "@nuxtjs/tailwindcss",
-    "@pinia/nuxt",
-    "@vueuse/nuxt",
-    "@vite-pwa/nuxt",
-    "unplugin-icons/nuxt",
-    "shadcn-nuxt",
-    "@nuxt/eslint",
-    (_options, nuxt) => {
-      nuxt.hook("components:dirs", dirs => {
-        for (let index = 0; index < dirs.length; index++) {
-          const source = dirs[index];
-          if (!source) continue;
-          const dir = typeof source === "string" ? { path: source, extensions: [] } : source;
-          if (dir.path.replaceAll("\\\\", "/").includes("components/ui")) {
-            dir.extensions = ["vue"];
-            dirs[index] = dir;
-          }
-        }
-      });
-    },
-  ],''',
-    )
+JBˆ]Üš]Wİ^
+^
+Bˆ›Üˆ][ˆ
+•RSÉÛ^˜ÛÛ™šYËÉË•RSÉÛX‹Ù]Kİ[Y\ËÉÊN‚ˆ^H]œ™XYİ^
 
+Kœ™\XÙJ	È’ÛYX›Ş‰Ë	ÈËPÜ˜]H‰ÊKœ™\XÙJ	È’ÛYH[™[ÜH\‰Ë	È•ÛÜšÜÚÜ[™[ÜH[™\]Z\Y[ÚXÚÛİ]‰ÊBˆ]Üš]Wİ^
+^
+BˆYˆ˜[Y\Ê˜[YJN‚ˆYˆ\Ú[œİ[˜ÙJ˜[YKİŠNˆ™]\›ˆ˜[YKœ™\XÙJ	ÒÛYP›Ş	Ë	ĞËPÜ˜]IÊKœ™\XÙJ	ÒÛYX›Ş	Ë	ĞËPÜ˜]IÊBˆYˆ\Ú[œİ[˜ÙJ˜[YKXİ
+Nˆ™]\›ˆÚÙ^Nˆ˜[Y\Ê][JH›ÜˆÙ^K][H[ˆ˜[YKš][\Ê
+_BˆYˆ\Ú[œİ[˜ÙJ˜[YK\İ
+Nˆ™]\›ˆİ˜[Y\Ê][JH›Üˆ][H[ˆ˜[YWBˆ™]\›ˆ˜[YBˆ›Üˆ][ˆ
+•RSÉÛØØ[\ÉÊK™ÛØŠ	Ê‹šœÛÛ‰ÊN‚ˆ]Üš]Wİ^
+œÛÛ‹™[\Ê˜[Y\ÊœÛÛ‹›ØYÊ]œ™XYİ^
+[˜ÛÙ[™ÏIİ]‹N	ÊJJK[œİ\™WØ\ØÚZOQ˜[ÙK[™[LŠJÉ×‰Ë[˜ÛÙ[™ÏIİ]‹N	ÊBˆÙÛÈH
+“ÓÕÉÚÚ[ÜÚËØœ˜[™[™ËØØXÚKXÜ™X]Kœİ™ÉÊKœ™XYİ^
 
-def filter_known_wasi_warning(output):
-    """Drop only the exact Node WASI notice known to accompany the Pi fallback."""
-    return re.sub(
-        r'(?m)^ERROR \(node:\d+\) ExperimentalWarning: WASI is an experimental feature and might change at any time(?:\r?\n|$)',
-        '',
-        output,
-    )
+Bˆ
+•RSÉØÛÛ\Û™[ËĞ\ÓÙÛËYIÊKÜš]Wİ^
+	Ï[\]O—‰ÊÛÙÛÊÉÏİ[\]O—‰ÊBˆÚ][˜ÛÜ]™YJ“ÓÕÉÚÚ[ÜÚËØœ˜[™[™ÉË•RSÉÜX›XÉË\œ×Ù^\İÛÚÏUYJBˆ™\XÙJ	ÜYÙ\ËÚ[™^YIË	ÈÛYP—ˆ\ÙÛÈÛ\ÜÏH‹[X‹MËLLˆˆÏ—ˆ	Ë	Ï\ÙÛÈ\šXKZY[HYHˆÛ\ÜÏH›\‹LÈÚ^™KLMÚš[šËLˆÏÜ[ËPÜ˜]OÜÜ[‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÈÓ^[šÏ——ˆÛÛXİ[Û”Ù[XİÜˆÏ‰Ë	ÈÜ[ˆÛ\ÜÏH˜›ØÚÈ^XÙ[\ˆ^X˜\ÙH›ÛX›ÛÜ›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—NšY[ˆËPÜ˜]OÜÜ[—ˆÓ^[šÏ——ˆÛÛXİ[Û”Ù[XİÜˆÏ‰ÊB‚‚™Yˆ][WÛÙ×Ùœ›Û[™
 
+N‚ˆÈÛ™H˜Z[XÛÜÙY[\]H[˜ÚÜˆÙY\ÈH\ØÛÜİ\™H™\ÚYH˜]]™H]Z[Ë‚ˆ]H	ÜYÙ\ËÚ][KÖÚYKÚ[™^YIÂˆ™\XÙJ]	È[\ÜX™[XZÙ\ˆœ›ÛIË	È[\ÜÛÜšÜÚÜ][SÙÈœ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜÒ][SÙËYH×ˆ[\Ü][SØ[œÈœ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜÒ][SØ[œËYH×ˆ[\ÜX™[XZÙ\ˆœ›ÛIÊBˆ]Z[×Ø[˜ÚÜˆH	ÈÑ]Z[ÔÙXİ[Û—ˆĞ˜\ÙPØ\™——ˆKKH[][™È[ˆ\È\È›İ™[™\™YYˆÛˆ[›İ\ˆYÙHKO‰Âˆ™\XÙJ]]Z[×Ø[˜ÚÜ‹	ÈÑ]Z[ÔÙXİ[Û—ˆ]ˆ‹ZYHš][K™\Ü^RYˆÛ\ÜÏH™›^][\ËXÙ[\ˆØ\LˆMˆ‹LˆÜ[ˆÛ\ÜÏH^\ÛH^[]]YY›Ü™YÜ›İ[™ˆ]OH‘Ù[™\˜]Yœ›ÛH][H\H[™[İÜ˜YÙH]È™YÙ[™\˜]YÚ[ˆH][H[İ™\Ëˆ‘\Ü^HQÜÜ[ÛÙHÛ\ÜÏH™›Û[[Û›È›Û\Ù[ZX›ÛŞÈ][K™\Ü^RY_OØÛÙOÛÜU^^Hš][K™\Ü^RYˆšXÛÛ‹\Ú^™OHŒMˆˆÏÙ]—ˆ]ˆ‹ZYHš][KœÚÜÛÙHˆÛ\ÜÏH™›^][\ËXÙ[\ˆØ\LˆMˆ‹MÜ[ˆÛ\ÜÏH^\ÛH^[]]YY›Ü™YÜ›İ[™”ÚÜÛÙOÜÜ[ÛÙHÛ\ÜÏH™›Û[[Û›È›Û\Ù[ZX›ÛŞÈ][KœÚÜÛÙH_OØÛÙOÛÜU^^Hš][KœÚÜÛÙHˆšXÛÛ‹\Ú^™OHŒMˆˆÏÙ]—ˆĞ˜\ÙPØ\™——ˆÛÜšÜÚÜ][SÙÈ‹ZYHˆZ\Ó™\İYˆš][KZYHš][RYˆÏ——ˆKKH[][™È[ˆ\È\È›İ™[™\™YYˆÛˆ[›İ\ˆYÙHKO‰ÊB‚‚™Yˆ[İ™WØÜ™X]WØXİ[Ûœ×ØY\—Üİ×Ü™]šY]ÊÛİ\˜ÙJN‚ˆˆˆ’ÙY\›İ^\İ[™ÈÜ™X]HXİ[ÛœÈY\ˆ\ØYY\İÈ™]šY]ÜËˆˆˆ‚ˆXİ[Û—ÛÜ[ˆH	È]ˆÛ\ÜÏH›]M›^›^\›İË\™]™\œÙH‰ÂˆXİ[Û—Üİ\HÛİ\˜ÙK™š[™
+Xİ[Û—ÛÜ[ŠBˆ™]šY]×Üİ\HÛİ\˜ÙK™š[™
+	ÈİÕ\ØY\”™]šY]×‰ÊBˆYˆXİ[Û—Üİ\Üˆ™]šY]×Üİ\‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Õ\İ™X[HÚ[™ÙYˆ^XİYHÜ™X]HXİ[ÛœÈ[™İÈ™]šY]È[ˆÜ™X]S[Ù[YIÊBˆYˆÛİ\˜ÙK˜Ûİ[
+Xİ[Û—ÛÜ[ŠHOHHÜˆÛİ\˜ÙK˜Ûİ[
+	ÈİÕ\ØY\”™]šY]×‰ÊHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™HÜ™X]HXİ[Ûˆ›ØÚÈ[™İÈ™]šY]È[ˆÜ™X]S[Ù[YIÊB‚ˆXİ[Û—ØÛÜÙHHÛİ\˜ÙK™š[™
+	×ˆÙ]‰ËXİ[Û—Üİ\
+Bˆ]Û—ÙÜ›İ\Üİ\HÛİ\˜ÙK™š[™
+	È]Û‘Ü›İ\‰ËXİ[Û—Üİ\Xİ[Û—ØÛÜÙJBˆYˆXİ[Û—ØÛÜÙHÜˆ]Û—ÙÜ›İ\Üİ\‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Õ\İ™X[HÚ[™ÙYˆ^XİYHÜ™X]H]ÛœÈ[œÚYHZ\ˆXİ[ÛœÈ›ØÚÉÊBˆ]Û—ÙÜ›İ\Ù[™HÛİ\˜ÙK™š[™
+	ÈĞ]Û‘Ü›İ\‰Ë]Û—ÙÜ›İ\Üİ\
+BˆYˆ]Û—ÙÜ›İ\Ù[™Üˆ]Û—ÙÜ›İ\Ù[™ˆXİ[Û—ØÛÜÙN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Õ\İ™X[HÚ[™ÙYˆ^XİYHÜ™X]H]ÛœÈ[œÚYHZ\ˆXİ[ÛœÈ›ØÚÉÊBˆYˆÛİ\˜ÙVØXİ[Û—Üİ\
+È[ŠXİ[Û—ÛÜ[ŠN˜]Û—ÙÜ›İ\Üİ\Kœİš\
 
-def run_frontend_command(command, *, cwd, env):
-    process = subprocess.Popen(
-        command,
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+HÜˆÛİ\˜ÙVØ]Û—ÙÜ›İ\Ù[™
+È[Š	ÈĞ]Û‘Ü›İ\‰ÊN˜Xİ[Û—ØÛÜÙWKœİš\
 
-    def forward(source, destination):
-        for line in source:
-            line = filter_known_wasi_warning(line)
-            if line:
-                destination.write(line)
-                destination.flush()
+N‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Õ\İ™X[HÚ[™ÙYˆ^XİYÛ›HHÜ™X]H]ÛˆÜ›İ\[œÚYH]ÈXİ[ÛœÈ›ØÚÉÊBˆXİ[Û—Ù[™HXİ[Û—ØÛÜÙH
+È[Š	×ˆÙ]‰ÊBˆXİ[ÛœÈHÛİ\˜ÙVØXİ[Û—Üİ\˜Xİ[Û—Ù[™BˆYˆXİ[ÛœË˜Ûİ[
+	İ\OHœİX›Z]‰ÊHOHHÜˆXİ[ÛœË˜Ûİ[
+	ĞÛXÚÏH˜Ü™X]J˜[ÙJH‰ÊHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Õ\İ™X[HÚ[™ÙYˆ^XİY›İ^\İ[™ÈÜ™X]HXİ[ÛœÈ[ˆÜ™X]S[Ù[YIÊBˆYˆ™]šY]×Üİ\Xİ[Û—Üİ\‚ˆ™]\›ˆÛİ\˜ÙB‚ˆYˆÛİ\˜ÙVØXİ[Û—Ù[™œ™]šY]×Üİ\HOH	×—‰Î‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Õ\İ™X[HÚ[™ÙYˆ^XİYÜ™X]HXİ[ÛœÈ\™XİH™Y›Ü™HHİÈ™]šY]ÉÊBˆ™]šY]×İY×Ù[™HÛİ\˜ÙK™š[™
+	Ï‰Ë™]šY]×Üİ\
+BˆYˆ™]šY]×İY×Ù[™ÜˆÛİ\˜ÙVÜ™]šY]×İY×Ù[™HWHOH	ËÉÎ‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Õ\İ™X[HÚ[™ÙYˆ^XİYHÙ[‹XÛÜÚ[™ÈİÈ™]šY]È[ˆÜ™X]S[Ù[YIÊBˆ™]šY]×Ù[™H™]šY]×İY×Ù[™
+ÈBˆ™]\›ˆÛİ\˜ÙVÎ˜Xİ[Û—Üİ\H
+È	×—‰È
+ÈÛİ\˜ÙVÜ™]šY]×Üİ\œ™]šY]×Ù[™H
+È	×—‰È
+ÈXİ[ÛœÈ
+ÈÛİ\˜ÙVÜ™]šY]×Ù[™—B‚‚™Yˆ™\İÙœ›Û[™
 
-    output_threads = [
-        threading.Thread(target=forward, args=(process.stdout, sys.stdout)),
-        threading.Thread(target=forward, args=(process.stderr, sys.stderr)),
-    ]
-    for thread in output_threads:
-        thread.start()
-    returncode = process.wait()
-    for thread in output_threads:
-        thread.join()
-    if returncode:
-        raise subprocess.CalledProcessError(returncode, command)
-    return subprocess.CompletedProcess(command, returncode)
+N‚ˆ™\XÙJ	ÛX‹Ø\KØÛ\ÜÙ\ËÚ][\ËÉË	ÈÜ™\OÎˆİš[™ÎÉË	ÈÜ™\OÎˆİš[™Î×ˆ\ÓØØ][ÛÎˆ›ÛÛX[ÉÊBˆ™\XÙJˆ	ØÛÛ\Û™[ËİZKÙX[ÙË\›İšY\‹İ][ËÉËˆ	ÈÑX[ÙÒQÜ™X]Q[]WN—ˆÈ˜\ÙU\Nˆš][HÈ›ÙXİÎˆ˜\˜ÛÙT›ÙXİÈ˜\˜ÛÙOÎˆİš[™ÎÈİX’][OÎˆYNÈ™\İ[YOÎˆYHWˆÈ˜\ÙU\Nˆ›ØØ][ÛˆˆNÉËˆ	ÈÑX[ÙÒQÜ™X]Q[]WNˆ
+ˆÈ˜\ÙU\Nˆš][HÈ›ÙXİÎˆ˜\˜ÛÙT›ÙXİÈ˜\˜ÛÙOÎˆİš[™ÎÈİX’][OÎˆYNÈ™\İ[YOÎˆYHWˆÈ˜\ÙU\Nˆ›ØØ][ÛˆˆWˆ
+H	ˆÈ\™[YÎˆİš[™ÈNÉËˆ
+Bˆ]H	ØÛÛ\Û™[ËÑ[]KĞÜ™X]S[Ù[YIÂˆ™\XÙJ]	Î™[]K]\\ÏHœİX’][PÜ™X]HÈ[]U\\Ë™š[\ŠOˆ]š\ÓØØ][ÛŠHˆ[]U\\È‰Ë	Î™[]K]\\ÏH™[]U\\È‰ÊBˆ\™Ù]H•RSÜ]ˆÛİ\˜ÙHH\™Ù]œ™XYİ^
 
+BˆÈÛ\ˆœ›Û[™[œÈY›İY][˜ÛYH[Ù[[[X™\ˆ[™[™ËˆY]ˆÈÛ›HÚ[ˆXœÙ[È˜\˜ÛÙKX]Ø\™H[œÈ[™XYHİ\HHÛÛ\]H›İË‚ˆYˆ	İ‹[[Ù[H™›Ü›K›[Ù[[X™\ˆ‰È›İ[ˆÛİ\˜ÙN‚ˆ™\XÙJ]	È›Ü›U^šY[ˆ‹ZYHˆ\Ù[XİY[]U\OËš\ÓØØ][Ûˆ—ˆ‹[[Ù[›[X™\H™›Ü›Kœ]X[]H‰Ë	È›Ü›U^šY[‹ZYHˆ\Ù[XİY[]U\OËš\ÓØØ][Ûˆˆ‹[[Ù[H™›Ü›K›[Ù[[X™\ˆˆX™[H“[Ù[[X™\ˆˆ›X^[[™İHŒMHˆÏ—ˆ›Ü›U^šY[ˆ‹ZYHˆ\Ù[XİY[]U\OËš\ÓØØ][Ûˆ—ˆ‹[[Ù[›[X™\H™›Ü›Kœ]X[]H‰ÊBˆ[YˆÛİ\˜ÙK˜Ûİ[
+	İ‹[[Ù[H™›Ü›K›[Ù[[X™\ˆ‰ÊHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H[Ù[[[X™\ˆÛÛ›Û[ˆÜ]IÊBˆYˆ	Û[Ù[[X™\ˆˆ‹	È›İ[ˆÛİ\˜ÙN‚ˆ™\XÙJ]	È˜[YNˆˆ‹ˆ]X[]NˆK	Ë	È˜[YNˆˆ‹ˆ[Ù[[X™\ˆˆ‹ˆ]X[]NˆK	ÊBˆ[YˆÛİ\˜ÙK˜Ûİ[
+	Û[Ù[[X™\ˆˆ‹	ÊHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H[Ù[[[X™\ˆ›Ü›HšY[[ˆÜ]IÊBˆYˆ	Ù›Ü›K›[Ù[[X™\ˆHˆÉÈ›İ[ˆÛİ\˜ÙN‚ˆ™\XÙJ]	È›Ü›K›˜[YHHˆ×ˆ›Ü›Kœ]X[]HHNÉË	È›Ü›K›˜[YHHˆ×ˆ›Ü›K›[Ù[[X™\ˆHˆ×ˆ›Ü›Kœ]X[]HHNÉÊBˆ\™Ù]H•RSÜ]ˆ^H\™Ù]œ™XYİ^
 
-def brand_frontend():
-    # Brand values and assets change; API identifiers, theme keys and URLs stay native.
-    for folder in ('pages', 'components', 'layouts'):
-        for path in (BUILD/folder).rglob('*.vue'):
-            text = re.sub(r'\bHome(?:Box|box)\b', 'C-Crate', path.read_text())
-            path.write_text(text)
-    for path in (BUILD/'nuxt.config.ts', BUILD/'lib/data/themes.ts'):
-        text = path.read_text().replace('"Homebox"', '"C-Crate"').replace('"Home Inventory App"', '"Workshop inventory and equipment checkout"')
-        path.write_text(text)
-    def values(value):
-        if isinstance(value, str): return value.replace('HomeBox', 'C-Crate').replace('Homebox', 'C-Crate')
-        if isinstance(value, dict): return {key: values(item) for key, item in value.items()}
-        if isinstance(value, list): return [values(item) for item in value]
-        return value
-    for path in (BUILD/'locales').glob('*.json'):
-        path.write_text(json.dumps(values(json.loads(path.read_text(encoding='utf-8'))), ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-    logo = (ROOT/'kiosk/branding/caci-create.svg').read_text()
-    (BUILD/'components/App/Logo.vue').write_text('<template>\n'+logo+'</template>\n')
-    shutil.copytree(ROOT/'kiosk/branding', BUILD/'public', dirs_exist_ok=True)
-    replace('pages/index.vue', '            HomeB\n            <AppLogo class="-mb-4 w-12" />\n            x', '<AppLogo aria-hidden="true" class="mr-3 size-14 shrink-0" /><span>C-Crate</span>')
-    replace('layouts/default.vue', '          </NuxtLink>\n\n          <CollectionSelector />', '            <span class="block text-center text-base font-bold group-data-[collapsible=icon]:hidden">C-Crate</span>\n          </NuxtLink>\n\n          <CollectionSelector />')
+BˆÙ[XİÜˆH	È][TÙ[XİÜ—‰ÂˆYˆ^˜Ûİ[
+Ù[XİÜŠHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™HİX‹Z][HÙ[XİÜˆ[ˆÜ]IÊBˆİ\H^š[™^
+Ù[XİÜŠBˆ[™H^š[™^
+	×ˆÏ‰Ëİ\
+H
+È[Š	×ˆÏ‰ÊBˆ^H^Îœİ\Jİ^Ù[™—Bˆ[\ÜØ›ØÚÈH^İ^š[™^
+	È[\Ü\HÉÊN^š[™^
+	ÈHœ›ÛHŸŸ‹ÛX‹Ø\Kİ\\ËÙ]KXÛÛ˜XİÈÉÊWBˆYˆ	Ñ[]Tİ[[X\K	È›İ[ˆ[\ÜØ›ØÚÎ‚ˆYˆ^˜Ûİ[
+	È[]PÜ™X]K	ÊHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H[]PÜ™X]H[\Ü[ˆÜ]IÊBˆ^H^œ™\XÙJ	È[]PÜ™X]K	Ë	È[]PÜ™X]Kˆ[]Tİ[[X\K	ÊBˆ[Yˆ[\ÜØ›ØÚË˜Ûİ[
+	Ñ[]Tİ[[X\K	ÊHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H[]Tİ[[X\H[\Ü[ˆÜ]IÊBˆ^H^œ™\XÙJ	ØÛÛœİ›İ[™HØØ][ÛœË˜[YK™š[™
+OˆšYOOH]K™Y˜][ØØ][ÛˆKšY
+NÉË	ØÛÛœİÈ]Nˆ›İ[™HH]ØZ]\Kš][\Ë™Ù]
+]K™Y˜][ØØ][Û‹šY
+NÉÊBˆ^H^œ™\XÙJ	ÛØØ][ÛˆØØ][ÛœË˜[YH	‰ˆØØ][ÛœË˜[YK›[™İˆÈØØ][ÛœË˜[YVÌHˆ
+ßH\È[]Sİ]
+IË	ÛØØ][Ûˆ[\È[]Tİ[[X\H[	ÊBˆ^H^œ™\XÙJ	È›Ü›Kœ\™[YH[ÉË	È›Ü›Kœ\™[YH[×ˆ›Ü›K›ØØ][ÛˆH[ÉÊBˆ^H^œ™\XÙJ	È\™[˜[YHH]NÉË	È\™[][SØØ][Û’YH]KšYÉÊBˆİ\H^š[™^
+	ÈYˆ
+]Kœ\™[
+HÉÊNÈ[™H^š[™^
+	×ˆIËİ\
+Bˆ^H^Îœİ\Jİ^Ù[™—BˆØØ][Û—ØÛÛ^Ø[˜ÚÜˆH	ÉÉÈÛÛœİØÒYHØØ][Û’Y˜[YHÈØØ][Û’Y˜[YHˆ\™[][SØØ][Û’YÂˆ\R[š]X[˜\˜ÛÙT\˜[PY\ÛÛ^
+[š]X[˜\˜ÛÙK›Ü›KÛÚİ\˜\˜ÛÙK
 
+HOˆÂˆYˆ
+ØÒY
+HÂˆÛÛœİ›İ[™HØØ][ÛœË˜[YK™š[™
+OˆšYOOHØÒY
+NÂˆYˆ
+›İ[™
+HÂˆ›Ü›K›ØØ][ÛˆH›İ[™ÂˆBˆB‚ˆYˆ
+YÒY˜[YJHÉÉÉÂˆYˆ^˜Ûİ[
+ØØ][Û—ØÛÛ^Ø[˜ÚÜŠHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H˜\˜ÛÙKX]Ø\™HØØ][ÛˆÛÛ^[˜ÚÜˆ[ˆÜ]IÊBˆ^H^œ™\XÙJˆØØ][Û—ØÛÛ^Ø[˜ÚÜ‹ˆ	ÉÉÈÛÛœİØÒYH\˜[\Ëœ\™[YØØ][Û’Y˜[YH\™[][SØØ][Û’YÂˆYˆ
+ØÒY
+HÂˆÛÛœİÈ]HHH]ØZ]\Kš][\Ë™Ù]
+İš[™ÊØÒY
+JNÂˆYˆ
+]JH›Ü›K›ØØ][ÛˆH]NÂˆB‚ˆ\R[š]X[˜\˜ÛÙT\˜[PY\ÛÛ^
+[š]X[˜\˜ÛÙK›Ü›KÛÚİ\˜\˜ÛÙK
 
-def item_log_frontend():
-    # One fail-closed template anchor keeps the disclosure beside native Details.
-    path = 'pages/item/[id]/index.vue'
-    replace(path, '  import LabelMaker from', '  import WorkshopItemLog from "@/components/Workshop/ItemLog.vue";\n  import ItemLoans from "@/components/Workshop/ItemLoans.vue";\n  import LabelMaker from')
-    details_anchor = '          </DetailsSection>\n        </BaseCard>\n\n        <!-- anything in this is not rendered if on another page -->'
-    replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Generated from item type and full storage path; regenerated when the item moves.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
+HOˆÂˆYˆ
+YÒY˜[YJHÉÉÉËˆ
+Bˆİ\H^š[™^
+	ÈËÈ][\È]\İ]™HÛÛY]Ú\™IÊNÈ[™H^š[™^
+	ÈYˆ
+ØY[™Ë˜[YJIËİ\
+Bˆ^H^Îœİ\Jİ^Ù[™—Bˆ^H^œ™\XÙJ	Ü\™[Yˆ›Ü›K›ØØ][Û‹šY\Èİš[™ÉË	Ü\™[Yˆ›Ü›K›ØØ][ÛËšY[	ÊKœ™\XÙJ	Ü\™[Yˆ›Ü›Kœ\™[Y
+›Ü›K›ØØ][Û‹šY\Èİš[™ÊIË	Ü\™[Yˆ›Ü›K›ØØ][ÛËšY[	ÊBˆÈ˜\˜ÛÙKX]Ø\™H\İ™X[H[™XYHİÛœÈH[Ù[[[X™\ˆšY[İ]H[™ˆÈÜ™X]H^[ØYËˆÙY\Hİ™\›^Hœ›ÛH™Z[œÙ\[™È\XØ]HÙ^\ËÚ[\ÜË‚ˆ^\İ[™×Û[Ù[Û[X™\—Ü^[ØYÈH^˜Ûİ[
+	Û[Ù[[X™\ˆ›Ü›K›[Ù[[X™\‹	ÊBˆYˆ^\İ[™×Û[Ù[Û[X™\—Ü^[ØYÈ›İ[ˆ
+ÊN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİY™\›ÈÜˆ™YH[Ù[[[X™\ˆ^[ØYÈ[ˆÜ]IÊBˆYˆ^\İ[™×Û[Ù[Û[X™\—Ü^[ØYÈOH‚ˆYˆ^˜Ûİ[
+	ØÛÛœİ[\]T™\]Y\İHÉÊHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H[\]H™\]Y\İ[ˆÜ]IÊBˆ^H^œ™\XÙJ	ØÛÛœİ[\]T™\]Y\İHÉË	ØÛÛœİ[\]T™\]Y\İH×ˆ[Ù[[X™\ˆ›Ü›K›[Ù[[X™\Ëš[J
+H[™Yš[™Y	ÊBˆ^[ØYØ[˜ÚÜˆH	È˜[YNˆ›Ü›K›˜[YKˆ]X[]Nˆ›Ü›Kœ]X[]Kˆ\ØÜš\[Ûˆ›Ü›K™\ØÜš\[Û‹	ÂˆYˆ^˜Ûİ[
+^[ØYØ[˜ÚÜŠHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H›Ü›X[][H^[ØY[ˆÜ]IÊBˆ^H^œ™\XÙJ^[ØYØ[˜ÚÜ‹	È˜[YNˆ›Ü›K›˜[YKˆ[Ù[[X™\ˆ›Ü›K›[Ù[[X™\Ëš[J
+H[™Yš[™Yˆ]X[]Nˆ›Ü›Kœ]X[]Kˆ\ØÜš\[Ûˆ›Ü›K™\ØÜš\[Û‹	ÊBˆ[\ÜØ›ØÚÈH^İ^š[™^
+	È[\Ü\HÉÊN^š[™^
+	ÈHœ›ÛHŸŸ‹ÛX‹Ø\Kİ\\ËÙ]KXÛÛ˜XİÈÉÊWBˆ›Ü›WØ›ØÚÈH^İ^š[™^
+	ÈÛÛœİ›Ü›HH™XXİ]™JÉÊN^š[™^
+	×ˆJNÉË^š[™^
+	ÈÛÛœİ›Ü›HH™XXİ]™JÉÊJWBˆYˆ[\ÜØ›ØÚË˜Ûİ[
+	Ñ[]Tİ[[X\K	ÊHOHHÜˆ›Ü›WØ›ØÚË˜Ûİ[
+	Û[Ù[[X™\ˆˆ‹	ÊHOHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİYÛ™H[]Tİ[[X\H[\Ü[™[Ù[[X™\ˆ›Ü›HšY[[ˆÜ]IÊBˆYˆ^˜Ûİ[
+	Û[Ù[[X™\ˆ›Ü›K›[Ù[[X™\‹	ÊHOHÎ‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Õ\İ™X[HÚ[™ÙYˆ^XİY[Ù[[X™\ˆ[ˆXXÚ˜]]™HÜ™X]H^[ØY[ˆÜ]IÊBˆ^H[İ™WØÜ™X]WØXİ[Ûœ×ØY\—Üİ×Ü™]šY]Ê^
+Bˆ\™Ù]Üš]Wİ^
+^
+Bˆ]H	ÜYÙ\ËÚ][KÖÚYKÚ[™^ÙY]YIÎÈ\™Ù]P•RSÜ]È^]\™Ù]œ™XYİ^
 
+Bˆİ\]^š[™^
+	ÈYˆ
+]Kœ\™[	‰ˆ]Kœ\™[™[]U\IÊNÈ[™]^š[™^
+	×ˆ™]\›ˆ]NÉËİ\
+Bˆ^]^Îœİ\Jİ^Ù[™—BˆİX\™IÉÉÈYˆ
+Z][K˜[YKœ\™[ËšY	‰ˆ\\™[˜[YOËšY
+HÂˆØ\İ™\œ›ÜŠ
+š][\ËØ\İ™˜Z[YÜØ]™WÛ›×ÛØØ][ÛˆŠJNÂˆ™]\›ÂˆB‰ÉÉÂˆ\ÜÙ\^˜Ûİ[
+İX\™
+OOLÈ^]^œ™\XÙJİX\™	ÉÊBˆ^]^œ™\XÙJ	Ü\™[˜[YOËšY][K˜[YKœ\™[ËšY[	Ë	Ú][K˜[YKœ\™[ËšY[	ÊBˆ^]^œ™\XÙJ	ÏØØ][Û”Ù[XİÜˆ‹[[Ù[Hš][Kœ\™[ˆ\]N›[Ù[]˜[YOHš[™›Ü›PX›İ]\Ş[˜Ú[™ÓØØ][Û‘œ›ÛT\™[
 
-def move_create_actions_after_photo_preview(source):
-    """Keep both existing create actions after uploaded-photo previews."""
-    action_open = '      <div class="mt-4 flex flex-row-reverse">'
-    action_start = source.find(action_open)
-    preview_start = source.find('      <PhotoUploaderPreview\n')
-    if action_start < 0 or preview_start < 0:
-        raise RuntimeError('Upstream changed: expected the create actions and photo preview in CreateModal.vue')
-    if source.count(action_open) != 1 or source.count('      <PhotoUploaderPreview\n') != 1:
-        raise RuntimeError('Upstream changed: expected one create action block and photo preview in CreateModal.vue')
-
-    action_close = source.find('\n      </div>', action_start)
-    button_group_start = source.find('        <ButtonGroup>', action_start, action_close)
-    if action_close < 0 or button_group_start < 0:
-        raise RuntimeError('Upstream changed: expected the create buttons inside their actions block')
-    button_group_end = source.find('        </ButtonGroup>', button_group_start)
-    if button_group_end < 0 or button_group_end > action_close:
-        raise RuntimeError('Upstream changed: expected the create buttons inside their actions block')
-    if source[action_start + len(action_open):button_group_start].strip() or source[button_group_end + len('        </ButtonGroup>'):action_close].strip():
-        raise RuntimeError('Upstream changed: expected only the create button group inside its actions block')
-    action_end = action_close + len('\n      </div>')
-    actions = source[action_start:action_end]
-    if actions.count('type="submit"') != 1 or actions.count('@click="create(false)"') != 1:
-        raise RuntimeError('Upstream changed: expected both existing create actions in CreateModal.vue')
-    if preview_start < action_start:
-        return source
-
-    if source[action_end:preview_start] != '\n\n':
-        raise RuntimeError('Upstream changed: expected create actions directly before the photo preview')
-    preview_end = source.index('\n      />', preview_start) + len('\n      />')
-    return source[:action_start] + '\n\n' + source[preview_start:preview_end] + '\n\n' + actions + source[preview_end:]
-
-
-def nest_frontend():
-    replace('lib/api/classes/items.ts', '  orderBy?: string;', '  orderBy?: string;\n  isLocation?: boolean;')
-    replace(
-        'components/ui/dialog-provider/utils.ts',
-        '  [DialogID.CreateEntity]:\n    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true; resume?: true }\n    | { baseType: "location" };',
-        '  [DialogID.CreateEntity]: (\n    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true; resume?: true }\n    | { baseType: "location" }\n  ) & { parentId?: string };',
-    )
-    path = 'components/Entity/CreateModal.vue'
-    replace(path, ':entity-types="subItemCreate ? entityTypes.filter(t => !t.isLocation) : entityTypes"', ':entity-types="entityTypes"')
-    target = BUILD/path
-    source = target.read_text()
-    # Older frontend pins did not yet include model-number handling. Add it
-    # only when absent; barcode-aware pins already supply the complete flow.
-    if 'v-model="form.modelNumber"' not in source:
-        replace(path, '      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"', '      <FormTextField v-if="!selectedEntityType?.isLocation" v-model="form.modelNumber" label="Model number" :max-length="255" />\n      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"')
-    elif source.count('v-model="form.modelNumber"') != 1:
-        raise RuntimeError(f'Upstream changed: expected one model-number control in {path}')
-    if 'modelNumber: "",' not in source:
-        replace(path, '    name: "",\n    quantity: 1,', '    name: "",\n    modelNumber: "",\n    quantity: 1,')
-    elif source.count('modelNumber: "",') != 1:
-        raise RuntimeError(f'Upstream changed: expected one model-number form field in {path}')
-    if 'form.modelNumber = "";' not in source:
-        replace(path, '    form.name = "";\n    form.quantity = 1;', '    form.name = "";\n    form.modelNumber = "";\n    form.quantity = 1;')
-    target = BUILD/path
-    text = target.read_text()
-    selector = '      <ItemSelector\n'
-    if text.count(selector) != 1:
-        raise RuntimeError(f'Upstream changed: expected one sub-item selector in {path}')
-    start = text.index(selector)
-    end = text.index('\n      />', start) + len('\n      />')
-    text = text[:start]+text[end:]
-    import_block = text[text.index('  import type {'):text.index('  } from "~~/lib/api/types/data-contracts";')]
-    if 'EntitySummary,' not in import_block:
-        if text.count('    EntityCreate,') != 1:
-            raise RuntimeError(f'Upstream changed: expected one EntityCreate import in {path}')
-        text = text.replace('    EntityCreate,', '    EntityCreate,\n    EntitySummary,')
-    elif import_block.count('EntitySummary,') != 1:
-        raise RuntimeError(f'Upstream changed: expected one EntitySummary import in {path}')
-    text = text.replace('const found = locations.value.find(l => l.id === data.defaultLocation!.id);', 'const { data: found } = await api.items.get(data.defaultLocation.id);')
-    text = text.replace('location: locations.value && locations.value.length > 0 ? locations.value[0] : ({} as EntityOut)', 'location: null as EntitySummary | null')
-    text = text.replace('      form.parentId = null;', '      form.parentId = null;\n      form.location = null;')
-    text = text.replace('            parent.value = data;', '            parentItemLocationId = data.id;')
-    start = text.index('          if (data.parent) {'); end = text.index('\n        }', start)
-    text = text[:start]+text[end:]
-    location_context_anchor = '''      const locId = locationId.value ? locationId.value : parentItemLocationId;
-      applyInitialBarcodeParamAfterContext(initialBarcode, form, lookupBarcode, () => {
-        if (locId) {
-          const found = locations.value.find(l => l.id === locId);
-          if (found) {
-            form.location = found;
-          }
-        }
-
-        if (tagId.value) {'''
-    if text.count(location_context_anchor) != 1:
-        raise RuntimeError(f'Upstream changed: expected one barcode-aware location context anchor in {path}')
-    text = text.replace(
-        location_context_anchor,
-        '''      const locId = params.parentId || locationId.value || parentItemLocationId;
-      if (locId) {
-        const { data } = await api.items.get(String(locId));
-        if (data) form.location = data;
-      }
-
-      applyInitialBarcodeParamAfterContext(initialBarcode, form, lookupBarcode, () => {
-        if (tagId.value) {''',
-    )
-    start = text.index('    // Items must live somewhere'); end = text.index('    if (loading.value)', start)
-    text = text[:start]+text[end:]
-    text = text.replace('parentId: form.location.id as string', 'parentId: form.location?.id || null').replace('parentId: form.parentId || (form.location.id as string)', 'parentId: form.location?.id || null')
-    # Barcode-aware upstream already owns the model-number field, state and
-    # create payloads. Keep the overlay from reinserting duplicate keys/imports.
-    existing_model_number_payloads = text.count('modelNumber: form.modelNumber,')
-    if existing_model_number_payloads not in (0, 3):
-        raise RuntimeError(f'Upstream changed: expected zero or three model-number payloads in {path}')
-    if existing_model_number_payloads == 0:
-        if text.count('const templateRequest = {') != 1:
-            raise RuntimeError(f'Upstream changed: expected one template request in {path}')
-        text = text.replace('const templateRequest = {', 'const templateRequest = {\n        modelNumber: form.modelNumber?.trim() || undefined,')
-        payload_anchor = '        name: form.name,\n        quantity: form.quantity,\n        description: form.description,'
-        if text.count(payload_anchor) != 1:
-            raise RuntimeError(f'Upstream changed: expected one normal item payload in {path}')
-        text = text.replace(payload_anchor, '        name: form.name,\n        modelNumber: form.modelNumber?.trim() || undefined,\n        quantity: form.quantity,\n        description: form.description,')
-    import_block = text[text.index('  import type {'):text.index('  } from "~~/lib/api/types/data-contracts";')]
-    form_block = text[text.index('  const form = reactive({'):text.index('\n  });', text.index('  const form = reactive({'))]
-    if import_block.count('EntitySummary,') != 1 or form_block.count('modelNumber: "",') != 1:
-        raise RuntimeError(f'Upstream changed: expected one EntitySummary import and modelNumber form field in {path}')
-    if text.count('modelNumber: form.modelNumber,') != 3:
-        raise RuntimeError(f'Upstream changed: expected modelNumber in each native create payload in {path}')
-    text = move_create_actions_after_photo_preview(text)
-    target.write_text(text)
-    path = 'pages/item/[id]/index/edit.vue'; target=BUILD/path; text=target.read_text()
-    start=text.index('    if (data.parent && data.parent.entityType'); end=text.index('\n    return data;',start)
-    text=text[:start]+text[end:]
-    guard='''    if (!item.value.parent?.id && !parent.value?.id) {
-      toast.error(t("items.toast.failed_save_no_location"));
-      return;
-    }
-'''
-    assert text.count(guard)==2; text=text.replace(guard,'')
-    text=text.replace('parent.value?.id || item.value.parent?.id || null','item.value.parent?.id || null')
-    text=text.replace('<LocationSelector v-model="item.parent" @update:model-value="informAboutDesyncingLocationFromParent()" />','<LocationSelector v-model="item.parent" :current-location="item" />')
-    start=text.index('            <ItemSelector\n'); end=text.index('            <TagSelector',start)
-    text=text[:start]+'            <p class="text-sm text-muted-foreground">Contents stay inside this item when it moves.</p>\n'+text[end:]
-    start=text.index('  async function maybeSyncWithParentLocation()');end=text.index('  onMounted(() => {',start)
-    text=text[:start]+text[end:]
-    text=text.replace('  const { query, results, isLoading, triggerSearch } = useItemSearch(api, { immediate: false });\n  const parent = ref();\n','')
-    target.write_text(text)
-    replace('pages/location/[id]/index/edit.vue', '<LocationSelector v-model="parent" label="Parent Location" :current-location="item" />', '<LocationSelector v-model="parent" :current-location="item" />')
-    for path, model in [('pages/item/[id]/index.vue','item'),('pages/location/[id]/index/index.vue','location')]:
-        replace(path, '  import LabelMaker from', '  import InsideActions from "@/components/Workshop/InsideActions.vue";\n  import LabelMaker from')
-        replace(path, '            <div class="ml-auto mt-2 flex flex-wrap items-center justify-between gap-2">', '            <div class="ml-auto mt-2 flex flex-wrap items-center justify-between gap-2">\n              <InsideActions :entity-id="'+model+'.id" :archived="'+model+'.archived" />')
-    replace('pages/item/[id]/index.vue', '  import ItemViewSelectable from', '  import LocationCard from "@/components/Location/Card.vue";\n  import ItemViewSelectable from')
-    replace('pages/item/[id]/index.vue', '<section v-if="items && items.length > 0" class="mt-6">', '<section v-if="item?.children?.length || (items && items.length > 0)" class="mt-6">')
-    replace('pages/item/[id]/index.vue', '      <ItemViewSelectable :items="items" @refresh="refreshItemList" />', '''      <section v-if="item?.children?.length" class="mt-6">
-        <h2 class="mb-3 text-xl font-semibold">Locations inside</h2>
-        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3"><LocationCard v-for="child in item.children" :key="child.id" :location="child" /></div>
-      </section>
-      <ItemViewSelectable v-if="items && items.length" :items="items || []" @refresh="refreshItemList" />''')
-
-    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  displayId: string;\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  displayId: string;\n  shortCode: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
-    for interface_name in ('EntityCreate', 'EntityTemplateCreateItemRequest'):
-        start = text.index(f'export interface {interface_name} {{')
-        end = text.index('\n}', start)
-        if 'modelNumber?: string;' not in text[start:end]:
-            text = text[:start] + text[start:end].replace('{', '{\n  modelNumber?: string;', 1) + text[end:]
-    start=text.index('export interface EntityTemplateCreateItemRequest {');end=text.index('\n}',start)
-    text=text[:start]+text[start:end].replace('parentId: string;','parentId: string | null;')+text[end:];target.write_text(text)
-    replace('composables/use-barcode-detector.ts','api.items.getAll({ locations: [id] })','api.items.getAll({ parentIds: [id] })')
-    path='components/Item/View/ItemChangeDetails.vue';target=BUILD/path;text=target.read_text()
-    text=text.replace('item.location','item.parent').replace(']!.location',']!.parent')
-    text=text.replace('      items.value = params.items;', '      items.value = params.items;\n      newLocation.value = null;')
-    text=text.replace('!items.value.length || (enabled.changeLocation && !location)', '!items.value.length')
-    text=text.replace('patch.parentId = location!.id;', 'if (location) patch.parentId = location.id; else patch.clearParent = true;')
-    text=text.replace('v-model="newLocation" />','v-model="newLocation" :exclude-ids="items.map(item => item.id)" />')
-    text=text.replace('saving || (enabled.changeLocation && !newLocation)','saving')
-    target.write_text(text)
-    path='components/Location/Tree/tree-state.ts';target=BUILD/path;text=target.read_text()
-    text+='\nexport function containsLocation(node: import("@/lib/api/types/data-contracts").TreeItem): boolean { const todo = [node]; while (todo.length) { const current = todo.pop()!; if (current.type === "location") return true; todo.push(...(current.children || [])); } return false; }\n';target.write_text(text)
-    replace('components/Location/Tree/Node.vue','import { useTreeState }','import { useTreeState, containsLocation }')
-    replace('components/Location/Tree/Node.vue','children.filter(child => child.type === "location")','children.filter(containsLocation)')
-    replace('components/Location/Tree/Root.vue','  import type { TreeItem }','  import { containsLocation } from "./tree-state";\n  import type { TreeItem }')
-    replace('components/Location/Tree/Root.vue','const list = props.locs ?? [];','const list = (props.locs ?? []).filter(node => props.showItems !== false || containsLocation(node));')
-    replace('pages/locations.vue','@click="openAll"','@click="openAll" :aria-label="$t(\'locations.expand_tree\')"')
-    replace('pages/locations.vue','@click="closeAll"','@click="closeAll" :aria-label="$t(\'locations.collapse_tree\')"')
-    replace('pages/locations.vue','@click="showItems = !showItems"','@click="showItems = !showItems" :aria-label="showItems ? $t(\'locations.hide_items\') : $t(\'locations.show_items\')"')
-    # Mixed ancestors link to their actual native item/location pages.
-    path='pages/location/[id]/index/index.vue'
-    target=BUILD/path; text=target.read_text()
-    text=text.replace('  const confirm = useConfirm();', '  const fullpath = computedAsync(async () => location.value ? (await api.items.fullpath(location.value.id)).data || [] : []);\n\n  const confirm = useConfirm();')
-    start=text.index('              <Breadcrumb v-if="location?.parent">');end=text.index('              </Breadcrumb>',start)+len('              </Breadcrumb>')
-    text=text[:start]+'''              <Breadcrumb v-if="fullpath && fullpath.length > 1">
-                <BreadcrumbList><template v-for="(part, idx) in fullpath" :key="part.id">
-                  <BreadcrumbItem><BreadcrumbLink v-if="idx < fullpath.length - 1" as-child><NuxtLink :to="`/${part.type}/${part.id}`">{{ part.name }}</NuxtLink></BreadcrumbLink><span v-else>{{ part.name }}</span></BreadcrumbItem>
-                  <BreadcrumbSeparator v-if="idx < fullpath.length - 1" />
-                </template></BreadcrumbList>
-              </Breadcrumb>'''+text[end:]
-    target.write_text(text)
+HˆÏ‰Ë	ÏØØ][Û”Ù[XİÜˆ‹[[Ù[Hš][Kœ\™[ˆ˜İ\œ™[[ØØ][ÛHš][HˆÏ‰ÊBˆİ\]^š[™^
+	È][TÙ[XİÜ—‰ÊNÈ[™]^š[™^
+	ÈYÔÙ[XİÜ‰Ëİ\
+Bˆ^]^Îœİ\JÉÈÛ\ÜÏH^\ÛH^[]]YY›Ü™YÜ›İ[™ÛÛ[Èİ^H[œÚYH\È][HÚ[ˆ][İ™\ËÜ—‰Êİ^Ù[™—Bˆİ\]^š[™^
+	È\Ş[˜È[˜İ[ÛˆX^X™TŞ[˜ÕÚ]\™[ØØ][ÛŠ
+IÊNÙ[™]^š[™^
+	ÈÛ“[İ[Y
 
 
-def navigation_frontend():
-    replace('layouts/default.vue', '      <Sidebar collapsible="icon">', '      <Sidebar side="left" collapsible="icon">')
-    replace('layouts/default.vue', '<Collapsible v-else default-open', '<Collapsible v-else :default-open="n.name.value !== \'More\'"')
-    replace('layouts/default.vue', '<SidebarMenuLink\n                        :href="n.to"', '<CollapsibleTrigger v-if="n.name.value === \'More\'" as-child><SidebarMenuButton :tooltip="n.name.value" class="flex gap-2"><component :is="n.icon" /><span>{{ n.name.value }}</span><MdiChevronRight class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" /></SidebarMenuButton></CollapsibleTrigger>\n                      <SidebarMenuLink v-else\n                        :href="n.to"')
-    replace('layouts/default.vue', '<CollapsibleTrigger as-child>\n                        <SidebarMenuButton class="flex size-12', '<CollapsibleTrigger v-if="n.name.value !== \'More\'" as-child>\n                        <SidebarMenuButton class="flex size-12')
-    replace('layouts/default.vue', '    collapsible?: {\n      active: ComputedRef<boolean>;', '    collapsible?: {\n      action?: () => void;\n      active: ComputedRef<boolean>;')
-    replace('layouts/default.vue', '<SidebarMenuLink\n                            :href="c.to"', '<SidebarMenuLink v-if="!c.action"\n                            :href="c.to"')
-    replace('layouts/default.vue', '                          </SidebarMenuLink>\n                        </SidebarMenuSubItem>', '                          </SidebarMenuLink>\n                          <SidebarMenuButton v-else @click.prevent="c.action?.()"><span>{{ c.name.value }}</span></SidebarMenuButton>\n                        </SidebarMenuSubItem>')
-    layout = BUILD/'layouts/default.vue'
-    source = layout.read_text()
-    start = source.index('              <!-- makes scanner accessible easily if using legacy header -->')
-    end = source.index('              </SidebarMenuItem>', start) + len('              </SidebarMenuItem>\n')
-    layout.write_text(source[:start] + source[end:])
-    replace('layouts/default.vue', 'const nav: {', 'const baseNav: {')
-    replace('layouts/default.vue', '  const quickMenuActions = reactive([', '''  const workshop = useWorkshop();
-  const { selectedId: workshopGroup } = useCollections();
-  const workshopLinks = computed(() => [
-    ["loans", "Loans & notes"], ["map", "Workshop & storage"],
-    ["checkout-cart", "Checkout cart"],
-    ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
-  ]);
-  const nav = computed<typeof baseNav>(() => [
-    baseNav[0]!,
-    { ...baseNav[3]!, id: 1, name: computed(() => "Inventory") },
-    { id: 8, icon: MdiWrench, name: computed(() => "Workshop"), to: "/workshop/map", active: computed(() => route.path === "/workshop/map") },
-    { id: 9, icon: MdiTagMultiple, name: computed(() => "Label"), to: "/workshop/labels", active: computed(() => route.path === "/workshop/labels") },
-    { ...baseNav[7]!, id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
-    {
-      id: 11, icon: MdiFileDocumentMultiple, name: computed(() => "More"), to: "",
-      active: computed(() => false),
-      collapsible: [
-        ...baseNav.slice(1, 3), baseNav[4]!, baseNav[5]!, baseNav[6]!,
-        ...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members"),
-        ...workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels").map(([id, name], index) => ({ id: 80 + index, name: computed(() => name!), to: `/workshop/${id}`, active: computed(() => route.path === `/workshop/${id}`) })),
-        { id: 92, name: computed(() => "Report feedback"), to: "/feedback", active: computed(() => route.path === "/feedback") },
-        { id: 90, name: computed(() => "Equipment Terminal"), to: terminalURL.value, active: computed(() => false) },
-        { id: 91, name: computed(() => t("menu.scanner")), to: "", active: computed(() => false), action: openScanner },
-      ],
-    },
-  ]);
-  watch([workshopGroup, () => useAuthContext().user?.id], () => { workshop.context.value = null; workshop.refresh().catch(() => {}); }, { immediate: true });
+HOˆÉËİ\
+Bˆ^]^Îœİ\Jİ^Ù[™—Bˆ^]^œ™\XÙJ	ÈÛÛœİÈ]Y\K™\İ[Ë\ÓØY[™ËšYÙÙ\”ÙX\˜ÚHH\ÙR][TÙX\˜Ú
+\KÈ[[YYX]Nˆ˜[ÙHJN×ˆÛÛœİ\™[H™YŠ
+N×‰Ë	ÉÊBˆ\™Ù]Üš]Wİ^
+^
+Bˆ™\XÙJ	ÜYÙ\ËÛØØ][Û‹ÖÚYKÚ[™^ÙY]YIË	ÏØØ][Û”Ù[XİÜˆ‹[[Ù[Hœ\™[ˆX™[H”\™[ØØ][Ûˆˆ˜İ\œ™[[ØØ][ÛHš][HˆÏ‰Ë	ÏØØ][Û”Ù[XİÜˆ‹[[Ù[Hœ\™[ˆ˜İ\œ™[[ØØ][ÛHš][HˆÏ‰ÊBˆ›Üˆ][Ù[[ˆÊ	ÜYÙ\ËÚ][KÖÚYKÚ[™^YIË	Ú][IÊK
+	ÜYÙ\ËÛØØ][Û‹ÖÚYKÚ[™^Ú[™^YIË	ÛØØ][Û‰ÊWN‚ˆ™\XÙJ]	È[\ÜX™[XZÙ\ˆœ›ÛIË	È[\Ü[œÚYPXİ[ÛœÈœ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜÒ[œÚYPXİ[ÛœËYH×ˆ[\ÜX™[XZÙ\ˆœ›ÛIÊBˆ™\XÙJ]	È]ˆÛ\ÜÏH›[X]]È]Lˆ›^›^]Ü˜\][\ËXÙ[\ˆ\İYKX™]ÙY[ˆØ\Lˆ‰Ë	È]ˆÛ\ÜÏH›[X]]È]Lˆ›^›^]Ü˜\][\ËXÙ[\ˆ\İYKX™]ÙY[ˆØ\Lˆ—ˆ[œÚYPXİ[ÛœÈ™[]KZYH‰ÊÛ[Ù[
+ÉËšYˆ˜\˜Ú]™YH‰ÊÛ[Ù[
+ÉË˜\˜Ú]™YˆÏ‰ÊBˆ™\XÙJ	ÜYÙ\ËÚ][KÖÚYKÚ[™^YIË	È[\Ü][UšY]ÔÙ[XİX›Hœ›ÛIË	È[\ÜØØ][ÛØ\™œ›ÛHØÛÛ\Û™[ËÓØØ][Û‹ĞØ\™YH×ˆ[\Ü][UšY]ÔÙ[XİX›Hœ›ÛIÊBˆ™\XÙJ	ÜYÙ\ËÚ][KÖÚYKÚ[™^YIË	ÏÙXİ[Ûˆ‹ZYHš][\È	‰ˆ][\Ë›[™İˆˆÛ\ÜÏH›]Mˆ‰Ë	ÏÙXİ[Ûˆ‹ZYHš][OË˜Ú[™[Ë›[™İ
+][\È	‰ˆ][\Ë›[™İˆ
+HˆÛ\ÜÏH›]Mˆ‰ÊBˆ™\XÙJ	ÜYÙ\ËÚ][KÖÚYKÚ[™^YIË	È][UšY]ÔÙ[XİX›Hš][\ÏHš][\Èˆ™Yœ™\ÚHœ™Yœ™\Ú][S\İˆÏ‰Ë	ÉÉÈÙXİ[Ûˆ‹ZYHš][OË˜Ú[™[Ë›[™İˆÛ\ÜÏH›]Mˆ‚ˆˆÛ\ÜÏH›X‹LÈ^^›Û\Ù[ZX›Û“ØØ][ÛœÈ[œÚYOÚ‚ˆ]ˆÛ\ÜÏH™ÜšYÜšYXÛÛËLHØ\LˆÛN™ÜšYXÛÛËLÈØØ][ÛØ\™‹Y›ÜH˜Ú[[ˆ][K˜Ú[™[ˆˆšÙ^OH˜Ú[šYˆ›ØØ][ÛH˜Ú[ˆÏÙ]‚ˆÜÙXİ[Û‚ˆ][UšY]ÔÙ[XİX›H‹ZYHš][\È	‰ˆ][\Ë›[™İˆš][\ÏHš][\È×Hˆ™Yœ™\ÚHœ™Yœ™\Ú][S\İˆÏ‰ÉÉÊB‚ˆ]IÛX‹Ø\Kİ\\ËÙ]KXÛÛ˜XİËÉÎİ\™Ù]P•RSÜ]İ^]\™Ù]œ™XYİ^
 
-  const quickMenuActions = computed(() => [''')
-    replace('layouts/default.vue', '...nav.map(v => ({', '...nav.value.filter(v => v.name.value !== "More").map(v => ({')
-    target = BUILD/'layouts/default.vue'
-    target.write_text(target.read_text().replace('text: computed(() => v.name.value),', 'text: v.name.value,'))
+Nİ^]^œ™\XÙJ	Ù^Ü[\™˜XÙH[]Tİ[[X\HÉË	Ù^Ü[\™˜XÙH[]Tİ[[X\H×ˆ\Ü^RYˆİš[™Î×ˆÚÜÛÙNˆİš[™ÎÉÊKœ™\XÙJ	Ù^Ü[\™˜XÙH[]Sİ]ÉË	Ù^Ü[\™˜XÙH[]Sİ]×ˆ\Ü^RYˆİš[™Î×ˆÚÜÛÙNˆİš[™ÎÉÊKœ™\XÙJ	Ù^Ü[\™˜XÙH[]T]ÚÉË	Ù^Ü[\™˜XÙH[]T]Ú×ˆÛX\”\™[Îˆ›ÛÛX[ÉÊBˆ›Üˆ[\™˜XÙWÛ˜[YH[ˆ
+	Ñ[]PÜ™X]IË	Ñ[]U[\]PÜ™X]R][T™\]Y\İ	ÊN‚ˆİ\H^š[™^
+‰Ù^Ü[\™˜XÙHÚ[\™˜XÙWÛ˜[Y_HŞÉÊBˆ[™H^š[™^
+	×ŸIËİ\
+BˆYˆ	Û[Ù[[X™\Îˆİš[™ÎÉÈ›İ[ˆ^Üİ\™[™N‚ˆ^H^Îœİ\H
+È^Üİ\™[™Kœ™\XÙJ	ŞÉË	Ş×ˆ[Ù[[X™\Îˆİš[™ÎÉËJH
+È^Ù[™—Bˆİ\]^š[™^
+	Ù^Ü[\™˜XÙH[]U[\]PÜ™X]R][T™\]Y\İÉÊNÙ[™]^š[™^
+	×ŸIËİ\
+Bˆ^]^Îœİ\Jİ^Üİ\™[™Kœ™\XÙJ	Ü\™[Yˆİš[™ÎÉË	Ü\™[Yˆİš[™È[ÉÊJİ^Ù[™—Nİ\™Ù]Üš]Wİ^
+^
+Bˆ™\XÙJ	ØÛÛ\ÜØX›\Ëİ\ÙKX˜\˜ÛÙKY]XİÜ‹ÉË	Ø\Kš][\Ë™Ù][
+ÈØØ][ÛœÎˆÚYHJIË	Ø\Kš][\Ë™Ù][
+È\™[YÎˆÚYHJIÊBˆ]IØÛÛ\Û™[ËÒ][KÕšY]ËÒ][PÚ[™ÙQ]Z[ËYIÎİ\™Ù]P•RSÜ]İ^]\™Ù]œ™XYİ^
 
+Bˆ^]^œ™\XÙJ	Ú][K›ØØ][Û‰Ë	Ú][Kœ\™[	ÊKœ™\XÙJ	×HK›ØØ][Û‰Ë	×HKœ\™[	ÊBˆ^]^œ™\XÙJ	È][\Ë˜[YHH\˜[\Ëš][\ÎÉË	È][\Ë˜[YHH\˜[\Ëš][\Î×ˆ™]ÓØØ][Û‹˜[YHH[ÉÊBˆ^]^œ™\XÙJ	ÈZ][\Ë˜[YK›[™İ
+[˜X›Y˜Ú[™ÙSØØ][Ûˆ	‰ˆ[ØØ][ÛŠIË	ÈZ][\Ë˜[YK›[™İ	ÊBˆ^]^œ™\XÙJ	Ü]Úœ\™[YHØØ][ÛˆKšYÉË	ÚYˆ
+ØØ][ÛŠH]Úœ\™[YHØØ][Û‹šYÈ[ÙH]Ú˜ÛX\”\™[HYNÉÊBˆ^]^œ™\XÙJ	İ‹[[Ù[H›™]ÓØØ][ÛˆˆÏ‰Ë	İ‹[[Ù[H›™]ÓØØ][Ûˆˆ™^ÛYKZYÏHš][\Ë›X\
+][HOˆ][KšY
+HˆÏ‰ÊBˆ^]^œ™\XÙJ	ÜØ]š[™È
+[˜X›Y˜Ú[™ÙSØØ][Ûˆ	‰ˆ[™]ÓØØ][ÛŠIË	ÜØ]š[™ÉÊBˆ\™Ù]Üš]Wİ^
+^
+Bˆ]IØÛÛ\Û™[ËÓØØ][Û‹Õ™YKİ™YK\İ]KÉÎİ\™Ù]P•RSÜ]İ^]\™Ù]œ™XYİ^
 
-def shell_frontend():
-    layout = BUILD/'layouts/default.vue'
-    source = layout.read_text()
-    start = source.index('<SidebarHeader class="items-center">')
-    selector = '          <CollectionSelector />'
-    end = source.index(selector, start) + len(selector)
-    source = source[:start] + '''<SidebarHeader class="items-stretch gap-2 p-3">
-          <NuxtLink to="/home" aria-label="C-Crate home" class="flex h-10 w-full items-center gap-3 rounded-md px-2 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-            <AppLogo aria-hidden="true" class="size-7 shrink-0" />
-          </NuxtLink>
+Bˆ^
+ÏI×™^Ü[˜İ[ÛˆÛÛZ[œÓØØ][ÛŠ›ÙNˆ[\Ü
+ÛX‹Ø\Kİ\\ËÙ]KXÛÛ˜XİÈŠK•™YR][JNˆ›ÛÛX[ˆÈÛÛœİÙÈHÛ›ÙWNÈÚ[H
+ÙË›[™İ
+HÈÛÛœİİ\œ™[HÙËœÜ
 
-          <CollectionSelector />'''+source[end:]
-    layout.write_text(source)
-    replace('layouts/default.vue', '    SidebarGroupLabel,\n', '')
-    replace('layouts/default.vue', 'drop-shadow-md hover:bg-primary/90', 'hover:bg-primary/90')
-    replace('layouts/default.vue', 'class="flex justify-center group-data-[collapsible=icon]:justify-start group-data-[collapsible=icon]:bg-destructive group-data-[collapsible=icon]:text-destructive-foreground group-data-[collapsible=icon]:shadow-sm group-data-[collapsible=icon]:hover:bg-destructive/90"', 'class="flex justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-start"')
-    replace('layouts/default.vue', 'class="sticky top-0 z-20 flex h-[var(--header-height-mobile)] translate-y-[-0.5px] flex-col bg-secondary p-2 shadow-md sm:h-[var(--header-height)] sm:flex-row"', 'class="sticky top-0 z-20 flex min-h-[var(--header-height-mobile)] flex-col gap-1 border-b border-border bg-card px-3 py-2 sm:min-h-[var(--header-height)] sm:flex-row"')
-    replace('layouts/default.vue', '            <div class="flex h-1/2 grow items-center justify-end gap-2 sm:h-auto">', '            <div class="flex min-w-0 grow items-center justify-end gap-2">\n              <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="shrink-0" />')
-    replace('layouts/default.vue', '        <AppHeaderDecor class="-mt-10 hidden lg:block" />', '''        <AppHeaderDecor class="-mt-10 hidden lg:block" />
-            <DeviceStatus v-if="preferences.displayLegacyHeader && terminalHeader" :enabled="preferences.displayLegacyHeader && terminalHeader" class="absolute right-6 top-3 z-30 hidden lg:flex" />''')
-    replace('layouts/default.vue', '<Button size="icon" @click="triggerSearch">', '<Button size="icon" :aria-label="$t(\'global.search\')" @click="triggerSearch">')
-    replace('layouts/default.vue', '<Button size="icon" @click="openScanner">', '<Button size="icon" :aria-label="$t(\'menu.scanner\')" @click="openScanner">')
-    replace('layouts/default.vue', '  const search = ref("");', '''  const terminalHeader = ref(false);
-  let desktopHeaderMedia: MediaQueryList | null = null;
-  const updateDesktopHeader = () => { terminalHeader.value = desktopHeaderMedia?.matches || false; };
-  onMounted(() => { desktopHeaderMedia = window.matchMedia("(min-width: 1024px)"); updateDesktopHeader(); desktopHeaderMedia.addEventListener("change", updateDesktopHeader); });
-  onBeforeUnmount(() => desktopHeaderMedia?.removeEventListener("change", updateDesktopHeader));
-  const terminalURL = computed(() => { const url = new URL(window.location.href); url.port = "17749"; url.pathname = "/"; url.search = "?mode=editor"; url.hash = ""; return url.href; });
-  const search = ref("");''')
-    replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import DeviceStatus from "~/components/Workshop/DeviceStatus.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
+HNÈYˆ
+İ\œ™[\HOOH›ØØ][ÛˆŠH™]\›ˆYNÈÙËœ\Ú
+‹‹Šİ\œ™[˜Ú[™[ˆ×JJNÈH™]\›ˆ˜[ÙNÈW‰Îİ\™Ù]Üš]Wİ^
+^
+Bˆ™\XÙJ	ØÛÛ\Û™[ËÓØØ][Û‹Õ™YKÓ›ÙKYIË	Ú[\ÜÈ\ÙU™YTİ]HIË	Ú[\ÜÈ\ÙU™YTİ]KÛÛZ[œÓØØ][ÛˆIÊBˆ™\XÙJ	ØÛÛ\Û™[ËÓØØ][Û‹Õ™YKÓ›ÙKYIË	ØÚ[™[‹™š[\ŠÚ[OˆÚ[\HOOH›ØØ][ÛˆŠIË	ØÚ[™[‹™š[\ŠÛÛZ[œÓØØ][ÛŠIÊBˆ™\XÙJ	ØÛÛ\Û™[ËÓØØ][Û‹Õ™YKÔ›ÛİYIË	È[\Ü\HÈ™YR][HIË	È[\ÜÈÛÛZ[œÓØØ][ÛˆHœ›ÛH‹‹İ™YK\İ]H×ˆ[\Ü\HÈ™YR][HIÊBˆ™\XÙJ	ØÛÛ\Û™[ËÓØØ][Û‹Õ™YKÔ›ÛİYIË	ØÛÛœİ\İH›ÜË›ØÜÈÏÈ×NÉË	ØÛÛœİ\İH
+›ÜË›ØÜÈÏÈ×JK™š[\Š›ÙHOˆ›ÜËœÚİÒ][\ÈOOH˜[ÙHÛÛZ[œÓØØ][ÛŠ›ÙJJNÉÊBˆ™\XÙJ	ÜYÙ\ËÛØØ][ÛœËYIË	ĞÛXÚÏH›Ü[[‰Ë	ĞÛXÚÏH›Ü[[ˆ˜\šXK[X™[H‰
+	ÛØØ][ÛœË™^[™İ™YW	ÊH‰ÊBˆ™\XÙJ	ÜYÙ\ËÛØØ][ÛœËYIË	ĞÛXÚÏH˜ÛÜÙP[‰Ë	ĞÛXÚÏH˜ÛÜÙP[ˆ˜\šXK[X™[H‰
+	ÛØØ][ÛœË˜ÛÛ\ÙWİ™YW	ÊH‰ÊBˆ™\XÙJ	ÜYÙ\ËÛØØ][ÛœËYIË	ĞÛXÚÏHœÚİÒ][\ÈH\ÚİÒ][\È‰Ë	ĞÛXÚÏHœÚİÒ][\ÈH\ÚİÒ][\Èˆ˜\šXK[X™[HœÚİÒ][\ÈÈ	
+	ÛØØ][ÛœËšYWÚ][\×	ÊHˆ	
+	ÛØØ][ÛœËœÚİ×Ú][\×	ÊH‰ÊBˆÈZ^Y[˜Ù\İÜœÈ[šÈÈZ\ˆXİX[˜]]™H][KÛØØ][ÛˆYÙ\Ë‚ˆ]IÜYÙ\ËÛØØ][Û‹ÖÚYKÚ[™^Ú[™^YIÂˆ\™Ù]P•RSÜ]È^]\™Ù]œ™XYİ^
 
+Bˆ^]^œ™\XÙJ	ÈÛÛœİÛÛ™š\›HH\ÙPÛÛ™š\›J
+NÉË	ÈÛÛœİ[]HÛÛ\]Y\Ş[˜Ê\Ş[˜È
 
-def strip_item_response_short_codes_from_update_tests():
-    """Keep response-only identifiers out of update payloads in pinned API tests."""
-    relative = pathlib.Path('lib/api/__test__/user/items.test.ts')
-    target = BUILD / relative
-    source = target.read_text()
-    if not re.search(r'\b(?:displayId|shortCode)\b', source):
-        return
-    rewrites = (
-        ("    const itemUpdate = {\n      ...item,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,", "    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemDisplayID;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,"),
-        ("    const child1ItemUpdate = {\n      ...child1Item,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild1DisplayID, shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1DisplayID;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,"),
-        ("    const child2ItemUpdate = {\n      ...child2Item,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild2DisplayID, shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2DisplayID;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,"),
-        ("    const itemUpdate = {\n      ...parent,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,", "    const { displayId: omittedParentDisplayID, shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentDisplayID;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,"),
-    )
-    if len(rewrites) != 4:
-        raise RuntimeError('Expected four pinned item update test fixtures')
-    for original, replacement in rewrites:
-        count = source.count(original)
-        if count == 0 and source.count(replacement) == 1:
-            continue
-        if count != 1:
-            raise RuntimeError(f'Expected exactly one item update fixture anchor in {relative}, found {count}')
-        source = source.replace(original, replacement)
-    target.write_text(source)
+HOˆØØ][Û‹˜[YHÈ
+]ØZ]\Kš][\Ë™[]
+ØØ][Û‹˜[YKšY
+JK™]H×Hˆ×JN×—ˆÛÛœİÛÛ™š\›HH\ÙPÛÛ™š\›J
+NÉÊBˆİ\]^š[™^
+	Èœ™XYÜ[Xˆ‹ZYH›ØØ][ÛËœ\™[‰ÊNÙ[™]^š[™^
+	ÈĞœ™XYÜ[X‰Ëİ\
+JÛ[Š	ÈĞœ™XYÜ[X‰ÊBˆ^]^Îœİ\JÉÉÉÈœ™XYÜ[Xˆ‹ZYH™[]	‰ˆ[]›[™İˆH‚ˆœ™XYÜ[X“\İ[\]H‹Y›ÜHŠ\Y
+H[ˆ[]ˆšÙ^OHœ\šY‚ˆœ™XYÜ[X’][Oœ™XYÜ[X“[šÈ‹ZYHšY[]›[™İHHˆ\ËXÚ[^[šÈÏH˜ÉÜ\\_KÉÜ\šYXŞÈ\›˜[YH_OÓ^[šÏĞœ™XYÜ[X“[šÏÜ[ˆ‹Y[ÙOŞÈ\›˜[YH_OÜÜ[Ğœ™XYÜ[X’][O‚ˆœ™XYÜ[X”Ù\\˜]Üˆ‹ZYHšY[]›[™İHHˆÏ‚ˆİ[\]OĞœ™XYÜ[X“\İ‚ˆĞœ™XYÜ[X‰ÉÉÊİ^Ù[™—Bˆ\™Ù]Üš]Wİ^
+^
+B‚‚™Yˆ˜]šYØ][Û—Ùœ›Û[™
+
+N‚ˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÈÚYX˜\ˆÛÛ\ÚX›OHšXÛÛˆ‰Ë	ÈÚYX˜\ˆÚYOH›YˆÛÛ\ÚX›OHšXÛÛˆ‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÏÛÛ\ÚX›H‹Y[ÙHY˜][[Ü[‰Ë	ÏÛÛ\ÚX›H‹Y[ÙH™Y˜][[Ü[H›‹›˜[YK˜[YHOOH	Ó[Ü™W	È‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÏÚYX˜\“Y[S[š×ˆš™YH›‹È‰Ë	ÏÛÛ\ÚX›UšYÙÙ\ˆ‹ZYH›‹›˜[YK˜[YHOOH	Ó[Ü™W	Èˆ\ËXÚ[ÚYX˜\“Y[P]ÛˆÛÛ\H›‹›˜[YK˜[YHˆÛ\ÜÏH™›^Ø\LˆÛÛ\Û™[š\ÏH›‹šXÛÛˆˆÏÜ[ŞÈ‹›˜[YK˜[YH_OÜÜ[YPÚ]œ›Û”šYÚÛ\ÜÏH›[X]]È˜[œÚ][Û‹]˜[œÙ›Ü›H\˜][Û‹LŒÜ›İ\Y]KVÜİ]O[Ü[—KØÛÛ\ÚX›Nœ›İ]KNLˆÏÔÚYX˜\“Y[P]ÛĞÛÛ\ÚX›UšYÙÙ\—ˆÚYX˜\“Y[S[šÈ‹Y[ÙWˆš™YH›‹È‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÏÛÛ\ÚX›UšYÙÙ\ˆ\ËXÚ[—ˆÚYX˜\“Y[P]ÛˆÛ\ÜÏH™›^Ú^™KLL‰Ë	ÏÛÛ\ÚX›UšYÙÙ\ˆ‹ZYH›‹›˜[YK˜[YHOOH	Ó[Ü™W	Èˆ\ËXÚ[—ˆÚYX˜\“Y[P]ÛˆÛ\ÜÏH™›^Ú^™KLL‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÈÛÛ\ÚX›OÎˆ×ˆXİ]™NˆÛÛ\]Y™Y›ÛÛX[ÉË	ÈÛÛ\ÚX›OÎˆ×ˆXİ[ÛÎˆ
+
+HOˆ›ÚY×ˆXİ]™NˆÛÛ\]Y™Y›ÛÛX[ÉÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÏÚYX˜\“Y[S[š×ˆš™YH˜ËÈ‰Ë	ÏÚYX˜\“Y[S[šÈ‹ZYHˆXË˜Xİ[Ûˆ—ˆš™YH˜ËÈ‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÈÔÚYX˜\“Y[S[šÏ—ˆÔÚYX˜\“Y[TİX’][O‰Ë	ÈÔÚYX˜\“Y[S[šÏ—ˆÚYX˜\“Y[P]Ûˆ‹Y[ÙHÛXÚËœ™]™[H˜Ë˜Xİ[ÛËŠ
+HÜ[ŞÈË›˜[YK˜[YH_OÜÜ[ÔÚYX˜\“Y[P]Û—ˆÔÚYX˜\“Y[TİX’][O‰ÊBˆ^[İ]H•RSÉÛ^[İ]ËÙY˜][YIÂˆÛİ\˜ÙHH^[İ]œ™XYİ^
+
+Bˆİ\HÛİ\˜ÙKš[™^
+	ÈKKHXZÙ\ÈØØ[›™\ˆXØÙ\ÜÚX›HX\Ú[HYˆ\Ú[™ÈYØXŞHXY\ˆKO‰ÊBˆ[™HÛİ\˜ÙKš[™^
+	ÈÔÚYX˜\“Y[R][O‰Ëİ\
+H
+È[Š	ÈÔÚYX˜\“Y[R][O—‰ÊBˆ^[İ]Üš]Wİ^
+Ûİ\˜ÙVÎœİ\H
+ÈÛİ\˜ÙVÙ[™—JBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ØÛÛœİ˜]ˆÉË	ØÛÛœİ˜\ÙS˜]ˆÉÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÈÛÛœİ]ZXÚÓY[PXİ[ÛœÈH™XXİ]™JÉË	ÉÉÈÛÛœİÛÜšÜÚÜH\ÙUÛÜšÜÚÜ
+
+NÂˆÛÛœİÈÙ[XİYYˆÛÜšÜÚÜÜ›İ\HH\ÙPÛÛXİ[ÛœÊ
+NÂˆÛÛœİÛÜšÜÚÜ[šÜÈHÛÛ\]Y
 
 
-def camera_ocr_frontend():
-    path = 'pages/item/[id]/index/edit.vue'
-    replace(
-        path,
-        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
-        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
-    )
-    replace(
-        path,
-        '''  async function suggestItemNameFromPhoto(file: File) {
-    try {
-      const suggestion = await recognizeNameFromFileLocally(file);
-      if (!suggestion) {
-        nameOcrMessage.value = t("components.form.camera.name_not_found");
-        return;
-      }
-      item.value.name = suggestion;
-      nameOcrMessage.value = t("components.form.camera.name_suggested");
-    } catch {
-      nameOcrMessage.value = t("components.form.camera.name_unavailable");
-    }
-  }''',
-        '''  async function suggestItemNameFromPhoto(file: File) {
-    try {
-      nameOcrMessage.value = t("components.form.camera.ocr_running");
-      const outcome = await suggestNameWithoutOverwritingEdits({
-        getName: () => item.value.name,
-        getRevision: () => nameEditRevision.value,
-        setName: (value: string) => { item.value.name = value; },
-        recognize: recognizeNameFromImage,
-        image: file,
-      });
-      if (outcome === "empty") {
-        nameOcrMessage.value = t("components.form.camera.name_not_found");
-      } else if (outcome === "edited-during-recognition") {
-        nameOcrMessage.value = t("components.form.camera.name_preserved");
-      } else {
-        nameOcrMessage.value = t("components.form.camera.name_suggested");
-      }
-    } catch {
-      nameOcrMessage.value = t("components.form.camera.name_unavailable");
-    }
-  }''',
-    )
-    replace(path, '  const nameOcrMessage = ref("");', '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);')
-    replace(
-        path,
-        '                    v-model="item[field.ref]"\n                    class="min-w-0 flex-1"',
-        '                    v-model="item[field.ref]"\n                    @update:model-value="nameEditRevision++"\n                    class="min-w-0 flex-1"',
-    )
-    replace(
-        path,
-        '''                  </Button>
-                </div>
-                <FormTextField
-                  v-else-if="field.type === 'text'"''',
-        '''                  </Button>
-                </div>
-                <p v-if="field.ref === 'name'" class="mt-1 text-xs text-muted-foreground">
-                  {{ $t("components.form.camera.local_ocr_notice") }}
-                </p>
-                <FormTextField
-                  v-else-if="field.type === 'text'"''',
-    )
+HOˆÂˆÈ›Ø[œÈ‹“Ø[œÈ	ˆ›İ\È—KÈ›X\‹•ÛÜšÜÚÜ	ˆİÜ˜YÙH—KˆÈ˜ÚXÚÛİ]XØ\‹ÚXÚÛİ]Ø\—Kˆ‹‹ŠÛÜšÜÚÜ›X[˜YÙ\‹˜[YHÈÖÈš[\ÜÈ‹’[\ÜÈ—KÈ›X™[È‹“X™[]Y]YH—KÈœ™XÛİ™\H‹”™XÛİ™\H—KÈœŞ\İ[H‹”Ş\İ[H—WHˆ×JKˆJNÂˆÛÛœİ˜]ˆHÛÛ\]Y\[Ùˆ˜\ÙS˜]Š
 
-    modal = 'components/Entity/CreateModal.vue'
-    replace(
-        modal,
-        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
-        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
-    )
-    replace(modal, '  const nameOcrMessage = ref("");', '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);')
-    replace(
-        modal,
-        '''  async function suggestNameFromPhoto(file: File) {
-    try {
-      const suggestion = await recognizeNameFromFileLocally(file);
-      if (!suggestion) {
-        nameOcrMessage.value = t("components.form.camera.name_not_found");
-        return;
-      }
-      form.name = suggestion;
-      nameOcrMessage.value = t("components.form.camera.name_suggested");
-    } catch {
-      nameOcrMessage.value = t("components.form.camera.name_unavailable");
-    }
-  }''',
-        '''  async function suggestNameFromPhoto(file: File) {
-    try {
-      nameOcrMessage.value = t("components.form.camera.ocr_running");
-      const outcome = await suggestNameWithoutOverwritingEdits({
-        getName: () => form.name,
-        getRevision: () => nameEditRevision.value,
-        setName: (value: string) => { form.name = value; },
-        recognize: recognizeNameFromImage,
-        image: file,
-      });
-      if (outcome === "empty") {
-        nameOcrMessage.value = t("components.form.camera.name_not_found");
-      } else if (outcome === "edited-during-recognition") {
-        nameOcrMessage.value = t("components.form.camera.name_preserved");
-      } else {
-        nameOcrMessage.value = t("components.form.camera.name_suggested");
-      }
-    } catch {
-      nameOcrMessage.value = t("components.form.camera.name_unavailable");
-    }
-  }''',
-    )
-    replace(
-        modal,
-        '          v-model="form.name"\n          class="min-w-0 flex-1"',
-        '          v-model="form.name"\n          @update:model-value="nameEditRevision++"\n          class="min-w-0 flex-1"',
-    )
-    replace(
-        modal,
-        '      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>',
-        '      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>\n      <p class="text-xs text-muted-foreground">{{ $t("components.form.camera.local_ocr_notice") }}</p>',
-    )
-    locale = BUILD/'locales/en.json'
-    data = json.loads(locale.read_text(encoding='utf-8'))
-    camera = data['components']['form']['camera']
-    camera['name_preserved'] = 'Your typed name was kept. OCR finished in the background.'
-    camera['ocr_running'] = 'Reading the label in this browserâ€¦ first use may download OCR code and the English model.'
-    camera['local_ocr_notice'] = 'Name suggestions run in this browser, and the suggestion photo is not uploaded. OCR code and the English model download on first use.'
-    locale.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+HOˆÂˆ˜\ÙS˜]–ÌHKˆÈ‹‹˜˜\ÙS˜]–Ì×HKYˆK˜[YNˆÛÛ\]Y
 
 
-def prepare():
-    from homebox_patchset import materialize
-    native_source = materialize(UPSTREAM_ROOT)
-    shutil.copytree(native_source/'frontend', BUILD, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns('node_modules', '.nuxt', '.output'))
-    strip_item_response_short_codes_from_update_tests()
-    shutil.copytree(ROOT/'homebox-ui/overlay', BUILD, dirs_exist_ok=True)
-    camera_ocr_frontend()
-    shutil.copy2(ROOT/'kiosk/member-avatar.js', BUILD/'lib/member-avatar.js')
-    shutil.copy2(ROOT/'kiosk/label-editor.js', BUILD/'lib/label-editor.js')
-    package = json.loads((BUILD/'package.json').read_text())
-    overrides = {name: '3.5.20' for name in ('vue', '@vue/runtime-core', '@vue/runtime-dom', '@vue/reactivity', '@vue/shared', '@vue/compiler-sfc', '@vue/compiler-core', '@vue/compiler-dom', '@vue/compiler-ssr', '@vue/server-renderer')}
-    package.pop('pnpm', None)
-    (BUILD/'package.json').write_text(json.dumps(package, indent=2)+'\n')
-    (BUILD/'pnpm-workspace.yaml').write_text('overrides:\n'+''.join(f"  '{name}': {version}\n" for name, version in overrides.items()))
-    if (ROOT/'homebox-ui/pnpm-lock.yaml').exists():
-        shutil.copy2(ROOT/'homebox-ui/pnpm-lock.yaml', BUILD/'pnpm-lock.yaml')
-    configure_ui_component_discovery()
-    replace('nuxt.config.ts', 'css: ["@/assets/css/main.css"],', 'css: ["@/assets/css/main.css", "@/assets/css/workshop.css", "@/assets/css/ccrate.css"],')
-    # The Home dashboard shows the same current custody as the equipment terminal.
-    replace('pages/home/index.vue', '  import BaseCard from', '  import CheckedOutItems from "@/components/Workshop/CheckedOutItems.vue";\n  import BaseCard from')
-    replace('pages/home/index.vue', '      <section>\n        <Subtitle> {{ $t("home.recently_added") }}', '      <CheckedOutItems />\n\n      <section>\n        <Subtitle> {{ $t("home.recently_added") }}')
-    # Native sidebar and quick menu, with manager-only entries hidden for members.
-    navigation_frontend()
-    shell_frontend()
-    replace('layouts/default.vue', 'class="h-9 grow sm:max-w-sm"', 'class="h-9 min-w-0 grow sm:max-w-sm"')
-    # Put badges on the actual existing Collection members table.
-    path = 'pages/collection/index/members.vue'
-    replace(path, '  const loading = ref(true);', '''  const workshop = useWorkshop();
-  const { selectedId } = useCollections();
-  const badgeRows = ref<any[]>([]), peopleRows = ref<any[]>([]), workshopError = ref("");
-  const memberLoans = ref<WorkshopLoan[] | null>(null), itemLoading = ref(true), itemError = ref("");
-  let itemRevision = 0, memberTimer: ReturnType<typeof setInterval> | null = null;
-  async function loadMemberLoans() {
-    const revision = ++itemRevision;
-    itemLoading.value = true; itemError.value = "";
-    try {
-      const rows = await workshop.request<WorkshopLoan[]>("loans");
-      if (revision === itemRevision) memberLoans.value = rows;
-    } catch (cause) { if (revision === itemRevision) itemError.value = (cause as Error).message; }
-    finally { if (revision === itemRevision) itemLoading.value = false; }
-  }
-  function refreshVisibleItems() { if (document.visibilityState === "visible" && !itemLoading.value) void loadMemberLoans(); }
-  function refreshMembers() { void loadMembers(); void loadBadges(); void loadMemberLoans(); }
-  let workshopRevision = 0;
-  async function loadBadges() {
-    const revision = ++workshopRevision;
-    badgeRows.value = []; peopleRows.value = []; workshopError.value = "";
-    try {
-      await workshop.refresh();
-      if (!workshop.manager.value) return;
-      const [badges, people] = await Promise.all([workshop.request<any[]>("badges"), workshop.request<any[]>("people")]);
-      if (revision === workshopRevision) { badgeRows.value = badges; peopleRows.value = people; }
-    } catch (cause) { if (revision === workshopRevision) workshopError.value = (cause as Error).message; }
-  }
-  watch(selectedId, () => { memberLoans.value = null; refreshMembers(); }, { flush: "sync" });
-  onMounted(() => {
-    void loadMemberLoans();
-    window.addEventListener("focus", refreshVisibleItems);
-    document.addEventListener("visibilitychange", refreshVisibleItems);
-    memberTimer = setInterval(refreshVisibleItems, 30000);
-  });
-  onBeforeUnmount(() => {
-    workshopRevision++; itemRevision++; memberLoans.value = null;
-    if (memberTimer) clearInterval(memberTimer);
-    window.removeEventListener("focus", refreshVisibleItems);
-    document.removeEventListener("visibilitychange", refreshVisibleItems);
-  });
-
-  const loading = ref(true);''')
-    replace(path, '<TableCell>{{ user.name }}</TableCell>', '<TableCell><div class="flex items-center gap-3"><MemberAvatar :member-id="user.id" :name="user.name" /><span class="font-medium">{{ user.name }}</span></div></TableCell>')
-    replace(path, '  import { Button }', '  import MemberAvatar from "@/components/Workshop/MemberAvatar.vue";\n  import MemberItems from "@/components/Workshop/MemberItems.vue";\n  import type { WorkshopLoan } from "@/lib/workshop-loans";\n  import BadgeActions from "@/components/Workshop/BadgeActions.vue";\n  import { Button }')
-    replace(path, '    loadMembers();\n  });', '    loadMembers();\n    loadBadges();\n  });')
-    replace(path, '  <div class="space-y-4">', '''  <div class="space-y-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-sm text-muted-foreground">Members, kiosk badges and the items each person has checked out.</p>
-      <Button variant="outline" size="sm" :disabled="loading || itemLoading" @click="refreshMembers">Refresh members &amp; items</Button>
-    </div>
-    <p v-if="itemError" role="alert" class="text-sm text-destructive">Could not load checked-out items. {{ itemError }}</p>
-    <p v-if="workshopError" role="alert" class="text-sm text-destructive">Badge management: {{ workshopError }} <Button variant="link" @click="loadBadges">Reload badge management</Button></p>''')
-    replace(path, '<TableHead>{{ $t("collection.members.name") }}</TableHead>', '<TableHead>User</TableHead>')
-    replace(path, '              <TableHead class="w-32', '              <TableHead v-if="workshop.manager.value">Kiosk Badge</TableHead>\n              <TableHead>Items</TableHead>\n              <TableHead class="w-32')
-    replace(path, '              <TableCell>\n                <div class="ml-auto">', '''              <TableCell v-if="workshop.manager.value">
-                <BadgeActions :member="user" :badges="badgeRows.filter(row => row.user_id === user.id)" :can-manage="!!peopleRows.find(row => row.id === user.id)?.workshop_manager" :protected-owner="!!peopleRows.find(row => row.id === user.id)?.protected_owner" @changed="loadBadges" />
-              </TableCell>
-              <TableCell><MemberItems :member-id="user.id" :loans="memberLoans" :loading="itemLoading" :error="itemError" /></TableCell>
-              <TableCell>
-                <div class="ml-auto">''')
-    # Item loans sit alongside native Details/Maintenance/Edit; details show status.
-    path = 'pages/item/[id]/index.vue'
-    item_log_frontend()
-    replace(path, '        id: "edit",', '        id: "loans", name: "Loans & return notes", to: `/item/${itemId.value}/loans`,\n      },\n      {\n        id: "edit",')
-    replace(path, '{{ $t(tab.name) }}', '{{ tab.id === "loans" ? tab.name : $t(tab.name) }}')
-    replace(path, ':id="item.assetId"\n                type="asset"', ':id="item.assetId"\n                :entity-id="item.id"\n                type="asset"')
-    replace(path, '<NuxtPage :item="item" :page-key="itemId" />', '<NuxtPage :item="item" :page-key="itemId" />\n        <ItemLoans v-if="!hasNested" :item-id="itemId" compact />')
-    # Extend the existing label dialog; browser printing remains native.
-    path = 'components/global/LabelMaker.vue'
-    replace(path, '  import PageQRCode', '  import PiPrint from "@/components/Workshop/PiPrint.vue";\n  import PageQRCode')
-    replace(path, '    id: string;', '    id: string;\n    entityId?: string;')
-    replace(path, '        <img :src="getLabelUrl(false)" />', '<img :src="getLabelUrl(false)" alt="Homebox label preview" />\n        <PiPrint :id="id" :entity-id="entityId" />')
-    replace(path, '<Button size="icon" @click="openDialog(DialogID.PrintLabel)">', '<Button size="icon" :aria-label="$t(\'components.global.label_maker.browser_print\')" @click="openDialog(DialogID.PrintLabel)">')
-    # Manage native people beside badges and custody, with collection-owner access.
-    contract=BUILD/'lib/api/types/data-contracts.ts';body=contract.read_text()
-    start=body.index('export interface UserSummary {');end=body.index('\n}',start)
-    body=body[:end]+'\n  avatar?: string;'+body[end:];contract.write_text(body)
-    path='pages/collection/index/members.vue';target=BUILD/path;body=target.read_text()
-    body=body.replace('  import MemberAvatar from', '  import UserManager from "@/components/Workshop/UserManager.vue";\n  import MemberAvatar from')
-    body=body.replace('  const workshop = useWorkshop();', '  const workshop = useWorkshop();\n  const userAdmin = ref(false), userManager = ref<InstanceType<typeof UserManager> | null>(null);')
-    body=body.replace('const [badges, people] = await Promise.all([workshop.request<any[]>("badges"), workshop.request<any[]>("people")]);','const [badges, people, administration] = await Promise.all([workshop.request<any[]>("badges"), workshop.request<any[]>("people"), workshop.request<{ canManage: boolean }>("users/administration")]);')
-    body=body.replace('badgeRows.value = badges; peopleRows.value = people;', 'badgeRows.value = badges; peopleRows.value = people; userAdmin.value = administration.canManage;')
-    body=body.replace('if (!workshop.manager.value) return;', 'if (!workshop.manager.value) { userAdmin.value = false; return; }')
-    body=body.replace('watch(selectedId, () => { memberLoans.value = null;', 'watch(selectedId, () => { userAdmin.value = false; memberLoans.value = null;')
-    body=body.replace('      <Button variant="outline" size="sm" :disabled="loading || itemLoading"', '      <Button v-if="userAdmin" variant="outline" size="sm" @click="userManager?.show()">Manage users</Button>\n      <Button variant="outline" size="sm" :disabled="loading || itemLoading"')
-    body=body.replace('    <p v-if="itemError"', '    <UserManager v-if="userAdmin" ref="userManager" :members="members" @changed="refreshMembers" />\n    <p v-if="itemError"')
-    body=body.replace('<MemberAvatar :member-id="user.id" :name="user.name" /><span class="font-medium">{{ user.name }}</span>', '<MemberAvatar :member-id="user.id" :name="user.name" :picture="user.avatar" /><span><span class="block font-medium">{{ user.name }}</span><span class="block text-xs text-muted-foreground">ID {{ user.id.slice(0,8) }}</span></span>')
-    body=body.replace('<TableCell>{{ user.email }}</TableCell>', '<TableCell>{{ user.email || "â€”" }}</TableCell>')
-    body=body.replace('                <div class="ml-auto">','                <div class="ml-auto flex items-center justify-end gap-2">\n                  <Button v-if="userAdmin" variant="outline" size="sm" :aria-label="\'Manage profile: \' + user.name" @click="userManager?.show(user)">Manage profile</Button>')
-    body=body.replace(':disabled="removing[user.id] || (isLastMember && user.id === currentUserId)"', ':disabled="!userAdmin || removing[user.id] || user.id === currentUserId || !!peopleRows.find(row => row.id === user.id)?.protected_owner"')
-    body=body.replace('  const loading = ref(true);', '  let memberRevision = 0;\n  const loading = ref(true);')
-    body=body.replace('const loadMembers = async () => {', 'const loadMembers = async () => {\n    const revision = ++memberRevision;')
-    body=body.replace('const res = await api.group.getMembers();', 'const res = await api.group.getMembers();\n      if (revision !== memberRevision) return;')
-    start=body.index('  const loadMembers = async () => {');end=body.index('  const handleRemove',start)
-    part=body[start:end].replace('    } catch (e) {','    } catch (e) {\n      if (revision !== memberRevision) return;').replace('      loading.value = false;', '      if (revision === memberRevision) loading.value = false;')
-    body=body[:start]+part+body[end:]
-    body=body.replace('workshopRevision++; itemRevision++;', 'memberRevision++; workshopRevision++; itemRevision++;')
-    body=body.replace('watch(selectedId, () => { userAdmin.value = false;', 'watch([selectedId, () => auth.user?.id], () => { members.value = []; userAdmin.value = false;')
-    target.write_text(body)
-    nest_frontend()
-    brand_frontend()
+HOˆ’[™[ÜHŠHKˆÈYˆXÛÛˆYUÜ™[˜Ú˜[YNˆÛÛ\]Y
 
 
-def build():
-    global TOOLCHAIN_ROOT, UPSTREAM_ROOT
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--toolchain-root', type=pathlib.Path, default=TOOLCHAIN_ROOT)
-    parser.add_argument('--upstream-root', type=pathlib.Path, default=UPSTREAM_ROOT)
-    parser.add_argument('--prepare', action='store_true', help='prepare dependencies without running typecheck or build')
-    args = parser.parse_args()
-    TOOLCHAIN_ROOT, UPSTREAM_ROOT = args.toolchain_root.resolve(), args.upstream_root.resolve()
-    prepare()
-    node = pathlib.Path((TOOLCHAIN_ROOT/'node-path.txt').read_text().strip())
-    env = dict(os.environ, PATH=str(node/'bin')+os.pathsep+os.environ['PATH'])
-    # oxc-parser 0.72's native ARM binding requires instructions absent on this Pi.
-    # Use the same version's upstream WASI binding only for this build dependency.
-    wasi = TOOLCHAIN_ROOT/'oxc-wasi/node_modules/@oxc-parser/binding-wasm32-wasi'
-    if wasi.exists():
-        binding = BUILD/'node_modules/.pnpm/oxc-parser@0.72.3/node_modules/oxc-parser/bindings.js'
-        source = binding.read_text()
-        anchor = 'nativeBinding = requireNative()'
-        if anchor in source:
-            binding.write_text(source.replace(anchor, 'nativeBinding = require('+repr(str(wasi))+')'))
-    pnpm = TOOLCHAIN_ROOT/'pnpm/node_modules/.bin/pnpm'
-    run_frontend_command([str(pnpm), 'exec', 'nuxt', 'prepare'], cwd=BUILD, env=env)
-    if not args.prepare:
-        result = subprocess.run([str(pnpm), 'exec', 'nuxi', 'typecheck'], cwd=BUILD, env=env, capture_output=True, text=True)
-        (ROOT/'work/homebox-ui-typecheck.log').write_text(result.stdout+result.stderr)
-        diagnostics = [list(match.groups()) for match in re.finditer(r'^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$', result.stdout+result.stderr, re.M)]
-        if result.returncode:
-            baseline = json.loads((ROOT/'homebox-ui/upstream-typecheck.json').read_text())
-            pin = source_commit(UPSTREAM_ROOT/'upstream/homebox')
-            additional = Counter(map(tuple, diagnostics))-Counter(map(tuple, baseline['diagnostics']))
-            if baseline['pin'] != pin or not diagnostics or additional:
-                print(result.stdout+result.stderr)
-                raise RuntimeError('Frontend typecheck introduced errors or its upstream baseline changed.')
-            print(f'Typecheck: no added diagnostics; {len(diagnostics)} pre-existing upstream diagnostics.', flush=True)
-        run_frontend_command([str(pnpm), 'run', 'build'], cwd=BUILD, env=env)
+HOˆ•ÛÜšÜÚÜŠKÎˆ‹İÛÜšÜÚÜÛX\‹Xİ]™NˆÛÛ\]Y
 
 
-if __name__ == '__main__':
-    build()
+HOˆ›İ]Kœ]OOH‹İÛÜšÜÚÜÛX\ŠHKˆÈYˆKXÛÛˆYUYÓ][\K˜[YNˆÛÛ\]Y
+
+
+HOˆ“X™[ŠKÎˆ‹İÛÜšÜÚÜÛX™[È‹Xİ]™NˆÛÛ\]Y
+
+
+HOˆ›İ]Kœ]OOH‹İÛÜšÜÚÜÛX™[ÈŠHKˆÈ‹‹˜˜\ÙS˜]–Í×HKYˆL˜[YNˆÛÛ\]Y
+
+
+HOˆ•\Ù\œÈŠKÎˆ‹ØÛÛXİ[Û‹ÛY[X™\œÈ‹Xİ]™NˆÛÛ\]Y
+
+
+HOˆ›İ]Kœ]OOH‹ØÛÛXİ[Û‹ÛY[X™\œÈŠKÛÛ\ÚX›Nˆ[™Yš[™YKˆÂˆYˆLKXÛÛˆYQš[QØİ[Y[][\K˜[YNˆÛÛ\]Y
+
+
+HOˆ“[Ü™HŠKÎˆˆ‹ˆXİ]™NˆÛÛ\]Y
+
+
+HOˆ˜[ÙJKˆÛÛ\ÚX›NˆÂˆ‹‹˜˜\ÙS˜]‹œÛXÙJKÊK˜\ÙS˜]–ÍHK˜\ÙS˜]–ÍWHK˜\ÙS˜]–Í—HKˆ‹‹˜˜\ÙS˜]–Í×HK˜ÛÛ\ÚX›HK™š[\Š][HOˆ][KÈOOH‹ØÛÛXİ[Û‹ÛY[X™\œÈŠKˆ‹‹ÛÜšÜÚÜ[šÜË˜[YK™š[\Š
+ÚYJHOˆYOOH›X\ˆ	‰ˆYOOH›X™[ÈŠK›X\
+
+ÚY˜[YWK[™^
+HOˆ
+ÈYˆ
+È[™^˜[YNˆÛÛ\]Y
+
+
+HOˆ˜[YHJKÎˆİÛÜšÜÚÜÉÚYXXİ]™NˆÛÛ\]Y
+
+
+HOˆ›İ]Kœ]OOHİÛÜšÜÚÜÉÚYX
+HJJKˆÈYˆL‹˜[YNˆÛÛ\]Y
+
+
+HOˆ”™\Ü™YY˜XÚÈŠKÎˆ‹Ù™YY˜XÚÈ‹Xİ]™NˆÛÛ\]Y
+
+
+HOˆ›İ]Kœ]OOH‹Ù™YY˜XÚÈŠHKˆÈYˆL˜[YNˆÛÛ\]Y
+
+
+HOˆ‘\]Z\Y[\›Z[˜[ŠKÎˆ\›Z[˜[T“˜[YKXİ]™NˆÛÛ\]Y
+
+
+HOˆ˜[ÙJHKˆÈYˆLK˜[YNˆÛÛ\]Y
+
+
+HOˆ
+›Y[KœØØ[›™\ˆŠJKÎˆˆ‹Xİ]™NˆÛÛ\]Y
+
+
+HOˆ˜[ÙJKXİ[ÛˆÜ[”ØØ[›™\ˆKˆKˆKˆJNÂˆØ]Ú
+İÛÜšÜÚÜÜ›İ\
+
+HOˆ\ÙP]]ÛÛ^
+
+K\Ù\ËšYK
+
+HOˆÈÛÜšÜÚÜ˜ÛÛ^˜[YHH[ÈÛÜšÜÚÜœ™Yœ™\Ú
+
+K˜Ø]Ú
+
+
+HOˆßJNÈKÈ[[YYX]NˆYHJNÂ‚ˆÛÛœİ]ZXÚÓY[PXİ[ÛœÈHÛÛ\]Y
+
+
+HOˆÉÉÉÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	Ë‹‹›˜]‹›X\
+ˆOˆ
+ÉË	Ë‹‹›˜]‹˜[YK™š[\ŠˆOˆ‹›˜[YK˜[YHOOH“[Ü™HŠK›X\
+ˆOˆ
+ÉÊBˆ\™Ù]H•RSÉÛ^[İ]ËÙY˜][YIÂˆ\™Ù]Üš]Wİ^
+\™Ù]œ™XYİ^
+
+Kœ™\XÙJ	İ^ˆÛÛ\]Y
+
+
+HOˆ‹›˜[YK˜[YJK	Ë	İ^ˆ‹›˜[YK˜[YK	ÊJB‚‚™YˆÚ[Ùœ›Û[™
+
+N‚ˆ^[İ]H•RSÉÛ^[İ]ËÙY˜][YIÂˆÛİ\˜ÙHH^[İ]œ™XYİ^
+
+Bˆİ\HÛİ\˜ÙKš[™^
+	ÏÚYX˜\’XY\ˆÛ\ÜÏHš][\ËXÙ[\ˆ‰ÊBˆÙ[XİÜˆH	ÈÛÛXİ[Û”Ù[XİÜˆÏ‰Âˆ[™HÛİ\˜ÙKš[™^
+Ù[XİÜ‹İ\
+H
+È[ŠÙ[XİÜŠBˆÛİ\˜ÙHHÛİ\˜ÙVÎœİ\H
+È	ÉÉÏÚYX˜\’XY\ˆÛ\ÜÏHš][\Ë\İ™]ÚØ\LˆLÈ‚ˆ^[šÈÏH‹ÚÛYHˆ\šXK[X™[HËPÜ˜]HÛYHˆÛ\ÜÏH™›^LLËY[][\ËXÙ[\ˆØ\LÈ›İ[™Y[YLˆ^\ÚYX˜\‹Y›Ü™YÜ›İ[™İ™\˜™Ë\ÚYX˜\‹XXØÙ[Ü›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—Nš\İYKXÙ[\ˆÜ›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—NœL‚ˆ\ÙÛÈ\šXKZY[HYHˆÛ\ÜÏHœÚ^™KMÈÚš[šËLˆÏ‚ˆÓ^[šÏ‚‚ˆÛÛXİ[Û”Ù[XİÜˆÏ‰ÉÉÊÜÛİ\˜ÙVÙ[™—Bˆ^[İ]Üš]Wİ^
+Ûİ\˜ÙJBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÈÚYX˜\‘Ü›İ\X™[‰Ë	ÉÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	Ù›Ü\ÚYİË[Yİ™\˜™Ë\š[X\KÎL	Ë	Úİ™\˜™Ë\š[X\KÎL	ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ØÛ\ÜÏH™›^\İYKXÙ[\ˆÜ›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—Nš\İYK\İ\Ü›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—N˜™ËY\İXİ]™HÜ›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—N^Y\İXİ]™KY›Ü™YÜ›İ[™Ü›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—NœÚYİË\ÛHÜ›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—Nšİ™\˜™ËY\İXİ]™KÎL‰Ë	ØÛ\ÜÏH™›^\İYKXÙ[\ˆ›İ[™Y[Y^\ÚYX˜\‹Y›Ü™YÜ›İ[™İ™\˜™Ë\ÚYX˜\‹XXØÙ[İ™\^\ÚYX˜\‹XXØÙ[Y›Ü™YÜ›İ[™Ü›İ\Y]KVØÛÛ\ÚX›OZXÛÛ—Nš\İYK\İ\‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ØÛ\ÜÏHœİXÚŞHÜL‹LŒ›^Vİ˜\ŠKZXY\‹ZZYÚ[[Øš[JWH˜[œÛ]K^KVËL\H›^XÛÛ™Ë\ÙXÛÛ™\HLˆÚYİË[YÛNšVİ˜\ŠKZXY\‹ZZYÚ
+WHÛN™›^\›İÈ‰Ë	ØÛ\ÜÏHœİXÚŞHÜL‹LŒ›^Z[‹ZVİ˜\ŠKZXY\‹ZZYÚ[[Øš[JWH›^XÛÛØ\LH›Ü™\‹Xˆ›Ü™\‹X›Ü™\ˆ™ËXØ\™LÈKLˆÛN›Z[‹ZVİ˜\ŠKZXY\‹ZZYÚ
+WHÛN™›^\›İÈ‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	È]ˆÛ\ÜÏH™›^LKÌˆÜ›İÈ][\ËXÙ[\ˆ\İYKY[™Ø\LˆÛNšX]]È‰Ë	È]ˆÛ\ÜÏH™›^Z[‹]ËLÜ›İÈ][\ËXÙ[\ˆ\İYKY[™Ø\Lˆ—ˆ]šXÙTİ]\È‹ZYHˆ\™Y™\™[˜Ù\Ë™\Ü^SYØXŞRXY\ˆ]\›Z[˜[XY\ˆˆ™[˜X›YHˆ\™Y™\™[˜Ù\Ë™\Ü^SYØXŞRXY\ˆ]\›Z[˜[XY\ˆˆÛ\ÜÏHœÚš[šËLˆÏ‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	È\XY\‘XÛÜˆÛ\ÜÏH‹[]LLY[ˆÎ˜›ØÚÈˆÏ‰Ë	ÉÉÈ\XY\‘XÛÜˆÛ\ÜÏH‹[]LLY[ˆÎ˜›ØÚÈˆÏ‚ˆ]šXÙTİ]\È‹ZYHœ™Y™\™[˜Ù\Ë™\Ü^SYØXŞRXY\ˆ	‰ˆ\›Z[˜[XY\ˆˆ™[˜X›YHœ™Y™\™[˜Ù\Ë™\Ü^SYØXŞRXY\ˆ	‰ˆ\›Z[˜[XY\ˆˆÛ\ÜÏH˜XœÛÛ]HšYÚMˆÜLÈ‹LÌY[ˆÎ™›^ˆÏ‰ÉÉÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	Ï]ÛˆÚ^™OHšXÛÛˆˆÛXÚÏHšYÙÙ\”ÙX\˜Ú‰Ë	Ï]ÛˆÚ^™OHšXÛÛˆˆ˜\šXK[X™[H‰
+	ÙÛØ˜[œÙX\˜Ú	ÊHˆÛXÚÏHšYÙÙ\”ÙX\˜Ú‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	Ï]ÛˆÚ^™OHšXÛÛˆˆÛXÚÏH›Ü[”ØØ[›™\ˆ‰Ë	Ï]ÛˆÚ^™OHšXÛÛˆˆ˜\šXK[X™[H‰
+	ÛY[KœØØ[›™\—	ÊHˆÛXÚÏH›Ü[”ØØ[›™\ˆ‰ÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ÈÛÛœİÙX\˜ÚH™YŠˆŠNÉË	ÉÉÈÛÛœİ\›Z[˜[XY\ˆH™YŠ˜[ÙJNÂˆ]\ÚİÜXY\“YYXNˆYYXT]Y\S\İ[H[ÂˆÛÛœİ\]Q\ÚİÜXY\ˆH
+
+HOˆÈ\›Z[˜[XY\‹˜[YHH\ÚİÜXY\“YYXOË›X]Ú\È˜[ÙNÈNÂˆÛ“[İ[Y
+
+
+HOˆÈ\ÚİÜXY\“YYXHHÚ[™İË›X]ÚYYXJŠZ[‹]ÚYˆL
+HŠNÈ\]Q\ÚİÜXY\Š
+NÈ\ÚİÜXY\“YYXK˜Y]™[\İ[™\Š˜Ú[™ÙH‹\]Q\ÚİÜXY\ŠNÈJNÂˆÛ™Y›Ü™U[›[İ[
+
+
+HOˆ\ÚİÜXY\“YYXOËœ™[[İ™Q]™[\İ[™\Š˜Ú[™ÙH‹\]Q\ÚİÜXY\ŠJNÂˆÛÛœİ\›Z[˜[T“HÛÛ\]Y
+
+
+HOˆÈÛÛœİ\›H™]ÈT“
+Ú[™İË›ØØ][Û‹š™YŠNÈ\›œÜHŒMÍÍHÈ\›œ]˜[YHH‹ÈÈ\›œÙX\˜ÚHÛ[ÙOYY]ÜˆÈ\›š\ÚHˆÈ™]\›ˆ\›š™YÈJNÂˆÛÛœİÙX\˜ÚH™YŠˆŠNÉÉÉÊBˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	È[\Ü\XY\‘XÛÜˆœ›ÛHŸ‹ØÛÛ\Û™[ËĞ\ÒXY\‘XÛÜ‹YHÉË	È[\Ü]šXÙTİ]\Èœ›ÛHŸ‹ØÛÛ\Û™[ËÕÛÜšÜÚÜÑ]šXÙTİ]\ËYH×ˆ[\Ü\XY\‘XÛÜˆœ›ÛHŸ‹ØÛÛ\Û™[ËĞ\ÒXY\‘XÛÜ‹YHÉÊB‚‚™Yˆİš\Ú][WÜ™\ÜÛœÙWÜÚÜØÛÙ\×Ùœ›ÛWİ\]Wİ\İÊ
+N‚ˆˆˆ’ÙY\™\ÜÛœÙK[Û›HY[YšY\œÈİ]Ùˆ\]H^[ØYÈ[ˆ[›™YTH\İËˆˆˆ‚ˆ™[]]™HH]X‹”]
+	ÛX‹Ø\K××İ\İ×Ëİ\Ù\‹Ú][\Ë\İÉÊBˆ\™Ù]H•RSÈ™[]]™BˆÛİ\˜ÙHH\™Ù]œ™XYİ^
+
+BˆYˆ›İ™KœÙX\˜Ú
+‰×ŠÎ™\Ü^RYÚÜÛÙJW‰ËÛİ\˜ÙJN‚ˆ™]\›‚ˆ™]Üš]\ÈH
+ˆ
+ˆÛÛœİ][U\]HH×ˆ‹‹š][Kˆ[]U\RYˆ][K™[]U\OËšY—‹ˆ\™[Yˆ][Kœ\™[ËšY[‹ˆÛÛœİÈ\Ü^RYˆÛZ]Y][Q\Ü^RQÚÜÛÙNˆÛZ]Y][TÚÜÛÙK‹‹š][Q›Ü•\]HHH][N×ˆ›ÚYÛZ]Y][Q\Ü^RQ×ˆ›ÚYÛZ]Y][TÚÜÛÙN×ˆÛÛœİ][U\]HH×ˆ‹‹š][Q›Ü•\]Kˆ[]U\RYˆ][K™[]U\OËšY—‹ˆ\™[Yˆ][Kœ\™[ËšY[ŠKˆ
+ˆÛÛœİÚ[R][U\]HH×ˆ‹‹˜Ú[R][Kˆ[]U\RYˆÚ[R][K™[]U\OËšY—‹ˆ\™[Yˆ\™[šY‹ˆÛÛœİÈ\Ü^RYˆÛZ]YÚ[Q\Ü^RQÚÜÛÙNˆÛZ]YÚ[TÚÜÛÙK‹‹˜Ú[Q›Ü•\]HHHÚ[R][N×ˆ›ÚYÛZ]YÚ[Q\Ü^RQ×ˆ›ÚYÛZ]YÚ[TÚÜÛÙN×ˆÛÛœİÚ[R][U\]HH×ˆ‹‹˜Ú[Q›Ü•\]Kˆ[]U\RYˆÚ[R][K™[]U\OËšY—‹ˆ\™[Yˆ\™[šYŠKˆ
+ˆÛÛœİÚ[’][U\]HH×ˆ‹‹˜Ú[’][Kˆ[]U\RYˆÚ[’][K™[]U\OËšY—‹ˆ\™[Yˆ\™[šY‹ˆÛÛœİÈ\Ü^RYˆÛZ]YÚ[‘\Ü^RQÚÜÛÙNˆÛZ]YÚ[”ÚÜÛÙK‹‹˜Ú[‘›Ü•\]HHHÚ[’][N×ˆ›ÚYÛZ]YÚ[‘\Ü^RQ×ˆ›ÚYÛZ]YÚ[”ÚÜÛÙN×ˆÛÛœİÚ[’][U\]HH×ˆ‹‹˜Ú[‘›Ü•\]Kˆ[]U\RYˆÚ[’][K™[]U\OËšY—‹ˆ\™[Yˆ\™[šYŠKˆ
+ˆÛÛœİ][U\]HH×ˆ‹‹œ\™[ˆ[]U\RYˆ\™[™[]U\OËšY—‹ˆ\™[Yˆ\™[ØØ][Û‹šY‹ˆÛÛœİÈ\Ü^RYˆÛZ]Y\™[\Ü^RQÚÜÛÙNˆÛZ]Y\™[ÚÜÛÙK‹‹œ\™[›Ü•\]HHH\™[×ˆ›ÚYÛZ]Y\™[\Ü^RQ×ˆ›ÚYÛZ]Y\™[ÚÜÛÙN×ˆÛÛœİ][U\]HH×ˆ‹‹œ\™[›Ü•\]Kˆ[]U\RYˆ\™[™[]U\OËšY—‹ˆ\™[Yˆ\™[ØØ][Û‹šYŠKˆ
+BˆYˆ[Š™]Üš]\ÊHOH‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ	Ñ^XİY›İ\ˆ[›™Y][H\]H\İš^\™\ÉÊBˆ›ÜˆÜšYÚ[˜[™\XÙ[Y[[ˆ™]Üš]\Î‚ˆÛİ[HÛİ\˜ÙK˜Ûİ[
+ÜšYÚ[˜[
+BˆYˆÛİ[OH[™Ûİ\˜ÙK˜Ûİ[
+™\XÙ[Y[
+HOHN‚ˆÛÛ[YBˆYˆÛİ[OHN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ‰Ñ^XİY^XİHÛ™H][H\]Hš^\™H[˜ÚÜˆ[ˆÜ™[]]™_K›İ[™ØÛİ[IÊBˆÛİ\˜ÙHHÛİ\˜ÙKœ™\XÙJÜšYÚ[˜[™\XÙ[Y[
+Bˆ\™Ù]Üš]Wİ^
+Ûİ\˜ÙJB‚‚™YˆØ[Y\˜WÛØÜ—Ùœ›Û[™
+
+N‚ˆ]H	ÜYÙ\ËÚ][KÖÚYKÚ[™^ÙY]YIÂˆ™\XÙJˆ]ˆ	È[\ÜÈ™XÛÙÛš^™S˜[YQœ›ÛQš[SØØ[HHœ›ÛHŸ‹ØÛÛ\Û™[ËÑ›Ü›KØØ[Y\˜HÉËˆ	È[\ÜÈ™XÛÙÛš^™S˜[YQœ›ÛR[XYÙKİYÙÙ\İ˜[YUÚ]İ]İ™\Üš][™ÑY]ÈHœ›ÛHŸ‹ÛX‹ÛØØ[[ØÜˆÉËˆ
+Bˆ™\XÙJˆ]ˆ	ÉÉÈ\Ş[˜È[˜İ[ÛˆİYÙÙ\İ][S˜[YQœ›ÛTİÊš[Nˆš[JHÂˆHÂˆÛÛœİİYÙÙ\İ[ÛˆH]ØZ]™XÛÙÛš^™S˜[YQœ›ÛQš[SØØ[Jš[JNÂˆYˆ
+\İYÙÙ\İ[ÛŠHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÛ›İÙ›İ[™ŠNÂˆ™]\›ÂˆBˆ][K˜[YK›˜[YHHİYÙÙ\İ[ÛÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÜİYÙÙ\İYŠNÂˆHØ]ÚÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWİ[˜]˜Z[X›HŠNÂˆBˆIÉÉËˆ	ÉÉÈ\Ş[˜È[˜İ[ÛˆİYÙÙ\İ][S˜[YQœ›ÛTİÊš[Nˆš[JHÂˆHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›ØÜ—Ü[›š[™ÈŠNÂˆÛÛœİİ]ÛÛYHH]ØZ]İYÙÙ\İ˜[YUÚ]İ]İ™\Üš][™ÑY]ÊÂˆÙ]˜[YNˆ
+
+HOˆ][K˜[YK›˜[YKˆÙ]™]š\Ú[Ûˆ
+
+HOˆ˜[YQY]™]š\Ú[Û‹˜[YKˆÙ]˜[YNˆ
+˜[YNˆİš[™ÊHOˆÈ][K˜[YK›˜[YHH˜[YNÈKˆ™XÛÙÛš^™Nˆ™XÛÙÛš^™S˜[YQœ›ÛR[XYÙKˆ[XYÙNˆš[KˆJNÂˆYˆ
+İ]ÛÛYHOOH™[\HŠHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÛ›İÙ›İ[™ŠNÂˆH[ÙHYˆ
+İ]ÛÛYHOOH™Y]YY\š[™Ë\™XÛÙÛš][ÛˆŠHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÜ™\Ù\™YŠNÂˆH[ÙHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÜİYÙÙ\İYŠNÂˆBˆHØ]ÚÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWİ[˜]˜Z[X›HŠNÂˆBˆIÉÉËˆ
+Bˆ™\XÙJ]	ÈÛÛœİ˜[YSØÜ“Y\ÜØYÙHH™YŠˆŠNÉË	ÈÛÛœİ˜[YSØÜ“Y\ÜØYÙHH™YŠˆŠN×ˆÛÛœİ˜[YQY]™]š\Ú[ÛˆH™YŠ
+NÉÊBˆ™\XÙJˆ]ˆ	È‹[[Ù[Hš][VÙšY[œ™Y—H—ˆÛ\ÜÏH›Z[‹]ËL›^LH‰Ëˆ	È‹[[Ù[Hš][VÙšY[œ™Y—H—ˆ\]N›[Ù[]˜[YOH›˜[YQY]™]š\Ú[ÛŠÊÈ—ˆÛ\ÜÏH›Z[‹]ËL›^LH‰Ëˆ
+Bˆ™\XÙJˆ]ˆ	ÉÉÈĞ]Û‚ˆÙ]‚ˆ›Ü›U^šY[ˆ‹Y[ÙKZYH™šY[\HOOH	İ^	È‰ÉÉËˆ	ÉÉÈĞ]Û‚ˆÙ]‚ˆ‹ZYH™šY[œ™YˆOOH	Û˜[YIÈˆÛ\ÜÏH›]LH^^È^[]]YY›Ü™YÜ›İ[™‚ˆŞÈ	
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›ØØ[ÛØÜ—Û›İXÙHŠH_BˆÜ‚ˆ›Ü›U^šY[ˆ‹Y[ÙKZYH™šY[\HOOH	İ^	È‰ÉÉËˆ
+B‚ˆ[Ù[H	ØÛÛ\Û™[ËÑ[]KĞÜ™X]S[Ù[YIÂˆ™\XÙJˆ[Ù[ˆ	È[\ÜÈ™XÛÙÛš^™S˜[YQœ›ÛQš[SØØ[HHœ›ÛHŸ‹ØÛÛ\Û™[ËÑ›Ü›KØØ[Y\˜HÉËˆ	È[\ÜÈ™XÛÙÛš^™S˜[YQœ›ÛR[XYÙKİYÙÙ\İ˜[YUÚ]İ]İ™\Üš][™ÑY]ÈHœ›ÛHŸ‹ÛX‹ÛØØ[[ØÜˆÉËˆ
+Bˆ™\XÙJ[Ù[	ÈÛÛœİ˜[YSØÜ“Y\ÜØYÙHH™YŠˆŠNÉË	ÈÛÛœİ˜[YSØÜ“Y\ÜØYÙHH™YŠˆŠN×ˆÛÛœİ˜[YQY]™]š\Ú[ÛˆH™YŠ
+NÉÊBˆ™\XÙJˆ[Ù[ˆ	ÉÉÈ\Ş[˜È[˜İ[ÛˆİYÙÙ\İ˜[YQœ›ÛTİÊš[Nˆš[JHÂˆHÂˆÛÛœİİYÙÙ\İ[ÛˆH]ØZ]™XÛÙÛš^™S˜[YQœ›ÛQš[SØØ[Jš[JNÂˆYˆ
+\İYÙÙ\İ[ÛŠHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÛ›İÙ›İ[™ŠNÂˆ™]\›ÂˆBˆ›Ü›K›˜[YHHİYÙÙ\İ[ÛÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÜİYÙÙ\İYŠNÂˆHØ]ÚÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWİ[˜]˜Z[X›HŠNÂˆBˆIÉÉËˆ	ÉÉÈ\Ş[˜È[˜İ[ÛˆİYÙÙ\İ˜[YQœ›ÛTİÊš[Nˆš[JHÂˆHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›ØÜ—Ü[›š[™ÈŠNÂˆÛÛœİİ]ÛÛYHH]ØZ]İYÙÙ\İ˜[YUÚ]İ]İ™\Üš][™ÑY]ÊÂˆÙ]˜[YNˆ
+
+HOˆ›Ü›K›˜[YKˆÙ]™]š\Ú[Ûˆ
+
+HOˆ˜[YQY]™]š\Ú[Û‹˜[YKˆÙ]˜[YNˆ
+˜[YNˆİš[™ÊHOˆÈ›Ü›K›˜[YHH˜[YNÈKˆ™XÛÙÛš^™Nˆ™XÛÙÛš^™S˜[YQœ›ÛR[XYÙKˆ[XYÙNˆš[KˆJNÂˆYˆ
+İ]ÛÛYHOOH™[\HŠHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÛ›İÙ›İ[™ŠNÂˆH[ÙHYˆ
+İ]ÛÛYHOOH™Y]YY\š[™Ë\™XÛÙÛš][ÛˆŠHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÜ™\Ù\™YŠNÂˆH[ÙHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÜİYÙÙ\İYŠNÂˆBˆHØ]ÚÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWİ[˜]˜Z[X›HŠNÂˆBˆIÉÉËˆ
+Bˆ™\XÙJˆ[Ù[ˆ	È‹[[Ù[H™›Ü›K›˜[YH—ˆÛ\ÜÏH›Z[‹]ËL›^LH‰Ëˆ	È‹[[Ù[H™›Ü›K›˜[YH—ˆ\]N›[Ù[]˜[YOH›˜[YQY]™]š\Ú[ÛŠÊÈ—ˆÛ\ÜÏH›Z[‹]ËL›^LH‰Ëˆ
+Bˆ™\XÙJˆ[Ù[ˆ	È‹ZYH›˜[YSØÜ“Y\ÜØYÙHˆÛ\ÜÏH^\ÛH^[]]YY›Ü™YÜ›İ[™ˆ›ÛOHœİ]\ÈŞÈ˜[YSØÜ“Y\ÜØYÙH_OÜ‰Ëˆ	È‹ZYH›˜[YSØÜ“Y\ÜØYÙHˆÛ\ÜÏH^\ÛH^[]]YY›Ü™YÜ›İ[™ˆ›ÛOHœİ]\ÈŞÈ˜[YSØÜ“Y\ÜØYÙH_OÜ—ˆÛ\ÜÏH^^È^[]]YY›Ü™YÜ›İ[™ŞÈ	
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›ØØ[ÛØÜ—Û›İXÙHŠH_OÜ‰Ëˆ
+BˆØØ[HH•RSÉÛØØ[\ËÙ[‹šœÛÛ‰Âˆ]HHœÛÛ‹›ØYÊØØ[Kœ™XYİ^
+[˜ÛÙ[™ÏIİ]‹N	ÊJBˆØ[Y\˜HH]VÉØÛÛ\Û™[É×VÉÙ›Ü›I×VÉØØ[Y\˜I×BˆØ[Y\˜VÉÛ˜[YWÜ™\Ù\™Y	×HH	Ö[İ\ˆ\Y˜[YHØ\ÈÙ\ˆĞÔˆš[š\ÚY[ˆH˜XÚÙÜ›İ[™‰ÂˆØ[Y\˜VÉÛØÜ—Ü[›š[™É×HH	Ô™XY[™ÈHX™[[ˆ\Èœ›İÜÙ\¸ )ˆš\œİ\ÙHX^HİÛ›ØYĞÔˆÛÙH[™H[™Û\Ú[Ù[‰ÂˆØ[Y\˜VÉÛØØ[ÛØÜ—Û›İXÙI×HH	Ó˜[YHİYÙÙ\İ[ÛœÈ[ˆ[ˆ\Èœ›İÜÙ\‹[™HİYÙÙ\İ[ÛˆİÈ\È›İ\ØYYˆĞÔˆÛÙH[™H[™Û\Ú[Ù[İÛ›ØYÛˆš\œİ\ÙK‰ÂˆØØ[KÜš]Wİ^
+œÛÛ‹™[\Ê]K[œİ\™WØ\ØÚZOQ˜[ÙK[™[LŠJÉ×‰Ë[˜ÛÙ[™ÏIİ]‹N	ÊB‚‚™Yˆ™\\™J
+N‚ˆœ›ÛHÛYX›ŞÜ]ÚÙ][\ÜX]\šX[^™Bˆ˜]]™WÜÛİ\˜ÙHHX]\šX[^™JTÕ‘PSWÔ“ÓÕ
+BˆÚ][˜ÛÜ]™YJ˜]]™WÜÛİ\˜ÙKÉÙœ›Û[™	Ë•RS\œ×Ù^\İÛÚÏUYKˆYÛ›Ü™O\Ú][šYÛ›Ü™WÜ]\›œÊ	Û›ÙWÛ[Ù[\ÉË	Ë›^	Ë	Ë›İ]]	ÊJBˆİš\Ú][WÜ™\ÜÛœÙWÜÚÜØÛÙ\×Ùœ›ÛWİ\]Wİ\İÊ
+BˆÚ][˜ÛÜ]™YJ“ÓÕÉÚÛYX›Ş]ZKÛİ™\›^IË•RS\œ×Ù^\İÛÚÏUYJBˆØ[Y\˜WÛØÜ—Ùœ›Û[™
+
+BˆÚ][˜ÛÜLŠ“ÓÕÉÚÚ[ÜÚËÛY[X™\‹X]˜]\‹šœÉË•RSÉÛX‹ÛY[X™\‹X]˜]\‹šœÉÊBˆÚ][˜ÛÜLŠ“ÓÕÉÚÚ[ÜÚËÛX™[YY]Ü‹šœÉË•RSÉÛX‹ÛX™[YY]Ü‹šœÉÊBˆXÚØYÙHHœÛÛ‹›ØYÊ
+•RSÉÜXÚØYÙKšœÛÛ‰ÊKœ™XYİ^
+
+JBˆİ™\œšY\ÈHÛ˜[YNˆ	ÌËKŒŒ	È›Üˆ˜[YH[ˆ
+	İYIË	ĞYKÜ[[YKXÛÜ™IË	ĞYKÜ[[YKYÛIË	ĞYKÜ™XXİ]š]IË	ĞYKÜÚ\™Y	Ë	ĞYKØÛÛ\[\‹\Ù˜ÉË	ĞYKØÛÛ\[\‹XÛÜ™IË	ĞYKØÛÛ\[\‹YÛIË	ĞYKØÛÛ\[\‹\ÜÜ‰Ë	ĞYKÜÙ\™\‹\™[™\™\‰Ê_BˆXÚØYÙKœÜ
+	ÜœIË›Û™JBˆ
+•RSÉÜXÚØYÙKšœÛÛ‰ÊKÜš]Wİ^
+œÛÛ‹™[\ÊXÚØYÙK[™[LŠJÉ×‰ÊBˆ
+•RSÉÜœK]ÛÜšÜÜXÙKX[[	ÊKÜš]Wİ^
+	Ûİ™\œšY\Î—‰ÊÉÉËš›Ú[Šˆˆ	ŞÛ˜[Y_IÎˆİ™\œÚ[ÛŸWˆˆ›Üˆ˜[YK™\œÚ[Ûˆ[ˆİ™\œšY\Ëš][\Ê
+JJBˆYˆ
+“ÓÕÉÚÛYX›Ş]ZKÜœK[ØÚËX[[	ÊK™^\İÊ
+N‚ˆÚ][˜ÛÜLŠ“ÓÕÉÚÛYX›Ş]ZKÜœK[ØÚËX[[	Ë•RSÉÜœK[ØÚËX[[	ÊBˆÛÛ™šYİ\™WİZWØÛÛ\Û™[Ù\ØÛİ™\J
+Bˆ™\XÙJ	Û^˜ÛÛ™šYËÉË	ØÜÜÎˆÈØ\ÜÙ]ËØÜÜËÛXZ[‹˜ÜÜÈ—K	Ë	ØÜÜÎˆÈØ\ÜÙ]ËØÜÜËÛXZ[‹˜ÜÜÈ‹Ø\ÜÙ]ËØÜÜËİÛÜšÜÚÜ˜ÜÜÈ‹Ø\ÜÙ]ËØÜÜËØØÜ˜]K˜ÜÜÈ—K	ÊBˆÈHÛYH\Ú›Ø\™ÚİÜÈHØ[YHİ\œ™[İ\İÙH\ÈH\]Z\Y[\›Z[˜[‚ˆ™\XÙJ	ÜYÙ\ËÚÛYKÚ[™^YIË	È[\Ü˜\ÙPØ\™œ›ÛIË	È[\ÜÚXÚÙYİ]][\Èœ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜĞÚXÚÙYİ]][\ËYH×ˆ[\Ü˜\ÙPØ\™œ›ÛIÊBˆ™\XÙJ	ÜYÙ\ËÚÛYKÚ[™^YIË	ÈÙXİ[Û—ˆİX]OˆŞÈ	
+šÛYKœ™XÙ[WØYYŠH_IË	ÈÚXÚÙYİ]][\ÈÏ——ˆÙXİ[Û—ˆİX]OˆŞÈ	
+šÛYKœ™XÙ[WØYYŠH_IÊBˆÈ˜]]™HÚYX˜\ˆ[™]ZXÚÈY[KÚ]X[˜YÙ\‹[Û›H[šY\ÈY[ˆ›ÜˆY[X™\œË‚ˆ˜]šYØ][Û—Ùœ›Û[™
+
+BˆÚ[Ùœ›Û[™
+
+Bˆ™\XÙJ	Û^[İ]ËÙY˜][YIË	ØÛ\ÜÏHšNHÜ›İÈÛN›X^]Ë\ÛH‰Ë	ØÛ\ÜÏHšNHZ[‹]ËLÜ›İÈÛN›X^]Ë\ÛH‰ÊBˆÈ]˜YÙ\ÈÛˆHXİX[^\İ[™ÈÛÛXİ[ÛˆY[X™\œÈX›K‚ˆ]H	ÜYÙ\ËØÛÛXİ[Û‹Ú[™^ÛY[X™\œËYIÂˆ™\XÙJ]	ÈÛÛœİØY[™ÈH™YŠYJNÉË	ÉÉÈÛÛœİÛÜšÜÚÜH\ÙUÛÜšÜÚÜ
+
+NÂˆÛÛœİÈÙ[XİYYHH\ÙPÛÛXİ[ÛœÊ
+NÂˆÛÛœİ˜YÙT›İÜÈH™Y[V×OŠ×JK[ÜT›İÜÈH™Y[V×OŠ×JKÛÜšÜÚÜ\œ›ÜˆH™YŠˆŠNÂˆÛÛœİY[X™\“Ø[œÈH™YÛÜšÜÚÜØ[–×H[Š[
+K][SØY[™ÈH™YŠYJK][Q\œ›ÜˆH™YŠˆŠNÂˆ]][T™]š\Ú[ÛˆHY[X™\•[Y\ˆ™]\›•\O\[ÙˆÙ][\˜[ˆ[H[Âˆ\Ş[˜È[˜İ[ÛˆØYY[X™\“Ø[œÊ
+HÂˆÛÛœİ™]š\Ú[ÛˆH
+ÊÚ][T™]š\Ú[ÛÂˆ][SØY[™Ë˜[YHHYNÈ][Q\œ›Ü‹˜[YHHˆÂˆHÂˆÛÛœİ›İÜÈH]ØZ]ÛÜšÜÚÜœ™\]Y\İÛÜšÜÚÜØ[–×OŠ›Ø[œÈŠNÂˆYˆ
+™]š\Ú[ÛˆOOH][T™]š\Ú[ÛŠHY[X™\“Ø[œË˜[YHH›İÜÎÂˆHØ]Ú
+Ø]\ÙJHÈYˆ
+™]š\Ú[ÛˆOOH][T™]š\Ú[ÛŠH][Q\œ›Ü‹˜[YHH
+Ø]\ÙH\È\œ›ÜŠK›Y\ÜØYÙNÈBˆš[˜[HÈYˆ
+™]š\Ú[ÛˆOOH][T™]š\Ú[ÛŠH][SØY[™Ë˜[YHH˜[ÙNÈBˆBˆ[˜İ[Ûˆ™Yœ™\Úš\ÚX›R][\Ê
+HÈYˆ
+Øİ[Y[š\ÚXš[]Tİ]HOOHš\ÚX›Hˆ	‰ˆZ][SØY[™Ë˜[YJH›ÚYØYY[X™\“Ø[œÊ
+NÈBˆ[˜İ[Ûˆ™Yœ™\ÚY[X™\œÊ
+HÈ›ÚYØYY[X™\œÊ
+NÈ›ÚYØY˜YÙ\Ê
+NÈ›ÚYØYY[X™\“Ø[œÊ
+NÈBˆ]ÛÜšÜÚÜ™]š\Ú[ÛˆHÂˆ\Ş[˜È[˜İ[ÛˆØY˜YÙ\Ê
+HÂˆÛÛœİ™]š\Ú[ÛˆH
+ÊİÛÜšÜÚÜ™]š\Ú[ÛÂˆ˜YÙT›İÜË˜[YHH×NÈ[ÜT›İÜË˜[YHH×NÈÛÜšÜÚÜ\œ›Ü‹˜[YHHˆÂˆHÂˆ]ØZ]ÛÜšÜÚÜœ™Yœ™\Ú
+
+NÂˆYˆ
+]ÛÜšÜÚÜ›X[˜YÙ\‹˜[YJH™]\›ÂˆÛÛœİØ˜YÙ\Ë[ÜWHH]ØZ]›ÛZ\ÙK˜[
+İÛÜšÜÚÜœ™\]Y\İ[V×OŠ˜˜YÙ\ÈŠKÛÜšÜÚÜœ™\]Y\İ[V×OŠœ[ÜHŠWJNÂˆYˆ
+™]š\Ú[ÛˆOOHÛÜšÜÚÜ™]š\Ú[ÛŠHÈ˜YÙT›İÜË˜[YHH˜YÙ\ÎÈ[ÜT›İÜË˜[YHH[ÜNÈBˆHØ]Ú
+Ø]\ÙJHÈYˆ
+™]š\Ú[ÛˆOOHÛÜšÜÚÜ™]š\Ú[ÛŠHÛÜšÜÚÜ\œ›Ü‹˜[YHH
+Ø]\ÙH\È\œ›ÜŠK›Y\ÜØYÙNÈBˆBˆØ]Ú
+Ù[XİYY
+
+HOˆÈY[X™\“Ø[œË˜[YHH[È™Yœ™\ÚY[X™\œÊ
+NÈKÈ›\ÚˆœŞ[˜ÈˆJNÂˆÛ“[İ[Y
+
+
+HOˆÂˆ›ÚYØYY[X™\“Ø[œÊ
+NÂˆÚ[™İË˜Y]™[\İ[™\Š™›Øİ\È‹™Yœ™\Úš\ÚX›R][\ÊNÂˆØİ[Y[˜Y]™[\İ[™\Šš\ÚXš[]XÚ[™ÙH‹™Yœ™\Úš\ÚX›R][\ÊNÂˆY[X™\•[Y\ˆHÙ][\˜[
+™Yœ™\Úš\ÚX›R][\ËÌ
+NÂˆJNÂˆÛ™Y›Ü™U[›[İ[
+
+
+HOˆÂˆÛÜšÜÚÜ™]š\Ú[ÛŠÊÎÈ][T™]š\Ú[ÛŠÊÎÈY[X™\“Ø[œË˜[YHH[ÂˆYˆ
+Y[X™\•[Y\ŠHÛX\’[\˜[
+Y[X™\•[Y\ŠNÂˆÚ[™İËœ™[[İ™Q]™[\İ[™\Š™›Øİ\È‹™Yœ™\Úš\ÚX›R][\ÊNÂˆØİ[Y[œ™[[İ™Q]™[\İ[™\Šš\ÚXš[]XÚ[™ÙH‹™Yœ™\Úš\ÚX›R][\ÊNÂˆJNÂ‚ˆÛÛœİØY[™ÈH™YŠYJNÉÉÉÊBˆ™\XÙJ]	ÏX›PÙ[ŞÈ\Ù\‹›˜[YH_OÕX›PÙ[‰Ë	ÏX›PÙ[]ˆÛ\ÜÏH™›^][\ËXÙ[\ˆØ\LÈY[X™\]˜]\ˆ›Y[X™\‹ZYH\Ù\‹šYˆ›˜[YOH\Ù\‹›˜[YHˆÏÜ[ˆÛ\ÜÏH™›Û[YY][HŞÈ\Ù\‹›˜[YH_OÜÜ[Ù]ÕX›PÙ[‰ÊBˆ™\XÙJ]	È[\ÜÈ]ÛˆIË	È[\ÜY[X™\]˜]\ˆœ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜÓY[X™\]˜]\‹YH×ˆ[\ÜY[X™\’][\Èœ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜÓY[X™\’][\ËYH×ˆ[\Ü\HÈÛÜšÜÚÜØ[ˆHœ›ÛHÛX‹İÛÜšÜÚÜ[Ø[œÈ×ˆ[\Ü˜YÙPXİ[ÛœÈœ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜĞ˜YÙPXİ[ÛœËYH×ˆ[\ÜÈ]ÛˆIÊBˆ™\XÙJ]	ÈØYY[X™\œÊ
+N×ˆJNÉË	ÈØYY[X™\œÊ
+N×ˆØY˜YÙ\Ê
+N×ˆJNÉÊBˆ™\XÙJ]	È]ˆÛ\ÜÏHœÜXÙK^KM‰Ë	ÉÉÈ]ˆÛ\ÜÏHœÜXÙK^KM‚ˆ]ˆÛ\ÜÏH™›^›^]Ü˜\][\ËXÙ[\ˆ\İYKX™]ÙY[ˆØ\LÈ‚ˆÛ\ÜÏH^\ÛH^[]]YY›Ü™YÜ›İ[™“Y[X™\œËÚ[ÜÚÈ˜YÙ\È[™H][\ÈXXÚ\œÛÛˆ\ÈÚXÚÙYİ]Ü‚ˆ]Ûˆ˜\šX[H›İ][™HˆÚ^™OHœÛHˆ™\ØX›YH›ØY[™È][SØY[™ÈˆÛXÚÏHœ™Yœ™\ÚY[X™\œÈ”™Yœ™\ÚY[X™\œÈ	˜[\È][\ÏĞ]Û‚ˆÙ]‚ˆ‹ZYHš][Q\œ›Üˆˆ›ÛOH˜[\ˆÛ\ÜÏH^\ÛH^Y\İXİ]™HÛİ[›İØYÚXÚÙY[İ]][\ËˆŞÈ][Q\œ›Üˆ_OÜ‚ˆ‹ZYHÛÜšÜÚÜ\œ›Üˆˆ›ÛOH˜[\ˆÛ\ÜÏH^\ÛH^Y\İXİ]™H˜YÙHX[˜YÙ[Y[ˆŞÈÛÜšÜÚÜ\œ›Üˆ_H]Ûˆ˜\šX[H›[šÈˆÛXÚÏH›ØY˜YÙ\È”™[ØY˜YÙHX[˜YÙ[Y[Ğ]ÛÜ‰ÉÉÊBˆ™\XÙJ]	ÏX›RXYŞÈ	
+˜ÛÛXİ[Û‹›Y[X™\œË›˜[YHŠH_OÕX›RXY‰Ë	ÏX›RXY•\Ù\ÕX›RXY‰ÊBˆ™\XÙJ]	ÈX›RXYÛ\ÜÏHËLÌ‰Ë	ÈX›RXY‹ZYHÛÜšÜÚÜ›X[˜YÙ\‹˜[YH’Ú[ÜÚÈ˜YÙOÕX›RXY—ˆX›RXY’][\ÏÕX›RXY—ˆX›RXYÛ\ÜÏHËLÌ‰ÊBˆ™\XÙJ]	ÈX›PÙ[—ˆ]ˆÛ\ÜÏH›[X]]È‰Ë	ÉÉÈX›PÙ[‹ZYHÛÜšÜÚÜ›X[˜YÙ\‹˜[YH‚ˆ˜YÙPXİ[ÛœÈ›Y[X™\H\Ù\ˆˆ˜˜YÙ\ÏH˜˜YÙT›İÜË™š[\Š›İÈOˆ›İË\Ù\—ÚYOOH\Ù\‹šY
+Hˆ˜Ø[‹[X[˜YÙOHˆH\[ÜT›İÜË™š[™
+›İÈOˆ›İËšYOOH\Ù\‹šY
+OËÛÜšÜÚÜÛX[˜YÙ\ˆˆœ›İXİY[İÛ™\HˆH\[ÜT›İÜË™š[™
+›İÈOˆ›İËšYOOH\Ù\‹šY
+OËœ›İXİYÛİÛ™\ˆˆÚ[™ÙYH›ØY˜YÙ\ÈˆÏ‚ˆÕX›PÙ[‚ˆX›PÙ[Y[X™\’][\È›Y[X™\‹ZYH\Ù\‹šYˆ›Ø[œÏH›Y[X™\“Ø[œÈˆ›ØY[™ÏHš][SØY[™Èˆ™\œ›ÜHš][Q\œ›ÜˆˆÏÕX›PÙ[‚ˆX›PÙ[‚ˆ]ˆÛ\ÜÏH›[X]]È‰ÉÉÊBˆÈ][HØ[œÈÚ][Û™ÜÚYH˜]]™H]Z[ËÓXZ[[˜[˜ÙKÑY]È]Z[ÈÚİÈİ]\Ë‚ˆ]H	ÜYÙ\ËÚ][KÖÚYKÚ[™^YIÂˆ][WÛÙ×Ùœ›Û[™
+
+Bˆ™\XÙJ]	ÈYˆ™Y]‹	Ë	ÈYˆ›Ø[œÈ‹˜[YNˆ“Ø[œÈ	ˆ™]\›ˆ›İ\È‹ÎˆÚ][KÉÚ][RY˜[Y_KÛØ[œØˆKˆ×ˆYˆ™Y]‹	ÊBˆ™\XÙJ]	ŞŞÈ	
+X‹›˜[YJH_IË	ŞŞÈX‹šYOOH›Ø[œÈˆÈX‹›˜[YHˆ	
+X‹›˜[YJH_IÊBˆ™\XÙJ]	ÎšYHš][K˜\ÜÙ]Y—ˆ\OH˜\ÜÙ]‰Ë	ÎšYHš][K˜\ÜÙ]Y—ˆ™[]KZYHš][KšY—ˆ\OH˜\ÜÙ]‰ÊBˆ™\XÙJ]	Ï^YÙHš][OHš][HˆœYÙKZÙ^OHš][RYˆÏ‰Ë	Ï^YÙHš][OHš][HˆœYÙKZÙ^OHš][RYˆÏ—ˆ][SØ[œÈ‹ZYHˆZ\Ó™\İYˆš][KZYHš][RYˆÛÛ\XİÏ‰ÊBˆÈ^[™H^\İ[™ÈX™[X[ÙÎÈœ›İÜÙ\ˆš[[™È™[XZ[œÈ˜]]™K‚ˆ]H	ØÛÛ\Û™[ËÙÛØ˜[ÓX™[XZÙ\‹YIÂˆ™\XÙJ]	È[\ÜYÙTTÛÙIË	È[\ÜTš[œ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜÔTš[YH×ˆ[\ÜYÙTTÛÙIÊBˆ™\XÙJ]	ÈYˆİš[™ÎÉË	ÈYˆİš[™Î×ˆ[]RYÎˆİš[™ÎÉÊBˆ™\XÙJ]	È[YÈœÜ˜ÏH™Ù]X™[\›
+˜[ÙJHˆÏ‰Ë	Ï[YÈœÜ˜ÏH™Ù]X™[\›
+˜[ÙJHˆ[H’ÛYX›ŞX™[™]šY]ÈˆÏ—ˆTš[šYHšYˆ™[]KZYH™[]RYˆÏ‰ÊBˆ™\XÙJ]	Ï]ÛˆÚ^™OHšXÛÛˆˆÛXÚÏH›Ü[‘X[ÙÊX[ÙÒQ”š[X™[
+H‰Ë	Ï]ÛˆÚ^™OHšXÛÛˆˆ˜\šXK[X™[H‰
+	ØÛÛ\Û™[Ë™ÛØ˜[›X™[ÛXZÙ\‹˜œ›İÜÙ\—Üš[	ÊHˆÛXÚÏH›Ü[‘X[ÙÊX[ÙÒQ”š[X™[
+H‰ÊBˆÈX[˜YÙH˜]]™H[ÜH™\ÚYH˜YÙ\È[™İ\İÙKÚ]ÛÛXİ[Û‹[İÛ™\ˆXØÙ\ÜË‚ˆÛÛ˜XİP•RSÉÛX‹Ø\Kİ\\ËÙ]KXÛÛ˜XİËÉÎØ›ÙOXÛÛ˜Xİœ™XYİ^
+
+Bˆİ\X›ÙKš[™^
+	Ù^Ü[\™˜XÙH\Ù\”İ[[X\HÉÊNÙ[™X›ÙKš[™^
+	×ŸIËİ\
+Bˆ›ÙOX›ÙVÎ™[™JÉ×ˆ]˜]\Îˆİš[™ÎÉÊØ›ÙVÙ[™—NØÛÛ˜XİÜš]Wİ^
+›ÙJBˆ]IÜYÙ\ËØÛÛXİ[Û‹Ú[™^ÛY[X™\œËYIÎİ\™Ù]P•RSÜ]Ø›ÙO]\™Ù]œ™XYİ^
+
+Bˆ›ÙOX›ÙKœ™\XÙJ	È[\ÜY[X™\]˜]\ˆœ›ÛIË	È[\Ü\Ù\“X[˜YÙ\ˆœ›ÛHØÛÛ\Û™[ËÕÛÜšÜÚÜÕ\Ù\“X[˜YÙ\‹YH×ˆ[\ÜY[X™\]˜]\ˆœ›ÛIÊBˆ›ÙOX›ÙKœ™\XÙJ	ÈÛÛœİÛÜšÜÚÜH\ÙUÛÜšÜÚÜ
+
+NÉË	ÈÛÛœİÛÜšÜÚÜH\ÙUÛÜšÜÚÜ
+
+N×ˆÛÛœİ\Ù\YZ[ˆH™YŠ˜[ÙJK\Ù\“X[˜YÙ\ˆH™Y[œİ[˜ÙU\O\[Ùˆ\Ù\“X[˜YÙ\ˆ[Š[
+NÉÊBˆ›ÙOX›ÙKœ™\XÙJ	ØÛÛœİØ˜YÙ\Ë[ÜWHH]ØZ]›ÛZ\ÙK˜[
+İÛÜšÜÚÜœ™\]Y\İ[V×OŠ˜˜YÙ\ÈŠKÛÜšÜÚÜœ™\]Y\İ[V×OŠœ[ÜHŠWJNÉË	ØÛÛœİØ˜YÙ\Ë[ÜKYZ[š\İ˜][Û—HH]ØZ]›ÛZ\ÙK˜[
+İÛÜšÜÚÜœ™\]Y\İ[V×OŠ˜˜YÙ\ÈŠKÛÜšÜÚÜœ™\]Y\İ[V×OŠœ[ÜHŠKÛÜšÜÚÜœ™\]Y\İÈØ[“X[˜YÙNˆ›ÛÛX[ˆOŠ\Ù\œËØYZ[š\İ˜][ÛˆŠWJNÉÊBˆ›ÙOX›ÙKœ™\XÙJ	Ø˜YÙT›İÜË˜[YHH˜YÙ\ÎÈ[ÜT›İÜË˜[YHH[ÜNÉË	Ø˜YÙT›İÜË˜[YHH˜YÙ\ÎÈ[ÜT›İÜË˜[YHH[ÜNÈ\Ù\YZ[‹˜[YHHYZ[š\İ˜][Û‹˜Ø[“X[˜YÙNÉÊBˆ›ÙOX›ÙKœ™\XÙJ	ÚYˆ
+]ÛÜšÜÚÜ›X[˜YÙ\‹˜[YJH™]\›ÉË	ÚYˆ
+]ÛÜšÜÚÜ›X[˜YÙ\‹˜[YJHÈ\Ù\YZ[‹˜[YHH˜[ÙNÈ™]\›ÈIÊBˆ›ÙOX›ÙKœ™\XÙJ	İØ]Ú
+Ù[XİYY
+
+HOˆÈY[X™\“Ø[œË˜[YHH[ÉË	İØ]Ú
+Ù[XİYY
+
+HOˆÈ\Ù\YZ[‹˜[YHH˜[ÙNÈY[X™\“Ø[œË˜[YHH[ÉÊBˆ›ÙOX›ÙKœ™\XÙJ	È]Ûˆ˜\šX[H›İ][™HˆÚ^™OHœÛHˆ™\ØX›YH›ØY[™È][SØY[™È‰Ë	È]Ûˆ‹ZYH\Ù\YZ[ˆˆ˜\šX[H›İ][™HˆÚ^™OHœÛHˆÛXÚÏH\Ù\“X[˜YÙ\ËœÚİÊ
+H“X[˜YÙH\Ù\œÏĞ]Û—ˆ]Ûˆ˜\šX[H›İ][™HˆÚ^™OHœÛHˆ™\ØX›YH›ØY[™È][SØY[™È‰ÊBˆ›ÙOX›ÙKœ™\XÙJ	È‹ZYHš][Q\œ›Üˆ‰Ë	È\Ù\“X[˜YÙ\ˆ‹ZYH\Ù\YZ[ˆˆ™YH\Ù\“X[˜YÙ\ˆˆ›Y[X™\œÏH›Y[X™\œÈˆÚ[™ÙYHœ™Yœ™\ÚY[X™\œÈˆÏ—ˆ‹ZYHš][Q\œ›Üˆ‰ÊBˆ›ÙOX›ÙKœ™\XÙJ	ÏY[X™\]˜]\ˆ›Y[X™\‹ZYH\Ù\‹šYˆ›˜[YOH\Ù\‹›˜[YHˆÏÜ[ˆÛ\ÜÏH™›Û[YY][HŞÈ\Ù\‹›˜[YH_OÜÜ[‰Ë	ÏY[X™\]˜]\ˆ›Y[X™\‹ZYH\Ù\‹šYˆ›˜[YOH\Ù\‹›˜[YHˆœXİ\™OH\Ù\‹˜]˜]\ˆˆÏÜ[Ü[ˆÛ\ÜÏH˜›ØÚÈ›Û[YY][HŞÈ\Ù\‹›˜[YH_OÜÜ[Ü[ˆÛ\ÜÏH˜›ØÚÈ^^È^[]]YY›Ü™YÜ›İ[™’QŞÈ\Ù\‹šYœÛXÙJ
+H_OÜÜ[ÜÜ[‰ÊBˆ›ÙOX›ÙKœ™\XÙJ	ÏX›PÙ[ŞÈ\Ù\‹™[XZ[_OÕX›PÙ[‰Ë	ÏX›PÙ[ŞÈ\Ù\‹™[XZ[¸ %ˆ_OÕX›PÙ[‰ÊBˆ›ÙOX›ÙKœ™\XÙJ	È]ˆÛ\ÜÏH›[X]]È‰Ë	È]ˆÛ\ÜÏH›[X]]È›^][\ËXÙ[\ˆ\İYKY[™Ø\Lˆ—ˆ]Ûˆ‹ZYH\Ù\YZ[ˆˆ˜\šX[H›İ][™HˆÚ^™OHœÛHˆ˜\šXK[X™[H—	ÓX[˜YÙH›Ùš[Nˆ	È
+È\Ù\‹›˜[YHˆÛXÚÏH\Ù\“X[˜YÙ\ËœÚİÊ\Ù\ŠH“X[˜YÙH›Ùš[OĞ]Û‰ÊBˆ›ÙOX›ÙKœ™\XÙJ	Î™\ØX›YHœ™[[İš[™Öİ\Ù\‹šYH
+\Ó\İY[X™\ˆ	‰ˆ\Ù\‹šYOOHİ\œ™[\Ù\’Y
+H‰Ë	Î™\ØX›YHˆ]\Ù\YZ[ˆ™[[İš[™Öİ\Ù\‹šYH\Ù\‹šYOOHİ\œ™[\Ù\’YH\[ÜT›İÜË™š[™
+›İÈOˆ›İËšYOOH\Ù\‹šY
+OËœ›İXİYÛİÛ™\ˆ‰ÊBˆ›ÙOX›ÙKœ™\XÙJ	ÈÛÛœİØY[™ÈH™YŠYJNÉË	È]Y[X™\”™]š\Ú[ÛˆH×ˆÛÛœİØY[™ÈH™YŠYJNÉÊBˆ›ÙOX›ÙKœ™\XÙJ	ØÛÛœİØYY[X™\œÈH\Ş[˜È
+
+HOˆÉË	ØÛÛœİØYY[X™\œÈH\Ş[˜È
+
+HOˆ×ˆÛÛœİ™]š\Ú[ÛˆH
+ÊÛY[X™\”™]š\Ú[ÛÉÊBˆ›ÙOX›ÙKœ™\XÙJ	ØÛÛœİ™\ÈH]ØZ]\K™Ü›İ\™Ù]Y[X™\œÊ
+NÉË	ØÛÛœİ™\ÈH]ØZ]\K™Ü›İ\™Ù]Y[X™\œÊ
+N×ˆYˆ
+™]š\Ú[ÛˆOOHY[X™\”™]š\Ú[ÛŠH™]\›ÉÊBˆİ\X›ÙKš[™^
+	ÈÛÛœİØYY[X™\œÈH\Ş[˜È
+
+HOˆÉÊNÙ[™X›ÙKš[™^
+	ÈÛÛœİ[™T™[[İ™IËİ\
+Bˆ\X›ÙVÜİ\™[™Kœ™\XÙJ	ÈHØ]Ú
+JHÉË	ÈHØ]Ú
+JH×ˆYˆ
+™]š\Ú[ÛˆOOHY[X™\”™]š\Ú[ÛŠH™]\›ÉÊKœ™\XÙJ	ÈØY[™Ë˜[YHH˜[ÙNÉË	ÈYˆ
+™]š\Ú[ÛˆOOHY[X™\”™]š\Ú[ÛŠHØY[™Ë˜[YHH˜[ÙNÉÊBˆ›ÙOX›ÙVÎœİ\JÜ\
+Ø›ÙVÙ[™—Bˆ›ÙOX›ÙKœ™\XÙJ	İÛÜšÜÚÜ™]š\Ú[ÛŠÊÎÈ][T™]š\Ú[ÛŠÊÎÉË	ÛY[X™\”™]š\Ú[ÛŠÊÎÈÛÜšÜÚÜ™]š\Ú[ÛŠÊÎÈ][T™]š\Ú[ÛŠÊÎÉÊBˆ›ÙOX›ÙKœ™\XÙJ	İØ]Ú
+Ù[XİYY
+
+HOˆÈ\Ù\YZ[‹˜[YHH˜[ÙNÉË	İØ]Ú
+ÜÙ[XİYY
+
+HOˆ]]\Ù\ËšYK
+
+HOˆÈY[X™\œË˜[YHH×NÈ\Ù\YZ[‹˜[YHH˜[ÙNÉÊBˆ\™Ù]Üš]Wİ^
+›ÙJBˆ™\İÙœ›Û[™
+
+Bˆœ˜[™Ùœ›Û[™
+
+B‚‚™YˆZ[
+
+N‚ˆÛØ˜[ÓÓÒRS—Ô“ÓÕTÕ‘PSWÔ“ÓÕˆ\œÙ\ˆH\™Ü\œÙK\™İ[Y[\œÙ\Š
+Bˆ\œÙ\‹˜YØ\™İ[Y[
+	ËK]ÛÛÚZ[‹\›Ûİ	Ë\O\]X‹”]Y˜][UÓÓÒRS—Ô“ÓÕ
+Bˆ\œÙ\‹˜YØ\™İ[Y[
+	ËK]\İ™X[K\›Ûİ	Ë\O\]X‹”]Y˜][UTÕ‘PSWÔ“ÓÕ
+Bˆ\œÙ\‹˜YØ\™İ[Y[
+	ËK\™\\™IËXİ[ÛIÜİÜ™WİYIË[IÜ™\\™H\[™[˜ÚY\ÈÚ]İ][›š[™È\XÚXÚÈÜˆZ[	ÊBˆ\™ÜÈH\œÙ\‹œ\œÙWØ\™ÜÊ
+BˆÓÓÒRS—Ô“ÓÕTÕ‘PSWÔ“ÓÕH\™ÜËÛÛÚZ[—Ü›Ûİœ™\ÛÛ™J
+K\™ÜË\İ™X[WÜ›Ûİœ™\ÛÛ™J
+Bˆ™\\™J
+Bˆ›ÙHH]X‹”]
+
+ÓÓÒRS—Ô“ÓÕÉÛ›ÙK\]	ÊKœ™XYİ^
+
+Kœİš\
+
+JBˆ[ˆHXİ
+ÜË™[š\›Û‹U\İŠ›ÙKÉØš[‰ÊJÛÜËœ]Ù\
+ÛÜË™[š\›Û–ÉÔU	×JBˆÈŞË\\œÙ\ˆÌ‰ÜÈ˜]]™HT“Hš[™[™È™\]Z\™\È[œİXİ[ÛœÈXœÙ[Ûˆ\ÈK‚ˆÈ\ÙHHØ[YH™\œÚ[Û‰ÜÈ\İ™X[HĞTÒHš[™[™ÈÛ›H›Üˆ\ÈZ[\[™[˜ŞK‚ˆØ\ÚHHÓÓÒRS—Ô“ÓÕÉÛŞË]Ø\ÚKÛ›ÙWÛ[Ù[\ËĞŞË\\œÙ\‹Øš[™[™Ë]Ø\ÛLÌ‹]Ø\ÚIÂˆYˆØ\ÚK™^\İÊ
+N‚ˆš[™[™ÈH•RSÉÛ›ÙWÛ[Ù[\ËËœœKÛŞË\\œÙ\Ì‹ŒËÛ›ÙWÛ[Ù[\ËÛŞË\\œÙ\‹Øš[™[™ÜËšœÉÂˆÛİ\˜ÙHHš[™[™Ëœ™XYİ^
+
+Bˆ[˜ÚÜˆH	Û˜]]™Pš[™[™ÈH™\]Z\™S˜]]™J
+IÂˆYˆ[˜ÚÜˆ[ˆÛİ\˜ÙN‚ˆš[™[™ËÜš]Wİ^
+Ûİ\˜ÙKœ™\XÙJ[˜ÚÜ‹	Û˜]]™Pš[™[™ÈH™\]Z\™J	ÊÜ™\ŠİŠØ\ÚJJJÉÊIÊJBˆœHHÓÓÒRS—Ô“ÓÕÉÜœKÛ›ÙWÛ[Ù[\ËË˜š[‹ÜœIÂˆ[—Ùœ›Û[™ØÛÛ[X[™
+ÜİŠœJK	Ù^XÉË	Û^	Ë	Ü™\\™I×KİÙP•RS[Y[ŠBˆYˆ›İ\™ÜËœ™\\™N‚ˆ™\İ[HİXœ›ØÙ\ÜËœ[ŠÜİŠœJK	Ù^XÉË	Û^IË	İ\XÚXÚÉ×KİÙP•RS[Y[‹Ø\\™WÛİ]]UYK^UYJBˆ
+“ÓÕÉİÛÜšËÚÛYX›Ş]ZK]\XÚXÚË›ÙÉÊKÜš]Wİ^
+™\İ[œİİ]
+Ü™\İ[œİ\œŠBˆXYÛ›ÜİXÜÈHÛ\İ
+X]Ú™Ü›İ\Ê
+JH›ÜˆX]Ú[ˆ™K™š[™]\Š‰×ŠŠÏÊW
+
+Ë
+×
+Nˆ\œ›Üˆ
+×
+ÊNˆ
+ŠŠI	Ë™\İ[œİİ]
+Ü™\İ[œİ\œ‹™K“JWBˆYˆ™\İ[œ™]\›˜ÛÙN‚ˆ˜\Ù[[™HHœÛÛ‹›ØYÊ
+“ÓÕÉÚÛYX›Ş]ZKİ\İ™X[K]\XÚXÚËšœÛÛ‰ÊKœ™XYİ^
+
+JBˆ[ˆHÛİ\˜ÙWØÛÛ[Z]
+TÕ‘PSWÔ“ÓÕÉİ\İ™X[KÚÛYX›Ş	ÊBˆY][Û˜[HÛİ[\ŠX\
+\KXYÛ›ÜİXÜÊJKPÛİ[\ŠX\
+\K˜\Ù[[™VÉÙXYÛ›ÜİXÜÉ×JJBˆYˆ˜\Ù[[™VÉÜ[‰×HOH[ˆÜˆ›İXYÛ›ÜİXÜÈÜˆY][Û˜[‚ˆš[
+™\İ[œİİ]
+Ü™\İ[œİ\œŠBˆ˜Z\ÙH[[YQ\œ›ÜŠ	Ñœ›Û[™\XÚXÚÈ[›ÙXÙY\œ›ÜœÈÜˆ]È\İ™X[H˜\Ù[[™HÚ[™ÙY‰ÊBˆš[
+‰Õ\XÚXÚÎˆ›ÈYYXYÛ›ÜİXÜÎÈÛ[ŠXYÛ›ÜİXÜÊ_H™KY^\İ[™È\İ™X[HXYÛ›ÜİXÜË‰Ë›\ÚUYJBˆ[—Ùœ›Û[™ØÛÛ[X[™
+ÜİŠœJK	Ü[‰Ë	ØZ[	×KİÙP•RS[Y[ŠB‚‚šYˆ×Û˜[YW×ÈOH	××ÛXZ[—×ÉÎ‚ˆZ[
+
+B

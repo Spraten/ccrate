@@ -1,324 +1,213 @@
-"""Focused regression tests for disposable Homebox UI build preparation."""
-import contextlib
-import importlib.util
-import io
-import json
-import os
-import pathlib
-import re
-import shutil
-import subprocess
-import sys
-import tempfile
-import unittest
+Û^š›bh¥êß¢¹­…â'ŠØš–,ŞçÚº[C®+Ş²Š^­«b¢z'¶…ŠW’ÊË^ššè¾'^­ö¢•çHˆˆ‘›Øİ\ÙY™YÜ™\ÜÚ[Ûˆ\İÈ›Üˆ\ÜÜØX›HÛYX›ŞRHZ[™\\˜][Û‹ˆˆˆ‚š[\ÜÛÛ^X‚š[\Ü[\ÜX‹][š[\Ü[Âš[\ÜœÛÛ‚š[\ÜÜÂš[\Ü]X‚š[\Ü™Bš[\ÜÚ][š[\ÜİXœ›ØÙ\ÜÂš[\ÜŞ\Âš[\Ü[\š[Bš[\Ü[š]\İ‚‚”“ÓÕH]X‹”]
+×Ùš[W×ÊKœ™\ÛÛ™J
+Kœ\™[ÖÌWB”ÔPÈH[\ÜX‹][œÜX×Ùœ›ÛWÙš[WÛØØ][ÛŠ˜Z[ÚÛYX›ŞİZH‹“ÓÕÈ™\ŞKØZ[ZÛYX›Ş]ZKœHŠB•RSTˆH[\ÜX‹][›[Ù[WÙœ›ÛWÜÜXÊÔPÊB”ÔPË›ØY\‹™^X×Û[Ù[J•RSTŠB‚‚˜Û\ÜÈÛYX›ŞZPZ[\•\İÊ[š]\İ•\İØ\ÙJN‚ˆYˆ\İØÜ™X]WÚ][WØXİ[Ûœ×Ø\™WØY\—Üİ×Ü™]šY]×İÚ]İ]ØÚ[™Ú[™×Ù›Ü›WØXİ[ÛœÊÙ[ŠN‚ˆÛİ\˜ÙHH	ÉÉÈİÕ\ØY\ˆÏ‚ˆ]ˆÛ\ÜÏH›]M›^›^\›İË\™]™\œÙH‚ˆ]Û‘Ü›İ\‚ˆ]Ûˆ™\ØX›YH›ØY[™Èˆ\OHœİX›Z]ˆÛ\ÜÏH™Ü›İ\ŞÈ	
+™ÛØ˜[˜Ü™X]HŠH_OĞ]Û‚ˆ]Ûˆ˜\šX[H›İ][™Hˆ™\ØX›YH›ØY[™Èˆ\OH˜]ÛˆˆÛXÚÏH˜Ü™X]J˜[ÙJHŞÈ	
+™ÛØ˜[˜Ü™X]WØ[™ØYŠH_OĞ]Û‚ˆĞ]Û‘Ü›İ\‚ˆÙ]‚‚ˆİÕ\ØY\”™]šY]ÂˆœİÜÏH™›Ü›KœİÜÈ‚ˆ[]OH™[]TİĞ]‚ˆ›İ]OHœ›İ]TİĞ]‚ˆÙ]\š[X\OHœÙ]š[X\TİĞ]‚ˆÏ‚‰ÉÉÂˆÙ[™\˜]YH•RST‹›[İ™WØÜ™X]WØXİ[Ûœ×ØY\—Üİ×Ü™]šY]ÊÛİ\˜ÙJB‚ˆÙ[‹˜\ÜÙ\\ÜÊÙ[™\˜]Yš[™^
+İÕ\ØY\”™]šY]ÈŠKÙ[™\˜]Yš[™^
+	İ\OHœİX›Z]‰ÊJBˆÙ[‹˜\ÜÙ\\ÜÊÙ[™\˜]Yš[™^
+İÕ\ØY\”™]šY]ÈŠKÙ[™\˜]Yš[™^
+	ĞÛXÚÏH˜Ü™X]J˜[ÙJH‰ÊJBˆXİ[ÛœÈHÛİ\˜ÙVÜÛİ\˜ÙKš[™^
+	È]ˆÛ\ÜÏH›]M›^›^\›İË\™]™\œÙH‰ÊNœÛİ\˜ÙKš[™^
+	×—ˆİÕ\ØY\”™]šY]ÉÊWBˆÙ[‹˜\ÜÙ\\]X[
+Ù[™\˜]Y˜Ûİ[
+Xİ[ÛœÊKJBˆÙ[‹˜\ÜÙ\\]X[
+Ù[™\˜]Y˜Ûİ[
+	İ\OHœİX›Z]‰ÊKJBˆÙ[‹˜\ÜÙ\\]X[
+Ù[™\˜]Y˜Ûİ[
+	ĞÛXÚÏH˜Ü™X]J˜[ÙJH‰ÊKJBˆÙ[‹˜\ÜÙ\\]X[
+•RST‹›[İ™WØÜ™X]WØXİ[Ûœ×ØY\—Üİ×Ü™]šY]ÊÙ[™\˜]Y
+KÙ[™\˜]Y
+B‚ˆYˆ\İØÜ™X]WØXİ[Û—Û[İ™WÙ˜Z[×ØÛX\›WİÚ[—Üİ×Ü™]šY]×ÛX\šİ\ÜÚYÊÙ[ŠN‚ˆÛİ\˜ÙHH	ÉÉÈ]ˆÛ\ÜÏH›]M›^›^\›İË\™]™\œÙH‚ˆ]Û‘Ü›İ\‚ˆ]Ûˆ\OHœİX›Z]Ü™X]OĞ]Û‚ˆ]ÛˆÛXÚÏH˜Ü™X]J˜[ÙJHÜ™X]H	ˆYĞ]Û‚ˆĞ]Û‘Ü›İ\‚ˆÙ]‚‚ˆİÕ\ØY\”™]šY]ÂˆœİÜÏH™›Ü›KœİÜÈ‚ˆ‚‰ÉÉÂˆÚ]Ù[‹˜\ÜÙ\˜Z\Ù\Ô™YÙ^
+[[YQ\œ›Ü‹œİÈ™]šY]ÈŠN‚ˆ•RST‹›[İ™WØÜ™X]WØXİ[Ûœ×ØY\—Üİ×Ü™]šY]ÊÛİ\˜ÙJB‚ˆYˆ\İØÜ™X]WØXİ[Û—Û[İ™WÜ™Z™Xİ×ÜZ\™YÜİ×Ü™]šY]×ÛX\šİ\
+Ù[ŠN‚ˆÛİ\˜ÙHH	ÉÉÈ]ˆÛ\ÜÏH›]M›^›^\›İË\™]™\œÙH‚ˆ]Û‘Ü›İ\‚ˆ]Ûˆ\OHœİX›Z]Ü™X]OĞ]Û‚ˆ]ÛˆÛXÚÏH˜Ü™X]J˜[ÙJHÜ™X]H	ˆYĞ]Û‚ˆĞ]Û‘Ü›İ\‚ˆÙ]‚‚ˆİÕ\ØY\”™]šY]ÂˆœİÜÏH™›Ü›KœİÜÈ‚ˆ‚ˆ]”™]šY]ÈÛÛ[Ù]‚ˆÔİÕ\ØY\”™]šY]Ï‚‚ˆ]\ÛÛ\Û™[ˆÏ‚‰ÉÉÂˆÚ]Ù[‹˜\ÜÙ\˜Z\Ù\Ô™YÙ^
+[[YQ\œ›Ü‹œÙ[‹XÛÜÚ[™ÈİÈ™]šY]ÈŠN‚ˆ•RST‹›[İ™WØÜ™X]WØXİ[Ûœ×ØY\—Üİ×Ü™]šY]ÊÛİ\˜ÙJB‚ˆYˆ\İØÜ™X]WØXİ[Û—Ø]Ûœ×Û]\İØ™[Û™×İ×İWÜØ[YWØXİ[Ûœ×Ø›ØÚÊÙ[ŠN‚ˆÛİ\˜ÙHH	ÉÉÈİÕ\ØY\ˆÏ‚ˆ]ˆÛ\ÜÏH›]M›^›^\›İË\™]™\œÙH‚ˆ]Û‘Ü›İ\‚ˆ]Ûˆ™\ØX›YH›ØY[™Èˆ\OH˜]ÛˆˆÛ\ÜÏH™Ü›İ\ŞÈ	
+™ÛØ˜[˜Ü™X]HŠH_OĞ]Û‚ˆĞ]Û‘Ü›İ\‚ˆÙ]‚‚ˆİÕ\ØY\”™]šY]ÂˆœİÜÏH™›Ü›KœİÜÈ‚ˆÏ‚ˆ]Ûˆ\OHœİX›Z]ŞÈ	
+™ÛØ˜[˜Ü™X]HŠH_OĞ]Û‚ˆ]Ûˆ\OH˜]ÛˆˆÛXÚÏH˜Ü™X]J˜[ÙJHŞÈ	
+™ÛØ˜[˜Ü™X]WØ[™ØYŠH_OĞ]Û‚‰ÉÉÂˆÚ]Ù[‹˜\ÜÙ\˜Z\Ù\Ô™YÙ^
+[[YQ\œ›Ü‹˜›İ^\İ[™ÈÜ™X]HXİ[ÛœÈŠN‚ˆ•RST‹›[İ™WØÜ™X]WØXİ[Ûœ×ØY\—Üİ×Ü™]šY]ÊÛİ\˜ÙJB‚ˆYˆ\İØÜ™X]WØXİ[Û—İÜ˜\\—ØØ[››İØ›Üœ›İ×Ø]Ûœ×Ùœ›ÛWØWÛ]\—Ø›ØÚÊÙ[ŠN‚ˆÛİ\˜ÙHH	ÉÉÈİÕ\ØY\ˆÏ‚ˆ]ˆÛ\ÜÏH›]M›^›^\›İË\™]™\œÙH‚ˆÙ]‚ˆ]ˆÛ\ÜÏH›İ\‹XXİ[ÛœÈ‚ˆ]Û‘Ü›İ\‚ˆ]Ûˆ\OHœİX›Z]ŞÈ	
+™ÛØ˜[˜Ü™X]HŠH_OĞ]Û‚ˆ]Ûˆ\OH˜]ÛˆˆÛXÚÏH˜Ü™X]J˜[ÙJHŞÈ	
+™ÛØ˜[˜Ü™X]WØ[™ØYŠH_OĞ]Û‚ˆĞ]Û‘Ü›İ\‚ˆÙ]‚‚ˆİÕ\ØY\”™]šY]ÂˆœİÜÏH™›Ü›KœİÜÈ‚ˆÏ‚‰ÉÉÂˆÚ]Ù[‹˜\ÜÙ\˜Z\Ù\Ê[[YQ\œ›ÜŠN‚ˆ•RST‹›[İ™WØÜ™X]WØXİ[Ûœ×ØY\—Üİ×Ü™]šY]ÊÛİ\˜ÙJB‚ˆYˆ\İØØ[Y\˜WÛØÜ—ØZ[Ú[š™Xİ[Û—İ\Ù\×ÛØØ[Ù[™Ú[™WØ[™ÙY]Ü™]š\Ú[ÛŠÙ[ŠN‚ˆÚ][\š[K•[\Ü˜\Q\™XİÜJ\T“ÓÕ
+H\È\™XİÜN‚ˆ™]š[İ\×ØZ[H•RST‹•RSˆ•RST‹•RSH]X‹”]
+\™XİÜJBˆYÙHH•RST‹•RSÈœYÙ\ËÚ][KÖÚYKÚ[™^ÙY]YH‚ˆ[Ù[H•RST‹•RSÈ˜ÛÛ\Û™[ËÑ[]KĞÜ™X]S[Ù[YH‚ˆYÙKœ\™[›ZÙ\Š\™[ÏUYJBˆ[Ù[œ\™[›ZÙ\Š\™[ÏUYJBˆYÙKÜš]Wİ^
+	ÉÉÈ[\ÜÈ™XÛÙÛš^™S˜[YQœ›ÛQš[SØØ[HHœ›ÛHŸ‹ØÛÛ\Û™[ËÑ›Ü›KØØ[Y\˜HÂˆÛÛœİ˜[YSØÜ“Y\ÜØYÙHH™YŠˆŠNÂˆ\Ş[˜È[˜İ[ÛˆİYÙÙ\İ][S˜[YQœ›ÛTİÊš[Nˆš[JHÂˆHÂˆÛÛœİİYÙÙ\İ[ÛˆH]ØZ]™XÛÙÛš^™S˜[YQœ›ÛQš[SØØ[Jš[JNÂˆYˆ
+\İYÙÙ\İ[ÛŠHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÛ›İÙ›İ[™ŠNÂˆ™]\›ÂˆBˆ][K˜[YK›˜[YHHİYÙÙ\İ[ÛÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÜİYÙÙ\İYŠNÂˆHØ]ÚÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWİ[˜]˜Z[X›HŠNÂˆBˆBˆ›Ü›U^šY[ˆ‹[[Ù[Hš][VÙšY[œ™Y—H‚ˆÛ\ÜÏH›Z[‹]ËL›^LH‚ˆÏ‚ˆ]Ûˆ\OH˜]Ûˆˆ˜\šX[H›İ][™H‚ˆŞÈ	
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜KœİYÙÙ\İÛ˜[YHŠH_BˆĞ]Û‚ˆÙ]‚ˆ›Ü›U^šY[ˆ‹Y[ÙKZYH™šY[\HOOH	İ^	È‚‰ÉÉÊBˆ[Ù[Üš]Wİ^
+	ÉÉÈ[\ÜÈ™XÛÙÛš^™S˜[YQœ›ÛQš[SØØ[HHœ›ÛHŸ‹ØÛÛ\Û™[ËÑ›Ü›KØØ[Y\˜HÂˆÛÛœİ˜[YSØÜ“Y\ÜØYÙHH™YŠˆŠNÂˆ\Ş[˜È[˜İ[ÛˆİYÙÙ\İ˜[YQœ›ÛTİÊš[Nˆš[JHÂˆHÂˆÛÛœİİYÙÙ\İ[ÛˆH]ØZ]™XÛÙÛš^™S˜[YQœ›ÛQš[SØØ[Jš[JNÂˆYˆ
+\İYÙÙ\İ[ÛŠHÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÛ›İÙ›İ[™ŠNÂˆ™]\›ÂˆBˆ›Ü›K›˜[YHHİYÙÙ\İ[ÛÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWÜİYÙÙ\İYŠNÂˆHØ]ÚÂˆ˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›˜[YWİ[˜]˜Z[X›HŠNÂˆBˆBˆ›Ü›U^šY[ˆ‹[[Ù[H™›Ü›K›˜[YH‚ˆÛ\ÜÏH›Z[‹]ËL›^LH‚ˆÏ‚ˆŞÈ	
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜KœİYÙÙ\İÛ˜[YHŠH_Bˆ‹ZYH›˜[YSØÜ“Y\ÜØYÙHˆÛ\ÜÏH^\ÛH^[]]YY›Ü™YÜ›İ[™ˆ›ÛOHœİ]\ÈŞÈ˜[YSØÜ“Y\ÜØYÙH_OÜ‚‰ÉÉÊBˆØØ[HH•RST‹•RSÈ›ØØ[\ËÙ[‹šœÛÛˆ‚ˆØØ[Kœ\™[›ZÙ\Š\™[ÏUYJBˆØØ[KÜš]Wİ^
+œÛÛ‹™[\ÊÈ˜ÛÛ\Û™[ÈˆÈ™›Ü›HˆÈ˜Ø[Y\˜Hˆß___JJBˆN‚ˆ•RST‹˜Ø[Y\˜WÛØÜ—Ùœ›Û[™
+
+Bˆš[˜[N‚ˆ•RST‹•RSH™]š[İ\×ØZ[‚ˆÙ[™\˜]YHYÙKœ™XYİ^
+
+BˆØ[Y\˜HHœÛÛ‹›ØYÊØØ[Kœ™XYİ^
+
+JVÈ˜ÛÛ\Û™[È—VÈ™›Ü›H—VÈ˜Ø[Y\˜H—BˆÙ[‹˜\ÜÙ\[Š	Ùœ›ÛHŸ‹ÛX‹ÛØØ[[ØÜˆ‰ËÙ[™\˜]Y
+BˆÙ[‹˜\ÜÙ\[Š	ÙÙ]™]š\Ú[Ûˆ
+
+HOˆ˜[YQY]™]š\Ú[Û‹˜[YIËÙ[™\˜]Y
+BˆÙ[‹˜\ÜÙ\[Š	Ğ\]N›[Ù[]˜[YOH›˜[YQY]™]š\Ú[ÛŠÊÈ‰ËÙ[™\˜]Y
+BˆÙ[‹˜\ÜÙ\[Š	Û˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›ØÜ—Ü[›š[™ÈŠIËÙ[™\˜]Y
+BˆÙ[‹˜\ÜÙ\[Š	ÜÙ]˜[YNˆ
+˜[YNˆİš[™ÊHOˆÈ][K˜[YK›˜[YHH˜[YNÈIËÙ[™\˜]Y
+BˆÙ[‹˜\ÜÙ\[Š››İ\ØYY‹Ø[Y\˜VÈ›ØØ[ÛØÜ—Û›İXÙH—JBˆÙ[‹˜\ÜÙ\[Š›˜[YWÜ™\Ù\™Y‹Ø[Y\˜JBˆÙ[™\˜]YÛ[Ù[H[Ù[œ™XYİ^
+
+BˆÙ[‹˜\ÜÙ\[Š	Ùœ›ÛHŸ‹ÛX‹ÛØØ[[ØÜˆ‰ËÙ[™\˜]YÛ[Ù[
+BˆÙ[‹˜\ÜÙ\[Š	ÙÙ]™]š\Ú[Ûˆ
+
+HOˆ˜[YQY]™]š\Ú[Û‹˜[YIËÙ[™\˜]YÛ[Ù[
+BˆÙ[‹˜\ÜÙ\[Š	Ğ\]N›[Ù[]˜[YOH›˜[YQY]™]š\Ú[ÛŠÊÈ‰ËÙ[™\˜]YÛ[Ù[
+BˆÙ[‹˜\ÜÙ\[Š	Û˜[YSØÜ“Y\ÜØYÙK˜[YHH
+˜ÛÛ\Û™[Ë™›Ü›K˜Ø[Y\˜K›ØÜ—Ü[›š[™ÈŠIËÙ[™\˜]YÛ[Ù[
+BˆÙ[‹˜\ÜÙ\[Š	ÜÙ]˜[YNˆ
+˜[YNˆİš[™ÊHOˆÈ›Ü›K›˜[YHH˜[YNÈIËÙ[™\˜]YÛ[Ù[
+B‚ˆYˆ\İÜ™\\™WØ\Wİ\İÜ™]Üš]WÚ\×ÚY[\İ[İÚ[—Ùš\œİÙš^\™WÚ\×Ø[™XYWÜ]ÚY
+Ù[ŠN‚ˆÛİ\˜ÙHH	ÉÉÈÛÛœİÈ\Ü^RYˆÛZ]Y][Q\Ü^RQÚÜÛÙNˆÛZ]Y][TÚÜÛÙK‹‹š][Q›Ü•\]HHH][NÂˆ›ÚYÛZ]Y][Q\Ü^RQÂˆ›ÚYÛZ]Y][TÚÜÛÙNÂˆÛÛœİ][U\]HHÂˆ‹‹š][Q›Ü•\]Kˆ[]U\RYˆ][K™[]U\OËšYˆ‹ˆ\™[Yˆ][Kœ\™[ËšY[ˆNÂˆÛÛœİÚ[R][U\]HHÂˆ‹‹˜Ú[R][Kˆ[]U\RYˆÚ[R][K™[]U\OËšYˆ‹ˆ\™[Yˆ\™[šYˆNÂˆÛÛœİÚ[’][U\]HHÂˆ‹‹˜Ú[’][Kˆ[]U\RYˆÚ[’][K™[]U\OËšYˆ‹ˆ\™[Yˆ\™[šYˆNÂˆÛÛœİ][U\]HHÂˆ‹‹œ\™[ˆ[]U\RYˆ\™[™[]U\OËšYˆ‹ˆ\™[Yˆ\™[ØØ][Û‹šYˆNÂ‰ÉÉÂˆÚ][\š[K•[\Ü˜\Q\™XİÜJ\T“ÓÕ
+H\È\™XİÜN‚ˆ™]š[İ\×ØZ[H•RST‹•RSˆ•RST‹•RSH]X‹”]
+\™XİÜJBˆ\™Ù]H•RST‹•RSÈ›X‹Ø\K××İ\İ×Ëİ\Ù\‹Ú][\Ë\İÈ‚ˆ\™Ù]œ\™[›ZÙ\Š\™[ÏUYJBˆ\™Ù]Üš]Wİ^
+Ûİ\˜ÙJBˆN‚ˆ•RST‹œİš\Ú][WÜ™\ÜÛœÙWÜÚÜØÛÙ\×Ùœ›ÛWİ\]Wİ\İÊ
+Bˆš[˜[N‚ˆ•RST‹•RSH™]š[İ\×ØZ[ˆÙ[‹˜\ÜÙ\[Š‹‹‹š][Q›Ü•\]H‹\™Ù]œ™XYİ^
+
+JBˆÙ[‹˜\ÜÙ\[Š‹‹‹˜Ú[Q›Ü•\]H‹\™Ù]œ™XYİ^
+
+JB‚ˆYˆ\İÙÙ[™\˜]YÛØØ][Û—ÜÙ[XİÜ—Ü™\Ù\™\×ÚY\˜\˜ÚWØ[™Ü\™[Ùš[\š[™ÊÙ[ŠN‚ˆÚ][\š[K•[\Ü˜\Q\™XİÜJ\T“ÓÕ
+H\È\™XİÜN‚ˆ™]š[İ\×ØZ[H•RST‹•RSˆ•RST‹•RSH]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[‚ˆN‚ˆ•RST‹œ™\\™J
+Bˆš[˜[N‚ˆ•RST‹•RSH™]š[İ\×ØZ[‚ˆÙ[XİÜˆH
+]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[ØÛÛ\Û™[ËÓØØ][Û‹ÔÙ[XİÜ‹YHŠKœ™XYİ^
+
+Bˆ[\ˆH
+]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[ÛX‹ÛØØ][Û‹\Ù[XİÜ‹]™YKšœÈŠKœ™XYİ^
+
+BˆÙ[‹˜\ÜÙ\[Š‹Y›ÜW›ØØ][Ûˆ[ˆš\ÚX›SØØ][Ûœ×ˆ‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[ŠÛXÚËœİÜœ™]™[WÙÙÛQ^[™Y
+ØØ][Û‹šY
+Wˆ‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[ŠœY[™ÓYˆ	ÛØØ][Û‹™\\™[X‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[Š	Ùœ›ÛHŸŸ‹ÛX‹ÛØØ][Û‹\Ù[XİÜ‹]™YH‰ËÙ[XİÜŠBˆÙ[‹˜\ÜÙ\[Š˜Z[ØØ][Û•™YJ›İÜË˜[YH‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[Š™Ù]š\ÚX›SØØ][Û•™YJ‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[Š™^ÛYRYÏÎˆİš[™Ö×H‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[Š˜İ\œ™[ØØ][ÛÎˆ[]Tİ[[X\H‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[Šš\ÓØØ][ÛˆÙˆİYK˜[ÙWH‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[Š™^\ÛÜ™ÛÊÙX\˜Ú˜[YH‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[Š™[˜İ[ÛˆÙ[XİØØ][ÛŠØØ][Ûˆ[]Tİ[[X\JH‹Ù[XİÜŠBˆÙ[‹˜\ÜÙ\[Š™^Ü[˜İ[ÛˆZ[ØØ][Û•™YH‹[\ŠBˆÙ[‹˜\ÜÙ\[Š™^ÛYRYÈ‹[\ŠBˆÙ[‹˜\ÜÙ\[Š›Ü[ÛœË˜İ\œ™[ØØ][Û‹šY‹[\ŠBˆÙ[‹˜\ÜÙ\[ŠšYˆ
+›İË˜\˜Ú]™Y
+H™]\›ˆ˜[ÙH‹[\ŠBˆÙ[‹˜\ÜÙ\[Š™^ÛYYš\Êİ\œ™[šY
+HÙY[‹š\Êİ\œ™[šY
+H‹[\ŠBˆÙ[‹˜\ÜÙ\[Š™^Ü[˜İ[ÛˆÙ]ØØ][Û“X™[‹[\ŠB‚ˆYˆ\İÜ™\\™WØXØÙ\×Ø˜\˜ÛÙWØ]Ø\™WØÜ™X]WÙ[]WÙX[Ù×İ\JÙ[ŠN‚ˆÚ][\š[K•[\Ü˜\Q\™XİÜJ\T“ÓÕ
+H\È\™XİÜN‚ˆ™]š[İ\×ØZ[H•RST‹•RSˆ•RST‹•RSH]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[‚ˆN‚ˆ•RST‹œ™\\™J
+Bˆš[˜[N‚ˆ•RST‹•RSH™]š[İ\×ØZ[‚ˆX[Ù×İ][ÈH
+]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[ØÛÛ\Û™[ËİZKÙX[ÙË\›İšY\‹İ][ËÈŠKœ™XYİ^
+
+BˆÙ[‹˜\ÜÙ\[Š˜˜\˜ÛÙOÎˆİš[™È‹X[Ù×İ][ÊBˆÙ[‹˜\ÜÙ\[Šœ\™[YÎˆİš[™È‹X[Ù×İ][ÊBˆÙ[‹˜\ÜÙ\[Šœ›ÙXİÎˆ˜\˜ÛÙT›ÙXİ‹X[Ù×İ][ÊB‚ˆÜ™X]WÛ[Ù[H
+]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[ØÛÛ\Û™[ËÑ[]KĞÜ™X]S[Ù[YHŠKœ™XYİ^
+
+Bˆ[\ÜØ›ØÚÈHÜ™X]WÛ[Ù[ØÜ™X]WÛ[Ù[š[™^
+ˆ[\Ü\HÈŠN˜Ü™X]WÛ[Ù[š[™^
+	ÈHœ›ÛHŸŸ‹ÛX‹Ø\Kİ\\ËÙ]KXÛÛ˜XİÈÉÊWBˆ›Ü›WÜİ\HÜ™X]WÛ[Ù[š[™^
+ˆÛÛœİ›Ü›HH™XXİ]™JÈŠBˆ›Ü›WØ›ØÚÈHÜ™X]WÛ[Ù[Ù›Ü›WÜİ\˜Ü™X]WÛ[Ù[š[™^
+—ˆJNÈ‹›Ü›WÜİ\
+WBˆÙ[‹˜\ÜÙ\\]X[
+[\ÜØ›ØÚË˜Ûİ[
+‘[]Tİ[[X\KŠKJBˆÙ[‹˜\ÜÙ\\]X[
+›Ü›WØ›ØÚË˜Ûİ[
+	Û[Ù[[X™\ˆˆ‹	ÊKJBˆÙ[‹˜\ÜÙ\\]X[
+Ü™X]WÛ[Ù[˜Ûİ[
+›[Ù[[X™\ˆ›Ü›K›[Ù[[X™\‹ŠKÊBˆÙ[‹˜\ÜÙ\\]X[
+Ü™X]WÛ[Ù[˜Ûİ[
+	İ‹[[Ù[H™›Ü›K›[Ù[[X™\ˆ‰ÊKJBˆÙ[‹˜\ÜÙ\›İ[Š][TÙ[XİÜˆ‹Ü™X]WÛ[Ù[
+BˆÙ[‹˜\ÜÙ\[Š	Ï]ˆÛ\ÜÏH™›^][\ËY[™Ø\Lˆ—ˆ›Ü›U^šY[	ËÜ™X]WÛ[Ù[
+B‚ˆ^ØÛÛ™šYÈH
+]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[Û^˜ÛÛ™šYËÈŠKœ™XYİ^
+
+BˆÙ[‹˜\ÜÙ\\]X[
+^ØÛÛ™šYË˜Ûİ[
+ˆ[Ù[\ÎˆÈŠKJBˆÙ[‹˜\ÜÙ\\ÜÊ^ØÛÛ™šYËš[™^
+	ÈœÚYÛ‹[^‰ÊK^ØÛÛ™šYËš[™^
+	ÊÛÜ[ÛœË^
+HO‰ÊJBˆÙ[‹˜\ÜÙ\[Š	Û^šÛÚÊ˜ÛÛ\Û™[Î™\œÈ‰Ë^ØÛÛ™šYÊBˆÙ[‹˜\ÜÙ\YJ
+]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[ØÛÛ\Û™[ËİZKØ]Û‹Ú[™^ÈŠK™^\İÊ
+JB‚ˆXÚØYÙHHœÛÛ‹›ØYÊ
+]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[ÜXÚØYÙKšœÛÛˆŠKœ™XYİ^
+
+JBˆÙ[‹˜\ÜÙ\›İ[ŠœœH‹XÚØYÙJBˆÛÜšÜÜXÙWØÛÛ™šYÈH
+]X‹”]
+\™XİÜJHÈšÛYX›Ş]ZKXZ[ÜœK]ÛÜšÜÜXÙKX[[ŠKœ™XYİ^
+
+BˆÙ[‹˜\ÜÙ\[Š›İ™\œšY\Îˆ‹ÛÜšÜÜXÙWØÛÛ™šYÊBˆÙ[‹˜\ÜÙ\[Š‰ĞYKÜ[[YKXÛÜ™IÎˆËKŒŒ‹ÛÜšÜÜXÙWØÛÛ™šYÊB‚ˆ›ÙHHÚ][ÚXÚ
+››ÙHŠBˆYˆ›İ›ÙN‚ˆÙ[‹œÚÚ\\İ
+“›ÙKšœÈ\È™\]Z\™YÈ^\˜Ú\ÙHHÙ[™\˜]Y^ÛÚÈš^\™HŠBˆX]ÚH™KœÙX\˜Ú
+‰Ê
+ÛÜ[ÛœË^
+HOˆËŠ×ˆJIË^ØÛÛ™šYË™K”ÊBˆÙ[‹˜\ÜÙ\\Ó›İ›Û™JX]Ú™^XİYH˜Z[[™È[›[™H^[Ù[HŠBˆ[Ù[WØ›ØÚÈH™KœÙX\˜Ú
+ˆˆ[Ù[\ÎˆÊŠÊWˆK‹^ØÛÛ™šYË™K”ÊBˆÙ[‹˜\ÜÙ\\Ó›İ›Û™J[Ù[WØ›ØÚË™^XİYHÙ[™\˜]Y^[Ù[\È\İŠBˆ[Ù[WÙ[šY\ÈH™K™š[™[
+‰ÈŠ×ˆ——JÊHŸ
+
+ÛÜ[ÛœË^
+HOˆËŠ×ˆJIË[Ù[WØ›ØÚË™Ü›İ\
+JK™K”ÊBˆÛÛ™šYİ\™YÛ[Ù[\ÈHÂˆÈ›˜[YHˆ˜[Y_HYˆ˜[YH[ÙHÈš[›[™Hˆ[›[™_Bˆ›Üˆ˜[YK[›[™H[ˆ[Ù[WÙ[šY\ÂˆBˆÙ[‹˜\ÜÙ\\]X[
+ÛÛ™šYİ\™YÛ[Ù[\ÖËLWKÈš[›[™HˆX]Ú™Ü›İ\
+J_JBˆÙ[‹˜\ÜÙ\\ÜÊˆ™^
+[™^›Üˆ[™^[H[ˆ[[Y\˜]JÛÛ™šYİ\™YÛ[Ù[\ÊHYˆ[K™Ù]
+›˜[YHŠHOHœÚYÛ‹[^ŠKˆ[ŠÛÛ™šYİ\™YÛ[Ù[\ÊHHKˆ
+BˆÙ[‹˜\ÜÙ\[Š›^Œ‹Œˆ‹
+“ÓÕÈ\İ™X[KÚÛYX›ŞÙœ›Û[™ÜœK[ØÚËX[[ŠKœ™XYİ^
+
+JBˆš^\™HH
+ˆ˜ÛÛœİÛÛ™šYİ\™YH”ÓÓ‹œ\œÙJ›ØÙ\ÜË˜\™İ–ÌWJNÈÛÛœİ\œÈH×NÈÛÛœİÛÚÜÈH×NÈ‚ˆ˜ÛÛœİ^HÚÛÚÊ˜[YKØ[˜XÚÊHÈYˆ
+˜[YHOOH	ØÛÛ\Û™[Î™\œÉÊHÛÚÜËœ\Ú
+Ø[˜XÚÊNÈ_NÈ‚ˆ˜ÛÛœİ[œİ[YHÈ	ÜÚYÛ‹[^	Îˆ
+ÛÜ[ÛœË^
+HOˆ^šÛÚÊ	ØÛÛ\Û™[Î™\œÉË\œÈOˆ\œËœ\Ú
+Ü]ˆ	ËØZ[ØÛÛ\Û™[ËİZKØ]Û‰Ë^[œÚ[ÛœÎˆÉİÉË	İYI×_JJHNÈ‚ˆ˜ÛÛœİ[Ù[\ÈHÛÛ™šYİ\™Y›X\
+[HOˆ[K›˜[YHÈ
+[œİ[YÙ[K›˜[YWH
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("build_homebox_ui", ROOT / "deploy/build-homebox-ui.py")
-BUILDER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(BUILDER)
-
-
-class HomeboxUiBuilderTests(unittest.TestCase):
-    def test_create_item_actions_are_after_photo_preview_without_changing_form_actions(self):
-        source = '''      <PhotoUploader />
-      <div class="mt-4 flex flex-row-reverse">
-        <ButtonGroup>
-          <Button :disabled="loading" type="submit" class="group">{{ $t("global.create") }}</Button>
-          <Button variant="outline" :disabled="loading" type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
-        </ButtonGroup>
-      </div>
-
-      <PhotoUploaderPreview
-        :photos="form.photos"
-        @delete="deletePhotoAt"
-        @rotate="rotatePhotoAt"
-        @set-primary="setPrimaryPhotoAt"
-      />
-'''
-        generated = BUILDER.move_create_actions_after_photo_preview(source)
-
-        self.assertLess(generated.index("<PhotoUploaderPreview"), generated.index('type="submit"'))
-        self.assertLess(generated.index("<PhotoUploaderPreview"), generated.index('@click="create(false)"'))
-        self.assertEqual(generated.count('type="submit"'), 1)
-        self.assertEqual(generated.count('@click="create(false)"'), 1)
-        self.assertEqual(BUILDER.move_create_actions_after_photo_preview(generated), generated)
-
-    def test_create_action_buttons_must_belong_to_the_same_actions_block(self):
-        source = '''      <PhotoUploader />
-      <div class="mt-4 flex flex-row-reverse">
-        <ButtonGroup>
-          <Button :disabled="loading" type="button" class="group">{{ $t("global.create") }}</Button>
-        </ButtonGroup>
-      </div>
-
-      <PhotoUploaderPreview
-        :photos="form.photos"
-      />
-      <Button type="submit">{{ $t("global.create") }}</Button>
-      <Button type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
-'''
-        with self.assertRaisesRegex(RuntimeError, "both existing create actions"):
-            BUILDER.move_create_actions_after_photo_preview(source)
-
-    def test_create_action_wrapper_cannot_borrow_buttons_from_a_later_block(self):
-        source = '''      <PhotoUploader />
-      <div class="mt-4 flex flex-row-reverse">
-      </div>
-      <div class="other-actions">
-        <ButtonGroup>
-          <Button type="submit">{{ $t("global.create") }}</Button>
-          <Button type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
-        </ButtonGroup>
-      </div>
-
-      <PhotoUploaderPreview
-        :photos="form.photos"
-      />
-'''
-        with self.assertRaises(RuntimeError):
-            BUILDER.move_create_actions_after_photo_preview(source)
-
-    def test_camera_ocr_build_injection_uses_local_engine_and_edit_revision(self):
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            previous_build = BUILDER.BUILD
-            BUILDER.BUILD = pathlib.Path(directory)
-            page = BUILDER.BUILD / "pages/item/[id]/index/edit.vue"
-            modal = BUILDER.BUILD / "components/Entity/CreateModal.vue"
-            page.parent.mkdir(parents=True)
-            modal.parent.mkdir(parents=True)
-            page.write_text('''  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
-  const nameOcrMessage = ref("");
-  async function suggestItemNameFromPhoto(file: File) {
-    try {
-      const suggestion = await recognizeNameFromFileLocally(file);
-      if (!suggestion) {
-        nameOcrMessage.value = t("components.form.camera.name_not_found");
-        return;
-      }
-      item.value.name = suggestion;
-      nameOcrMessage.value = t("components.form.camera.name_suggested");
-    } catch {
-      nameOcrMessage.value = t("components.form.camera.name_unavailable");
-    }
-  }
-                  <FormTextField
-                    v-model="item[field.ref]"
-                    class="min-w-0 flex-1"
-                  />
-                  <Button type="button" variant="outline">
-                    {{ $t("components.form.camera.suggest_name") }}
-                  </Button>
-                </div>
-                <FormTextField
-                  v-else-if="field.type === 'text'"
-''')
-            modal.write_text('''  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
-  const nameOcrMessage = ref("");
-  async function suggestNameFromPhoto(file: File) {
-    try {
-      const suggestion = await recognizeNameFromFileLocally(file);
-      if (!suggestion) {
-        nameOcrMessage.value = t("components.form.camera.name_not_found");
-        return;
-      }
-      form.name = suggestion;
-      nameOcrMessage.value = t("components.form.camera.name_suggested");
-    } catch {
-      nameOcrMessage.value = t("components.form.camera.name_unavailable");
-    }
-  }
-          <FormTextField
-          v-model="form.name"
-          class="min-w-0 flex-1"
-          />
-          {{ $t("components.form.camera.suggest_name") }}
-      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>
-''')
-            locale = BUILDER.BUILD / "locales/en.json"
-            locale.parent.mkdir(parents=True)
-            locale.write_text(json.dumps({"components": {"form": {"camera": {}}}}))
-            try:
-                BUILDER.camera_ocr_frontend()
-            finally:
-                BUILDER.BUILD = previous_build
-
-            generated = page.read_text()
-            camera = json.loads(locale.read_text())["components"]["form"]["camera"]
-            self.assertIn('from "~/lib/local-ocr"', generated)
-            self.assertIn('getRevision: () => nameEditRevision.value', generated)
-            self.assertIn('@update:model-value="nameEditRevision++"', generated)
-            self.assertIn('nameOcrMessage.value = t("components.form.camera.ocr_running")', generated)
-            self.assertIn('setName: (value: string) => { item.value.name = value; }', generated)
-            self.assertIn("not uploaded", camera["local_ocr_notice"])
-            self.assertIn("name_preserved", camera)
-            generated_modal = modal.read_text()
-            self.assertIn('from "~/lib/local-ocr"', generated_modal)
-            self.assertIn('getRevision: () => nameEditRevision.value', generated_modal)
-            self.assertIn('@update:model-value="nameEditRevision++"', generated_modal)
-            self.assertIn('nameOcrMessage.value = t("components.form.camera.ocr_running")', generated_modal)
-            self.assertIn('setName: (value: string) => { form.name = value; }', generated_modal)
-
-    def test_prepare_api_test_rewrite_is_idempotent_when_first_fixture_is_already_patched(self):
-        source = '''    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;
-    void omittedItemDisplayID;
-    void omittedItemShortCode;
-    const itemUpdate = {
-      ...itemForUpdate,
-      entityTypeId: item.entityType?.id || "",
-      parentId: item.parent?.id || null,
-    };
-    const child1ItemUpdate = {
-      ...child1Item,
-      entityTypeId: child1Item.entityType?.id || "",
-      parentId: parent.id,
-    };
-    const child2ItemUpdate = {
-      ...child2Item,
-      entityTypeId: child2Item.entityType?.id || "",
-      parentId: parent.id,
-    };
-    const itemUpdate = {
-      ...parent,
-      entityTypeId: parent.entityType?.id || "",
-      parentId: parentLocation.id,
-    };
-'''
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            previous_build = BUILDER.BUILD
-            BUILDER.BUILD = pathlib.Path(directory)
-            target = BUILDER.BUILD / "lib/api/__test__/user/items.test.ts"
-            target.parent.mkdir(parents=True)
-            target.write_text(source)
-            try:
-                BUILDER.strip_item_response_short_codes_from_update_tests()
-            finally:
-                BUILDER.BUILD = previous_build
-            self.assertIn("...itemForUpdate", target.read_text())
-            self.assertIn("...child1ForUpdate", target.read_text())
-
-    def test_generated_location_selector_preserves_hierarchy_and_parent_filtering(self):
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            previous_build = BUILDER.BUILD
-            BUILDER.BUILD = pathlib.Path(directory) / "homebox-ui-build"
-            try:
-                BUILDER.prepare()
-            finally:
-                BUILDER.BUILD = previous_build
-
-            selector = (pathlib.Path(directory) / "homebox-ui-build/components/Location/Selector.vue").read_text()
-            helper = (pathlib.Path(directory) / "homebox-ui-build/lib/location-selector-tree.js").read_text()
-            self.assertIn("v-for=\"location in visibleLocations\"", selector)
-            self.assertIn("@click.stop.prevent=\"toggleExpanded(location.id)\"", selector)
-            self.assertIn("paddingLeft: `${location.depth}rem`", selector)
-            self.assertIn('from "~~/lib/location-selector-tree"', selector)
-            self.assertIn("buildLocationTree(rows.value", selector)
-            self.assertIn("getVisibleLocationTree(", selector)
-            self.assertIn("excludeIds?: string[]", selector)
-            self.assertIn("currentLocation?: EntitySummary", selector)
-            self.assertIn("isLocation of [true, false]", selector)
-            self.assertIn("fuzzysort.go(search.value", selector)
-            self.assertIn("function selectLocation(location: EntitySummary)", selector)
-            self.assertIn("export function buildLocationTree", helper)
-            self.assertIn("excludeIds", helper)
-            self.assertIn("options.currentLocation.id", helper)
-            self.assertIn("if (row.archived) return false", helper)
-            self.assertIn("excluded.has(current.id) || seen.has(current.id)", helper)
-            self.assertIn("export function getLocationLabel", helper)
-
-    def test_prepare_accepts_barcode_aware_create_entity_dialog_type(self):
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            previous_build = BUILDER.BUILD
-            BUILDER.BUILD = pathlib.Path(directory) / "homebox-ui-build"
-            try:
-                BUILDER.prepare()
-            finally:
-                BUILDER.BUILD = previous_build
-
-            dialog_utils = (pathlib.Path(directory) / "homebox-ui-build/components/ui/dialog-provider/utils.ts").read_text()
-            self.assertIn("barcode?: string", dialog_utils)
-            self.assertIn("parentId?: string", dialog_utils)
-            self.assertIn("product?: BarcodeProduct", dialog_utils)
-
-            create_modal = (pathlib.Path(directory) / "homebox-ui-build/components/Entity/CreateModal.vue").read_text()
-            import_block = create_modal[create_modal.index("  import type {"):create_modal.index('  } from "~~/lib/api/types/data-contracts";')]
-            form_start = create_modal.index("  const form = reactive({")
-            form_block = create_modal[form_start:create_modal.index("\n  });", form_start)]
-            self.assertEqual(import_block.count("EntitySummary,"), 1)
-            self.assertEqual(form_block.count('modelNumber: "",'), 1)
-            self.assertEqual(create_modal.count("modelNumber: form.modelNumber,"), 3)
-            self.assertEqual(create_modal.count('v-model="form.modelNumber"'), 1)
-            self.assertNotIn("<ItemSelector", create_modal)
-            self.assertIn('<div class="flex items-end gap-2">\n        <FormTextField', create_modal)
-
-            nuxt_config = (pathlib.Path(directory) / "homebox-ui-build/nuxt.config.ts").read_text()
-            self.assertEqual(nuxt_config.count("  modules: ["), 1)
-            self.assertLess(nuxt_config.index('"shadcn-nuxt"'), nuxt_config.index('(_options, nuxt) =>'))
-            self.assertIn('nuxt.hook("components:dirs"', nuxt_config)
-            self.assertTrue((pathlib.Path(directory) / "homebox-ui-build/components/ui/button/index.ts").exists())
-
-            package = json.loads((pathlib.Path(directory) / "homebox-ui-build/package.json").read_text())
-            self.assertNotIn("pnpm", package)
-            workspace_config = (pathlib.Path(directory) / "homebox-ui-build/pnpm-workspace.yaml").read_text()
-            self.assertIn("overrides:", workspace_config)
-            self.assertIn("'@vue/runtime-core': 3.5.20", workspace_config)
-
-            node = shutil.which("node")
-            if not node:
-                self.skipTest("Node.js is required to exercise the generated Nuxt hook fixture")
-            match = re.search(r'(\(_options, nuxt\) => \{.*?\n    \})', nuxt_config, re.S)
-            self.assertIsNotNone(match, "expected a trailing inline Nuxt module")
-            module_block = re.search(r"  modules: \[(.*?)\n  \],", nuxt_config, re.S)
-            self.assertIsNotNone(module_block, "expected the generated Nuxt modules list")
-            module_entries = re.findall(r'"([^"\n]+)"|(\(_options, nuxt\) => \{.*?\n    \})', module_block.group(1), re.S)
-            configured_modules = [
-                {"name": name} if name else {"inline": inline}
-                for name, inline in module_entries
-            ]
-            self.assertEqual(configured_modules[-1], {"inline": match.group(1)})
-            self.assertLess(
-                next(index for index, entry in enumerate(configured_modules) if entry.get("name") == "shadcn-nuxt"),
-                len(configured_modules) - 1,
-            )
-            self.assertIn("nuxt@4.2.2", (ROOT / "upstream/homebox/frontend/pnpm-lock.yaml").read_text())
-            fixture = (
-                "const configured = JSON.parse(process.argv[1]); const dirs = []; const hooks = []; "
-                "const nuxt = {hook(name, callback) { if (name === 'components:dirs') hooks.push(callback); }}; "
-                "const installed = { 'shadcn-nuxt': (_options, nuxt) => nuxt.hook('components:dirs', dirs => dirs.push({path: '/build/components/ui/button', extensions: ['ts', 'vue']})) }; "
-                "const modules = configured.map(entry => entry.name ? (installed[entry.name] || (() => {})) : eval('(' + entry.inline + ')')); "
-                "for (const setup of modules) setup({}, nuxt); "
-                "for (const hook of hooks) hook(dirs); "
-                "process.stdout.write(JSON.stringify(dirs));"
-            )
-            result = subprocess.run([node, "-e", fixture, json.dumps(configured_modules)], capture_output=True, text=True, check=True)
-            self.assertEqual(result.stdout, '[{"path":"/build/components/ui/button","extensions":["vue"]}]')
-
-    def test_wasi_filter_is_narrow_and_keeps_command_failure_status(self):
-        notice = "ERROR (node:31459) ExperimentalWarning: WASI is an experimental feature and might change at any time\n"
-        unrelated = "ExperimentalWarning: another API is experimental\n"
-        self.assertEqual(BUILDER.filter_known_wasi_warning(notice + unrelated), unrelated)
-        extended_notice = notice.rstrip("\n") + " | unrelated failure\n"
-        self.assertEqual(BUILDER.filter_known_wasi_warning(extended_notice), extended_notice)
-
-        stdout, stderr = io.StringIO(), io.StringIO()
-        command = [
-            sys.executable,
-            "-c",
-            "import sys; "
-            "print('ordinary output'); "
-            + "print(" + repr(notice.rstrip("\n")) + ", file=sys.stderr); "
-            + "print(" + repr(unrelated.rstrip("\n")) + ", file=sys.stderr); "
-            + "sys.exit(7)",
-        ]
-        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            with self.assertRaises(subprocess.CalledProcessError) as raised:
-                BUILDER.run_frontend_command(command, cwd=ROOT, env=os.environ.copy())
-
-        self.assertEqual(raised.exception.returncode, 7)
-        self.assertIn("ordinary output", stdout.getvalue())
-        self.assertNotIn("WASI is an experimental feature", stderr.getvalue())
-        self.assertIn("another API is experimental", stderr.getvalue())
-
-
-if __name__ == "__main__":
-    unittest.main()
+HOˆßJJHˆ]˜[
+	Ê	È
+È[Kš[›[™H
+È	ÊIÊJNÈ‚ˆ™›Üˆ
+ÛÛœİÙ]\Ùˆ[Ù[\ÊHÙ]\
+ßK^
+NÈ‚ˆ™›Üˆ
+ÛÛœİÛÚÈÙˆÛÚÜÊHÛÚÊ\œÊNÈ‚ˆœ›ØÙ\ÜËœİİ]Üš]J”ÓÓ‹œİš[™ÚYJ\œÊJNÈ‚ˆ
+Bˆ™\İ[HİXœ›ØÙ\ÜËœ[ŠÛ›ÙK‹YH‹š^\™KœÛÛ‹™[\ÊÛÛ™šYİ\™YÛ[Ù[\ÊWKØ\\™WÛİ]]UYK^UYKÚXÚÏUYJBˆÙ[‹˜\ÜÙ\\]X[
+™\İ[œİİ]	ÖŞÈœ]ˆ‹ØZ[ØÛÛ\Û™[ËİZKØ]Ûˆ‹™^[œÚ[ÛœÈ–ÈYH—_WIÊB‚ˆYˆ\İİØ\ÚWÙš[\—Ú\×Û˜\œ›İ×Ø[™ÚÙY\×ØÛÛ[X[™Ù˜Z[\™WÜİ]\ÊÙ[ŠN‚ˆ›İXÙHH‘T”“Ôˆ
+›ÙNŒÌMNJH^\š[Y[[Ø\›š[™ÎˆĞTÒH\È[ˆ^\š[Y[[™X]\™H[™ZYÚÚ[™ÙH][H[YWˆ‚ˆ[œ™[]YH‘^\š[Y[[Ø\›š[™Îˆ[›İ\ˆTH\È^\š[Y[[ˆ‚ˆÙ[‹˜\ÜÙ\\]X[
+•RST‹™š[\—ÚÛ›İÛ—İØ\ÚWİØ\›š[™Ê›İXÙH
+È[œ™[]Y
+K[œ™[]Y
+Bˆ^[™YÛ›İXÙHH›İXÙKœœİš\
+—ˆŠH
+Èˆ[œ™[]Y˜Z[\™Wˆ‚ˆÙ[‹˜\ÜÙ\\]X[
+•RST‹™š[\—ÚÛ›İÛ—İØ\ÚWİØ\›š[™Ê^[™YÛ›İXÙJK^[™YÛ›İXÙJB‚ˆİİ]İ\œˆH[Ë”İš[™ÒSÊ
+K[Ë”İš[™ÒSÊ
+BˆÛÛ[X[™HÂˆŞ\Ë™^Xİ]X›Kˆ‹XÈ‹ˆš[\ÜŞ\ÎÈ‚ˆœš[
+	ÛÜ™[˜\Hİ]]	ÊNÈ‚ˆ
+Èœš[
+ˆ
+È™\Š›İXÙKœœİš\
+—ˆŠJH
+È‹š[O\Ş\Ëœİ\œŠNÈ‚ˆ
+Èœš[
+ˆ
+È™\Š[œ™[]Yœœİš\
+—ˆŠJH
+È‹š[O\Ş\Ëœİ\œŠNÈ‚ˆ
+ÈœŞ\Ë™^]
+ÊH‹ˆBˆÚ]ÛÛ^X‹œ™Y\™XİÜİİ]
+İİ]
+KÛÛ^X‹œ™Y\™XİÜİ\œŠİ\œŠN‚ˆÚ]Ù[‹˜\ÜÙ\˜Z\Ù\ÊİXœ›ØÙ\ÜËØ[Y›ØÙ\ÜÑ\œ›ÜŠH\È˜Z\ÙY‚ˆ•RST‹œ[—Ùœ›Û[™ØÛÛ[X[™
+ÛÛ[X[™İÙT“ÓÕ[[ÜË™[š\›Û‹˜ÛÜJ
+JB‚ˆÙ[‹˜\ÜÙ\\]X[
+˜Z\ÙY™^Ù\[Û‹œ™]\›˜ÛÙKÊBˆÙ[‹˜\ÜÙ\[Š›Ü™[˜\Hİ]]‹İİ]™Ù]˜[YJ
+JBˆÙ[‹˜\ÜÙ\›İ[Š•ĞTÒH\È[ˆ^\š[Y[[™X]\™H‹İ\œ‹™Ù]˜[YJ
+JBˆÙ[‹˜\ÜÙ\[Š˜[›İ\ˆTH\È^\š[Y[[‹İ\œ‹™Ù]˜[YJ
+JB‚‚šYˆ×Û˜[YW×ÈOH—×ÛXZ[—×È‚ˆ[š]\İ›XZ[Š
+B
