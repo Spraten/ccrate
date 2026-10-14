@@ -118,6 +118,11 @@ test('marks a grapheme wider than its text box as truncated without emitting it'
   )
 })
 
+test('keeps combining marks attached when truncation adds an ellipsis', () => {
+  const measure = value => value === 'e\u0301' ? 1 : value === 'W' ? 2 : value === '…' ? 0.6 : value === 'e\u0301…' ? 1.8 : 0.5
+  assert.deepEqual(fitTextToBox('e\u0301W', 1.2, 10, 2, { measure }), { lines: ['…'], truncated: true })
+})
+
 test('preserves square QR and tall-image proportions when another element occupies the center', () => {
   const page = { widthMm: 40, heightMm: 28 }
   const occupied = [{ type: 'rect', xMm: 10, yMm: 5, widthMm: 20, heightMm: 18, visible: true }]

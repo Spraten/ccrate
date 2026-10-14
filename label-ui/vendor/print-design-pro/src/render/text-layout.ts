@@ -75,7 +75,7 @@ export function fitTextToBox(
   measurer: TextMeasurer,
 ): { lines: string[], truncated: boolean } {
   const maxLines = Math.floor(height / (fontSize * TEXT_LINE_HEIGHT) + 1e-7)
-  const graphemes = Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(content), part => part.segment)
+  const graphemes = splitGraphemes(content)
   const overWideIndex = graphemes.findIndex(grapheme => measurer.measure(grapheme) > width)
   const truncated = overWideIndex !== -1
   const fittingContent = truncated ? graphemes.slice(0, overWideIndex).join('') : content
@@ -83,9 +83,13 @@ export function fitTextToBox(
   if (!truncated && wrapped.length <= maxLines) return { lines: wrapped, truncated: false }
   if (maxLines < 1) return { lines: [], truncated: content.length > 0 }
   const lines = wrapped.slice(0, maxLines)
-  const chars = Array.from(lines[lines.length - 1] ?? '')
+  const chars = splitGraphemes(lines[lines.length - 1] ?? '')
   while (chars.length && measurer.measure(`${chars.join('')}…`) > width) chars.pop()
   if (measurer.measure('…') > width) return { lines: [], truncated: true }
   lines[lines.length - 1] = `${chars.join('')}…`
   return { lines, truncated: true }
+}
+
+function splitGraphemes(content: string): string[] {
+  return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(content), part => part.segment)
 }
