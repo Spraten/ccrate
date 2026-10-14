@@ -63,6 +63,20 @@ class LegacyLabelTextTests(unittest.TestCase):
     def test_truncation_does_not_split_combining_grapheme(self):
         self.assertEqual(labels._fit_name_lines('e\u0301🧰',_FixedWidthDraw(1),None,3,1),['…'])
 
+class LegacyLabelPreviewTests(unittest.TestCase):
+    def test_legacy_preview_uses_measured_stock_dimensions_once(self):
+        user=str(uuid4())
+        entity={'id':user,'name':'Multiword storage location','entityType':{'isLocation':True}}
+        class Client:
+            def entity(self,entity_id):return entity
+        image=SimpleNamespace(width=320,height=208,save=lambda stream,format:stream.write(b'png'))
+        measured={'width_mm':40,'height_mm':28}
+        with patch.object(labels,'probe',return_value=measured) as probe,patch.object(labels,'render',return_value=(image,'location-code')) as render:
+            result=labels.preview(Client(),user)
+        probe.assert_called_once_with()
+        render.assert_called_once_with(entity,40,28)
+        self.assertEqual((result['width'],result['height']),(320,208))
+
 class LabelTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.ledger=Ledger(Path(self.temp.name)/'ledger.db');self.jobs=NativeJobs(self.ledger);self.badges=Badges(self.ledger);self.group=str(uuid4());self.user=str(uuid4());self.badge=self.badges.issue(self.group,self.user,[self.user]);self.prints=[]

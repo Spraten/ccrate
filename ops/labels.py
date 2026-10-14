@@ -92,7 +92,10 @@ def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=Non
 def preview(client,entity_id,*,layouts=None,group=None,actor=None,template_id=None,template_revision=None):
     if layouts is not None:
         return layouts.preview(client,group,actor,{'mode':'item','entity_id':entity_id,'template_id':template_id,'template_revision':template_revision})
-    entity=client.entity(uuid(entity_id));image,code=render(entity);stream=io.BytesIO();image.save(stream,format='PNG')
+    entity=client.entity(uuid(entity_id))
+    try:material=probe()
+    except Exception as error:raise ValueError('Printer not ready. Check connection and loaded stock') from error
+    image,code=render(entity,material['width_mm'],material['height_mm']);stream=io.BytesIO();image.save(stream,format='PNG')
     return {'entity_id':entity['id'],'name':entity['name'],'code':code,'width':image.width,'height':image.height,'image':'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()}
 def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=None,valid_context=None):
     entity_id=uuid(entity_id)
