@@ -20,6 +20,65 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class HomeboxUiBuilderTests(unittest.TestCase):
+    def test_create_item_actions_are_after_photo_preview_without_changing_form_actions(self):
+        source = '''      <PhotoUploader />
+      <div class="mt-4 flex flex-row-reverse">
+        <ButtonGroup>
+          <Button :disabled="loading" type="submit" class="group">{{ $t("global.create") }}</Button>
+          <Button variant="outline" :disabled="loading" type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
+        </ButtonGroup>
+      </div>
+
+      <PhotoUploaderPreview
+        :photos="form.photos"
+        @delete="deletePhotoAt"
+        @rotate="rotatePhotoAt"
+        @set-primary="setPrimaryPhotoAt"
+      />
+'''
+        generated = BUILDER.move_create_actions_after_photo_preview(source)
+
+        self.assertLess(generated.index("<PhotoUploaderPreview"), generated.index('type="submit"'))
+        self.assertLess(generated.index("<PhotoUploaderPreview"), generated.index('@click="create(false)"'))
+        self.assertEqual(generated.count('type="submit"'), 1)
+        self.assertEqual(generated.count('@click="create(false)"'), 1)
+        self.assertEqual(BUILDER.move_create_actions_after_photo_preview(generated), generated)
+
+    def test_create_action_buttons_must_belong_to_the_same_actions_block(self):
+        source = '''      <PhotoUploader />
+      <div class="mt-4 flex flex-row-reverse">
+        <ButtonGroup>
+          <Button :disabled="loading" type="button" class="group">{{ $t("global.create") }}</Button>
+        </ButtonGroup>
+      </div>
+
+      <PhotoUploaderPreview
+        :photos="form.photos"
+      />
+      <Button type="submit">{{ $t("global.create") }}</Button>
+      <Button type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
+'''
+        with self.assertRaisesRegex(RuntimeError, "both existing create actions"):
+            BUILDER.move_create_actions_after_photo_preview(source)
+
+    def test_create_action_wrapper_cannot_borrow_buttons_from_a_later_block(self):
+        source = '''      <PhotoUploader />
+      <div class="mt-4 flex flex-row-reverse">
+      </div>
+      <div class="other-actions">
+        <ButtonGroup>
+          <Button type="submit">{{ $t("global.create") }}</Button>
+          <Button type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
+        </ButtonGroup>
+      </div>
+
+      <PhotoUploaderPreview
+        :photos="form.photos"
+      />
+'''
+        with self.assertRaises(RuntimeError):
+            BUILDER.move_create_actions_after_photo_preview(source)
+
     def test_camera_ocr_build_injection_uses_local_engine_and_edit_revision(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             previous_build = BUILDER.BUILD

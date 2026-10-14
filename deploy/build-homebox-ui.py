@@ -145,6 +145,38 @@ def item_log_frontend():
     replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Generated from item type and full storage path; regenerated when the item moves.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
 
 
+def move_create_actions_after_photo_preview(source):
+    """Keep both existing create actions after uploaded-photo previews."""
+    action_open = '      <div class="mt-4 flex flex-row-reverse">'
+    action_start = source.find(action_open)
+    preview_start = source.find('      <PhotoUploaderPreview\n')
+    if action_start < 0 or preview_start < 0:
+        raise RuntimeError('Upstream changed: expected the create actions and photo preview in CreateModal.vue')
+    if source.count(action_open) != 1 or source.count('      <PhotoUploaderPreview\n') != 1:
+        raise RuntimeError('Upstream changed: expected one create action block and photo preview in CreateModal.vue')
+
+    action_close = source.find('\n      </div>', action_start)
+    button_group_start = source.find('        <ButtonGroup>', action_start, action_close)
+    if action_close < 0 or button_group_start < 0:
+        raise RuntimeError('Upstream changed: expected the create buttons inside their actions block')
+    button_group_end = source.find('        </ButtonGroup>', button_group_start)
+    if button_group_end < 0 or button_group_end > action_close:
+        raise RuntimeError('Upstream changed: expected the create buttons inside their actions block')
+    if source[action_start + len(action_open):button_group_start].strip() or source[button_group_end + len('        </ButtonGroup>'):action_close].strip():
+        raise RuntimeError('Upstream changed: expected only the create button group inside its actions block')
+    action_end = action_close + len('\n      </div>')
+    actions = source[action_start:action_end]
+    if actions.count('type="submit"') != 1 or actions.count('@click="create(false)"') != 1:
+        raise RuntimeError('Upstream changed: expected both existing create actions in CreateModal.vue')
+    if preview_start < action_start:
+        return source
+
+    if source[action_end:preview_start] != '\n\n':
+        raise RuntimeError('Upstream changed: expected create actions directly before the photo preview')
+    preview_end = source.index('\n      />', preview_start) + len('\n      />')
+    return source[:action_start] + '\n\n' + source[preview_start:preview_end] + '\n\n' + actions + source[preview_end:]
+
+
 def nest_frontend():
     replace('lib/api/classes/items.ts', '  orderBy?: string;', '  orderBy?: string;\n  isLocation?: boolean;')
     replace(
@@ -234,6 +266,7 @@ def nest_frontend():
         raise RuntimeError(f'Upstream changed: expected one EntitySummary import and modelNumber form field in {path}')
     if text.count('modelNumber: form.modelNumber,') != 3:
         raise RuntimeError(f'Upstream changed: expected modelNumber in each native create payload in {path}')
+    text = move_create_actions_after_photo_preview(text)
     target.write_text(text)
     path = 'pages/item/[id]/index/edit.vue'; target=BUILD/path; text=target.read_text()
     start=text.index('    if (data.parent && data.parent.entityType'); end=text.index('\n    return data;',start)
