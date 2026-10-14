@@ -6,6 +6,17 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class LabelGeneratorContractTests(unittest.TestCase):
+    def test_print_failures_are_visible_and_only_uncertain_outcomes_lock_retry(self):
+        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
+        workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text()
+        self.assertIn('workspace.printError', component)
+        self.assertIn('workspace.printUncertain', component)
+        self.assertIn('workspace.printLocked || workspace.printedReviewIds.includes(row.review_id)', component)
+        self.assertIn("workspace.printError && !workspace.printUncertain ? 'Retry print'", component)
+        self.assertIn('pendingLabelPrint(pending())', workflow)
+        self.assertIn('labelPrintFailure(error,pending(),requestKey)', workflow)
+        self.assertIn('workspace.actions.recovery()', component)
+
     def test_routine_printing_uses_an_in_context_preview_before_explicit_output(self):
         component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
         self.assertIn('Preview selected labels', component)

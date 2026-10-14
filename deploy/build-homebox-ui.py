@@ -1,7 +1,3 @@
-Warning: truncated output (original token count: 13271)
-Total output lines: 711
-
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 #!/usr/bin/env python3
 """Build a native Homebox frontend overlay without modifying the upstream checkout.
 
@@ -297,7 +293,145 @@ def nest_frontend():
     # Mixed ancestors link to their actual native item/location pages.
     path='pages/location/[id]/index/index.vue'
     target=BUILD/path; text=target.read_text()
-    text=t…3271 tokens truncated…oto(file: File) {
+    text=text.replace('  const confirm = useConfirm();', '  const fullpath = computedAsync(async () => location.value ? (await api.items.fullpath(location.value.id)).data || [] : []);\n\n  const confirm = useConfirm();')
+    start=text.index('              <Breadcrumb v-if="location?.parent">');end=text.index('              </Breadcrumb>',start)+len('              </Breadcrumb>')
+    text=text[:start]+'''              <Breadcrumb v-if="fullpath && fullpath.length > 1">
+                <BreadcrumbList><template v-for="(part, idx) in fullpath" :key="part.id">
+                  <BreadcrumbItem><BreadcrumbLink v-if="idx < fullpath.length - 1" as-child><NuxtLink :to="`/${part.type}/${part.id}`">{{ part.name }}</NuxtLink></BreadcrumbLink><span v-else>{{ part.name }}</span></BreadcrumbItem>
+                  <BreadcrumbSeparator v-if="idx < fullpath.length - 1" />
+                </template></BreadcrumbList>
+              </Breadcrumb>'''+text[end:]
+    target.write_text(text)
+
+
+def navigation_frontend():
+    replace('layouts/default.vue', '      <Sidebar collapsible="icon">', '      <Sidebar side="left" collapsible="icon">')
+    replace('layouts/default.vue', '<Collapsible v-else default-open', '<Collapsible v-else :default-open="n.name.value !== \'More\'"')
+    replace('layouts/default.vue', '<SidebarMenuLink\n                        :href="n.to"', '<CollapsibleTrigger v-if="n.name.value === \'More\'" as-child><SidebarMenuButton :tooltip="n.name.value" class="flex gap-2"><component :is="n.icon" /><span>{{ n.name.value }}</span><MdiChevronRight class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" /></SidebarMenuButton></CollapsibleTrigger>\n                      <SidebarMenuLink v-else\n                        :href="n.to"')
+    replace('layouts/default.vue', '<CollapsibleTrigger as-child>\n                        <SidebarMenuButton class="flex size-12', '<CollapsibleTrigger v-if="n.name.value !== \'More\'" as-child>\n                        <SidebarMenuButton class="flex size-12')
+    replace('layouts/default.vue', '    collapsible?: {\n      active: ComputedRef<boolean>;', '    collapsible?: {\n      action?: () => void;\n      active: ComputedRef<boolean>;')
+    replace('layouts/default.vue', '<SidebarMenuLink\n                            :href="c.to"', '<SidebarMenuLink v-if="!c.action"\n                            :href="c.to"')
+    replace('layouts/default.vue', '                          </SidebarMenuLink>\n                        </SidebarMenuSubItem>', '                          </SidebarMenuLink>\n                          <SidebarMenuButton v-else @click.prevent="c.action?.()"><span>{{ c.name.value }}</span></SidebarMenuButton>\n                        </SidebarMenuSubItem>')
+    layout = BUILD/'layouts/default.vue'
+    source = layout.read_text()
+    start = source.index('              <!-- makes scanner accessible easily if using legacy header -->')
+    end = source.index('              </SidebarMenuItem>', start) + len('              </SidebarMenuItem>\n')
+    layout.write_text(source[:start] + source[end:])
+    replace('layouts/default.vue', 'const nav: {', 'const baseNav: {')
+    replace('layouts/default.vue', '  const quickMenuActions = reactive([', '''  const workshop = useWorkshop();
+  const { selectedId: workshopGroup } = useCollections();
+  const workshopLinks = computed(() => [
+    ["loans", "Loans & notes"], ["map", "Workshop & storage"],
+    ["checkout-cart", "Checkout cart"],
+    ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
+  ]);
+  const nav = computed<typeof baseNav>(() => [
+    baseNav[0]!,
+    { ...baseNav[3]!, id: 1, name: computed(() => "Inventory") },
+    { id: 8, icon: MdiWrench, name: computed(() => "Workshop"), to: "/workshop/map", active: computed(() => route.path === "/workshop/map") },
+    { id: 9, icon: MdiTagMultiple, name: computed(() => "Label"), to: "/workshop/labels", active: computed(() => route.path === "/workshop/labels") },
+    { ...baseNav[7]!, id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
+    {
+      id: 11, icon: MdiFileDocumentMultiple, name: computed(() => "More"), to: "",
+      active: computed(() => false),
+      collapsible: [
+        ...baseNav.slice(1, 3), baseNav[4]!, baseNav[5]!, baseNav[6]!,
+        ...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members"),
+        ...workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels").map(([id, name], index) => ({ id: 80 + index, name: computed(() => name!), to: `/workshop/${id}`, active: computed(() => route.path === `/workshop/${id}`) })),
+        { id: 92, name: computed(() => "Report feedback"), to: "/feedback", active: computed(() => route.path === "/feedback") },
+        { id: 90, name: computed(() => "Equipment Terminal"), to: terminalURL.value, active: computed(() => false) },
+        { id: 91, name: computed(() => t("menu.scanner")), to: "", active: computed(() => false), action: openScanner },
+      ],
+    },
+  ]);
+  watch([workshopGroup, () => useAuthContext().user?.id], () => { workshop.context.value = null; workshop.refresh().catch(() => {}); }, { immediate: true });
+
+  const quickMenuActions = computed(() => [''')
+    replace('layouts/default.vue', '...nav.map(v => ({', '...nav.value.filter(v => v.name.value !== "More").map(v => ({')
+    target = BUILD/'layouts/default.vue'
+    target.write_text(target.read_text().replace('text: computed(() => v.name.value),', 'text: v.name.value,'))
+
+
+def shell_frontend():
+    layout = BUILD/'layouts/default.vue'
+    source = layout.read_text()
+    start = source.index('<SidebarHeader class="items-center">')
+    selector = '          <CollectionSelector />'
+    end = source.index(selector, start) + len(selector)
+    source = source[:start] + '''<SidebarHeader class="items-stretch gap-2 p-3">
+          <NuxtLink to="/home" aria-label="C-Crate home" class="flex h-10 w-full items-center gap-3 rounded-md px-2 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+            <AppLogo aria-hidden="true" class="size-7 shrink-0" />
+          </NuxtLink>
+
+          <CollectionSelector />'''+source[end:]
+    layout.write_text(source)
+    replace('layouts/default.vue', '    SidebarGroupLabel,\n', '')
+    replace('layouts/default.vue', 'drop-shadow-md hover:bg-primary/90', 'hover:bg-primary/90')
+    replace('layouts/default.vue', 'class="flex justify-center group-data-[collapsible=icon]:justify-start group-data-[collapsible=icon]:bg-destructive group-data-[collapsible=icon]:text-destructive-foreground group-data-[collapsible=icon]:shadow-sm group-data-[collapsible=icon]:hover:bg-destructive/90"', 'class="flex justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-start"')
+    replace('layouts/default.vue', 'class="sticky top-0 z-20 flex h-[var(--header-height-mobile)] translate-y-[-0.5px] flex-col bg-secondary p-2 shadow-md sm:h-[var(--header-height)] sm:flex-row"', 'class="sticky top-0 z-20 flex min-h-[var(--header-height-mobile)] flex-col gap-1 border-b border-border bg-card px-3 py-2 sm:min-h-[var(--header-height)] sm:flex-row"')
+    replace('layouts/default.vue', '            <div class="flex h-1/2 grow items-center justify-end gap-2 sm:h-auto">', '            <div class="flex min-w-0 grow items-center justify-end gap-2">\n              <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="shrink-0" />')
+    replace('layouts/default.vue', '        <AppHeaderDecor class="-mt-10 hidden lg:block" />', '''        <AppHeaderDecor class="-mt-10 hidden lg:block" />
+            <DeviceStatus v-if="preferences.displayLegacyHeader && terminalHeader" :enabled="preferences.displayLegacyHeader && terminalHeader" class="absolute right-6 top-3 z-30 hidden lg:flex" />''')
+    replace('layouts/default.vue', '<Button size="icon" @click="triggerSearch">', '<Button size="icon" :aria-label="$t(\'global.search\')" @click="triggerSearch">')
+    replace('layouts/default.vue', '<Button size="icon" @click="openScanner">', '<Button size="icon" :aria-label="$t(\'menu.scanner\')" @click="openScanner">')
+    replace('layouts/default.vue', '  const search = ref("");', '''  const terminalHeader = ref(false);
+  let desktopHeaderMedia: MediaQueryList | null = null;
+  const updateDesktopHeader = () => { terminalHeader.value = desktopHeaderMedia?.matches || false; };
+  onMounted(() => { desktopHeaderMedia = window.matchMedia("(min-width: 1024px)"); updateDesktopHeader(); desktopHeaderMedia.addEventListener("change", updateDesktopHeader); });
+  onBeforeUnmount(() => desktopHeaderMedia?.removeEventListener("change", updateDesktopHeader));
+  const terminalURL = computed(() => { const url = new URL(window.location.href); url.port = "17749"; url.pathname = "/"; url.search = "?mode=editor"; url.hash = ""; return url.href; });
+  const search = ref("");''')
+    replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import DeviceStatus from "~/components/Workshop/DeviceStatus.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
+
+
+def strip_item_response_short_codes_from_update_tests():
+    """Keep response-only identifiers out of update payloads in pinned API tests."""
+    relative = pathlib.Path('lib/api/__test__/user/items.test.ts')
+    target = BUILD / relative
+    source = target.read_text()
+    if not re.search(r'\b(?:displayId|shortCode)\b', source):
+        return
+    rewrites = (
+        ("    const itemUpdate = {\n      ...item,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,", "    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemDisplayID;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,"),
+        ("    const child1ItemUpdate = {\n      ...child1Item,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild1DisplayID, shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1DisplayID;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,"),
+        ("    const child2ItemUpdate = {\n      ...child2Item,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild2DisplayID, shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2DisplayID;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,"),
+        ("    const itemUpdate = {\n      ...parent,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,", "    const { displayId: omittedParentDisplayID, shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentDisplayID;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,"),
+    )
+    if len(rewrites) != 4:
+        raise RuntimeError('Expected four pinned item update test fixtures')
+    for original, replacement in rewrites:
+        count = source.count(original)
+        if count == 0 and source.count(replacement) == 1:
+            continue
+        if count != 1:
+            raise RuntimeError(f'Expected exactly one item update fixture anchor in {relative}, found {count}')
+        source = source.replace(original, replacement)
+    target.write_text(source)
+
+
+def camera_ocr_frontend():
+    path = 'pages/item/[id]/index/edit.vue'
+    replace(
+        path,
+        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
+        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
+    )
+    replace(
+        path,
+        '''  async function suggestItemNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      item.value.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+        '''  async function suggestItemNameFromPhoto(file: File) {
     try {
       nameOcrMessage.value = t("components.form.camera.ocr_running");
       const outcome = await suggestNameWithoutOverwritingEdits({

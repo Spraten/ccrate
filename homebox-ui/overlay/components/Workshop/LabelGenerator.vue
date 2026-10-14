@@ -22,6 +22,9 @@ type Workspace = {
   printedReviewIds: string[];
   pages: { image: string; sha256: string }[];
   pendingActions: number;
+  printError: string;
+  printUncertain: boolean;
+  printLocked: boolean;
   busy: boolean;
   actions: {
     select: (ids: string[]) => void;
@@ -107,6 +110,10 @@ function designerClosed() {
         {{ workspace.pendingActions }} action{{ workspace.pendingActions === 1 ? ' has' : 's have' }} an unconfirmed result. Check saved actions before retrying.
         <Button variant="outline" class="ml-2" @click="workspace.actions.recovery()">Check saved actions</Button>
       </div>
+      <div v-if="workspace.printError" class="rounded-md border p-3 text-sm" :class="workspace.printUncertain ? 'border-amber-500/50 bg-amber-500/10' : 'border-destructive/50 bg-destructive/5'" :role="workspace.printUncertain ? 'alert' : 'status'">
+        <p>{{ workspace.printError }}</p>
+        <Button v-if="workspace.printUncertain" variant="outline" class="mt-2" @click="workspace.actions.recovery()">Open Recovery</Button>
+      </div>
       <section v-if="designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
         <p class="mb-3 text-sm text-muted-foreground">Edit a reusable design for this collection. Draft previews do not start a print.</p>
         <LabelDesigner ref="designerRef" :selected-item="selectedEquipment" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @busy="workspace.actions.designerBusy" />
@@ -164,7 +171,7 @@ function designerClosed() {
           <article v-for="row in workspace.reviews" :key="row.review_id" class="rounded-md border p-3">
             <img :src="row.image" :alt="'Label preview for ' + (workspace.items.find(item => item.id === row.entity_id)?.name || 'equipment')" class="mx-auto max-h-56 max-w-full bg-white object-contain" />
             <p class="truncate text-sm font-medium">{{ workspace.items.find(item => item.id === row.entity_id)?.name || row.entity_id }}</p>
-            <Button v-if="row.profile === 'supvan'" variant="outline" class="mt-2 w-full" :disabled="workspace.busy || workspace.printedReviewIds.includes(row.review_id)" @click="workspace.actions.printItem(row.entity_id, row.review_id)">{{ workspace.printedReviewIds.includes(row.review_id) ? 'Print submitted' : 'Print label' }}</Button>
+            <Button v-if="row.profile === 'supvan'" variant="outline" class="mt-2 w-full" :disabled="workspace.busy || workspace.printLocked || workspace.printedReviewIds.includes(row.review_id)" @click="workspace.actions.printItem(row.entity_id, row.review_id)">{{ workspace.printedReviewIds.includes(row.review_id) ? 'Print submitted' : workspace.printError && !workspace.printUncertain ? 'Retry print' : 'Print label' }}</Button>
           </article>
         </div>
       </section>

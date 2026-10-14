@@ -108,4 +108,3 @@ class LabelTests(unittest.TestCase):
             with self.assertRaises(Conflict):labels.print_badge(self.client,self.badges,self.jobs,self.group,self.user,key,self.badge['id'],self.badge['code'])
         with self.assertRaises(Conflict):self.run_print(str(uuid4()),reprint=True)
         self.assertFalse(self.prints)
-

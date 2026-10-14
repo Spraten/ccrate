@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 import unittest
 from pathlib import Path
 import subprocess
@@ -15,6 +14,11 @@ class FeedbackUiContractTests(unittest.TestCase):
     def test_report_is_linked_from_the_collapsed_more_navigation(self):
         builder = (ROOT / "deploy/build-homebox-ui.py").read_text()
         self.assertIn('{ id: 92, name: computed(() => "Report feedback"), to: "/feedback"', builder)
+
+    def test_submission_status_uses_a_theme_aware_success_color(self):
+        page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
+        submitted = page[page.index("<p v-if=\"status === 'submitted'\""):page.index("Report submitted.")]
+        self.assertIn("dark:text-green-300", submitted)
 
     def test_page_keeps_request_identity_per_native_user_and_never_contains_a_github_token(self):
         page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()

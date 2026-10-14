@@ -114,4 +114,3 @@ const assert=(value,message)=>{if(!value)throw Error(message)};
 
 if __name__ == "__main__":
     unittest.main()
-

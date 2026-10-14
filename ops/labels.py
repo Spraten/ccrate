@@ -249,4 +249,3 @@ def print_badge(client,badges,jobs,group,actor,key,badge_id,code):
     except Exception:
         if jobs.detail(group,job['id'])['status']=='prepared':jobs.cancel(group,job['id']);raise ValueError('Printer not ready. Check the stock and connection')
         jobs.review(group,job['id'],'Badge output uncertain. Inspect it; never auto-reprint');raise Conflict('Inspect the badge output and review it in Admin')
-

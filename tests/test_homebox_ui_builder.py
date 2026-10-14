@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 """Focused regression tests for disposable Homebox UI build preparation."""
 import contextlib
 import importlib.util

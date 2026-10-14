@@ -212,7 +212,7 @@
         </label>
         <p v-if="error" class="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm" role="alert">{{ error }}</p>
         <p v-if="status === 'pending'" class="text-sm text-muted-foreground" role="status">The request is saved. Check its status before taking another action.</p>
-        <p v-if="status === 'submitted'" class="text-sm text-green-700" role="status">
+        <p v-if="status === 'submitted'" class="text-sm text-green-700 dark:text-green-300" role="status">
           Report submitted.
           <a v-if="issueUrl" class="underline underline-offset-2" :href="issueUrl" target="_blank" rel="noreferrer">View the GitHub issue</a>
         </p>

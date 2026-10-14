@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 # C-Crate feedback reporting
 
 The signed-in C-Crate sidebar has **More → Report feedback**. Reports include a type and description and are sent to the `Spraten/ccrate` GitHub repository. GitHub issues are public, so the form warns users not to include passwords, badge keys, or other sensitive data.
