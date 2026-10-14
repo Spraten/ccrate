@@ -27,6 +27,9 @@ class DisplayIDContractTests(unittest.TestCase):
         self.assertIn('require.NotEqual(t, item.ShortCode, duplicateItem.ShortCode', tests)
         self.assertIn('"USB-C-ADAPTER", "12-34-56"', tests)
         self.assertIn('C-U812AB7D250404B2B918260F5EC674EFE', tests)
+        self.assertIn('PART-SABC-123', tests)
+        self.assertIn('displayIDOrdinarySearch = q.Search', builder)
+        self.assertIn('displayIDOrdinaryMatches[item.ID]', builder)
         self.assertIn('originalUUID, originalAssetID, originalShortCode', tests)
         self.assertIn("schemas[name]['properties']['displayId']", builder)
 

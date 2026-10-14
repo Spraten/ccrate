@@ -50,7 +50,7 @@ func TestFormatDisplayIDUsesShortCodeAndLegacyLocationFallback(t *testing.T) {
 }
 
 func TestIsDisplayIDSearchTreatsTrailingLocationNumberAsPath(t *testing.T) {
-	for _, value := range []string{"BIN-D-GC-C-1-A17-SDHP-001", "bin-d-gc-c-1-a17-sdhp-001", "C-U812AB7D250404B2B918260F5EC674EFE"} {
+	for _, value := range []string{"BIN-D-GC-C-1-A17-SDHP-001", "bin-d-gc-c-1-a17-sdhp-001", "C-U812AB7D250404B2B918260F5EC674EFE", "PART-SABC-123"} {
 		if !isDisplayIDSearch(value) {
 			t.Errorf("isDisplayIDSearch(%q) = false, want true", value)
 		}
@@ -126,6 +126,24 @@ func TestEntityDisplayIDChangesWithTypeAndLocationButKeepsNativeIDs(t *testing.T
 		require.Len(t, search.Items, 1)
 		require.Equal(t, candidate.ID, search.Items[0].ID)
 	}
+
+	ordinaryItem, err := tRepos.Entities.Create(ctx, groupID, EntityCreate{
+		Name: "PART-SABC-123", ParentID: slot.ID, EntityTypeID: binType.ID,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, ordinaryItem.ID) })
+	search, err := tRepos.Entities.QueryByGroup(ctx, groupID, EntityQuery{
+		Page: -1, PageSize: -1, Search: "PART-SABC-123",
+	})
+	require.NoError(t, err)
+	foundOrdinaryMatch := false
+	for _, candidate := range search.Items {
+		if candidate.ID == ordinaryItem.ID {
+			foundOrdinaryMatch = true
+			break
+		}
+	}
+	require.True(t, foundOrdinaryMatch, "a code-shaped ordinary name must remain searchable alongside exact display-ID matching")
 
 	updated, err := tRepos.Entities.UpdateByGroup(ctx, groupID, EntityUpdate{
 		ID: item.ID, Name: item.Name, ParentID: other.ID, EntityTypeID: drawerType.ID,

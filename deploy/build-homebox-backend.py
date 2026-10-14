@@ -53,12 +53,33 @@ search_anchor='''\tif q.Search != "" {
 		searchPredicates := []predicate.Entity{'''
 assert text.count(search_anchor)==1
 text=text.replace(search_anchor,'''\tdisplayIDSearch := ""
+	displayIDOrdinarySearch := ""
 	if q.AssetID.Nil() && isDisplayIDSearch(q.Search) {
 		displayIDSearch = strings.ToUpper(strings.TrimSpace(q.Search))
+		displayIDOrdinarySearch = q.Search
 		q.Search = ""
 	}
 	if q.Search != "" {
 		searchPredicates := []predicate.Entity{''',1)
+ordinary_anchor='''\tcountCtx, countSpan := entityTracer().Start(ctx, "repo.EntityRepository.QueryByGroup.count")'''
+assert text.count(ordinary_anchor)==1
+text=text.replace(ordinary_anchor,'''\tdisplayIDOrdinaryMatches := make(map[uuid.UUID]struct{})
+	if displayIDOrdinarySearch != "" {
+		ordinaryQB := qb.Clone().Where(entity.Or(
+			entity.NameContainsFold(displayIDOrdinarySearch),
+			entity.DescriptionContainsFold(displayIDOrdinarySearch),
+			entity.SerialNumberContainsFold(displayIDOrdinarySearch),
+			entity.ModelNumberContainsFold(displayIDOrdinarySearch),
+			entity.ManufacturerContainsFold(displayIDOrdinarySearch),
+			entity.NotesContainsFold(displayIDOrdinarySearch),
+			entity.ShortCodeContainsFold(displayIDOrdinarySearch),
+			entity.Barcode(displayIDOrdinarySearch),
+		))
+		ordinaryEntities, err := ordinaryQB.All(ctx)
+		if err != nil { recordSpanError(span, err); return PaginationResult[EntitySummary]{}, err }
+		for _, item := range ordinaryEntities { displayIDOrdinaryMatches[item.ID] = struct{}{} }
+	}
+	countCtx, countSpan := entityTracer().Start(ctx, "repo.EntityRepository.QueryByGroup.count")''',1)
 page_anchor='''\tif q.Page != -1 || q.PageSize != -1 {'''
 assert text.count(page_anchor)==1
 text=text.replace(page_anchor,'''\tif displayIDSearch == "" && (q.Page != -1 || q.PageSize != -1) {''',1)
@@ -72,7 +93,8 @@ text=text.replace(anchor,'''\tif err := r.populateDisplayIDs(fetchCtx, gid, enti
 	}
 	if displayIDSearch != "" {
 		entities = lo.Filter(entities, func(item EntitySummary, _ int) bool {
-			return strings.EqualFold(item.DisplayID, displayIDSearch)
+			_, ordinaryMatch := displayIDOrdinaryMatches[item.ID]
+			return strings.EqualFold(item.DisplayID, displayIDSearch) || ordinaryMatch
 		})
 		count = len(entities)
 		if q.Page != -1 || q.PageSize != -1 {
