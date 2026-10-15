@@ -91,6 +91,8 @@ Issue #14's optional identified-to-anonymous return action now names the identit
 
 **Issue #10 source follow-up (2026-10-15):** The current PR's location selector and tree helper match the local files. `node --test tests/location_selector_tree.test.mjs` passes 6/6, including duplicate-name selected breadcrumbs, full-path search, tree expansion, cycle/exclusion handling, and keyboard behavior. A unique selected location intentionally shows its short name; duplicate names show the full breadcrumb. Issue #10's status text now distinguishes this source/test evidence from the older browser build, which showed only the unique leaf name in the closed field.
 
+**Issue #15 source follow-up (2026-10-15):** The current PR cart service, kiosk UI, and focused tests match the local files. The bundled-Python checkout-cart group passes 20/20, covering non-reserving drafts, actor/group isolation, revision conflicts, cart reconciliation, managed-kit receipts, and recovery counts. No kiosk checkout or custody change was submitted; the end-to-end kiosk and target-installation gates remain open.
+
 `#1, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #18`.
 
 
