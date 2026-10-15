@@ -50,6 +50,9 @@ class NativeJobs:
                     pending_payload=json.loads(pending['payload'] or '{}')
                     if pending_payload.get('entity_id')==entity_id:
                         raise Conflict('An item note for this equipment is unresolved; inspect Recovery before starting another')
+            if kind=='print_label':
+                pending=db.execute("SELECT id FROM native_jobs WHERE group_id=? AND kind='print_label' AND status IN ('prepared','sent','review') LIMIT 1",(group,)).fetchone()
+                if pending:raise Conflict('A printer request is unresolved. Inspect its output and finish Recovery before printing another label')
             job=str(uuid4());now=timestamp()
             db.execute('INSERT INTO native_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
                 (job,group,actor,kind,key,digest,'prepared',None,encoded,json.dumps(context or {},sort_keys=True),now,now))
