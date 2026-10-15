@@ -53,6 +53,12 @@ class Tests(unittest.TestCase):
         job=self.jobs.prepare(self.group,self.actor,'print_label',key,{'entity_id':entity,'review_id':review})
         metadata={'review_id':review,'template_id':'starter:supvan:left','template_revision':0,'template_hash':'a'*64,'sha256':'b'*64,'profile':'supvan','label_mm':[40,28],'dpi':203.2,'width':320,'height':224}
         self.jobs.sent_print(self.group,job['id'],entity,metadata)
+
+    def test_unresolved_printer_job_blocks_a_different_item(self):
+        self.jobs.prepare(self.group,self.actor,'print_label',self.key,{'entity_id':str(uuid4()),'review_id':str(uuid4())})
+        with self.assertRaisesRegex(Conflict,'printer request is unresolved'):
+            self.jobs.prepare(self.group,self.actor,'print_label',str(uuid4()),{'entity_id':str(uuid4()),'review_id':str(uuid4())})
+
     def test_history_marks_first_completion_time_separately_from_request_time(self):
         entity=str(uuid4());job=self.jobs.prepare(self.group,self.actor,'add_note',self.key,
             {'entity_id':entity,'note':'A short note'},context={'entity_id':entity})

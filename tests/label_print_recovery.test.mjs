@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { labelPrintFailure, pendingLabelPrint, labelReviewCanPrint, submitReviewedLabel, applyLabelPreview } from '../homebox-ui/overlay/lib/label-print-recovery.js';
 
 test('confirmed-not-started print failure surfaces the error and allows retry', () => {
@@ -17,8 +18,21 @@ test('uncertain print failure stays locked and exposes recovery guidance', () =>
   assert.equal(pendingLabelPrint(saved), true);
 });
 
+test('an unresolved print from another tab keeps the queue locked', () => {
+  const state = labelPrintFailure(new Error('Another print needs recovery.'), [{ key: 'request-b', path: 'labels/print' }], 'request-a');
+  assert.equal(state.uncertain, true);
+  assert.equal(state.locked, true);
+});
+
 test('other saved workshop actions do not lock the label print queue', () => {
   assert.equal(pendingLabelPrint([{ key: 'request-b', path: 'workshop/save' }]), false);
+});
+
+test('the print write checks the live queue before sending', () => {
+  const source = readFileSync(new URL('../homebox-ui/overlay/lib/workshop-tools.js', import.meta.url), 'utf8');
+  assert.ok(source.includes("path==='labels/print'&&pendingLabelPrint(pending())"));
+  assert.ok(source.includes('function refreshPrintQueueLock(){if(!pendingLabelPrint(pending()))return false;queueStopped=true;workspace.printLocked=true;'));
+  assert.ok(source.includes('if(refreshPrintQueueLock()||attempted||workspace.printedReviewIds.includes(reviewId)'));
 });
 
 test('confirmed-unsent retry requires a fresh preview while keeping successful labels suppressed', async () => {

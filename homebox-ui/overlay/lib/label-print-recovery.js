@@ -3,8 +3,8 @@ export function pendingLabelPrint(actions) {
 }
 
 export function labelPrintFailure(error, actions, requestKey, queue) {
-  const uncertain = actions.some(action => action.key === requestKey && action.path === 'labels/print');
   const detail = error?.message || String(error);
+  const uncertain = pendingLabelPrint(actions) || /printer request is unresolved/i.test(detail);
   const state = {
     uncertain,
     locked: uncertain,
