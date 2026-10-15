@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const source = readFileSync(new URL('../label-ui/src/editor-host.ts', import.meta.url), 'utf8')
 const host = readFileSync(new URL('../homebox-ui/overlay/components/Workshop/LabelDesigner.vue', import.meta.url), 'utf8')
+const generator = readFileSync(new URL('../homebox-ui/overlay/components/Workshop/LabelGenerator.vue', import.meta.url), 'utf8')
 
 function loadSourceFunction(name, parameters) {
   const marker = `export function ${name}(`
@@ -165,4 +166,29 @@ test('uncertain template saves use status-only checks and stay locked until the 
   assert.equal(messages.some(message => message.includes('Template revision conflict')), true, 'the rejection is reported to the user')
   assert.equal((await rejection.save({ id: 'template-old', revision: 2, name: 'Updated label' }, '{}', false, {})).status, 'saved')
   assert.deepEqual(rejectionKeys, ['rejected-key-1', 'rejected-key-2'], 'the next attempt requires a separate user-initiated save and new key')
+})
+
+test('template-saved is emitted after direct and recovered save confirmation only', async () => {
+  const mountedSaveReconcile = source.slice(source.indexOf('const saveRecovery = createTemplateSaveRecovery('), source.indexOf('const placementWarning'))
+  assert.match(mountedSaveReconcile, /sendConfirmedTemplateSave\(send, result\)/, 'the mounted editor signals only from its successful reconcile callback')
+  assert.match(host, /saved: \(result: any\) => emit\("saved", result\)/, 'LabelDesigner forwards the host save event')
+  assert.match(generator, /@saved="workspace\.actions\.designerSaved"/, 'LabelGenerator forwards the save event to the parent action')
+
+  const createRecovery = loadSourceFunction('createTemplateSaveRecovery', ['makeKey', 'write', 'lookup', 'setPending', 'reconcile', 'notify', 'cloneJson'])
+  const sendConfirmed = loadSourceFunction('sendConfirmedTemplateSave', ['send', 'result'])
+  const directMessages = []
+  const directResult = { id: 'direct-id', revision: 2 }
+  const direct = createRecovery(() => 'direct-key', async () => directResult, async () => null, () => {}, (_, result) => sendConfirmed(message => directMessages.push(message), result), () => {}, value => value)
+  assert.equal((await direct.save({}, '{}', false, {})).status, 'saved')
+  assert.deepEqual(directMessages, [{ type: 'template-saved', data: directResult }])
+
+  const recoveredMessages = []
+  let statusResult = null
+  const recoveredResult = { id: 'recovered-id', revision: 4 }
+  const recovered = createRecovery(() => 'recovered-key', async () => { throw new Error('reply lost') }, async () => statusResult, () => {}, (_, result) => sendConfirmed(message => recoveredMessages.push(message), result), () => {}, value => value)
+  await assert.rejects(recovered.save({}, '{}', false, {}), /outcome is unknown/i)
+  assert.deepEqual(recoveredMessages, [], 'an unresolved save emits no success signal')
+  statusResult = recoveredResult
+  assert.equal((await recovered.check()).status, 'saved')
+  assert.deepEqual(recoveredMessages, [{ type: 'template-saved', data: recoveredResult }])
 })

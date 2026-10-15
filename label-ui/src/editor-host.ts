@@ -31,6 +31,10 @@ export function applyTemplateSaveResult(state: any, intent: any, result: any, cu
   state.templates = [...state.templates.filter((template: any) => template.id !== result.id), result]
 }
 
+export function sendConfirmedTemplateSave(send: (message: any) => void, result: any): void {
+  send({ type: 'template-saved', data: result })
+}
+
 export function createTemplateSaveRecovery(
   makeKey: () => string,
   write: (data: any) => Promise<any>,
@@ -204,6 +208,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
           applyTemplateSaveResult(state, intent, result, snapshot())
           selectedId.value = state.selectedId; revision.value = state.revision; templates.value = state.templates; baseline = state.baseline; dirty = state.dirty
           bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } })
+          sendConfirmedTemplateSave(send, result)
         },
         notify,
       )

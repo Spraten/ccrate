@@ -1,4 +1,4 @@
-import { mountLabelDesigner, exportReviewedPaper } from "./label-editor.js";
+import { mountLabelDesigner, exportReviewedPaper, createLabelDesignerSaveHandlers } from "./label-editor.js";
 import { workshopObjectPresets, workshopPresetForDrawing } from "./workshop-object-catalog.js";
 import { labelPrintFailure, labelReviewCanPrint, pendingLabelPrint, submitReviewedLabel, applyLabelPreview } from "./label-print-recovery.js";
 const labelQueues = new Map();
@@ -195,7 +195,7 @@ async function labelsPage(revision){
     async printPages(){if(!workspace.paper?.pages?.length||!paperCurrent())throw Error('Compose the current reviewed sheet before printing.');workspace.busy=true;try{toast(await exportReviewedPaper('/workshop-api/label-assets/render.html',workspace.paper,'print',paperCurrent))}finally{workspace.busy=false}},
     async downloadPdf(){if(!workspace.paper?.pages?.length||!paperCurrent())throw Error('Compose the current reviewed sheet before downloading.');workspace.busy=true;try{toast(await exportReviewedPaper('/workshop-api/label-assets/render.html',workspace.paper,'pdf',paperCurrent))}finally{workspace.busy=false}},
     designer(handle){labelEditor=handle;},
-    designerDirty(value){const saved=labelEditorDirty&&!value;labelEditorDirty=value;if(saved){const savedContext=context?.identity,saveToken=captureUi();api('labels/templates',undefined,identity).then(rows=>{if(!uiCurrent(saveToken)||savedContext!==context?.identity)return;labelTemplates=rows;workspace.templates=rows;workspace.templateId='';clearReviews()}).catch(error=>toast(error?.message||String(error)))}},
+    ...createLabelDesignerSaveHandlers({workspace,setDirty:value=>{labelEditorDirty=value},clearReviews,refresh:()=>{const savedContext=context?.identity,saveToken=captureUi();return api('labels/templates',undefined,identity).then(rows=>({rows,savedContext,saveToken}))},onTemplates:({rows,savedContext,saveToken})=>{if(!uiCurrent(saveToken)||savedContext!==context?.identity)return;labelTemplates=rows;workspace.templates=rows},onError:error=>toast(error?.message||String(error))}),
     designerBusy(value){labelEditorBusy=value;workspace.busy=value;if(!value)workspace.pendingActions=pending().length;},
     recovery(){navigate('/workshop/recovery')}
   };

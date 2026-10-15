@@ -38,6 +38,7 @@ type Workspace = {
     downloadPdf: () => void;
     designer: (handle: { canLeave: () => boolean; dispose: () => void } | null) => void;
     designerDirty: (value: boolean) => void;
+    designerSaved: (result: any) => void;
     designerBusy: (value: boolean) => void;
     recovery: () => void;
   };
@@ -117,7 +118,7 @@ function designerClosed() {
       </div>
       <section v-if="designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
         <p class="mb-3 text-sm text-muted-foreground">Edit a reusable design for this collection. Draft previews do not start a print.</p>
-        <LabelDesigner ref="designerRef" :selected-item="selectedEquipment" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @busy="workspace.actions.designerBusy" />
+        <LabelDesigner ref="designerRef" :selected-item="selectedEquipment" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @saved="workspace.actions.designerSaved" @busy="workspace.actions.designerBusy" />
       </section>
 
       <div v-if="!designerOpen" class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,.9fr)]">
