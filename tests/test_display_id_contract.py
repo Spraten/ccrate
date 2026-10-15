@@ -7,6 +7,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class DisplayIDContractTests(unittest.TestCase):
+    def test_docker_backend_builder_copies_its_display_id_overlay_dependency(self):
+        dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
+        self.assertIn('deploy/homebox_display_id_overlay.py', dockerfile)
+
     def test_display_id_contains_only_type_and_full_storage_path(self):
         source = (ROOT / 'homebox-backend/repo_display_ids.go').read_text(encoding='utf-8')
         helper = (ROOT / 'homebox-backend/displayids/display_id.go').read_text(encoding='utf-8')

@@ -82,5 +82,7 @@ Issue #14's optional identified-to-anonymous return action now names the identit
 
 ## Open issues in scope
 
+**Latest verified Docker review build (2026-10-15, PR head `32134930cf7d5bce245f8c5be484c99536a8580b`):** A fresh `docker compose ... up --build --wait` exposed a build-context omission: `build-homebox-backend.py` imports `deploy/homebox_display_id_overlay.py`, but the Dockerfile did not copy it into `/src/deploy`. Added the helper to the build copy list and a regression assertion in `tests/test_display_id_contract.py`; the focused contract suite passes 11 tests with 1 source-dependent skip. The complete Docker image then built successfully and the isolated service became healthy on ports 17755/17759. A screenshot of the live ORC pop-out was captured from this build and shown to the user; the existing app on 17745 was left alone. The broader `tests.test_homebox_ui_builder` attempt in this checkout had two fixture errors because `upstream/homebox` is not initialized with the verified source marker; that is not counted as passing. This verifies the current local build and pop-out rendering, not Pi runtime or camera access. `32134930` is the current PR head returned by GitHub; earlier head references in this plan are historical.
+
 `#1, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #18`.
 
