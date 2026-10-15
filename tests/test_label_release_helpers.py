@@ -95,7 +95,7 @@ class LabelReleaseHelperTests(unittest.TestCase):
             for name in ('package.json','pnpm-lock.yaml','vite.config.ts','editor.html','render.html','vendor-manifest.json'):
                 put(package,name,name)
             put(package,'src/editor.ts','source editor');put(package,'public/fonts/DejaVuSans.ttf','font');put(package,'public/fonts/DejaVu-Fonts-Copyright.txt','font license');put(package,'patches/0001-offline-fonts.patch','patch');put(package,'vendor/print-design-pro/LICENSE','upstream license');put(package,'vendor/print-design-pro/src/index.ts','vendor source')
-            for name in ('kiosk-server.py','workshop-gateway.py','run-homebox.py','backup-deployment.py','build-homebox-ui.py','build-homebox-backend.py','homebox_patchset.py','homebox-patchset.json','build-label-ui.py','install-shared-tools.py','runtime-manifest.py','stage-label-release.py','verify-label-layouts.py','homebox-native.service','homebox-companion.service','homebox-workshop-gateway.service','Equipment Terminal.desktop','Open-Workshop.ps1'):
+            for name in ('kiosk-server.py','workshop-gateway.py','run-homebox.py','backup-deployment.py','build-homebox-ui.py','build-homebox-backend.py','homebox_patchset.py','homebox_display_id_overlay.py','homebox-patchset.json','build-label-ui.py','install-shared-tools.py','runtime-manifest.py','stage-label-release.py','verify-label-layouts.py','homebox-native.service','homebox-companion.service','homebox-workshop-gateway.service','Equipment Terminal.desktop','Open-Workshop.ps1'):
                 put(source,'deploy/'+name,name)
             put(source,'deploy/homebox-patchset.json',json.dumps({'base':pin,'patches':['0001-fixture.patch']})+'\n')
             put(source,'deploy/homebox-patches/0001-fixture.patch','--- a/README\n+++ b/README\n@@ -1 +1 @@\n-pinned native\n+patched native\n')
@@ -128,6 +128,7 @@ class LabelReleaseHelperTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'Accepted native source pin mismatch'):
                 stage.stage_release(source,public,source/'work/wrong-pin',expected_native_pin='0'*40)
             result=stage.stage_release(source,public,output,expected_native_pin=pin)
+            self.assertEqual((output/'deploy/homebox_display_id_overlay.py').read_bytes(),(source/'deploy/homebox_display_id_overlay.py').read_bytes())
             self.assertEqual(result['editor_upstream_commit'],manifest['upstream_commit'])
             self.assertEqual(result['native_source_pin'],pin)
             self.assertEqual((output/'native/homebox').read_text(),'new patched backend')

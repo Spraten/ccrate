@@ -133,18 +133,17 @@ class LegacyRasterReviewTests(unittest.TestCase):
         image,preview=self.review_legacy_location()
         self.assertEqual((preview['width'],preview['height']),(320,208))
         self.assertIn('review_id',preview)
-    def test_stock_change_after_legacy_review_requires_a_fresh_preview(self):
-        image,preview=self.review_legacy_location();sent=[]
+    def test_40x28_physical_stock_is_rejected_and_review_invalidated(self):
+        _,preview=self.review_legacy_location()
+        printed=[]
         def print_once(*args,**kwargs):
-            sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()
-        with patch.object(labels,'render',side_effect=AssertionError('print must use the reviewed raster')),patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':30}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once):
-            with self.assertRaisesRegex(ValueError,'40 x 28 mm SUPVAN stock'):
+            printed.append(kwargs['input'])
+            return type('Result',(),{'stdout':b'{"status":"printed"}'})()
+        with patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':28}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once):
+            with self.assertRaisesRegex(ValueError,'40 x 30 mm SUPVAN stock'):
                 labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
-        self.assertEqual(sent,[])
-        with patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':28}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once) as printer:
-            with self.assertRaisesRegex(ValueError,'missing, expired'):
-                labels.print_label(self.client,self.jobs,self.group,self.actor,str(uuid4()),self.item,layouts=self.layouts,review_id=preview['review_id'])
-        printer.assert_not_called()
+        self.assertEqual(printed,[])
+        self.assertIsNone(self.layouts.review(self.group,self.actor,preview['review_id']))
     def test_incomplete_stock_probe_fails_without_invalidating_review(self):
         image,preview=self.review_legacy_location()
         with patch.object(labels,'probe',return_value={}):
@@ -154,7 +153,7 @@ class LegacyRasterReviewTests(unittest.TestCase):
     def test_legacy_location_print_sends_exact_reviewed_raster(self):
         image,preview=self.review_legacy_location();sent=[]
         def print_once(*args,**kwargs):sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()
-        with patch.object(labels,'render',side_effect=AssertionError('print must use the reviewed raster')),patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':28}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once):
+        with patch.object(labels,'render',side_effect=AssertionError('print must use the reviewed raster')),patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':30}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once):
             printed=labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
         self.assertEqual(printed['status'],'completed')
         self.assertEqual(sent,[image.tobytes()])

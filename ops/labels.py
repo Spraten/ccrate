@@ -129,9 +129,9 @@ def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=N
             if entity.get('updatedAt')!=ticket.get('item_updated_at') or entity.get('displayId','')!=ticket.get('item_display_id') or entity.get('archived'):raise Conflict('Storage location changed since preview; review it again')
             material=probe()
             if not isinstance(material,dict) or type(material.get('width_mm')) is not int or type(material.get('height_mm')) is not int or material['width_mm']<=0 or material['height_mm']<=0:raise ValueError('Could not verify loaded label stock. Check the printer and preview the location again')
-            if (material['width_mm'],material['height_mm'])!=(40,28):
+            if (material['width_mm'],material['height_mm'])!=(40,30):
                 layouts.resolve_review(group,review_id)
-                raise ValueError('Load the reviewed 40 x 28 mm SUPVAN stock and preview the location again')
+                raise ValueError('Load the reviewed 40 x 30 mm SUPVAN stock and preview the location again')
             with Image.open(io.BytesIO(ticket['png'])) as image_file:
                 image_file.load()
                 if image_file.mode!='L' or image_file.size!=(ticket['width'],ticket['height']):raise ValueError('Reviewed label raster is invalid')
