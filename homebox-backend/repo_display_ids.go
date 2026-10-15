@@ -23,7 +23,10 @@ func isDisplayIDSearch(value string) bool {
 	if value == "" || strings.HasPrefix(value, "-") || strings.HasSuffix(value, "-") { return false }
 	for _, r := range value { if !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') { return false } }
 	segments := strings.Split(value, "-")
-	if len(segments) == 1 { return segments[0] == "UNKNOWN" || segments[0] == "UNLOCATED" }
+	// A fully ASCII generated ID can collapse to one segment when Unicode
+	// type or location names normalize away. The query path still combines
+	// exact-ID matching with native text/barcode predicates.
+	if len(segments) == 1 { return segments[0] != "" }
 	if len(segments) < 2 { return false }
 	for _, segment := range segments { if segment == "" { return false } }
 	return true
