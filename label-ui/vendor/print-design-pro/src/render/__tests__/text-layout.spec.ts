@@ -46,7 +46,7 @@ describe('wrapText', () => {
   })
 
   it('flushes the current line before an overlong word breaks', () => {
-    expect(wrapText('hi abcdefgh', 4, mono)).toEqual(['hi', 'abcd', 'efgh'])
+    expect(wrapText('hi abcdefgh', 4, mono)).toEqual(['hi ', 'abcd', 'efgh'])
   })
 
   it('exact-fit line does not wrap', () => {
@@ -59,12 +59,12 @@ describe('wrapText', () => {
 
   it('keeps unicode text intact (per-character break on Vietnamese)', () => {
     const lines = wrapText('Xin chào thế giới', 8, mono)
-    expect(lines.join(' ').replaceAll('  ', ' ')).toContain('chào')
-    expect(lines.every(line => line.length <= 8)).toBe(true)
+    expect(lines).toEqual(['Xin chào ', 'thế giới'])
+    expect(lines.every(line => line.trimEnd().length <= 8)).toBe(true)
   })
 
   it('adds a visible ellipsis when wrapped text exceeds the box height', () => {
     const fitted = fitTextToBox('Ω abcdef', 4, 1.3, 1, { measure: text => [...text].length })
-    expect(fitted).toEqual({ lines: ['Ω…'], truncated: true })
+    expect(fitted).toEqual({ lines: ['Ω …'], truncated: true })
   })
 })

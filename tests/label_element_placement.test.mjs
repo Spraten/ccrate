@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { register } from 'node:module'
 import test from 'node:test'
 import { fitElementToPage, overlapsExisting } from '../label-ui/vendor/print-design-pro/src/core/element-placement.js'
-import { fitTextToBox, TEXT_LINE_HEIGHT, wrapText } from '../label-ui/vendor/print-design-pro/src/render/text-layout.ts'
+import { excludeOverflowingTrailingSpaces, fitTextToBox, TEXT_LINE_HEIGHT, wrapText } from '../label-ui/vendor/print-design-pro/src/render/text-layout.ts'
 function createShortCode(place) {
   return {
     id: 'short-code',
@@ -130,6 +130,13 @@ test('preserves spaces at wrap boundaries like whitespace-pre-wrap', () => {
   assert.deepEqual(wrapText(' a', 1, measureLength), [' ', 'a'])
   assert.deepEqual(wrapText('a  b', 1, measureLength), ['a  ', 'b'])
   assert.deepEqual(wrapText('a   ', 1, measureLength), ['a   '])
+})
+
+test('excludes only overflowing trailing spaces from aligned canvas text', () => {
+  const measureLength = { measure: value => value.length }
+  assert.equal(excludeOverflowingTrailingSpaces('aa bb ', 5, measureLength), 'aa bb')
+  assert.equal(excludeOverflowingTrailingSpaces('aa ', 3, measureLength), 'aa ')
+  assert.equal(excludeOverflowingTrailingSpaces('aa  ', 3, measureLength), 'aa ')
 })
 
 test('keeps combining marks attached when truncation adds an ellipsis', () => {

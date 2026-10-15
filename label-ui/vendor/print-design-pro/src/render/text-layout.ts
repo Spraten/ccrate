@@ -19,6 +19,14 @@ export interface TextMeasurer {
   measure: (text: string) => number
 }
 
+/** Remove only line-ending spaces that CSS pre-wrap hangs beyond the box. */
+export function excludeOverflowingTrailingSpaces(line: string, maxWidth: number, measurer: TextMeasurer): string {
+  let aligned = line
+  while (aligned.endsWith(' ') && measurer.measure(aligned) > maxWidth)
+    aligned = aligned.slice(0, -1)
+  return aligned
+}
+
 /**
  * Break `content` into rendered lines fitting `maxWidth` (same unit the
  * measurer returns). Preserves empty lines from consecutive newlines.

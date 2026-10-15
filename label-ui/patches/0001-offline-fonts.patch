@@ -1,9 +1,7 @@
+diff --git a/packages/editor/src/core/__tests__/sheet-layout.spec.ts b/packages/editor/src/core/__tests__/sheet-layout.spec.ts
 --- a/packages/editor/src/core/__tests__/sheet-layout.spec.ts
 +++ b/packages/editor/src/core/__tests__/sheet-layout.spec.ts
-@@ -42,4 +42,19 @@
-       expect(position.yMm + 30).toBeLessThanOrEqual(layout.sheet.heightMm - SHEET_MARGIN_MM + 1e-9)
-     }
-   })
+@@ -44,0 +45,15 @@
 +
 +  it('supports the exact portrait Letter label geometry without changing defaults', () => {
 +    const layout = computeSheetLayout(60, 40, { widthMm: 215.9, heightMm: 279.4 }, {
@@ -19,10 +17,10 @@
 +  it('rejects invalid optional sheet geometry before allocation', () => {
 +    expect(() => computeSheetLayout(60, 40, { widthMm: 215.9, heightMm: 279.4 }, { marginMm: Number.NaN })).toThrow()
 +  })
- })
+diff --git a/packages/editor/src/core/fonts.ts b/packages/editor/src/core/fonts.ts
 --- a/packages/editor/src/core/fonts.ts
 +++ b/packages/editor/src/core/fonts.ts
-@@ -1,75 +1,30 @@
+@@ -1,13 +1,4 @@
 -// Document fonts (round 15). A curated list keeps WYSIWYG guarantees: every
 -// entry is either web-safe or loaded from Google Fonts into document.fonts,
 -// which BOTH the DOM renderer and the Canvas2D engine read - so screen and
@@ -40,8 +38,7 @@
 +// Upstream commit eb118cc05b169c554066d823c44dc179aa3b96bb loads Google Fonts;
 +// this narrow patch removes runtime network access and never substitutes a missing face.
 +export interface DocumentFont { family: string, stack: string }
- 
- export const DOCUMENT_FONTS: DocumentFont[] = [
+@@ -16,12 +7 @@
 -  { family: 'Inter', stack: '"Inter", system-ui, sans-serif', googleId: 'Inter' },
 -  { family: 'Roboto', stack: '"Roboto", system-ui, sans-serif', googleId: 'Roboto' },
 -  { family: 'Open Sans', stack: '"Open Sans", system-ui, sans-serif', googleId: 'Open+Sans' },
@@ -55,16 +52,13 @@
 -  { family: 'Times New Roman', stack: '"Times New Roman", Times, serif' },
 -  { family: 'Courier New', stack: '"Courier New", Courier, monospace' },
 +  { family: 'DejaVu Sans', stack: '"DejaVu Sans", sans-serif' },
- ]
- 
+@@ -30 +9,0 @@
 -/** CSS stack for a stored family; unknown/empty falls back to `fallback`. */
- export function fontStack(family: string, fallback: string): string {
+@@ -32,2 +11 @@
 -  if (!family)
 -    return fallback
 +  if (!family) return '"DejaVu Sans", sans-serif'
-   return DOCUMENT_FONTS.find(font => font.family === family)?.stack ?? fallback
- }
- 
+@@ -37,8 +14,0 @@
 -const loaded = new Set<string>()
 -
 -/**
@@ -73,7 +67,7 @@
 - * back to the default font for families that are not loaded yet). Web-safe
 - * and unknown families resolve immediately.
 - */
- export async function ensureFontLoaded(family: string): Promise<void> {
+@@ -46,24 +16,9 @@
 -  const font = DOCUMENT_FONTS.find(entry => entry.family === family)
 -  if (!font || loaded.has(family))
 -    return
@@ -107,33 +101,21 @@
 +  const faces = await document.fonts.load('400 16px "DejaVu Sans"')
 +  if (!faces.length || !document.fonts.check('400 16px "DejaVu Sans"'))
 +    throw new Error('Bundled DejaVu Sans font failed to load')
- }
- 
+@@ -72 +26,0 @@
 -/** Preload every custom font a document uses (engine calls this pre-render). */
- export async function ensureDocumentFonts(families: Iterable<string>): Promise<void> {
+@@ -74 +28,2 @@
 -  await Promise.all([...new Set(families)].filter(Boolean).map(family => ensureFontLoaded(family)))
 +  const requested = [...new Set([...families].map(family => family || 'DejaVu Sans'))]
 +  await Promise.all(requested.map(ensureFontLoaded))
- }
+diff --git a/packages/editor/src/core/schema/template.ts b/packages/editor/src/core/schema/template.ts
 --- a/packages/editor/src/core/schema/template.ts
 +++ b/packages/editor/src/core/schema/template.ts
-@@ -1,6 +1,7 @@
- import { z } from 'zod'
- import { elementSchema } from './elements'
- import { PAGE_PRESETS, pageSettingsSchema, type PageSettings } from './page'
+@@ -3,0 +4 @@
 +import { secureRandomId } from '../secure-random-id'
- 
- // Guides: user-placed alignment lines dragged out from the rulers.
- export const guideSchema = z.object({
-@@ -45,7 +46,7 @@
- export type TemplateDocument = z.infer<typeof templateDocumentSchema>
- 
- export function newId(): string {
+@@ -48 +49 @@
 -  return crypto.randomUUID()
 +  return secureRandomId()
- }
- 
- export function createEmptyTemplate(
+diff --git a/packages/editor/src/core/secure-random-id.ts b/packages/editor/src/core/secure-random-id.ts
 --- a/packages/editor/src/core/secure-random-id.ts
 +++ b/packages/editor/src/core/secure-random-id.ts
 @@ -0,0 +1,10 @@
@@ -147,55 +129,35 @@
 +  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 +  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 +}
+diff --git a/packages/editor/src/core/sheet-layout.ts b/packages/editor/src/core/sheet-layout.ts
 --- a/packages/editor/src/core/sheet-layout.ts
 +++ b/packages/editor/src/core/sheet-layout.ts
-@@ -5,6 +5,12 @@
- export interface SheetSize {
-   widthMm: number
-   heightMm: number
+@@ -7,0 +8,6 @@
 +}
 +
 +export interface SheetLayoutOptions {
 +  marginMm?: number
 +  gapMm?: number
 +  orientation?: 'portrait' | 'auto'
- }
- 
- export interface SheetLayout {
-@@ -25,22 +31,22 @@
- /** Cutting gap between labels. */
- export const SHEET_GAP_MM = 2
- 
+@@ -28,3 +34,3 @@
 -function layoutFor(labelW: number, labelH: number, sheet: SheetSize, orientation: 'portrait' | 'landscape'): SheetLayout {
 -  const usableW = sheet.widthMm - SHEET_MARGIN_MM * 2
 -  const usableH = sheet.heightMm - SHEET_MARGIN_MM * 2
 +function layoutFor(labelW: number, labelH: number, sheet: SheetSize, orientation: 'portrait' | 'landscape', margin: number, gap: number): SheetLayout {
 +  const usableW = sheet.widthMm - margin * 2
 +  const usableH = sheet.heightMm - margin * 2
-   const columns = labelW <= usableW
+@@ -32 +38 @@
 -    ? Math.floor((usableW + SHEET_GAP_MM) / (labelW + SHEET_GAP_MM))
 +    ? Math.floor((usableW + gap) / (labelW + gap))
-     : 0
-   const rowsPerSheet = labelH <= usableH
+@@ -35 +41 @@
 -    ? Math.floor((usableH + SHEET_GAP_MM) / (labelH + SHEET_GAP_MM))
 +    ? Math.floor((usableH + gap) / (labelH + gap))
-     : 0
- 
-   const positions: Array<{ xMm: number, yMm: number }> = []
-   for (let row = 0; row < rowsPerSheet; row++) {
-     for (let column = 0; column < columns; column++) {
-       positions.push({
+@@ -42,2 +48,2 @@
 -        xMm: SHEET_MARGIN_MM + column * (labelW + SHEET_GAP_MM),
 -        yMm: SHEET_MARGIN_MM + row * (labelH + SHEET_GAP_MM),
 +        xMm: margin + column * (labelW + gap),
 +        yMm: margin + row * (labelH + gap),
-       })
-     }
-   }
-@@ -51,13 +57,20 @@
-  * Best A4 tiling for a label: tries both orientations and keeps the one
-  * that fits more labels per sheet. `perSheet === 0` = label too large.
-  */
+@@ -54,2 +60,9 @@
 -export function computeSheetLayout(labelWidthMm: number, labelHeightMm: number, sheet: SheetSize = SHEET_A4): SheetLayout {
 -  const portrait = layoutFor(labelWidthMm, labelHeightMm, sheet, 'portrait')
 +export function computeSheetLayout(labelWidthMm: number, labelHeightMm: number, sheet: SheetSize = SHEET_A4, options: SheetLayoutOptions = {}): SheetLayout {
@@ -207,27 +169,16 @@
 +    throw new Error('Sheet dimensions, margin and gap must be finite and valid')
 +  const portrait = layoutFor(labelWidthMm, labelHeightMm, sheet, 'portrait', margin, gap)
 +  if (orientation === 'portrait') return portrait
-   const landscape = layoutFor(
-     labelWidthMm,
-     labelHeightMm,
-     { widthMm: sheet.heightMm, heightMm: sheet.widthMm },
+@@ -60 +73 @@
 -    'landscape',
 +    'landscape', margin, gap,
-   )
-   return landscape.perSheet > portrait.perSheet ? landscape : portrait
- }
+diff --git a/packages/editor/src/render/__tests__/text-layout.spec.ts b/packages/editor/src/render/__tests__/text-layout.spec.ts
 --- a/packages/editor/src/render/__tests__/text-layout.spec.ts
 +++ b/packages/editor/src/render/__tests__/text-layout.spec.ts
-@@ -1,5 +1,5 @@
- import { describe, expect, it } from 'vitest'
+@@ -2 +2 @@
 -import { wrapText, type TextMeasurer } from '../text-layout'
 +import { fitTextToBox, wrapText, type TextMeasurer } from '../text-layout'
- 
- // Monospace width model: every char is 1 unit wide - makes cases exact.
- const mono: TextMeasurer = { measure: text => text.length }
-@@ -22,6 +22,27 @@ describe('wrapText', () => {
-   it('greedy-wraps on spaces', () => {
-     // "aa bb cc" with width 5: "aa bb" fits, "cc" wraps.
+@@ -22 +22,20 @@
 -    expect(wrapText('aa bb cc', 5, mono)).toEqual(['aa bb', 'cc'])
 +    expect(wrapText('aa bb cc', 5, mono)).toEqual(['aa bb ', 'cc'])
 +  })
@@ -249,66 +200,44 @@
 +
 +  it('does not turn wrapped trailing spaces into an extra empty line', () => {
 +    expect(wrapText('a ', 1, { measure: s => s.length })).toEqual(['a '])
+@@ -30 +49 @@
+-    expect(wrapText('hi abcdefgh', 4, mono)).toEqual(['hi', 'abcd', 'efgh'])
++    expect(wrapText('hi abcdefgh', 4, mono)).toEqual(['hi ', 'abcd', 'efgh'])
+@@ -43,2 +62,7 @@
+-    expect(lines.join(' ').replaceAll('  ', ' ')).toContain('chào')
+-    expect(lines.every(line => line.length <= 8)).toBe(true)
++    expect(lines).toEqual(['Xin chào ', 'thế giới'])
++    expect(lines.every(line => line.trimEnd().length <= 8)).toBe(true)
 +  })
-+
-   it('breaks a word wider than the box at character level', () => {
-     expect(wrapText('abcdefgh', 3, mono)).toEqual(['abc', 'def', 'gh'])
-   })
-@@ -43,4 +60,9 @@ describe('wrapText', () => {
-     expect(lines.join(' ').replaceAll('  ', ' ')).toContain('chào')
-     expect(lines.every(line => line.length <= 8)).toBe(true)
-   })
 +
 +  it('adds a visible ellipsis when wrapped text exceeds the box height', () => {
 +    const fitted = fitTextToBox('Ω abcdef', 4, 1.3, 1, { measure: text => [...text].length })
-+    expect(fitted).toEqual({ lines: ['Ω…'], truncated: true })
-+  })
- })
++    expect(fitted).toEqual({ lines: ['Ω …'], truncated: true })
+diff --git a/packages/editor/src/render/element-painters/paint-image.ts b/packages/editor/src/render/element-painters/paint-image.ts
 --- a/packages/editor/src/render/element-painters/paint-image.ts
 +++ b/packages/editor/src/render/element-painters/paint-image.ts
-@@ -2,23 +2,23 @@
- 
- // Image painter for the print engine. Sources are data URLs (same-origin by
- // construction - canvas tainting is impossible). A src that fails to load
+@@ -5 +5 @@
 -// paints NOTHING: broken-image glyphs must never reach paper.
 +// throws: failed image loads must never silently produce incomplete labels.
- 
+@@ -7 +7 @@
 -export type ImageCache = Map<string, Promise<HTMLImageElement | null>>
 +export type ImageCache = Map<string, Promise<HTMLImageElement>>
- 
- /**
-  * Load (and memoize) an image; null marks a failed source. The PROMISE is
-  * cached (not the value) so concurrent paints of the same src share one load
-  * even if the engine ever parallelizes elements.
-  */
+@@ -14 +14 @@
 -function loadImage(src: string, cache: ImageCache): Promise<HTMLImageElement | null> {
 +function loadImage(src: string, cache: ImageCache): Promise<HTMLImageElement> {
-   const cached = cache.get(src)
-   if (cached)
-     return cached
+@@ -18 +18 @@
 -  const loading = new Promise<HTMLImageElement | null>((resolve) => {
 +  const loading = new Promise<HTMLImageElement>((resolve, reject) => {
-     const img = new Image()
-     img.onload = () => resolve(img)
+@@ -21 +21 @@
 -    img.onerror = () => resolve(null)
 +    img.onerror = () => reject(new Error('Label image failed to load'))
-     img.src = src
-   })
-   cache.set(src, loading)
-@@ -33,8 +33,6 @@
-   if (!element.src)
-     return
-   const image = await loadImage(element.src, cache)
+@@ -36,2 +35,0 @@
 -  if (!image)
 -    return
-   // Stretch to the element box - fit modes are a later round.
-   ctx.drawImage(image, 0, 0, element.widthMm, element.heightMm)
- }
+diff --git a/packages/editor/src/render/element-painters/paint-qr.ts b/packages/editor/src/render/element-painters/paint-qr.ts
 --- a/packages/editor/src/render/element-painters/paint-qr.ts
 +++ b/packages/editor/src/render/element-painters/paint-qr.ts
-@@ -1,37 +1,72 @@
- import type { QrElement } from '../../core/schema/elements'
- 
+@@ -3,3 +3,10 @@
 -// QR painter. The code is drawn as a SQUARE filling min(w,h), centered in
 -// the element box - stretching a QR distorts modules and kills scans.
 -// `qrcode` is lazy-imported (externalized like pdf-lib).
@@ -322,7 +251,7 @@
 +  if (Math.abs(Math.hypot(matrix.a, matrix.b) - pxPerMm) > 1e-5 || Math.abs(Math.hypot(matrix.c, matrix.d) - pxPerMm) > 1e-5
 +    || Math.abs(matrix.a * matrix.c + matrix.b * matrix.d) > 1e-5)
 +    throw new Error('QR must use the label device-pixel grid')
- 
+@@ -7,7 +14,9 @@
 -export async function paintQr(
 -  ctx: CanvasRenderingContext2D,
 -  element: QrElement,
@@ -339,7 +268,7 @@
 +  const modulePx = Math.floor(sidePx / totalModules)
 +  if (modulePx < 4) throw new Error('QR needs at least four dots per module plus a four-module quiet zone')
 +  const rasterSidePx = totalModules * modulePx
- 
+@@ -15,2 +24,32 @@
 -  const sideMm = Math.min(element.widthMm, element.heightMm)
 -  const sidePx = Math.max(32, Math.round(sideMm * pxPerMm))
 +  const renderedSideMm = rasterSidePx / pxPerMm
@@ -374,7 +303,7 @@
 +    || qrMinX < minX - 1e-8 || qrMinY < minY - 1e-8
 +    || qrMaxX > maxX + 1e-8 || qrMaxY > maxY + 1e-8)
 +    throw new Error('Snapped QR and its quiet zone must fit inside the element')
- 
+@@ -18,10 +57,13 @@
 -  let raster: HTMLCanvasElement
 -  try {
 -    const { default: QRCode } = await import('qrcode')
@@ -398,7 +327,7 @@
 +      if (qr.modules.get(y, x))
 +        rasterCtx.fillRect((x + 4) * modulePx, (y + 4) * modulePx, modulePx, modulePx)
 +    }
-   }
+@@ -29,8 +71 @@
 -  catch {
 -    // Content too long for the EC level, etc. - print nothing rather than garbage.
 -    return
@@ -408,21 +337,12 @@
 -  const y = (element.heightMm - sideMm) / 2
 -  ctx.drawImage(raster, x, y, sideMm, sideMm)
 +  ctx.drawImage(raster, drawX, drawY, raster.width / pxPerMm, raster.height / pxPerMm)
- }
+diff --git a/packages/editor/src/render/export-sheet.ts b/packages/editor/src/render/export-sheet.ts
 --- a/packages/editor/src/render/export-sheet.ts
 +++ b/packages/editor/src/render/export-sheet.ts
-@@ -3,6 +3,7 @@
- import { resolveDocument } from '../core/variables'
- import { MM_PER_INCH } from '../core/units'
- import { canvasToPngBlob } from './export-image'
+@@ -5,0 +6 @@
 +import { printReviewedPageBlobs } from './print-browser'
- import { MAX_BATCH_ROWS } from './export-pdf'
- import { renderToCanvas, type RenderOptions } from './render-engine'
- 
-@@ -34,21 +35,108 @@
-   if (layout.perSheet === 0)
-     throw new Error('Label does not fit on the selected sheet')
- 
+@@ -37 +38,42 @@
 -  const dpi = options.dpi ?? 300
 +  async function* labels() {
 +    for (const row of rows) yield await renderToCanvas(resolveDocument(doc, row), options)
@@ -466,7 +386,7 @@
 +    throw new Error(`Sheet composition requires 1-${MAX_BATCH_ROWS} reviewed labels`)
 +  if (!Number.isFinite(dpi) || dpi <= 0) throw new Error('Sheet DPI must be positive and finite')
 +  if (layout.perSheet === 0) throw new Error('Label does not fit on the selected sheet')
-   const pxPerMm = dpi / MM_PER_INCH
+@@ -38,0 +81,17 @@
 +  if (labelMm) {
 +    const width = Math.round(labelMm[0] * pxPerMm), height = Math.round(labelMm[1] * pxPerMm)
 +    for (let row = 0; row < layout.rowsPerSheet; row++) {
@@ -484,10 +404,7 @@
 +        throw new Error('Reviewed labels overlap after raster rounding; increase the page margin or label gap.')
 +    }
 +  }
-   const blobs: Blob[] = []
-   let sheet: HTMLCanvasElement | null = null
-   let ctx: CanvasRenderingContext2D | null = null
- 
+@@ -43 +102,26 @@
 -  for (let index = 0; index < rows.length; index++) {
 +  const drawCutGuides = () => {
 +    if (!cutGuides || !ctx || !labelMm) return
@@ -515,33 +432,22 @@
 +
 +  let index = 0
 +  for await (const label of labels) {
-     const cell = index % layout.perSheet
-     if (cell === 0) {
-       // flush the finished sheet, start a fresh one
+@@ -47 +131,2 @@
 -      if (sheet)
 +      if (sheet) {
 +        drawCutGuides()
-         blobs.push(await canvasToPngBlob(sheet))
+@@ -48,0 +134 @@
 +      }
-       sheet = document.createElement('canvas')
-       sheet.width = Math.round(layout.sheet.widthMm * pxPerMm)
-       sheet.height = Math.round(layout.sheet.heightMm * pxPerMm)
+@@ -51,0 +138,2 @@
 +      if (sheet.width > 16384 || sheet.height > 16384 || sheet.width * sheet.height > 12_000_000)
 +        throw new Error('Sheet page exceeds renderer pixel limits')
-       ctx = sheet.getContext('2d')
-       if (!ctx)
-         throw new Error('Canvas 2D context unavailable')
-@@ -56,12 +144,19 @@
-       ctx.fillRect(0, 0, sheet.width, sheet.height)
-     }
- 
+@@ -59 +147,4 @@
 -    const label = await renderToCanvas(resolveDocument(doc, rows[index]!), options)
 +    if (labelMm && (label.width !== Math.round(labelMm[0] * pxPerMm) || label.height !== Math.round(labelMm[1] * pxPerMm)))
 +      throw new Error('Invalid reviewed label canvas')
 +    if (label.width > 16384 || label.height > 16384 || label.width * label.height > 12_000_000)
 +      throw new Error('Reviewed label exceeds renderer pixel limits')
-     const position = layout.positions[cell]!
-     ctx!.drawImage(label, Math.round(position.xMm * pxPerMm), Math.round(position.yMm * pxPerMm))
+@@ -62,2 +153,5 @@
 -  }
 -  if (sheet)
 +    index++
@@ -549,15 +455,9 @@
 +  if (index !== count) throw new Error('Reviewed sheet canvas count changed during composition')
 +  if (sheet) {
 +    drawCutGuides()
-     blobs.push(await canvasToPngBlob(sheet))
+@@ -64,0 +159 @@
 +  }
-   return blobs
- }
- 
-@@ -92,3 +187,28 @@
-   const bytes = await pdf.save()
-   return new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' })
- }
+@@ -94,0 +190,25 @@
 +
 +/** Export the already-composed, frozen PNG pages without resolving template data. */
 +export async function exportReviewedSheetPdf(pages: Blob[], widthMm: number, heightMm: number, name = 'Reviewed label sheet', isCurrent: () => boolean = () => true): Promise<Blob> {
@@ -583,73 +483,34 @@
 +export function printReviewedSheetPages(pages: Blob[], widthMm: number, heightMm: number, isCurrent: () => boolean = () => true): Promise<void> {
 +  return printReviewedPageBlobs(pages, { name: 'Reviewed label sheet', widthMm, heightMm }, isCurrent)
 +}
+diff --git a/packages/editor/src/render/print-browser.ts b/packages/editor/src/render/print-browser.ts
 --- a/packages/editor/src/render/print-browser.ts
 +++ b/packages/editor/src/render/print-browser.ts
-@@ -25,7 +25,7 @@
- 
- export async function printDocument(doc: TemplateDocument, options: RenderOptions = {}): Promise<void> {
-   const canvas = await renderToCanvas(resolveDocument(doc), options)
+@@ -28 +28 @@
 -  await printBlobs([await canvasToPngBlob(canvas)], pageOf(doc))
 +  await printReviewedPageBlobs([await canvasToPngBlob(canvas)], pageOf(doc))
- }
- 
- function pageOf(doc: TemplateDocument): PrintPage {
-@@ -51,7 +51,7 @@
-     const canvas = await renderToCanvas(resolveDocument(doc, row), options)
-     blobs.push(await canvasToPngBlob(canvas))
-   }
+@@ -54 +54 @@
 -  await printBlobs(blobs, pageOf(doc))
 +  await printReviewedPageBlobs(blobs, pageOf(doc))
- }
- 
- /** N-up batch print: labels tiled onto A4 carrier sheets (round 21). */
-@@ -62,7 +62,7 @@
- ): Promise<void> {
-   const layout = computeSheetLayout(doc.page.widthMm, doc.page.heightMm)
-   const blobs = await renderSheetBlobs(doc, rows, layout, options)
+@@ -65 +65 @@
 -  await printBlobs(blobs, {
 +  await printReviewedPageBlobs(blobs, {
-     name: doc.name,
-     widthMm: layout.sheet.widthMm,
-     heightMm: layout.sheet.heightMm,
-@@ -74,10 +74,10 @@
-  * the srcdoc string would DUPLICATE the whole payload again - at the 500-row
-  * cap that difference is hundreds of MB. URLs are revoked on cleanup.
-  */
+@@ -77 +77 @@
 -async function printBlobs(blobs: Blob[], page: PrintPage): Promise<void> {
 +export async function printReviewedPageBlobs(blobs: Blob[], page: PrintPage, isCurrent: () => boolean = () => true): Promise<void> {
-   const urls = blobs.map(blob => URL.createObjectURL(blob))
-   try {
+@@ -80 +80 @@
 -    await printImages(urls, page)
 +    await printImages(urls, page, isCurrent)
-   }
-   finally {
-     for (const url of urls)
-@@ -85,7 +85,7 @@
-   }
- }
- 
+@@ -88 +88 @@
 -async function printImages(dataUrls: string[], page: PrintPage): Promise<void> {
 +async function printImages(dataUrls: string[], page: PrintPage, isCurrent: () => boolean = () => true): Promise<void> {
-   const iframe = document.createElement('iframe')
-   iframe.style.position = 'fixed'
-   iframe.style.right = '0'
-@@ -145,6 +145,11 @@
-         reject(new Error('Print frame did not initialize'))
-         return
-       }
+@@ -147,0 +148,5 @@
 +      if (!isCurrent()) {
 +        cleanup()
 +        reject(new Error('The current label review changed before the print dialog opened.'))
 +        return
 +      }
-       win.addEventListener('afterprint', () => {
-         cleanup()
-         resolve()
-@@ -155,10 +160,17 @@
-         resolve()
-       }, CLEANUP_FALLBACK_MS)
-       // Let layout settle before opening the dialog.
+@@ -158 +163,8 @@
 -      requestAnimationFrame(() => {
 +      // A renderer can live in an offscreen host iframe. Browsers may pause
 +      // its animation frames even after the nested print document has loaded.
@@ -659,59 +520,45 @@
 +          reject(new Error('The current label review changed before the print dialog opened.'))
 +          return
 +        }
-         win.focus()
-         win.print()
+@@ -161 +173 @@
 -      })
 +      }, 0)
-     }
- 
-     document.body.appendChild(iframe)
+diff --git a/packages/editor/src/render/render-engine.ts b/packages/editor/src/render/render-engine.ts
 --- a/packages/editor/src/render/render-engine.ts
 +++ b/packages/editor/src/render/render-engine.ts
-@@ -15,7 +15,7 @@
- import { paintImage, type ImageCache } from './element-painters/paint-image'
- import { paintQr } from './element-painters/paint-qr'
- import { paintTable } from './element-painters/paint-table'
+@@ -18 +18 @@
 -import { TEXT_FONT_STACK, TEXT_LINE_HEIGHT, wrapText } from './text-layout'
-+import { TEXT_FONT_STACK, TEXT_LINE_HEIGHT, fitTextToBox } from './text-layout'
- 
- // Schema -> Canvas2D print renderer. THE single source of print output: PNG
- // export, PDF export, browser print, and the preview modal all call this, so
-@@ -255,15 +255,17 @@
-   ctx.textBaseline = 'alphabetic'
-   ctx.textAlign = element.align
- 
++import { TEXT_FONT_STACK, TEXT_LINE_HEIGHT, excludeOverflowingTrailingSpaces, fitTextToBox } from './text-layout'
+@@ -258 +258 @@
 -  const lines = wrapText(element.content, element.widthMm, {
 +  const fitted = fitTextToBox(element.content, element.widthMm, element.heightMm, fontSizeMm, {
-     measure: text => ctx.measureText(text).width,
-   })
+@@ -260,0 +261,2 @@
 +  if (element.content && fitted.truncated && fitted.lines.length === 0)
 +    throw new Error(`Text element “${element.name || element.id}” is too small to print legibly`)
- 
-   const x = element.align === 'left' ? 0 : element.align === 'center' ? element.widthMm / 2 : element.widthMm
-   // First baseline: approximate the browser's half-leading distribution -
-   // baseline sits at ~0.8em within a 1.25em line box.
-   const firstBaseline = lineHeightMm * 0.5 + fontSizeMm * 0.3
+@@ -266,2 +268,5 @@
 -  lines.forEach((line, index) => {
+-    ctx.fillText(line, x, firstBaseline + index * lineHeightMm)
 +  fitted.lines.forEach((line, index) => {
-     ctx.fillText(line, x, firstBaseline + index * lineHeightMm)
-   })
- }
++    const alignedLine = excludeOverflowingTrailingSpaces(line, element.widthMm, {
++      measure: text => ctx.measureText(text).width,
++    })
++    ctx.fillText(alignedLine, x, firstBaseline + index * lineHeightMm)
+diff --git a/packages/editor/src/render/text-layout.ts b/packages/editor/src/render/text-layout.ts
 --- a/packages/editor/src/render/text-layout.ts
 +++ b/packages/editor/src/render/text-layout.ts
-@@ -12,7 +12,7 @@
-  * explicitly so a host app's font choices can never make print line breaks
-  * diverge from the editor.
-  */
+@@ -15 +15 @@
 -export const TEXT_FONT_STACK = 'system-ui, sans-serif'
 +export const TEXT_FONT_STACK = '"DejaVu Sans", sans-serif'
- 
- export interface TextMeasurer {
-   /** Width of the string in the CURRENT ctx font, any unit (consistent). */
-@@ -31,24 +31,31 @@ export function wrapText(content: string, maxWidth: number, measurer: TextMeasurer): string[] {
-       lines.push('')
-       continue
-     }
+@@ -19,0 +20,8 @@
++}
++
++/** Remove only line-ending spaces that CSS pre-wrap hangs beyond the box. */
++export function excludeOverflowingTrailingSpaces(line: string, maxWidth: number, measurer: TextMeasurer): string {
++  let aligned = line
++  while (aligned.endsWith(' ') && measurer.measure(aligned) > maxWidth)
++    aligned = aligned.slice(0, -1)
++  return aligned
+@@ -34,3 +42,8 @@
 -    let current = ''
 -    for (const word of paragraph.split(' ')) {
 -      const candidate = current === '' ? word : `${current} ${word}`
@@ -723,11 +570,9 @@
 +        continue
 +      }
 +      const candidate = current === undefined ? `${spaces}${token}` : `${current}${spaces}${token}`
-       if (measurer.measure(candidate) <= maxWidth) {
-         current = candidate
+@@ -38,0 +52 @@
 +        spaces = ''
-         continue
-       }
+@@ -41,4 +55,5 @@
 -      // Word does not fit after the current line - flush what we have.
 -      // (Both branches below reassign `current`.)
 -      if (current !== '')
@@ -737,32 +582,21 @@
 +      else if (spaces !== '')
 +        lines.push(spaces)
 +      spaces = ''
-       // break-words: a single word wider than the box splits per character.
+@@ -46,2 +61,2 @@
 -      if (measurer.measure(word) <= maxWidth) {
 -        current = word
 +      if (measurer.measure(token) <= maxWidth) {
 +        current = token
-       }
-       else {
-         let chunk = ''
+@@ -51 +66 @@
 -        for (const char of word) {
 +        for (const char of splitGraphemes(token)) {
-           if (chunk !== '' && measurer.measure(chunk + char) > maxWidth) {
-             lines.push(chunk)
-             chunk = char
-@@ -60,8 +67,39 @@ export function wrapText(content: string, maxWidth: number, measurer: TextMeasurer): string[] {
-         current = chunk
-       }
-     }
+@@ -63 +78,4 @@
 -    lines.push(current)
 +    if (current !== undefined)
 +      lines.push(`${current}${spaces}`)
 +    else if (spaces !== '')
 +      lines.push(spaces)
-   }
- 
-   return lines
- }
+@@ -67,0 +86,28 @@
 +
 +/** Fit wrapped text to its actual box and mark truncated output visibly. */
 +export function fitTextToBox(

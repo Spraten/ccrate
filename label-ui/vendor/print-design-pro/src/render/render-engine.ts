@@ -15,7 +15,7 @@ import { paintBarcode } from './element-painters/paint-barcode'
 import { paintImage, type ImageCache } from './element-painters/paint-image'
 import { paintQr } from './element-painters/paint-qr'
 import { paintTable } from './element-painters/paint-table'
-import { TEXT_FONT_STACK, TEXT_LINE_HEIGHT, fitTextToBox } from './text-layout'
+import { TEXT_FONT_STACK, TEXT_LINE_HEIGHT, excludeOverflowingTrailingSpaces, fitTextToBox } from './text-layout'
 
 // Schema -> Canvas2D print renderer. THE single source of print output: PNG
 // export, PDF export, browser print, and the preview modal all call this, so
@@ -266,6 +266,9 @@ function drawText(ctx: CanvasRenderingContext2D, element: TextElement): void {
   // baseline sits at ~0.8em within a 1.25em line box.
   const firstBaseline = lineHeightMm * 0.5 + fontSizeMm * 0.3
   fitted.lines.forEach((line, index) => {
-    ctx.fillText(line, x, firstBaseline + index * lineHeightMm)
+    const alignedLine = excludeOverflowingTrailingSpaces(line, element.widthMm, {
+      measure: text => ctx.measureText(text).width,
+    })
+    ctx.fillText(alignedLine, x, firstBaseline + index * lineHeightMm)
   })
 }

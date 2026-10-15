@@ -1,5 +1,6 @@
 """Ensure the cumulative vendor patch reverses and rebuilds the maintained tree."""
 import hashlib
+import os
 import pathlib
 import re
 import shutil
@@ -17,7 +18,7 @@ PATCH_DIR = "label-ui/vendor/print-design-pro/src"
 
 def tree_hash(root):
     return {
-        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
         for path in root.rglob("*")
         if path.is_file()
     }
@@ -56,14 +57,19 @@ class LabelVendorPatchParityTests(unittest.TestCase):
             shutil.copytree(VENDOR, target)
             before = tree_hash(target)
             args = ["git", "apply", "-p4", f"--directory={PATCH_DIR}"]
+            env = os.environ.copy()
+            env["GIT_CEILING_DIRECTORIES"] = str(ROOT)
             patches = [OFFLINE_PATCH, PATCH]
             for patch in reversed(patches):
-                subprocess.run(args + ["--reverse", "--check", str(patch)], cwd=checkout, check=True)
-                subprocess.run(args + ["--reverse", str(patch)], cwd=checkout, check=True)
+                subprocess.run(args + ["--unidiff-zero", "--reverse", "--check", str(patch)], cwd=checkout, env=env, check=True)
+                subprocess.run(args + ["--unidiff-zero", "--reverse", str(patch)], cwd=checkout, env=env, check=True)
+            self.assertNotEqual(tree_hash(target), before, "reversing the vendor patches must change the copied source tree")
             for patch in patches:
-                subprocess.run(args + ["--check", str(patch)], cwd=checkout, check=True)
-                subprocess.run(args + [str(patch)], cwd=checkout, check=True)
-            self.assertEqual(tree_hash(target), before)
+                subprocess.run(args + ["--unidiff-zero", "--check", str(patch)], cwd=checkout, env=env, check=True)
+                subprocess.run(args + ["--unidiff-zero", str(patch)], cwd=checkout, env=env, check=True)
+            after = tree_hash(target)
+            differences = sorted(path for path in before.keys() | after.keys() if before.get(path) != after.get(path))
+            self.assertEqual(differences, [], f"vendor files differ after patch round-trip: {differences}")
 
 
 if __name__ == "__main__":
