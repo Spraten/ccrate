@@ -238,6 +238,13 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.request('checkout-cart', headers=headers).result, first.result)
         self.assertEqual(self.ledger.custody(self.group), [])
 
+    def test_checkout_availability_reports_unresolved_operations_for_desktop_cart(self):
+        operation = self.ledger.begin(self.group, self.manager, 'check_out', [self.asset], ident())
+        response = self.request('checkout-availability?ids='+self.asset)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.result, [{'id': self.asset, 'name': 'Fixture drill',
+                                            'reason': 'Checkout operation requires recovery (pending)'}])
+
     def test_checkout_cart_cannot_select_another_collection(self):
         headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true', 'X-Workshop-Group': self.other_group}
         self.assertEqual(self.request('checkout-cart', headers=headers).status, 403)
