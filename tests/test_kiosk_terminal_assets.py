@@ -33,3 +33,24 @@ class KioskTerminalAssetTests(unittest.TestCase):
                 self.assertIsNotNone(route, f'{path} route is missing')
                 self.assertIn(filename, route.group(1))
                 self.assertIn(mime, route.group(1))
+
+    def test_checkout_and_return_styles_are_owned_by_terminal_stylesheet(self):
+        css = (ROOT / 'kiosk/terminal.css').read_text(encoding='utf-8')
+        checkout = (ROOT / 'kiosk/checkout-ui.js').read_text(encoding='utf-8')
+        returns = (ROOT / 'kiosk/return-ui.js').read_text(encoding='utf-8')
+        workflow = (ROOT / 'kiosk/workflow-ui.js').read_text(encoding='utf-8')
+
+        for selector in ('.checkout-shell', '.checkout-body', '.checkout-bottom',
+                         '.checkout-button', '.return-row', '.return-controls',
+                         '.workflow-dialog', '.workflow-message'):
+            with self.subTest(selector=selector):
+                self.assertIn(selector, css)
+        self.assertIn('.workflow-focus-slider', css)
+        self.assertIn('.item-note-textarea', css)
+        self.assertIn("className='workflow-focus-slider'", workflow)
+        self.assertIn("className='item-note-textarea'", workflow)
+        self.assertNotRegex(workflow, r"(?:slider|textarea)\.style\s*=")
+        for source in (checkout, returns):
+            with self.subTest(source='runtime style injection'):
+                self.assertNotRegex(source, r"node\(['\"]style['\"]\)")
+                self.assertNotIn('document.head.append(', source)

@@ -90,7 +90,7 @@ home();load();updateIdentity();
 async function cameraFocusControls(overlay,message,photo=false,autofocus=photo){
 const active=()=>photo?photoOverlay===overlay:scanOverlay===overlay;
 try{const current=await api('/api/camera');if(!active())return;if(!current.supported){if(photo)message.textContent='Focus controls unavailable. Check the preview before capturing.';return}
-const row=node('div',undefined,'toolbar'),slider=node('input');slider.type='range';slider.min=0;slider.max=250;slider.step=5;slider.value=current.value;slider.style='width:180px;height:44px';slider.setAttribute('aria-label','Pi camera focus: far to near');
+const row=node('div',undefined,'toolbar'),slider=node('input');slider.type='range';slider.min=0;slider.max=250;slider.step=5;slider.value=current.value;slider.className='workflow-focus-slider';slider.setAttribute('aria-label','Pi camera focus: far to near');
 const change=async(mode,value)=>{if(!active())return;try{await api('/camera/focus',{mode,value});if(!active())return;message.textContent=mode==='auto'?'Autofocus on. Hold '+(photo?'the equipment':'the QR')+' steady.':'Manual focus '+value+' · adjust until the preview looks sharp.'}catch(e){if(active())message.textContent=e.message}};
 slider.onchange=()=>change('manual',Number(slider.value));row.append(primary(photo?'Manual focus':'Label focus',()=>change('manual',Number(slider.value))),primary('Autofocus',()=>change('auto')),slider);overlay.append(row);if(autofocus)await change('auto')
 }catch(e){if(photo&&active())message.textContent='Focus controls unavailable. Check the preview before capturing.'}}
@@ -171,7 +171,7 @@ function itemNoteForm(entity,draft={note:'',entity,actorId:identityUserId,genera
     itemNoteMode=true;itemNoteDraft=draft;heading('Add Notes to Item');
     const card=node('div',undefined,'notice');card.dataset.itemNoteForm='true';
     card.append(node('h1',entity.name),node('p','Write an independent note. This will not change checkout, condition, photos, kits, or labels.'));
-    const field=node('label','Note (up to 1,000 characters)');const textarea=node('textarea');textarea.value=draft.note;textarea.maxLength=4000;textarea.setAttribute('aria-label','Item note');textarea.rows=5;textarea.style='width:100%;font:inherit';
+    const field=node('label','Note (up to 1,000 characters)');const textarea=node('textarea');textarea.value=draft.note;textarea.maxLength=4000;textarea.setAttribute('aria-label','Item note');textarea.rows=5;textarea.className='item-note-textarea';
     textarea.oninput=()=>{draft.note=textarea.value;formDirty=true;count.textContent=Array.from(draft.note).length+' / 1000 characters'};
     const count=node('small',Array.from(draft.note).length+' / 1000 characters');field.append(textarea,count);card.append(field);
     const review=primary('Review note',()=>reviewItemNote(entity,draft));review.disabled=!draft.note.trim();
