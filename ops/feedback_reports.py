@@ -108,7 +108,8 @@ class FeedbackReportService:
         if not isinstance(value, str):
             return None
         expected = f"https://github.com/{self.repository}/issues/"
-        return value if value.startswith(expected) and value[len(expected):].isdigit() else None
+        matches_repository = value[:len(expected)].casefold() == expected.casefold()
+        return value if matches_repository and value[len(expected):].isdigit() else None
 
     def _reconcile(self, actor_id, request_id):
         if not self.token:
@@ -121,7 +122,7 @@ class FeedbackReportService:
             return self._response("pending", request_id, error="The report result is pending. Check its status again later.")
         try:
             connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute("SELECT status,last_checked_at FROM feedback_reports WHERE actor_id=? AND request_id=?",
+            row = connection.execute("SELECT status,issue_url,last_checked_at FROM feedback_reports WHERE actor_id=? AND request_id=?",
                                      (actor_id, request_id)).fetchone()
             now = int(time.time())
             if not row:
@@ -129,7 +130,7 @@ class FeedbackReportService:
                 return self._response("pending", request_id, error="The report result is pending. Check its status again later.")
             if row["status"] == "submitted":
                 connection.commit()
-                return self._response("submitted", request_id)
+                return self._response("submitted", request_id, issue_url=row["issue_url"])
             if now - row["last_checked_at"] < STATUS_CHECK_SECONDS:
                 connection.commit()
                 return self._response("pending", request_id, error="A status check just ran. Wait a few seconds and check again; do not resubmit the report.")
@@ -165,6 +166,75 @@ class FeedbackReportService:
             return self._response("submitted", request_id, issue_url=issue_url)
         return self._response("pending", request_id, error="GitHub has not confirmed the report yet. Check status again; do not resubmit it.")
 
+    def _dispatch_ready(self, actor_id, request_id):
+        if not self.token or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", self.repository):
+            return 503, self._response("pending", request_id, error="The saved report is ready to send when feedback reporting is configured.")
+        try:
+            connection = self._connect()
+        except (sqlite3.Error, OSError):
+            return 503, self._response("pending", request_id, error="The saved report is ready to send when the database is available.")
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT report_type,description,status,issue_url FROM feedback_reports WHERE actor_id=? AND request_id=?",
+                (actor_id, request_id),
+            ).fetchone()
+            if not row:
+                connection.rollback()
+                return 404, self._response("not_found", request_id, error="Report request not found.")
+            if row["status"] == "submitted":
+                connection.commit()
+                return 200, self._response("submitted", request_id, issue_url=row["issue_url"])
+            if row["status"] == "pending":
+                connection.commit()
+                result = self._reconcile(actor_id, request_id)
+                return (200 if result["status"] == "submitted" else 202), result
+            if row["status"] != "ready":
+                connection.commit()
+                return 422, self._response("rejected", request_id, error="GitHub rejected this report. Edit the draft and submit it again with a new request.")
+            claimed = connection.execute(
+                "UPDATE feedback_reports SET status='pending' WHERE actor_id=? AND request_id=? AND status='ready'",
+                (actor_id, request_id),
+            )
+            if claimed.rowcount != 1:
+                connection.commit()
+                result = self._reconcile(actor_id, request_id)
+                return (200 if result["status"] == "submitted" else 202), result
+            report_type, description = row["report_type"], row["description"]
+            connection.commit()
+        except sqlite3.Error:
+            connection.rollback()
+            return 503, self._response("pending", request_id, error="The saved report could not be claimed for delivery. Try checking again later.")
+        finally:
+            connection.close()
+
+        marker = self._marker(request_id)
+        body = json.dumps({"title": f"C-Crate feedback: {report_type}",
+                           "body": description + "\n\n<!-- " + marker + " -->"}).encode()
+        url = "https://api.github.com/repos/" + self.repository + "/issues"
+        try:
+            code, payload = self.github("POST", url, self._github_headers(), body)
+        except (OSError, TimeoutError, URLError, ValueError, http.client.HTTPException):
+            return 202, self._response("pending", request_id, error="GitHub did not confirm the result. Check status again; do not resubmit it.")
+        issue_url = self._issue_url(payload.get("html_url")) if isinstance(payload, dict) else None
+        if code == 201 and issue_url:
+            try:
+                with closing(self._connect()) as connection, connection:
+                    connection.execute("UPDATE feedback_reports SET status='submitted', issue_url=? WHERE actor_id=? AND request_id=?",
+                                       (issue_url, actor_id, request_id))
+            except (sqlite3.Error, OSError):
+                return 202, self._response("pending", request_id, error="GitHub created the report, but C-Crate could not save its confirmation yet. Check status again; do not resubmit it.")
+            return 201, self._response("submitted", request_id, issue_url=issue_url)
+        if 400 <= code < 500:
+            try:
+                with closing(self._connect()) as connection, connection:
+                    connection.execute("UPDATE feedback_reports SET status='rejected' WHERE actor_id=? AND request_id=?",
+                                       (actor_id, request_id))
+            except (sqlite3.Error, OSError):
+                return 202, self._response("pending", request_id, error="GitHub rejected the report, but C-Crate could not save the result. Check status again before retrying.")
+            return 422, self._response("rejected", request_id, error="GitHub rejected this report. Edit the draft and submit it again with a new request.")
+        return 202, self._response("pending", request_id, error="GitHub did not confirm the result. Check status again; do not resubmit it.")
+
     def _row(self, actor_id, request_id):
         with closing(self._connect()) as connection:
             return connection.execute("SELECT * FROM feedback_reports WHERE actor_id=? AND request_id=?",
@@ -187,6 +257,7 @@ class FeedbackReportService:
             connection = self._connect()
         except (sqlite3.Error, OSError):
             return 503, {"status": "not_started", "error": "The report could not be saved on this server. Your draft is still saved in this browser."}
+        dispatch_ready = False
         try:
             connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute("SELECT * FROM feedback_reports WHERE actor_id=? AND request_id=?",
@@ -194,7 +265,8 @@ class FeedbackReportService:
             if existing:
                 if existing["report_type"] != report_type or existing["description"] != description:
                     connection.rollback()
-                    return 409, self._response(existing["status"], normalized,
+                    status = "pending" if existing["status"] == "ready" else existing["status"]
+                    return 409, self._response(status, normalized,
                         issue_url=existing["issue_url"], error="This request is tied to the saved report. Keep its description unchanged while checking its result.")
                 connection.commit()
                 if existing["status"] == "submitted":
@@ -202,48 +274,29 @@ class FeedbackReportService:
                 if existing["status"] == "pending":
                     status = self._reconcile(actor_id, normalized)
                     return (200 if status["status"] == "submitted" else 202), status
-                return 422, self._response("rejected", normalized, error="GitHub rejected this report. Edit the draft and submit it again with a new request.")
-            count = connection.execute("SELECT count(*) FROM feedback_reports WHERE actor_id=? AND created_at>=?",
-                                       (actor_id, now - RATE_WINDOW_SECONDS)).fetchone()[0]
-            if count >= RATE_LIMIT:
-                connection.rollback()
-                return 429, {"status": "not_started", "error": "You have sent several reports recently. Try again in about an hour."}
-            connection.execute("INSERT INTO feedback_reports(actor_id,request_id,report_type,description,status,created_at) VALUES(?,?,?,?,?,?)",
-                               (actor_id, normalized, report_type, description, "pending", now))
-            connection.commit()
+                if existing["status"] == "ready":
+                    connection.commit()
+                    dispatch_ready = True
+                else:
+                    return 422, self._response("rejected", normalized, error="GitHub rejected this report. Edit the draft and submit it again with a new request.")
+            else:
+                count = connection.execute("SELECT count(*) FROM feedback_reports WHERE actor_id=? AND created_at>=?",
+                                           (actor_id, now - RATE_WINDOW_SECONDS)).fetchone()[0]
+                if count >= RATE_LIMIT:
+                    connection.rollback()
+                    return 429, {"status": "not_started", "error": "You have sent several reports recently. Try again in about an hour."}
+                connection.execute("INSERT INTO feedback_reports(actor_id,request_id,report_type,description,status,created_at) VALUES(?,?,?,?,?,?)",
+                                   (actor_id, normalized, report_type, description, "ready", now))
+                connection.commit()
+                dispatch_ready = True
         except sqlite3.Error:
             connection.rollback()
             return 503, {"status": "not_started", "error": "The report could not be saved on this server. Your draft is still saved in this browser."}
         finally:
             connection.close()
-
-        marker = self._marker(normalized)
-        body = json.dumps({"title": f"C-Crate feedback: {report_type}",
-                           "body": description + "\n\n<!-- " + marker + " -->"}).encode()
-        url = "https://api.github.com/repos/" + self.repository + "/issues"
-        try:
-            code, payload = self.github("POST", url, self._github_headers(), body)
-        except (OSError, TimeoutError, URLError, ValueError, http.client.HTTPException):
-            # Keep the row pending. A later status check searches for its unique body marker.
-            return 202, self._response("pending", normalized, error="GitHub did not confirm the result. Check status again; do not resubmit it.")
-        issue_url = self._issue_url(payload.get("html_url")) if isinstance(payload, dict) else None
-        if code == 201 and issue_url:
-            try:
-                with closing(self._connect()) as connection, connection:
-                    connection.execute("UPDATE feedback_reports SET status='submitted', issue_url=? WHERE actor_id=? AND request_id=?",
-                                       (issue_url, actor_id, normalized))
-            except (sqlite3.Error, OSError):
-                return 202, self._response("pending", normalized, error="GitHub created the report, but C-Crate could not save its confirmation yet. Check status again; do not resubmit it.")
-            return 201, self._response("submitted", normalized, issue_url=issue_url)
-        if 400 <= code < 500:
-            try:
-                with closing(self._connect()) as connection, connection:
-                    connection.execute("UPDATE feedback_reports SET status='rejected' WHERE actor_id=? AND request_id=?",
-                                       (actor_id, normalized))
-            except (sqlite3.Error, OSError):
-                return 202, self._response("pending", normalized, error="GitHub rejected the report, but C-Crate could not save the result. Check status again before retrying.")
-            return 422, self._response("rejected", normalized, error="GitHub rejected this report. Edit the draft and submit it again with a new request.")
-        return 202, self._response("pending", normalized, error="GitHub did not confirm the result. Check status again; do not resubmit it.")
+        if dispatch_ready:
+            return self._dispatch_ready(actor_id, normalized)
+        return 503, self._response("pending", normalized, error="The saved report could not be dispatched. Check its status again later.")
 
     def status(self, actor_id, request_id):
         normalized = self._request_id(request_id)
@@ -255,7 +308,11 @@ class FeedbackReportService:
             return 503, {"status": "pending", "error": "C-Crate could not check report status. Keep this request and try again later."}
         if not row:
             return 404, {"error": "Report request not found."}
+        if row["status"] == "ready":
+            status, result = self._dispatch_ready(actor_id, normalized)
+            return (200 if result.get("status") == "submitted" else status), result
         if row["status"] == "pending":
             result = self._reconcile(actor_id, normalized)
             return (200 if result["status"] == "submitted" else 202), result
         return 200, self._response(row["status"], normalized, issue_url=row["issue_url"])
+
