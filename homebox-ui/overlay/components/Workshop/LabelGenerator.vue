@@ -20,6 +20,7 @@ type Workspace = {
   gapMm: number;
   reviews: Review[];
   printedReviewIds: string[];
+  printedEntityIds?: string[];
   pages: { image: string; sha256: string }[];
   pendingActions: number;
   printError: string;
@@ -171,7 +172,7 @@ function designerClosed() {
           <article v-for="row in workspace.reviews" :key="row.review_id" class="rounded-md border p-3">
             <img :src="row.image" :alt="'Label preview for ' + (workspace.items.find(item => item.id === row.entity_id)?.name || 'equipment')" class="mx-auto max-h-56 max-w-full bg-white object-contain" />
             <p class="truncate text-sm font-medium">{{ workspace.items.find(item => item.id === row.entity_id)?.name || row.entity_id }}</p>
-            <Button v-if="row.profile === 'supvan'" variant="outline" class="mt-2 w-full" :disabled="workspace.busy || workspace.printLocked || workspace.printedReviewIds.includes(row.review_id)" @click="workspace.actions.printItem(row.entity_id, row.review_id)">{{ workspace.printedReviewIds.includes(row.review_id) ? 'Print submitted' : workspace.printError && !workspace.printUncertain ? 'Retry print' : 'Print label' }}</Button>
+            <Button v-if="row.profile === 'supvan'" variant="outline" class="mt-2 w-full" :disabled="workspace.busy || workspace.printLocked || workspace.printedReviewIds.includes(row.review_id) || workspace.printedEntityIds?.includes(row.entity_id)" @click="workspace.actions.printItem(row.entity_id, row.review_id)">{{ workspace.printedReviewIds.includes(row.review_id) || workspace.printedEntityIds?.includes(row.entity_id) ? 'Print submitted' : workspace.printError && !workspace.printUncertain ? 'Review again before retrying' : 'Print label' }}</Button>
           </article>
         </div>
       </section>
