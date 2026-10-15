@@ -90,6 +90,19 @@ def main():
     (output / 'workshop-tools.js').write_bytes((root / 'homebox-ui/overlay/lib/workshop-tools.js').read_bytes())
     bridge_host.write_text('''<!doctype html><html><body><div id="host"></div><script type="module">import {mountLabelDesigner} from "/label-editor.js";window.fixture={dirty:[],calls:0,writes:0,saved:null,touches:0};window.handle=mountLabelDesigner(document.querySelector("#host"),{src:"/workshop-api/label-assets/editor.html",context:()=>({host:'terminal',generation:7,instance:"session-a"}),dirty:value=>window.fixture.dirty.push(value),touchField:data=>{window.fixture.touches++;return Promise.resolve({field_id:data.field_id,instance_epoch:data.instance_epoch,value:'23.4'})},request:(action,data)=>{window.fixture.calls++;if(action==='labels/templates')return Promise.resolve([]);if(action==='labels/templates/save'){window.fixture.saved=data;return Promise.resolve({id:'saved-1',revision:1,document:data.document,name:data.name})}if(action==='labels/templates/result')return Promise.resolve(null);return new Promise(resolve=>window.fixture.resolve=resolve)},write:()=>{window.fixture.writes++;throw Error('physical print must be separately reviewed')}});</script></body></html>''')
     plain_http_host.write_text('''<!doctype html><html><body><div id="host"></div><div id="native"></div><script type="module">import {mountLabelDesigner} from "/label-editor.js";window.plainHttp={attempted:false,mounted:false,mountedNative:false,error:null,calls:[],dirty:[]};const options=host=>({src:'/label-assets/editor.html',context:()=>({host,generation:1,instance:'http-session-'+host}),dirty:value=>plainHttp.dirty.push(value),request:async(action,data)=>{plainHttp.calls.push({host,action,data});if(action==='labels/templates')return [];if(action==='labels/templates/save')return {id:'saved-http',revision:1,document:data.document,name:data.name};if(action==='labels/templates/result')return null;return {}},touchField:async data=>({field_id:data.field_id,instance_epoch:data.instance_epoch,value:'23.4'}),write:()=>{throw Error('unexpected physical write')}});try{window.handle=mountLabelDesigner(document.querySelector('#host'),options('terminal'));plainHttp.mounted=true;window.nativeHandle=mountLabelDesigner(document.querySelector('#native'),options('native'));plainHttp.mountedNative=true}catch(e){plainHttp.error=String(e)}finally{plainHttp.attempted=true}</script></body></html>''')
+    def replace_fixture(source, old, new, label):
+        if source.count(old) != 1:
+            raise SystemExit(f'FAIL: expected one {label} fixture anchor')
+        return source.replace(old, new)
+    bridge_source = bridge_host.read_text()
+    bridge_source = replace_fixture(bridge_source, "if(action==='labels/templates/save'){window.fixture.saved=data;return Promise.resolve({id:'saved-1',revision:1,document:data.document,name:data.name})}", '', 'bridge template-save request handler')
+    bridge_source = replace_fixture(bridge_source, "write:()=>{window.fixture.writes++;throw Error('physical print must be separately reviewed')}", "write:(action,data)=>{window.fixture.writes++;if(action==='labels/templates/save'){window.fixture.saved=data;return Promise.resolve({id:'saved-1',revision:1,document:data.document,name:data.name})}throw Error('physical print must be separately reviewed')}", 'bridge guarded writer')
+    bridge_host.write_text(bridge_source)
+    plain_source = plain_http_host.read_text()
+    plain_source = replace_fixture(plain_source, "calls:[],dirty:[]", "calls:[],writes:[],dirty:[]", 'plain HTTP write counter')
+    plain_source = replace_fixture(plain_source, "if(action==='labels/templates/save')return {id:'saved-http',revision:1,document:data.document,name:data.name};", '', 'plain HTTP template-save request handler')
+    plain_source = replace_fixture(plain_source, "write:()=>{throw Error('unexpected physical write')}", "write:(action,data)=>{plainHttp.writes.push({host,action,data});if(action==='labels/templates/save')return {id:'saved-http',revision:1,document:data.document,name:data.name};throw Error('unexpected physical write')}", 'plain HTTP guarded writer')
+    plain_http_host.write_text(plain_source)
     from PIL import Image
     sheet_buffer=io.BytesIO();Image.new('RGB',(2550,3300),'white').save(sheet_buffer,format='PNG');sheet_bytes=sheet_buffer.getvalue()
     stale_sheet_buffer=io.BytesIO();Image.new('RGB',(2550,3300),(7,19,31)).save(stale_sheet_buffer,format='PNG');stale_sheet_bytes=stale_sheet_buffer.getvalue()
@@ -301,6 +314,10 @@ window.runTerminalContext=async()=>{try{const pending=showLabelMaker();while(!co
                 try: bridge_page.wait_for_function('fixture.saved!==null', timeout=1500)
                 except Exception as error: raise AssertionError(f'Editor Save did not reach the bridge: message={bridge_frame.locator(".label-host-message").inner_text()}') from error
                 saved = bridge_page.evaluate('fixture.saved')
+                if bridge_page.evaluate('fixture.writes!==2||fixture.calls!==1'):
+                    raise AssertionError(f'template Save did not use the guarded writer without a request fallback: {bridge_page.evaluate("({calls:fixture.calls,writes:fixture.writes})")}')
+                if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', saved['request_key']) or saved.get('session_generation') != 7 or saved.get('session_instance') != 'session-a':
+                    raise AssertionError(f'terminal template Save lost request identity: {saved}')
                 updated = next((element for element in saved['document']['elements'] if element.get('content') == 'Immediate synchronous Save probe'), None)
                 if not updated: raise AssertionError('immediate Save missed the last text edit from the synchronous Pinia document store')
                 if abs(updated['xMm'] - 23.4) > .001: raise AssertionError(f'touch numeric geometry was not committed to Pinia before Save: {updated["xMm"]}')
@@ -309,7 +326,7 @@ window.runTerminalContext=async()=>{try{const pending=showLabelMaker();while(!co
                 bridge_page.wait_for_timeout(150)
                 if not bridge_page.evaluate('fixture.dirty.at(-1)===true'):
                     raise AssertionError(f'Undo did not restore dirty state after Save; events={bridge_page.evaluate("fixture.dirty")}')
-                report['bridge_checks'] = ['wrong origin rejected', 'wrong nonce rejected', 'wrong source rejected', 'unknown action rejected', 'physical print requires guarded write callback', 'late context result discarded', 'touch numeric Enter committed geometry before Save', 'immediate Save included final edit', 'undo restored dirty guard']
+                report['bridge_checks'] = ['wrong origin rejected', 'wrong nonce rejected', 'wrong source rejected', 'unknown action rejected', 'physical print requires guarded write callback', 'template Save uses guarded write callback with request and session identity', 'late context result discarded', 'touch numeric Enter committed geometry before Save', 'immediate Save included final edit', 'undo restored dirty guard']
                 bridge_page.close()
 
                 plain_page=browser.new_page(viewport={'width':800,'height':480})
@@ -335,11 +352,12 @@ window.runTerminalContext=async()=>{try{const pending=showLabelMaker();while(!co
                 if not element_id or not re.fullmatch(uuid4,element_id): raise AssertionError(f'plain HTTP palette element did not receive a cryptographic UUIDv4 id: {element_id}')
                 plain_frame.get_by_role('button',name='Undo',exact=True).click()
                 plain_frame.get_by_role('button',name='Save',exact=True).click()
-                try: plain_page.wait_for_function("plainHttp.calls.some(call=>call.action==='labels/templates/save')",timeout=5000)
+                try: plain_page.wait_for_function("plainHttp.writes.some(call=>call.action==='labels/templates/save')",timeout=5000)
                 except Exception as error: raise AssertionError(f'plain HTTP editor Save failed: parent={plain_page.evaluate("plainHttp.calls")}, frame={plain_frame.locator("body").inner_text()}, message={plain_frame.locator(".label-host-message").inner_text()}') from error
-                saved_call=plain_page.evaluate("plainHttp.calls.find(call=>call.action==='labels/templates/save')")
-                if not re.fullmatch(uuid4,saved_call['data']['request_key']): raise AssertionError('plain HTTP template Save did not use UUIDv4 request key')
-                report['plain_http_nonce_fixture']={'secure_context':False,'random_values_available':True,'random_uuid_type':plain_state['randomUUID'],'terminal_and_native_mounted':True,'both_host_nonce_source_origin_guards':True,'adapter_nonce':plain_state['nonce'],'palette_element_uuid':element_id,'template_save_request_key':saved_call['data']['request_key'],'editor_request_and_save':True}
+                saved_call=plain_page.evaluate("plainHttp.writes.find(call=>call.action==='labels/templates/save')")
+                if plain_page.evaluate("plainHttp.calls.some(call=>call.action==='labels/templates/save')"): raise AssertionError('plain HTTP template Save bypassed the guarded write callback')
+                if not re.fullmatch(uuid4,saved_call['data']['request_key']) or saved_call['data'].get('session_generation') != 1 or saved_call['data'].get('session_instance') != 'http-session-terminal': raise AssertionError(f'plain HTTP template Save lost request or session identity: {saved_call}')
+                report['plain_http_nonce_fixture']={'secure_context':False,'random_values_available':True,'random_uuid_type':plain_state['randomUUID'],'terminal_and_native_mounted':True,'both_host_nonce_source_origin_guards':True,'adapter_nonce':plain_state['nonce'],'palette_element_uuid':element_id,'template_save_request_key':saved_call['data']['request_key'],'template_save_write_callback':True,'editor_request_and_save':True}
                 plain_page.close()
 
                 native_page = browser.new_page(viewport={'width': 800, 'height': 480})

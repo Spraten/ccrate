@@ -1,0 +1,694 @@
+From 8104dc9d3f16d6fc08d3bf025edf35a2d007fb3c Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 06:33:36 -0400
+Subject: [PATCH 20/23] Fix item camera save and OCR races
+
+---
+ frontend/components/Form/CameraCaptureDialog.vue   |  48 ++++++----
+ frontend/components/Form/PhotoUploaderPreview.vue |   6 +
+ frontend/components/Form/camera.test.ts           |  57 ++++++++++++
+ frontend/components/Form/camera.ts                |  59 ++++++++++++
+ frontend/locales/en.json                          |   1
+ frontend/components/Form/photo-uploader.test.ts   |  48 ++++++++++
+ frontend/components/Form/photo-uploader.ts        |  30 ++++++
+ frontend/pages/item/[id]/index/edit.vue           | 100 +++++++++++++++------
+ 8 files changed, 294 insertions(+), 55 deletions(-)
+ create mode 100644 frontend/components/Form/photo-uploader.test.ts
+
+diff --git a/frontend/components/Form/CameraCaptureDialog.vue b/frontend/components/Form/CameraCaptureDialog.vue
+index 555e8bf9..113f5c13 100644
+--- a/frontend/components/Form/CameraCaptureDialog.vue
++++ b/frontend/components/Form/CameraCaptureDialog.vue
+@@ -55,7 +55,7 @@
+   import { DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+   import { DialogRoot } from "reka-ui";
+   import MdiCameraOutline from "~icons/mdi/camera-outline";
+-  import { canvasToPhotoFile } from "./camera";
++  import { CameraStreamSession, cameraErrorMessageKey, canvasToPhotoFile } from "./camera";
+ 
+   const props = defineProps<{ open: boolean }>();
+   const emit = defineEmits<{
+@@ -69,13 +69,19 @@
+   const errorMessage = ref("");
+   const capturedFile = ref<File>();
+   const previewUrl = ref("");
+-  let stream: MediaStream | null = null;
++  const cameraSession = new CameraStreamSession();
++  let cameraGeneration = 0;
+ 
+   async function startCamera() {
++    const generation = cameraSession.begin();
++    cameraGeneration = generation;
+     errorMessage.value = "";
+     cameraReady.value = false;
++    if (video.value) video.value.srcObject = null;
+     await nextTick();
+ 
++    if (!props.open || !cameraSession.isCurrent(generation)) return;
++
+     if (!navigator.mediaDevices?.getUserMedia) {
+       errorMessage.value = t("components.form.camera.unavailable");
+       return;
+@@ -86,25 +92,24 @@
+         video: { facingMode: { ideal: "environment" } },
+         audio: false,
+       });
+-      if (!props.open) {
+-        nextStream.getTracks().forEach(track => track.stop());
+-        return;
+-      }
+-      stream = nextStream;
++      if (!cameraSession.setStream(generation, nextStream)) return;
++      if (!props.open || !cameraSession.isCurrent(generation)) return;
+       if (!video.value) throw new Error("Camera preview is unavailable");
+-      video.value.srcObject = stream;
++      video.value.srcObject = nextStream;
+       await video.value.play();
++      if (!props.open || !cameraSession.isCurrent(generation)) return;
+       cameraReady.value = true;
+-    } catch {
++    } catch (error) {
++      if (!cameraSession.isCurrent(generation)) return;
+-      errorMessage.value = t("components.form.camera.permission_error");
++      errorMessage.value = t(`components.form.camera.${cameraErrorMessageKey(error)}`);
+-      stopCamera();
++      stopCamera(generation);
+     }
+   }
+ 
+-  function stopCamera() {
++  function stopCamera(generation?: number) {
++    if (generation !== undefined && !cameraSession.isCurrent(generation)) return;
+     cameraReady.value = false;
+-    stream?.getTracks().forEach(track => track.stop());
+-    stream = null;
++    cameraSession.stop(generation);
+     if (video.value) video.value.srcObject = null;
+   }
+ 
+@@ -115,7 +120,8 @@
+   }
+ 
+   async function capturePhoto() {
+-    if (!video.value?.videoWidth || !video.value.videoHeight) return;
++    const generation = cameraGeneration;
++    if (!props.open || !cameraSession.isCurrent(generation) || !cameraReady.value || !video.value?.videoWidth || !video.value.videoHeight) return;
+     const canvas = document.createElement("canvas");
+     canvas.width = video.value.videoWidth;
+     canvas.height = video.value.videoHeight;
+@@ -128,10 +134,13 @@
+     context.drawImage(video.value, 0, 0, canvas.width, canvas.height);
+     try {
+       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+-      capturedFile.value = await canvasToPhotoFile(canvas, `camera-${timestamp}.jpg`);
++      const file = await canvasToPhotoFile(canvas, `camera-${timestamp}.jpg`);
++      if (!props.open || !cameraSession.isCurrent(generation)) return;
++      capturedFile.value = file;
+       previewUrl.value = URL.createObjectURL(capturedFile.value);
+-      stopCamera();
++      stopCamera(generation);
+     } catch {
++      if (!props.open || !cameraSession.isCurrent(generation)) return;
+       errorMessage.value = t("components.form.camera.capture_error");
+     }
+   }
+@@ -142,7 +151,7 @@
+   }
+ 
+   function usePhoto() {
+-    if (!capturedFile.value) return;
++    if (!props.open || !capturedFile.value) return;
+     emit("captured", capturedFile.value);
+     emit("update:open", false);
+   }
+@@ -160,7 +169,8 @@
+   );
+ 
+   onBeforeUnmount(() => {
+-    stopCamera();
++    cameraSession.stop();
++    if (video.value) video.value.srcObject = null;
+     clearPreview();
+   });
+ </script>
+diff --git a/frontend/components/Form/PhotoUploaderPreview.vue b/frontend/components/Form/PhotoUploaderPreview.vue
+index 7b044880..8d5ad53b 100644
+--- a/frontend/components/Form/PhotoUploaderPreview.vue
++++ b/frontend/components/Form/PhotoUploaderPreview.vue
+@@ -13,7 +13,7 @@
+         <TooltipProvider class="flex gap-2" :delay-duration="0">
+           <Tooltip>
+             <TooltipTrigger>
+-              <Button size="icon" type="button" variant="destructive" @click.prevent="emit('delete', index)">
++              <Button size="icon" type="button" variant="destructive" :disabled="disabled" @click.prevent="emit('delete', index)">
+                 <MdiDelete />
+                 <div class="sr-only">{{ $t("components.entity.create_modal.delete_photo") }}</div>
+               </Button>
+@@ -25,7 +25,7 @@
+ 
+           <Tooltip>
+             <TooltipTrigger>
+-              <Button size="icon" type="button" variant="default" @click.prevent="emit('rotate', index)">
++              <Button size="icon" type="button" variant="default" :disabled="disabled" @click.prevent="emit('rotate', index)">
+                 <MdiRotateClockwise />
+                 <div class="sr-only">{{ $t("components.entity.create_modal.rotate_photo") }}</div>
+               </Button>
+@@ -40,6 +40,7 @@
+               <Button
+                 size="icon"
+                 type="button"
++                :disabled="disabled"
+                 :variant="photo.primary ? 'default' : 'outline'"
+                 @click.prevent="emit('setPrimary', index)"
+               >
+@@ -73,6 +74,7 @@
+ 
+   defineProps<{
+     photos: PhotoPreview[];
++    disabled?: boolean;
+   }>();
+ 
+   const emit = defineEmits<{
+diff --git a/frontend/components/Form/camera.test.ts b/frontend/components/Form/camera.test.ts
+index 6057e3a8..4d4aca05 100644
+--- a/frontend/components/Form/camera.test.ts
++++ b/frontend/components/Form/camera.test.ts
+@@ -1,5 +1,14 @@
+ import { describe, expect, test } from "vitest";
+-import { canvasToPhotoFile, recognizeNameFromFileLocally, recognizeNameLocally } from "./camera";
++import { CameraStreamSession, cameraErrorMessageKey, canvasToPhotoFile, recognizeNameFromFileLocally, recognizeNameLocally } from "./camera";
+ 
+ describe("local camera helpers", () => {
++  test("maps missing devices, permission failures, and camera startup errors", () => {
++    expect(cameraErrorMessageKey({ name: "NotFoundError" })).toBe("unavailable");
++    expect(cameraErrorMessageKey({ name: "DevicesNotFoundError" })).toBe("unavailable");
++    expect(cameraErrorMessageKey({ name: "NotAllowedError" })).toBe("permission_error");
++    expect(cameraErrorMessageKey({ name: "PermissionDeniedError" })).toBe("permission_error");
++    expect(cameraErrorMessageKey({ name: "NotReadableError" })).toBe("startup_error");
++    expect(cameraErrorMessageKey(new Error("preview failed"))).toBe("startup_error");
++  });
++
+   test("converts a captured canvas to a JPEG photo file for the existing preview flow", async () => {
+@@ -21,6 +30,35 @@ describe("local camera helpers", () => {
+     await expect(canvasToPhotoFile(canvas, "item-photo.jpg")).rejects.toThrow("Failed to capture camera frame");
+   });
+ 
++  test("stops a late stream when camera request A resolves after request B", async () => {
++    const stopped: string[] = [];
++    const makeStream = (id: string) => ({
++      getTracks: () => [{ stop: () => stopped.push(id) }],
++    }) as unknown as MediaStream;
++    const deferred = () => {
++      let resolve!: (stream: MediaStream) => void;
++      const promise = new Promise<MediaStream>(done => (resolve = done));
++      return { promise, resolve };
++    };
++    const session = new CameraStreamSession();
++    const requestA = session.begin();
++    const pendingA = deferred();
++    const requestB = session.begin();
++    const pendingB = deferred();
++    const streamA = makeStream("A");
++    const streamB = makeStream("B");
++
++    pendingB.resolve(streamB);
++    expect(session.setStream(requestB, await pendingB.promise)).toBe(true);
++    pendingA.resolve(streamA);
++    expect(session.setStream(requestA, await pendingA.promise)).toBe(false);
++    expect(session.isCurrent(requestA)).toBe(false);
++    expect(session.isCurrent(requestB)).toBe(true);
++    session.stop();
++
++    expect(stopped).toEqual(["A", "B"]);
++  });
++
+   test("returns locally recognized text as a single editable name suggestion", async () => {
+     const source = {} as HTMLCanvasElement;
+     class Detector {
+@@ -33,6 +71,23 @@ describe("local camera helpers", () => {
+     await expect(recognizeNameLocally(source, Detector)).resolves.toBe("ACME Cordless Drill");
+   });
+ 
++  test("prefers prominent text, tolerates missing geometry, and caps suggestions at 255 characters", async () => {
++    const source = {} as HTMLCanvasElement;
++    class Detector {
++      async detect() {
++        return [
++          { rawValue: "tiny serial", boundingBox: { width: 5, height: 4 } },
++          { rawValue: "Main product title", boundingBox: { width: 200, height: 40 } },
++          { rawValue: "x".repeat(300) },
++        ];
++      }
++    }
++
++    await expect(recognizeNameLocally(source, Detector)).resolves.toBe(
++      `Main product title tiny serial ${"x".repeat(224)}`
++    );
++  });
++
+   test("recognizes text from an image file locally and releases the decoded bitmap", async () => {
+     let closed = false;
+     const bitmap = { close: () => (closed = true) } as ImageBitmap;
+diff --git a/frontend/components/Form/camera.ts b/frontend/components/Form/camera.ts
+index ee914632..64f5f264 100644
+--- a/frontend/components/Form/camera.ts
++++ b/frontend/components/Form/camera.ts
+@@ -1,5 +1,6 @@
+ export interface LocalTextDetection {
+   rawValue: string;
++  boundingBox?: { width: number; height: number };
+ }
+ 
+ export interface LocalTextDetector {
+@@ -12,6 +13,47 @@ type TextDetectorGlobal = typeof globalThis & {
+   TextDetector?: LocalTextDetectorConstructor;
+ };
+ 
++export class CameraStreamSession {
++  private generation = 0;
++  private stream: MediaStream | null = null;
++
++  begin() {
++    this.generation++;
++    this.stopStream();
++    return this.generation;
++  }
++
++  isCurrent(generation: number) {
++    return this.generation === generation;
++  }
++
++  setStream(generation: number, stream: MediaStream) {
++    if (!this.isCurrent(generation)) {
++      stream.getTracks().forEach(track => track.stop());
++      return false;
++    }
++    this.stream = stream;
++    return true;
++  }
++
++  stop(generation?: number) {
++    if (generation !== undefined && !this.isCurrent(generation)) return;
++    this.generation++;
++    this.stopStream();
++  }
++
++  private stopStream() {
++    this.stream?.getTracks().forEach(track => track.stop());
++    this.stream = null;
++  }
++}
++
++export function cameraErrorMessageKey(error: unknown): "unavailable" | "permission_error" | "startup_error" {
++  const name = error && typeof error === "object" && "name" in error ? error.name : undefined;
++  if (name === "NotFoundError" || name === "DevicesNotFoundError") return "unavailable";
++  return name === "NotAllowedError" || name === "PermissionDeniedError" ? "permission_error" : "startup_error";
++}
++
+ export async function canvasToPhotoFile(canvas: HTMLCanvasElement, fileName: string): Promise<File> {
+   const blob = await new Promise<Blob>((resolve, reject) => {
+     canvas.toBlob(
+@@ -32,10 +74,25 @@ export async function recognizeNameLocally(
+ 
+   const detections = await new Detector().detect(source);
+   const suggestion = detections
+-    .map(detection => detection.rawValue.trim())
++    .map((detection, index) => ({
++      index,
++      area:
++        detection.boundingBox &&
++        Number.isFinite(detection.boundingBox.width) &&
++        Number.isFinite(detection.boundingBox.height) &&
++        detection.boundingBox.width > 0 &&
++        detection.boundingBox.height > 0
++          ? detection.boundingBox.width * detection.boundingBox.height
++          : 0,
++      text: detection.rawValue.trim(),
++    }))
++    .sort((a, b) => b.area - a.area || a.index - b.index)
++    .map(detection => detection.text)
+     .filter(Boolean)
+     .join(" ")
+     .replace(/\s+/g, " ")
++    .trim()
++    .slice(0, 255)
+     .trim();
+ 
+   return suggestion || null;
+diff --git a/frontend/locales/en.json b/frontend/locales/en.json
+index 6231ac68..6aeab2e1 100644
+--- a/frontend/locales/en.json
++++ b/frontend/locales/en.json
+@@ -132,2 +132,3 @@
+                 "permission_error": "Camera access failed. Check browser permissions and try again.",
++                "startup_error": "Camera could not start. Check whether it is already in use, then try again.",
+                 "capture_error": "The photo could not be captured. Try again.",
+diff --git a/frontend/components/Form/photo-uploader.test.ts b/frontend/components/Form/photo-uploader.test.ts
+new file mode 100644
+index 00000000..3344f205
+--- /dev/null
++++ b/frontend/components/Form/photo-uploader.test.ts
+@@ -0,0 +1,48 @@
++import { describe, expect, test } from "vitest";
++import { removeUploadedPhotoPreview, uploadPhotoPreviewsOnce, type PhotoPreview } from "./photo-uploader";
++
++const preview = (revision: number): PhotoPreview => ({
++  id: "capture-1",
++  revision,
++  photoName: "camera.jpg",
++  file: new File([`revision-${revision}`], "camera.jpg", { type: "image/jpeg" }),
++  fileBase64: "data:image/jpeg;base64,",
++  primary: true,
++});
++
++describe("staged photo saves", () => {
++  test("reconciles by stable identity and revision after an upload resolves", async () => {
++    let resolveUpload!: (success: boolean) => void;
++    let current = [preview(0)];
++    const attempts: number[] = [];
++    const save = uploadPhotoPreviewsOnce(
++      current,
++      async photo => {
++        attempts.push(photo.revision ?? 0);
++        return await new Promise<boolean>(resolve => (resolveUpload = resolve));
++      },
++      photo => (current = removeUploadedPhotoPreview(current, photo))
++    );
++
++    current = [preview(1)];
++    resolveUpload(true);
++    await expect(save).resolves.toBe(true);
++    expect(current.map(photo => photo.revision)).toEqual([1]);
++    expect(attempts).toEqual([0]);
++  });
++
++  test("does not continue the queue after an uncertain upload", async () => {
++    const attempts: number[] = [];
++    await expect(
++      uploadPhotoPreviewsOnce(
++        [preview(0), { ...preview(0), id: "capture-2", photoName: "second.jpg" }],
++        async photo => {
++          attempts.push(photo.revision ?? 0);
++          return false;
++        },
++        () => undefined
++      )
++    ).resolves.toBe(false);
++    expect(attempts).toHaveLength(1);
++  });
++});
+diff --git a/frontend/components/Form/photo-uploader.ts b/frontend/components/Form/photo-uploader.ts
+index c2071a2d..547986ff 100644
+--- a/frontend/components/Form/photo-uploader.ts
++++ b/frontend/components/Form/photo-uploader.ts
+@@ -1,10 +1,14 @@
+ export interface PhotoPreview {
++  id?: string;
++  revision?: number;
+   photoName: string;
+   file: File;
+   fileBase64: string;
+   primary: boolean;
+ }
+ 
++let nextPhotoPreviewId = 0;
++
+ export function dataURLtoFile(dataURL: string, fileName: string) {
+   const arr = dataURL.split(",");
+   const mimeMatch = arr[0]!.match(/:(.*?);/);
+@@ -31,6 +35,8 @@ export async function fileToPhotoPreview(file: File, primary = false): Promise<P
+   const fileBase64 = await readFileAsDataUrl(file);
+ 
+   return {
++    id: `photo-preview-${++nextPhotoPreviewId}`,
++    revision: 0,
+     photoName: file.name,
+     file,
+     fileBase64,
+@@ -78,13 +84,17 @@ export async function rotatePhotoPreview(photo: PhotoPreview): Promise<PhotoPrev
+ 
+   return {
+     ...photo,
++    revision: (photo.revision ?? 0) + 1,
+     fileBase64,
+     file: dataURLtoFile(fileBase64, photo.photoName),
+   };
+ }
+ 
+ export function setPrimaryPhoto(photos: PhotoPreview[], index: number): PhotoPreview[] {
+-  const nextPhotos = photos.map(photo => ({ ...photo, primary: false }));
++  const nextPhotos = photos.map((photo, photoIndex) => {
++    const primary = photoIndex === index;
++    return photo.primary === primary ? photo : { ...photo, primary, revision: (photo.revision ?? 0) + 1 };
++  });
+   if (nextPhotos[index]) {
+     nextPhotos[index] = { ...nextPhotos[index]!, primary: true };
+   }
+@@ -94,11 +104,27 @@ export function setPrimaryPhoto(photos: PhotoPreview[], index: number): PhotoPre
+ export function deletePhoto(photos: PhotoPreview[], index: number): PhotoPreview[] {
+   const nextPhotos = photos.filter((_, photoIndex) => photoIndex !== index);
+   if (nextPhotos.length > 0 && !nextPhotos.some(photo => photo.primary)) {
+-    nextPhotos[0] = { ...nextPhotos[0]!, primary: true };
++    nextPhotos[0] = { ...nextPhotos[0]!, primary: true, revision: (nextPhotos[0]!.revision ?? 0) + 1 };
+   }
+   return nextPhotos;
+ }
+ 
++export function removeUploadedPhotoPreview(photos: PhotoPreview[], uploaded: PhotoPreview): PhotoPreview[] {
++  return photos.filter(photo => photo.id !== uploaded.id || photo.revision !== uploaded.revision);
++}
++
++export async function uploadPhotoPreviewsOnce(
++  photos: PhotoPreview[],
++  upload: (photo: PhotoPreview) => Promise<boolean>,
++  onUploaded: (photo: PhotoPreview) => void
++): Promise<boolean> {
++  for (const photo of photos.map(photo => ({ ...photo }))) {
++    if (!(await upload(photo))) return false;
++    onUploaded(photo);
++  }
++  return true;
++}
++
+ async function readFileAsDataUrl(file: File): Promise<string> {
+   return await new Promise((resolve, reject) => {
+     const reader = new FileReader();
+diff --git a/frontend/pages/item/[id]/index/edit.vue b/frontend/pages/item/[id]/index/edit.vue
+index 115be5db..2048bcae 100644
+--- a/frontend/pages/item/[id]/index/edit.vue
++++ b/frontend/pages/item/[id]/index/edit.vue
+@@ -39,8 +39,10 @@
+   import {
+     deletePhoto,
+     fileToPhotoPreview,
++    removeUploadedPhotoPreview,
+     rotatePhotoPreview,
+     setPrimaryPhoto,
++    uploadPhotoPreviewsOnce,
+     type PhotoPreview,
+   } from "~/components/Form/photo-uploader";
+   import { useEntityTypeStore } from "~/stores/entityTypes";
+@@ -105,6 +107,7 @@
+   const capturedPhotos = ref<PhotoPreview[]>([]);
+   const savingCapturedPhotos = ref(false);
+   const capturedPhotoSaveUncertain = ref(false);
++  const pendingPhotoChanges = ref(0);
+ 
+   async function suggestItemNameFromPhoto(file: File) {
+     try {
+@@ -121,64 +124,91 @@
+   }
+ 
+   async function stageCameraPhoto(file: File) {
++    pendingPhotoChanges.value++;
+     try {
+       const hasExistingPhoto = item.value.attachments.some(attachment => attachment.type === "photo");
+       const primary = !hasExistingPhoto && capturedPhotos.value.length === 0;
+       capturedPhotos.value.push(await fileToPhotoPreview(file, primary));
+     } catch {
+       toast.error(t("components.form.camera.capture_error"));
++    } finally {
++      pendingPhotoChanges.value--;
+     }
+   }
+ 
+   function removeCapturedPhoto(index: number) {
++    if (savingCapturedPhotos.value) return;
+     capturedPhotos.value = deletePhoto(capturedPhotos.value, index);
+   }
+ 
+   async function rotateCapturedPhoto(index: number) {
++    if (savingCapturedPhotos.value) return;
+     const photo = capturedPhotos.value[index];
+     if (!photo) return;
++    pendingPhotoChanges.value++;
+     try {
+-      capturedPhotos.value[index] = await rotatePhotoPreview(photo);
++      const rotated = await rotatePhotoPreview(photo);
++      const currentIndex = capturedPhotos.value.findIndex(candidate => candidate.id === photo.id);
++      const current = capturedPhotos.value[currentIndex];
++      if (currentIndex >= 0 && current) {
++        capturedPhotos.value[currentIndex] = {
++          ...rotated,
++          primary: current.primary,
++          revision: (current.revision ?? 0) + 1,
++        };
++      }
+     } catch {
+       toast.error(t("components.entity.create_modal.toast.rotate_process_failed"));
++    } finally {
++      pendingPhotoChanges.value--;
+     }
+   }
+ 
+   function setCapturedPhotoPrimary(index: number) {
++    if (savingCapturedPhotos.value) return;
+     capturedPhotos.value = setPrimaryPhoto(capturedPhotos.value, index);
+   }
+ 
+-  async function saveCapturedPhotos() {
+-    if (savingCapturedPhotos.value || capturedPhotoSaveUncertain.value) return;
++  async function saveCapturedPhotos(): Promise<boolean> {
++    if (savingCapturedPhotos.value || capturedPhotoSaveUncertain.value || pendingPhotoChanges.value) return false;
+     savingCapturedPhotos.value = true;
+     try {
+-      for (const photo of [...capturedPhotos.value]) {
+-        const { data, error } = await api.items.attachments.add(
+-          itemId.value,
+-          photo.file,
+-          photo.photoName,
+-          AttachmentTypes.Photo,
+-          photo.primary
+-        );
+-        if (error) {
+-          capturedPhotoSaveUncertain.value = true;
+-          toast.error(t("components.form.camera.save_uncertain"));
+-          return;
++      const uploaded = await uploadPhotoPreviewsOnce(
++        capturedPhotos.value,
++        async photo => {
++          const { data, error } = await api.items.attachments.add(
++            itemId.value,
++            photo.file,
++            photo.photoName,
++            AttachmentTypes.Photo,
++            photo.primary
++          );
++          if (error) return false;
++          item.value.attachments = data.attachments;
++          return true;
++        },
++        photo => {
++          capturedPhotos.value = removeUploadedPhotoPreview(capturedPhotos.value, photo);
++          toast.success(t("items.toast.attachment_uploaded"));
+         }
+-        item.value.attachments = data.attachments;
+-        capturedPhotos.value = capturedPhotos.value.filter(candidate => candidate !== photo);
+-        toast.success(t("items.toast.attachment_uploaded"));
+-        await saveItem(false);
++      );
++      if (!uploaded) {
++        capturedPhotoSaveUncertain.value = true;
++        toast.error(t("components.form.camera.save_uncertain"));
++        return false;
+       }
++      return capturedPhotos.value.length === 0;
+     } catch {
+       capturedPhotoSaveUncertain.value = true;
+       toast.error(t("components.form.camera.save_uncertain"));
++      return false;
+     } finally {
+       savingCapturedPhotos.value = false;
+     }
+   }
+ 
+   async function saveItem(redirect: boolean) {
++    if (saving.value || savingCapturedPhotos.value || pendingPhotoChanges.value) return;
+     if (!item.value.parent?.id && !parent.value?.id) {
+       toast.error(t("items.toast.failed_save_no_location"));
+       return;
+@@ -222,14 +252,18 @@
+ 
+     const { error } = await api.items.update(itemId.value, payload);
+ 
+-    saving.value = false;
+-
+     if (error) {
++      saving.value = false;
+       toast.error(t("items.toast.failed_save"));
+       return;
+     }
+ 
+     toast.success(t("items.toast.item_saved"));
++    if (capturedPhotos.value.length && !(await saveCapturedPhotos())) {
++      saving.value = false;
++      return;
++    }
++    saving.value = false;
+     if (isConvertingToLocation) {
+       navigateTo("/location/" + itemId.value);
+     } else if (redirect) {
+@@ -500,18 +534,18 @@
+   async function uploadAttachment(files: File[] | null, type: AttachmentTypes | null) {
+     if (!files || files.length === 0 || !files[0]) {
+       return;
+     }
+-
++
+     const { data, error } = await api.items.attachments.add(itemId.value, files[0], files[0].name, type);
+-
++
+     if (error) {
+       toast.error(t("items.toast.failed_upload_attachment"));
+       return;
+     }
+-
++
+     toast.success(t("items.toast.attachment_uploaded"));
++    item.value.attachments = data.attachments;
+-
++
+     await saveItem(false);
+-
++
+-    item.value.attachments = data.attachments;
+   }
+@@ -747,7 +781,7 @@
+             <TooltipContent>{{ $t("items.show_advanced_view_options") }}</TooltipContent>
+           </Tooltip>
+         </TooltipProvider>
+-        <Button size="sm" :disabled="saving" @click="saveItem(true)">
++        <Button size="sm" :disabled="saving || savingCapturedPhotos || pendingPhotoChanges > 0" @click="saveItem(true)">
+           <MdiLoading v-if="saving" class="animate-spin" />
+           <MdiContentSaveOutline v-else />
+           {{ $t("global.save") }}
+@@ -914,14 +948,19 @@
+           </div>
+ 
+           <div class="mt-4 flex flex-wrap gap-2">
+-            <Button type="button" variant="outline" @click="photoCameraOpen = true">
++            <Button
++              type="button"
++              variant="outline"
++              :disabled="saving || savingCapturedPhotos || pendingPhotoChanges > 0 || capturedPhotoSaveUncertain"
++              @click="photoCameraOpen = true"
++            >
+               <MdiCameraOutline class="mr-2 size-4" />
+               {{ $t("components.form.camera.capture") }}
+             </Button>
+             <Button
+               v-if="capturedPhotos.length"
+               type="button"
+-              :disabled="savingCapturedPhotos || capturedPhotoSaveUncertain"
++              :disabled="saving || savingCapturedPhotos || pendingPhotoChanges > 0 || capturedPhotoSaveUncertain"
+               @click="saveCapturedPhotos"
+             >
+               <MdiLoading v-if="savingCapturedPhotos" class="mr-2 size-4 animate-spin" />
+@@ -930,6 +969,7 @@
+           </div>
+           <PhotoUploaderPreview
+             :photos="capturedPhotos"
++            :disabled="savingCapturedPhotos || pendingPhotoChanges > 0 || capturedPhotoSaveUncertain"
+             @delete="removeCapturedPhoto"
+             @rotate="rotateCapturedPhoto"
+             @set-primary="setCapturedPhotoPrimary"

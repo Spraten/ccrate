@@ -1,0 +1,106 @@
+From 78a32fe000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: C-Crate <ccrate@example.invalid>
+Date: Wed, 14 Oct 2026 00:00:00 -0400
+Subject: [PATCH 27/27] Keep incomplete barcode frames retryable
+
+---
+
+diff --git a/frontend/components/Entity/barcode.ts b/frontend/components/Entity/barcode.ts
+index b5578be..07fcb49 100644
+--- a/frontend/components/Entity/barcode.ts
++++ b/frontend/components/Entity/barcode.ts
+@@ -1,5 +1,5 @@
+ import type { BarcodeProduct, EntityListResult, EntitySummary } from "~~/lib/api/types/data-contracts";
+-import { NotFoundException } from "@zxing/library";
++import { ChecksumException, FormatException, NotFoundException } from "@zxing/library";
+ 
+ export type BarcodeDraft = {
+   name: string;
+@@ -174,11 +174,19 @@ export function scannerStatusAfterFrame(
+   error?: unknown
+ ): ScannerStatus {
+   if (hasResult) return "detected";
+-  if (error instanceof NotFoundException) return current;
++  if (isRetryableBarcodeDecodeError(error)) return current;
+   if (error) return "error";
+   return current === "starting" ? "scanning" : current;
+ }
+ 
++export function isRetryableBarcodeDecodeError(error: unknown): boolean {
++  return (
++    error instanceof NotFoundException ||
++    error instanceof ChecksumException ||
++    error instanceof FormatException
++  );
++}
++
+ export function scannerStatusMessage(
+   status: ScannerStatus,
+   barcode: string,
+diff --git a/frontend/components/App/ScannerModal.vue b/frontend/components/App/ScannerModal.vue
+index 90fad12..2fd53df 100644
+--- a/frontend/components/App/ScannerModal.vue
++++ b/frontend/components/App/ScannerModal.vue
+@@ -60,7 +60,7 @@
+ 
+ <script setup lang="ts">
+   import { computed, ref, watch } from "vue";
+-  import { BarcodeFormat, BrowserMultiFormatReader, NotFoundException } from "@zxing/library";
++  import { BarcodeFormat, BrowserMultiFormatReader } from "@zxing/library";
+   import { useI18n } from "vue-i18n";
+   import { DialogID } from "@/components/ui/dialog-provider/utils";
+   import { Dialog, DialogHeader, DialogScrollContent, DialogTitle } from "@/components/ui/dialog";
+@@ -72,6 +72,7 @@
+   import { useDialog } from "@/components/ui/dialog-provider";
+   import {
+     routeBarcodeScanResult,
++    isRetryableBarcodeDecodeError,
+     scannerStatusAfterFrame,
+     scannerStatusMessage as formatScannerStatusMessage,
+     type ScannerStatus,
+@@ -237,7 +238,7 @@
+         } else {
+           scannerStatus.value = scannerStatusAfterFrame(scannerStatus.value, false, err);
+         }
+-        if (err && !(err instanceof NotFoundException)) {
++        if (err && !isRetryableBarcodeDecodeError(err)) {
+           console.error(err);
+           handleError(err);
+         }
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+index 947b6e9..5140a36 100644
+--- a/frontend/components/Entity/barcode.test.ts
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, expect, test, vi } from "vitest";
+-import { NotFoundException } from "@zxing/library";
++import { ChecksumException, FormatException, NotFoundException } from "@zxing/library";
+ import type { BarcodeProduct, EntitySummary } from "~~/lib/api/types/data-contracts";
+ import {
+   applyBarcodeCandidate,
+@@ -19,6 +19,7 @@ import {
+   lookupBarcodeProducts,
+   openBarcodeDuplicate,
+   routeBarcodeScanResult,
++  isRetryableBarcodeDecodeError,
+   scannerStatusMessage,
+   scannerStatusAfterFrame,
+   startBarcodeLookup,
+@@ -105,6 +106,17 @@ describe("item barcode helpers", () => {
+     expect(scannerStatusAfterFrame("scanning", false, new NotFoundException())).toBe("scanning");
+   });
+ 
++  test.each([new ChecksumException(), new FormatException()])("keeps incomplete barcode frames retryable", error => {
++    expect(isRetryableBarcodeDecodeError(error)).toBe(true);
++    expect(scannerStatusAfterFrame("scanning", false, error)).toBe("scanning");
++  });
++
++  test("does not treat real camera errors as retryable decode misses", () => {
++    const cameraError = new Error("camera failure");
++    expect(isRetryableBarcodeDecodeError(cameraError)).toBe(false);
++    expect(scannerStatusAfterFrame("scanning", false, cameraError)).toBe("error");
++  });
++
+   test("moves scanner state from startup to scanning, detected, or actionable error", () => {
+     expect(scannerStatusAfterFrame("starting", false)).toBe("scanning");
+     expect(scannerStatusAfterFrame("scanning", true)).toBe("detected");

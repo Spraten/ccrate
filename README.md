@@ -65,7 +65,7 @@ PYTHONPATH=ops:kiosk:work/hardware/python python3 -m unittest discover -s tests 
 
 Native and browser integration checks require isolated Homebox and companion services. Use disposable local data and synthetic fixtures. Never run demo-creating or mutation checks against the operational Pi, restart its services, or print physical labels as part of routine testing.
 
-Uncertain writes and prints keep their original request identity. Resolve them through Recovery or a read-only status check; never retry automatically. Private credentials, badge keys, databases, and backups stay outside source control and logs. See [user management](docs/USER_MANAGEMENT.md), [clean start](docs/CLEAN_START.md), and [workflow navigation](docs/WORKFLOW_NAVIGATION.md).
+Uncertain writes and prints keep their original request identity. Resolve them through Recovery or a read-only status check; never retry automatically. Private credentials, badge keys, databases, and backups stay outside source control and logs. See [feedback reporting setup](docs/feedback-reporting.md), [user management](docs/USER_MANAGEMENT.md), [clean start](docs/CLEAN_START.md), and [workflow navigation](docs/WORKFLOW_NAVIGATION.md).
 
 ## Deployment ports
 

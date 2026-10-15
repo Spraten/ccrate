@@ -1,0 +1,87 @@
+From 5ceba1c3013de14b2c29279b7aa9a2aad64913bd Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 05:51:52 -0400
+Subject: [PATCH 15/23] update existing barcode from CSV imports
+
+---
+ .../core/services/service_entities.go         |  3 ++
+ .../core/services/service_exports_test.go     | 52 +++++++++++++++++++
+ 2 files changed, 55 insertions(+)
+
+diff --git a/backend/internal/core/services/service_entities.go b/backend/internal/core/services/service_entities.go
+index 11be94c8..93aea3be 100644
+--- a/backend/internal/core/services/service_entities.go
++++ b/backend/internal/core/services/service_entities.go
+@@ -489,6 +489,9 @@ func (svc *EntityService) CsvImport(ctx context.Context, gid uuid.UUID, data io.
+ 			Notes:  row.Notes,
+ 			Fields: fields,
+ 		}
++		if _, hasBarcodeColumn := sheet.GetColumn("HB.barcode"); hasBarcodeColumn {
++			updateEntity.Barcode = &row.Barcode
++		}
+ 
+ 		_, err = svc.repo.Entities.UpdateByGroup(ctx, gid, updateEntity)
+ 		if err != nil {
+diff --git a/backend/internal/core/services/service_exports_test.go b/backend/internal/core/services/service_exports_test.go
+index 3e8fa8b7..a32355ee 100644
+--- a/backend/internal/core/services/service_exports_test.go
++++ b/backend/internal/core/services/service_exports_test.go
+@@ -376,6 +376,58 @@ func TestCSVExportImportPreservesBarcodeAndAcceptsOlderFiles(t *testing.T) {
+ 	assert.Empty(t, legacyItem.Barcode)
+ }
+ 
++func TestCSVImportUpdatesExistingBarcodeOnlyWhenColumnIsPresent(t *testing.T) {
++	tests := []struct {
++		name        string
++		include     bool
++		value       string
++		wantBarcode string
++	}{
++		{name: "replaces barcode", include: true, value: "0009876", wantBarcode: "0009876"},
++		{name: "clears barcode with blank value", include: true, value: "", wantBarcode: ""},
++		{name: "older CSV preserves barcode", include: false, wantBarcode: "0012345"},
++	}
++
++	for _, tc := range tests {
++		t.Run(tc.name, func(t *testing.T) {
++			ctx := context.Background()
++			g, err := tRepos.Groups.GroupCreate(ctx, "csv-existing-barcode-"+fk.Str(4), uuid.Nil)
++			require.NoError(t, err)
++			locationType, err := tRepos.EntityTypes.GetDefault(ctx, g.ID, true)
++			require.NoError(t, err)
++			itemType, err := tRepos.EntityTypes.GetDefault(ctx, g.ID, false)
++			require.NoError(t, err)
++			location, err := tRepos.Entities.Create(ctx, g.ID, repo.EntityCreate{
++				Name:         "Barcode Import Location",
++				EntityTypeID: locationType.ID,
++			})
++			require.NoError(t, err)
++			ref := "existing-barcode-ref-" + fk.Str(4)
++			_, err = tRepos.Entities.Create(ctx, g.ID, repo.EntityCreate{
++				ImportRef:    ref,
++				Name:         "Existing barcode item",
++				ParentID:     location.ID,
++				EntityTypeID: itemType.ID,
++				Barcode:      "0012345",
++			})
++			require.NoError(t, err)
++
++			header := "HB.import_ref,HB.location,HB.name"
++			row := ref + ",Barcode Import Location,Existing barcode item"
++			if tc.include {
++				header += ",HB.barcode"
++				row += "," + tc.value
++			}
++			imported, err := tSvc.Entities.CsvImport(ctx, g.ID, strings.NewReader(header+"\n"+row+"\n"))
++			require.NoError(t, err)
++			require.Equal(t, 1, imported)
++			updated, err := tRepos.Entities.GetByRef(ctx, g.ID, ref)
++			require.NoError(t, err)
++			assert.Equal(t, tc.wantBarcode, updated.Barcode)
++		})
++	}
++}
++
+ func TestCSVImportRejectsSelfParentRef(t *testing.T) {
+ 	ctx := context.Background()
+ 

@@ -18,9 +18,93 @@ import '@print-design-pro/styles/index.css'
 import './offline-fonts.css'
 
 type Profile = 'supvan' | 'letter'
-type Message = { channel: 'label-designer'; nonce: string; type: string; id?: string; action?: string; data?: any; ok?: boolean; result?: any; error?: string }
+type Message = { channel: 'label-designer'; nonce: string; type: string; id?: string; action?: string; data?: any; ok?: boolean; result?: any; error?: string; status?: number }
 export type LabelDesignerBridge = { context?: () => unknown; request?: (action: string, data?: any) => Promise<any>; write?: (action: string, data: any, label: string, subject: string) => Promise<any>; notify?: (message: string) => void; changed?: (document: TemplateDocument) => void; dirty?: (value: boolean) => void; busy?: (value: boolean) => void; activity?: () => void }
 export type LabelDesignerHandle = { canLeave: () => boolean; dispose: () => void }
+
+export function applyTemplateSaveResult(state: any, intent: any, result: any, currentSnapshot: any): void {
+  state.selectedId = result.id || state.selectedId
+  state.revision = result.revision || state.revision + 1
+  if (result.document) intent.current.name = result.name || intent.current.name
+  state.baseline = intent.submitted
+  state.dirty = JSON.stringify(currentSnapshot) !== intent.submitted
+  state.templates = [...state.templates.filter((template: any) => template.id !== result.id), result]
+}
+
+export function createTemplateSaveRecovery(
+  makeKey: () => string,
+  write: (data: any) => Promise<any>,
+  lookup: (key: string) => Promise<any>,
+  setPending: (intent: any) => void,
+  reconcile: (intent: any, result: any) => void,
+  notify: (message: string) => void,
+): any {
+  let pending: any = null
+  let writing = false
+  let checking = false
+  const set = (intent: any) => { pending = intent; setPending(intent) }
+  const check = async () => {
+    if (!pending || writing || checking) return { status: 'idle' }
+    const intent = pending
+    checking = true
+    try {
+      const result = await lookup(intent.data.request_key)
+      if (!result) {
+        notify('No saved result is recorded yet. This save remains unresolved; check again before saving anything else.')
+        return { status: 'pending' }
+      }
+      reconcile(intent, result)
+      set(null)
+      return { status: 'saved', result }
+    } catch {
+      notify('The save result is still unknown. Check save result before starting another save.')
+      return { status: 'uncertain' }
+    } finally { checking = false }
+  }
+  return {
+    pending: () => pending,
+    restore(saved: any) {
+      if (pending || saved?.path !== 'labels/templates/save' || !saved.key) return null
+      if (!saved.intent) {
+        const intent = { data: { request_key: saved.key }, submitted: '', duplicate: false, current: {}, legacy: true }
+        set(intent)
+        return intent
+      }
+      if (saved.key !== saved.intent.request_key || !saved.intent.document) return null
+      const current = cloneJson(saved.intent.document)
+      const intent = { data: saved.intent, submitted: JSON.stringify(current), duplicate: false, current, legacy: false }
+      set(intent)
+      return intent
+    },
+    check,
+    async save(data: any, submitted: string, duplicate: boolean, current: any) {
+      if (pending) {
+        notify('This save is still unresolved. Check save result before starting another save.')
+        return { status: 'blocked' }
+      }
+      const intent = { data: { ...data, request_key: makeKey() }, submitted, duplicate, current }
+      set(intent)
+      writing = true
+      try {
+        const result = await write(intent.data)
+        reconcile(intent, result)
+        set(null)
+        return { status: 'saved', result }
+      } catch (error: any) {
+        writing = false
+        if ([400, 409].includes(Number(error?.status))) {
+          set(null)
+          notify(`Template save was rejected: ${error.message || 'The saved template could not be updated.'}`)
+          return { status: 'rejected', error }
+        }
+        const outcome = await check()
+        if (outcome.status === 'saved') return outcome
+        notify('The save outcome is unknown. Check save result before starting another save.')
+        throw new Error('Save outcome is unknown. Check save result before starting another save.')
+      } finally { writing = false }
+    },
+  }
+}
 
 const starterMap = starters as Record<string, TemplateDocument>
 export function mmToFontPoints(mm: number): number { return mm * 72 / 25.4 }
@@ -61,6 +145,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
   let disposed = false, dirty = false, busy = false, instanceEpoch = 0, activeFieldEpoch = 0
   let bridgeContext: any = null
   let applyBridgeContext: ((context: any) => void) | null = null
+  let restorePendingTemplateSave: ((saved: any) => void) | null = null
   const send = (message: Omit<Message, 'channel' | 'nonce'>) => { if (!disposed && window.parent !== window) window.parent.postMessage({ channel: 'label-designer', nonce, ...message }, trustedOrigin) }
   const requests = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }>()
   const request = (action: string, data?: any) => new Promise<any>((resolve, reject) => {
@@ -70,7 +155,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
     setup() {
       const doc = useDocumentStore(), history = useHistoryStore(), selection = useSelectionStore(), viewport = useViewportStore(), batchData = useBatchDataStore()
       const document = ref(starter('supvan')), revision = ref(0), profile = ref<Profile>('supvan'), selectedId = ref<string | null>('starter:supvan:left')
-      const templates = ref<any[]>([]), message = ref(''), preview = ref<any>(null), sampleName = ref('Sample item'), sampleCode = ref(''), selectedItem = ref('')
+      const templates = ref<any[]>([]), pendingTemplateSave = ref<any>(null), message = ref(''), preview = ref<any>(null), sampleName = ref('Sample item'), sampleCode = ref(''), sampleShortCode = ref(''), sampleDisplayId = ref(''), selectedItem = ref('')
       const previewDialog = ref<HTMLDialogElement | null>(null)
       let baseline = ''
       let previewOpener: HTMLElement | null = null
@@ -102,20 +187,55 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } }); bridge.changed?.(current)
       }
       const notify = (text: string) => { message.value = text; bridge.notify?.(text) }
+      const saveRecovery = createTemplateSaveRecovery(
+        secureRandomId,
+        data => invoke('labels/templates/save', data, true),
+        key => invoke('labels/templates/result', { request_key: key }),
+        intent => { pendingTemplateSave.value = intent },
+        (intent, result) => {
+          if (intent.legacy && result.document) {
+            profile.value = result.profile || 'supvan'
+            revision.value = result.revision || 0
+            load(result.document, result.id || null, true)
+            intent.current = snapshot()
+            intent.submitted = JSON.stringify(intent.current)
+          }
+          const state = { selectedId: selectedId.value, revision: revision.value, templates: templates.value, baseline, dirty }
+          applyTemplateSaveResult(state, intent, result, snapshot())
+          selectedId.value = state.selectedId; revision.value = state.revision; templates.value = state.templates; baseline = state.baseline; dirty = state.dirty
+          bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } })
+        },
+        notify,
+      )
       const placementWarning = () => notify('This element overlaps existing artwork. It is selected; move it to a clear area before saving.')
-      const load = (value: TemplateDocument, id: string | null = null) => {
+      const load = (value: TemplateDocument, id: string | null = null, restoringPending = false) => {
+        if (saveRecovery.pending() && !restoringPending) return
         document.value = cloneJson(value); openTemplate(document.value, { document: doc, history, selection });
         selectedId.value = id; if (!id) revision.value = 0; baseline = JSON.stringify(snapshot()); dirty = false; draftPreview.invalidate(); closePreview(); bridge.dirty?.(false); send({ type: 'dirty', data: { dirty: false } }); fitToPage(document.value.page)
       }
+      restorePendingTemplateSave = (saved: any) => {
+        const intent = saveRecovery.restore(saved)
+        if (!intent) return
+        if (intent.legacy) return
+        const data = intent.data
+        profile.value = data.profile || (String(data.id || '').includes('letter') ? 'letter' : 'supvan')
+        revision.value = data.revision || 0
+        load(data.document, data.id || null, true)
+        intent.current = snapshot()
+        intent.submitted = JSON.stringify(intent.current)
+      }
       applyBridgeContext = (context: any) => {
         applyHostTheme(context?.theme)
+        restorePendingTemplateSave?.(context?.pending_template_save)
         const item = context?.selected_item
         const nextId = typeof item?.entity_id === 'string' ? item.entity_id : ''
         const nextName = typeof item?.name === 'string' ? item.name : 'Sample item'
         const nextCode = typeof item?.asset_code === 'string' ? item.asset_code : ''
-        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value) { draftPreview.invalidate(); closePreview() }
-        selectedItem.value = nextId; sampleName.value = nextName; sampleCode.value = nextCode
-        batchData.setPreviewOverrides(nextId ? { item_name: nextName, asset_code: nextCode, item_path: `/item/${nextId}` } : null)
+        const nextShortCode = typeof item?.short_code === 'string' ? item.short_code : ''
+        const nextDisplayId = typeof item?.display_id === 'string' ? item.display_id : ''
+        if (nextId !== selectedItem.value || nextName !== sampleName.value || nextCode !== sampleCode.value || nextShortCode !== sampleShortCode.value || nextDisplayId !== sampleDisplayId.value) { draftPreview.invalidate(); closePreview() }
+        selectedItem.value = nextId; sampleName.value = nextName; sampleCode.value = nextCode; sampleShortCode.value = nextShortCode; sampleDisplayId.value = nextDisplayId
+        batchData.setPreviewOverrides(nextId ? { item_name: nextName, asset_code: nextCode, short_code: nextShortCode, display_id: nextDisplayId, item_path: `/item/${nextId}` } : null)
       }
       const invoke = async (action: string, data: any, write = false) => {
         busy = true; bridge.busy?.(true); send({ type: 'busy', data: { busy: true } })
@@ -133,19 +253,14 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
         const submitted = JSON.stringify(current)
         const checked = validateLabelDocument(current, profile.value)
         const makeCopy = duplicate || !selectedId.value || selectedId.value.startsWith('starter:')
-        const key = secureRandomId(), data = { request_key: key, id: makeCopy ? null : selectedId.value, revision: makeCopy ? 0 : revision.value, profile: profile.value, document: checked, name: checked.name }
-        try {
-          const result = await invoke('labels/templates/save', data, true); selectedId.value = result.id || selectedId.value; revision.value = result.revision || revision.value + 1; if (result.document) current.name = result.name || current.name; baseline = submitted; dirty = JSON.stringify(snapshot()) !== submitted; templates.value = [...templates.value.filter((t: any) => t.id !== result.id), result]; bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } }); notify(duplicate ? 'Copy saved.' : 'Template saved.')
-        } catch (error) {
-          const result = await invoke('labels/templates/result', { request_key: key }).catch(() => null)
-          if (!result) throw error
-          selectedId.value = result.id || selectedId.value; revision.value = result.revision || revision.value + 1; templates.value = [...templates.value.filter((t: any) => t.id !== result.id), result]; baseline = submitted; dirty = JSON.stringify(snapshot()) !== submitted; bridge.dirty?.(dirty); send({ type: 'dirty', data: { dirty } }); notify('Saved result confirmed.')
-        }
+        const outcome = await saveRecovery.save({ id: makeCopy ? null : selectedId.value, revision: makeCopy ? 0 : revision.value, profile: profile.value, document: checked, name: checked.name }, submitted, duplicate, current)
+        if (outcome.status === 'saved') notify(outcome.result ? (duplicate ? 'Copy saved.' : 'Template saved.') : 'Saved result confirmed.')
       }
+      const checkSaveResult = async () => { const outcome = await saveRecovery.check(); if (outcome.status === 'saved') notify('Saved result confirmed.') }
       const previewDraft = async () => {
         const version = draftPreview.begin()
         const opener = window.document.activeElement instanceof HTMLElement ? window.document.activeElement : null
-        const data = selectedItem.value ? { mode: 'item_draft', entity_id: selectedItem.value, profile: profile.value, document: snapshot() } : { mode: 'synthetic', profile: profile.value, document: snapshot(), sample: { item_name: sampleName.value, asset_code: sampleCode.value } }
+        const data = selectedItem.value ? { mode: 'item_draft', entity_id: selectedItem.value, profile: profile.value, document: snapshot() } : { mode: 'synthetic', profile: profile.value, document: snapshot(), sample: { item_name: sampleName.value, asset_code: sampleCode.value, short_code: sampleShortCode.value, display_id: sampleDisplayId.value } }
         const result = await invoke('labels/preview', data)
         if (!draftPreview.accepts(version, disposed)) return
         previewOpener = opener
@@ -155,25 +270,26 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
           previewDialog.value?.showModal()
       }
       const buttons = () => h('div', { class: 'label-host-toolbar' }, [
-        h('label', ['Label size ', h('select', { value: profile.value, onChange: (e: Event) => { if (dirty && !window.confirm('Discard unsaved label design changes?')) { (e.target as HTMLSelectElement).value = profile.value; return } profile.value = (e.target as HTMLSelectElement).value as Profile; load(starter(profile.value), `starter:${profile.value}:left`) } }, [h('option', { value: 'supvan' }, 'SUPVAN · 40 × 28 mm'), h('option', { value: 'letter' }, 'Letter · 60 × 40 mm')])]),
+        h('label', ['Label size ', h('select', { value: profile.value, disabled: !!pendingTemplateSave.value, onChange: (e: Event) => { if (saveRecovery.pending()) return; if (dirty && !window.confirm('Discard unsaved label design changes?')) { (e.target as HTMLSelectElement).value = profile.value; return } profile.value = (e.target as HTMLSelectElement).value as Profile; load(starter(profile.value), `starter:${profile.value}:left`) } }, [h('option', { value: 'supvan' }, 'SUPVAN · 40 × 28 mm'), h('option', { value: 'letter' }, 'Letter · 60 × 40 mm')])]),
         h('span', { class: 'label-host-paper-size', 'aria-live': 'polite' }, `Paper size: ${document.value.page.widthMm} × ${document.value.page.heightMm} mm`),
-        h('label', ['Design ', h('select', { 'aria-label': 'Label design', value: selectedId.value || '', onChange: (e: Event) => { const id = (e.target as HTMLSelectElement).value; if (dirty && !window.confirm('Discard unsaved label design changes?')) { (e.target as HTMLSelectElement).value = selectedId.value || ''; return } if (!id) { load(blankDesign(profile.value), null); return } loadTemplate(id).catch((err: Error) => notify(err.message)) } }, [
+        h('label', ['Design ', h('select', { 'aria-label': 'Label design', value: selectedId.value || '', disabled: !!pendingTemplateSave.value, onChange: (e: Event) => { if (saveRecovery.pending()) return; const id = (e.target as HTMLSelectElement).value; if (dirty && !window.confirm('Discard unsaved label design changes?')) { (e.target as HTMLSelectElement).value = selectedId.value || ''; return } if (!id) { load(blankDesign(profile.value), null); return } loadTemplate(id).catch((err: Error) => notify(err.message)) } }, [
           h('option', { value: '' }, 'Blank design'),
           h('optgroup', { label: 'Starter designs' }, [
             ...Object.keys(starterMap).filter(k => k.includes(profile.value)).map(k => h('option', { value: k }, starterMap[k]!.name)),
           ]),
           h('optgroup', { label: 'Saved designs' }, templates.value.filter((t: any) => !String(t.id).startsWith('starter:') && templateProfile(t) === profile.value).map((t: any) => h('option', { value: t.id }, t.name))),
         ])]),
-        h('button', { onClick: () => loadList().catch((e: Error) => notify(e.message)) }, 'Refresh designs'),
-        h('button', { onClick: () => save(false).catch((e: Error) => notify(e.message)) }, 'Save'), h('button', { onClick: () => save(true).catch((e: Error) => notify(e.message)) }, 'Duplicate'),
-        h('button', { onClick: () => { if (dirty && !window.confirm('Discard unsaved label design changes?')) return; selectedId.value ? loadTemplate(selectedId.value).catch((e: Error) => notify(e.message)) : load(blankDesign(profile.value), null) } }, 'Reset design'),
-        h('span', { class: 'label-host-selected-item', role: 'status' }, selectedItem.value ? `Draft preview for ${sampleName.value}` : 'Draft preview with a sample item'),
-        h('button', { onClick: () => previewDraft().catch((e: Error) => notify(e.message)) }, 'Preview draft'),
+        h('button', { disabled: !!pendingTemplateSave.value, onClick: () => loadList().catch((e: Error) => notify(e.message)) }, 'Refresh designs'),
+        pendingTemplateSave.value ? h('button', { onClick: () => checkSaveResult().catch((e: Error) => notify(e.message)) }, 'Check save result') : null,
+        h('button', { disabled: !!pendingTemplateSave.value, onClick: () => save(false).catch((e: Error) => notify(e.message)) }, 'Save'), h('button', { disabled: !!pendingTemplateSave.value, onClick: () => save(true).catch((e: Error) => notify(e.message)) }, 'Duplicate'),
+        h('button', { disabled: !!pendingTemplateSave.value, onClick: () => { if (saveRecovery.pending()) return; if (dirty && !window.confirm('Discard unsaved label design changes?')) return; selectedId.value ? loadTemplate(selectedId.value).catch((e: Error) => notify(e.message)) : load(blankDesign(profile.value), null) } }, 'Reset design'),
+        h('span', { class: 'label-host-selected-item', role: 'status' }, selectedItem.value ? `Draft preview for ${sampleName.value}${sampleDisplayId.value ? ` · ${sampleDisplayId.value}` : ''}` : 'Draft preview with a sample item'),
+        h('button', { disabled: !!pendingTemplateSave.value, onClick: () => previewDraft().catch((e: Error) => notify(e.message)) }, 'Preview draft'),
       ])
       watch(() => history.editVersion, changed, { flush: 'sync' })
-      onMounted(() => { window.addEventListener('pp-element-placement-warning', placementWarning); load(starter('supvan'), 'starter:supvan:left'); baseline = JSON.stringify(snapshot()); void loadList().catch((e: Error) => notify(e.message)); send({ type: 'ready', data: { nonce } }) })
+      onMounted(() => { window.addEventListener('pp-element-placement-warning', placementWarning); if (!saveRecovery.pending()) { load(starter('supvan'), 'starter:supvan:left'); baseline = JSON.stringify(snapshot()) }; void loadList().catch((e: Error) => notify(e.message)); send({ type: 'ready', data: { nonce } }) })
       onBeforeUnmount(() => { window.removeEventListener('pp-element-placement-warning', placementWarning); if (dirty) bridge.dirty?.(true) })
-      return () => h('div', { class: 'label-host' }, [buttons(), h('p', { role: 'status', class: 'label-host-message' }, message.value), h('div', { class: 'label-host-editor' }, [h(PrintDesigner, { modelValue: document.value, 'onUpdate:modelValue': (next: TemplateDocument) => { const unchanged = isSameDocumentSnapshot(next, snapshot()); document.value = next; if (!unchanged) changed() } })]), preview.value ? h('dialog', { ref: previewDialog, class: 'label-preview-dialog', 'aria-labelledby': 'label-preview-title', onClose: finishPreview }, [h('header', [h('h2', { id: 'label-preview-title' }, 'Draft preview'), h('button', { type: 'button', autofocus: true, onClick: closePreview }, 'Close preview')]), h('img', { src: preview.value.image, alt: 'Rendered draft label preview' })]) : null])
+      return () => h('div', { class: 'label-host' }, [buttons(), h('p', { role: 'status', class: 'label-host-message' }, message.value), h('div', { class: 'label-host-editor', inert: !!pendingTemplateSave.value }, [h(PrintDesigner, { modelValue: document.value, 'onUpdate:modelValue': (next: TemplateDocument) => { if (pendingTemplateSave.value) return; const unchanged = isSameDocumentSnapshot(next, snapshot()); document.value = next; if (!unchanged) changed() } })]), preview.value ? h('dialog', { ref: previewDialog, class: 'label-preview-dialog', 'aria-labelledby': 'label-preview-title', onClose: finishPreview }, [h('header', [h('h2', { id: 'label-preview-title' }, 'Draft preview'), h('button', { type: 'button', autofocus: true, onClick: closePreview }, 'Close preview')]), h('img', { src: preview.value.image, alt: 'Rendered draft label preview' })]) : null])
     },
   }))
   const exportGuard = document.createElement('style'); exportGuard.textContent = `:root,:root[data-theme="dark"]{--pp-color-app-bg:#f5f7f5;--pp-color-app-panel:#fff;--pp-color-app-inset:#edf1ee;--pp-color-app-border:#d9e1db;--pp-color-app-border2:#b8c7bb;--pp-color-app-desk:#e9eee9;--pp-color-app-text:#1c2b21;--pp-color-app-text2:#53645a;--pp-color-app-text3:#87958b;--pp-color-brand-500:#36704f;--pp-color-brand-600:#285d40;--pp-color-brand-soft:#e7f0e9;--pp-color-brand-soft2:#d5e5d9;--pp-color-brand-50:#e7f0e9;--pp-color-brand-100:#d5e5d9;--pp-color-brand-700:#244f37;--pp-color-app-ok:#36704f;--pp-color-app-ok-soft:#e7f0e9}
@@ -202,7 +318,7 @@ export function mountLabelDesigner(container: HTMLElement, bridge: LabelDesigner
     if (disposed || event.origin !== trustedOrigin || event.source !== window.parent || event.data?.channel !== 'label-designer' || event.data.nonce !== nonce) return
     bridge.activity?.()
     const message = event.data
-    if (message.type === 'response' && message.id) { const pending = requests.get(message.id); if (pending) { requests.delete(message.id); message.ok ? pending.resolve(message.result) : pending.reject(new Error(message.error || 'Label request failed.')) } }
+    if (message.type === 'response' && message.id) { const pending = requests.get(message.id); if (pending) { requests.delete(message.id); if (message.ok) pending.resolve(message.result); else pending.reject(Object.assign(new Error(message.error || 'Label request failed.'), { status: message.status })) } }
     if (message.type === 'initialize') { bridgeContext = message.data?.context; applyBridgeContext?.(bridgeContext) }
     if (message.type === 'session-activity') bridge.activity?.()
   }

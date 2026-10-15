@@ -26,6 +26,8 @@ def normalize(raw):
         if not parsed.hostname or parsed.username or parsed.password:return {'kind':'invalid','reason':'Malformed manufacturer QR URL'}
         return {'kind':'manufacturer','manufacturer_code':value}
     if re.fullmatch(r'\d{3}-\d{3}',value):return {'kind':'asset','asset_id':value}
+    match=re.fullmatch(r'([A-Za-z0-9]{3})-([0-9]{3,})',value)
+    if match:return {'kind':'short_code','short_code':f'{match.group(1).upper()}-{match.group(2)}'}
     if value.isascii() and value.isdigit() and len(value) in (8,12,13,14):
         total=sum(int(n)*(3 if i%2==0 else 1) for i,n in enumerate(reversed(value[:-1])))
         if (10-total%10)%10==int(value[-1]):return {'kind':'product','gtin':value}
@@ -39,6 +41,7 @@ def resolve_serial(code, items):
     """Match native serial metadata exactly; ambiguity never selects an asset."""
     matches=[e for e in items if not e.get('entityType',{}).get('isLocation')
              and not e.get('archived') and e.get('serialNumber')==code['serial']]
+    matches=unique_entities(matches)
     if len(matches)==1:
         return {**code,'entity':matches[0]}
     if matches:
@@ -47,6 +50,20 @@ def resolve_serial(code, items):
 
 MANUFACTURER_FIELD='Manufacturer QR code'
 GTIN_FIELD='Product GTIN'
+
+def unique_entities(items):
+    """Collapse duplicate native records by UUID while keeping distinct records separate."""
+    unique={}
+    unkeyed=[]
+    for entity in items:
+        identifier=entity.get('id')
+        if not isinstance(identifier,str) or not identifier:
+            unkeyed.append(entity)
+            continue
+        try:key=str(UUID(identifier))
+        except ValueError:key=identifier
+        unique.setdefault(key,entity)
+    return [*unique.values(),*unkeyed]
 
 def manufacturer_code(raw):
     if not isinstance(raw,str) or not raw.strip() or len(raw)>2048 or any(ord(c)<32 for c in raw):
@@ -62,17 +79,29 @@ def resolve_equipment(raw,code,items):
     active=[e for e in items if not e.get('archived') and not e.get('entityType',{}).get('isLocation')]
     value=raw.strip()
     def field(entity,name):return [f.get('textValue','') for f in entity.get('fields',[]) if f.get('name')==name]
-    matches=[e for e in active if value in field(e,MANUFACTURER_FIELD)]
+    if code['kind']=='short_code':
+        canonical=code['short_code'].upper()
+        matches=[e for e in active if e.get('barcode')==value or isinstance(e.get('shortCode'),str) and e['shortCode'].strip().upper()==canonical]
+        metadata=[e for e in active if isinstance(e.get('serialNumber'),str) and e['serialNumber'].strip().upper()==canonical or
+                  any(v.strip().upper()==canonical for v in field(e,MANUFACTURER_FIELD) if isinstance(v,str))]
+        owners=unique_entities(matches+metadata)
+        if len(owners)>1:
+            return {**code,'ambiguous':True,'reason':'This code matches multiple item identifiers. Check the item short code, serial number, or manufacturer code.'}
+        if owners:return {**code,'entity':owners[0]}
+        return {**code,'reason':'No equipment is registered with this short code.'}
+    matches=[e for e in active if e.get('barcode')==value or value in field(e,MANUFACTURER_FIELD)]
     if code['kind']=='serial':
-        matches=[e for e in active if value in field(e,MANUFACTURER_FIELD) or e.get('serialNumber')==code['serial']]
+        matches.extend(e for e in active if e.get('serialNumber')==code['serial'])
         if not matches:return resolve_serial(code,active)
-    if not matches and code['kind']=='manufacturer':
+    if code['kind']=='manufacturer':
         params=parse_qs(urlsplit(value).query)
         serials={v for k,values in params.items() if k.lower() in ('sn','serial','serialnumber','serial_number') for v in values if v}
-        if len(serials)==1:matches=[e for e in active if e.get('serialNumber')==next(iter(serials))]
-    if not matches and code['kind']=='product':
+        if len(serials)==1:matches.extend(e for e in active if e.get('serialNumber')==next(iter(serials)))
+    if code['kind']=='product':
         canonical=code['gtin'].zfill(14)
-        matches=[e for e in active if any(v.zfill(14)==canonical for v in field(e,GTIN_FIELD))]
+        matches.extend(e for e in active if any(v.zfill(14)==canonical for v in field(e,GTIN_FIELD)
+                                                   if isinstance(v,str) and v.isdigit()))
+    matches=unique_entities(matches)
     if len(matches)==1:return {**code,'entity':matches[0]}
     if matches:return {**code,'ambiguous':True,'reason':'This manufacturer code matches multiple items. Scan the individual C-Crate label or serial number.'}
     if code['kind'] in ('manufacturer','product'):return {**code,'reason':'No equipment is registered with this manufacturer code. Add its code in C-Crate or when adding equipment.'}

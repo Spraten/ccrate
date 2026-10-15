@@ -1,0 +1,188 @@
+From 149b467776b008194f4d75ea4aa892204743600f Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 22:27:04 -0400
+Subject: [PATCH 07/23] fix: clean barcode query review findings
+
+---
+ backend/app/api/handlers/v1/v1_ctrl_entities.go  | 8 ++++----
+ backend/app/api/static/docs/docs.go              | 4 ----
+ backend/app/api/static/docs/openapi-3.json       | 4 ----
+ backend/app/api/static/docs/openapi-3.yaml       | 3 ---
+ backend/app/api/static/docs/swagger.json         | 4 ----
+ backend/app/api/static/docs/swagger.yaml         | 3 ---
+ backend/internal/data/repo/repo_entities_test.go | 1 +
+ docs/public/api/openapi-3.0.json                 | 4 ----
+ docs/public/api/openapi-3.0.yaml                 | 3 ---
+ docs/public/api/swagger-2.0.json                 | 4 ----
+ docs/public/api/swagger-2.0.yaml                 | 3 ---
+ 11 files changed, 5 insertions(+), 36 deletions(-)
+
+diff --git a/backend/app/api/handlers/v1/v1_ctrl_entities.go b/backend/app/api/handlers/v1/v1_ctrl_entities.go
+index 1bc35ade..65153a0e 100644
+--- a/backend/app/api/handlers/v1/v1_ctrl_entities.go
++++ b/backend/app/api/handlers/v1/v1_ctrl_entities.go
+@@ -43,6 +43,10 @@ func startEntityCtrlSpan(ctx context.Context, name string, attrs ...attribute.Ke
+ 	return entityCtrlTracer().Start(ctx, name, trace.WithAttributes(attrs...))
+ }
+ 
++func entityBarcodeQueryValue(r *http.Request) string {
++	return strings.TrimSpace(r.URL.Query().Get("barcode"))
++}
++
+ // HandleEntitiesGetAll godoc
+ //
+ //	@Summary	Query All Entities
+@@ -57,10 +61,6 @@ func startEntityCtrlSpan(ctx context.Context, name string, attrs ...attribute.Ke
+ //	@Success	200			{object}	repo.EntityListResult
+ //	@Router		/v1/entities [GET]
+ //	@Security	Bearer
+-func entityBarcodeQueryValue(r *http.Request) string {
+-	return strings.TrimSpace(r.URL.Query().Get("barcode"))
+-}
+-
+ func (ctrl *V1Controller) HandleEntitiesGetAll() errchain.HandlerFunc {
+ 	extractQuery := func(r *http.Request) repo.EntityQuery {
+ 		params := r.URL.Query()
+diff --git a/backend/app/api/static/docs/docs.go b/backend/app/api/static/docs/docs.go
+index dcb7b006..40d48381 100644
+--- a/backend/app/api/static/docs/docs.go
++++ b/backend/app/api/static/docs/docs.go
+@@ -4284,10 +4284,6 @@ const docTemplate = `{
+                 "used_at": {
+                     "description": "UsedAt holds the value of the \"used_at\" field.",
+                     "type": "string"
+-                },
+-                "user_id": {
+-                    "description": "UserID holds the value of the \"user_id\" field.",
+-                    "type": "string"
+                 }
+             }
+         },
+diff --git a/backend/app/api/static/docs/openapi-3.json b/backend/app/api/static/docs/openapi-3.json
+index 7ccd9ded..92cda16d 100644
+--- a/backend/app/api/static/docs/openapi-3.json
++++ b/backend/app/api/static/docs/openapi-3.json
+@@ -4525,10 +4525,6 @@
+                     "used_at": {
+                         "description": "UsedAt holds the value of the \"used_at\" field.",
+                         "type": "string"
+-                    },
+-                    "user_id": {
+-                        "description": "UserID holds the value of the \"user_id\" field.",
+-                        "type": "string"
+                     }
+                 }
+             },
+diff --git a/backend/app/api/static/docs/openapi-3.yaml b/backend/app/api/static/docs/openapi-3.yaml
+index 0d6f5d4d..2c8bce6a 100644
+--- a/backend/app/api/static/docs/openapi-3.yaml
++++ b/backend/app/api/static/docs/openapi-3.yaml
+@@ -2813,9 +2813,6 @@ components:
+         used_at:
+           description: UsedAt holds the value of the "used_at" field.
+           type: string
+-        user_id:
+-          description: UserID holds the value of the "user_id" field.
+-          type: string
+     ent.PasswordResetTokensEdges:
+       type: object
+       properties:
+diff --git a/backend/app/api/static/docs/swagger.json b/backend/app/api/static/docs/swagger.json
+index 3e80db40..0feecbaa 100644
+--- a/backend/app/api/static/docs/swagger.json
++++ b/backend/app/api/static/docs/swagger.json
+@@ -4281,10 +4281,6 @@
+                 "used_at": {
+                     "description": "UsedAt holds the value of the \"used_at\" field.",
+                     "type": "string"
+-                },
+-                "user_id": {
+-                    "description": "UserID holds the value of the \"user_id\" field.",
+-                    "type": "string"
+                 }
+             }
+         },
+diff --git a/backend/app/api/static/docs/swagger.yaml b/backend/app/api/static/docs/swagger.yaml
+index c210deb9..ba286763 100644
+--- a/backend/app/api/static/docs/swagger.yaml
++++ b/backend/app/api/static/docs/swagger.yaml
+@@ -761,9 +761,6 @@ definitions:
+       used_at:
+         description: UsedAt holds the value of the "used_at" field.
+         type: string
+-      user_id:
+-        description: UserID holds the value of the "user_id" field.
+-        type: string
+     type: object
+   ent.PasswordResetTokensEdges:
+     properties:
+diff --git a/backend/internal/data/repo/repo_entities_test.go b/backend/internal/data/repo/repo_entities_test.go
+index 81b7f26f..1018aceb 100644
+--- a/backend/internal/data/repo/repo_entities_test.go
++++ b/backend/internal/data/repo/repo_entities_test.go
+@@ -911,6 +911,7 @@ func TestEntityRepository_BarcodeQuery(t *testing.T) {
+ 		Page: -1, PageSize: -1, Barcode: "  " + barcode + "  ",
+ 	})
+ 	require.NoError(t, err)
++	require.Len(t, result.Items, 2)
+ 	assert.Equal(t, 2, result.Total)
+ 	assert.ElementsMatch(t, []uuid.UUID{first.ID, second.ID}, []uuid.UUID{result.Items[0].ID, result.Items[1].ID})
+ 
+diff --git a/docs/public/api/openapi-3.0.json b/docs/public/api/openapi-3.0.json
+index 7ccd9ded..92cda16d 100644
+--- a/docs/public/api/openapi-3.0.json
++++ b/docs/public/api/openapi-3.0.json
+@@ -4525,10 +4525,6 @@
+                     "used_at": {
+                         "description": "UsedAt holds the value of the \"used_at\" field.",
+                         "type": "string"
+-                    },
+-                    "user_id": {
+-                        "description": "UserID holds the value of the \"user_id\" field.",
+-                        "type": "string"
+                     }
+                 }
+             },
+diff --git a/docs/public/api/openapi-3.0.yaml b/docs/public/api/openapi-3.0.yaml
+index 0d6f5d4d..2c8bce6a 100644
+--- a/docs/public/api/openapi-3.0.yaml
++++ b/docs/public/api/openapi-3.0.yaml
+@@ -2813,9 +2813,6 @@ components:
+         used_at:
+           description: UsedAt holds the value of the "used_at" field.
+           type: string
+-        user_id:
+-          description: UserID holds the value of the "user_id" field.
+-          type: string
+     ent.PasswordResetTokensEdges:
+       type: object
+       properties:
+diff --git a/docs/public/api/swagger-2.0.json b/docs/public/api/swagger-2.0.json
+index 3e80db40..0feecbaa 100644
+--- a/docs/public/api/swagger-2.0.json
++++ b/docs/public/api/swagger-2.0.json
+@@ -4281,10 +4281,6 @@
+                 "used_at": {
+                     "description": "UsedAt holds the value of the \"used_at\" field.",
+                     "type": "string"
+-                },
+-                "user_id": {
+-                    "description": "UserID holds the value of the \"user_id\" field.",
+-                    "type": "string"
+                 }
+             }
+         },
+diff --git a/docs/public/api/swagger-2.0.yaml b/docs/public/api/swagger-2.0.yaml
+index c210deb9..ba286763 100644
+--- a/docs/public/api/swagger-2.0.yaml
++++ b/docs/public/api/swagger-2.0.yaml
+@@ -761,9 +761,6 @@ definitions:
+       used_at:
+         description: UsedAt holds the value of the "used_at" field.
+         type: string
+-      user_id:
+-        description: UserID holds the value of the "user_id" field.
+-        type: string
+     type: object
+   ent.PasswordResetTokensEdges:
+     properties:

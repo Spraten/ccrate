@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from hierarchy import validate_parent
 from native_fields import text_field
-from scan_codes import normalize, resolve_equipment
+from scan_codes import normalize, resolve_equipment, unique_entities
 from conditions import condition, checkout_blocker
 import json
 import math
@@ -595,23 +595,31 @@ def _native_origin_allowed(client, raw):
 def _ambiguous_equipment(raw, code, entities):
     value = raw.strip()
     active = [e for e in entities if not e.get('archived') and not e.get('entityType', {}).get('isLocation')]
-    matches = [e for e in active if value in [f.get('textValue', '') for f in e.get('fields', [])
-                                                if f.get('name') == 'Manufacturer QR code']]
-    if code.get('kind') == 'serial':
-        matches = [e for e in active if value in [f.get('textValue', '') for f in e.get('fields', [])
-                                                   if f.get('name') == 'Manufacturer QR code'] or
-                   e.get('serialNumber') == code.get('serial')]
-    elif not matches and code.get('kind') == 'manufacturer':
+    matches = [e for e in active if e.get('barcode') == value or
+               value in [f.get('textValue', '') for f in e.get('fields', [])
+                         if f.get('name') == 'Manufacturer QR code']]
+    if code.get('kind') == 'short_code':
+        canonical = code.get('short_code', '').upper()
+        matches.extend(e for e in active if isinstance(e.get('shortCode'), str) and
+                       e['shortCode'].strip().upper() == canonical or
+                       isinstance(e.get('serialNumber'), str) and
+                       e['serialNumber'].strip().upper() == canonical or
+                       canonical in [f.get('textValue', '').strip().upper() for f in e.get('fields', [])
+                                     if f.get('name') == 'Manufacturer QR code' and
+                                     isinstance(f.get('textValue', ''), str)])
+    elif code.get('kind') == 'serial':
+        matches.extend(e for e in active if e.get('serialNumber') == code.get('serial'))
+    elif code.get('kind') == 'manufacturer':
         serials = {v for k, values in parse_qs(urlsplit(value).query).items()
                    if k.lower() in ('sn', 'serial', 'serialnumber', 'serial_number') for v in values if v}
         if len(serials) == 1:
-            matches = [e for e in active if e.get('serialNumber') == next(iter(serials))]
-    elif not matches and code.get('kind') == 'product':
+            matches.extend(e for e in active if e.get('serialNumber') == next(iter(serials)))
+    elif code.get('kind') == 'product':
         canonical = code.get('gtin', '').zfill(14)
-        matches = [e for e in active if any(f.get('name') == 'Product GTIN' and
+        matches.extend(e for e in active if any(f.get('name') == 'Product GTIN' and
                    isinstance(f.get('textValue'), str) and f['textValue'].zfill(14) == canonical
-                   for f in e.get('fields', []))]
-    return matches
+                   for f in e.get('fields', [])))
+    return unique_entities(matches)
 
 
 def resolve_workshop_code(client, raw: str) -> dict:

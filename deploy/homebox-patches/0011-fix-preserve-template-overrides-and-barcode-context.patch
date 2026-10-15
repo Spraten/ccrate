@@ -1,0 +1,252 @@
+From 592ebe14f6f040ac690929ebe418cc2725abcf7a Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 23:07:49 -0400
+Subject: [PATCH 11/23] fix: preserve template overrides and barcode context
+
+---
+ .../handlers/v1/v1_ctrl_entity_templates.go   | 30 ++++++++----
+ .../v1/v1_ctrl_entity_templates_test.go       | 49 +++++++++++++++++++
+ frontend/components/Entity/CreateModal.vue    | 22 +++++----
+ frontend/components/Entity/barcode.test.ts    | 28 +++++++++++
+ frontend/components/Entity/barcode.ts         | 10 ++++
+ 5 files changed, 119 insertions(+), 20 deletions(-)
+ create mode 100644 backend/app/api/handlers/v1/v1_ctrl_entity_templates_test.go
+
+diff --git a/backend/app/api/handlers/v1/v1_ctrl_entity_templates.go b/backend/app/api/handlers/v1/v1_ctrl_entity_templates.go
+index a87d52dc..2a40d6cc 100644
+--- a/backend/app/api/handlers/v1/v1_ctrl_entity_templates.go
++++ b/backend/app/api/handlers/v1/v1_ctrl_entity_templates.go
+@@ -2,6 +2,7 @@ package v1
+ 
+ import (
+ 	"net/http"
++	"strings"
+ 
+ 	"github.com/google/uuid"
+ 	"github.com/hay-kot/httpkit/errchain"
+@@ -107,8 +108,8 @@ type EntityTemplateCreateItemRequest struct {
+ 	Name         string    `json:"name"         validate:"required,min=1,max=255"`
+ 	Description  string    `json:"description"  validate:"max=1000"`
+ 	Barcode      string    `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
+-	Manufacturer string    `json:"manufacturer,omitempty" validate:"max=255"`
+-	ModelNumber  string    `json:"modelNumber,omitempty" validate:"max=255"`
++	Manufacturer *string   `json:"manufacturer,omitempty" validate:"omitempty,max=255"`
++	ModelNumber  *string   `json:"modelNumber,omitempty" validate:"omitempty,max=255"`
+ 	ParentID     uuid.UUID `json:"parentId"     validate:"required"`
+ 	// EntityTypeID is the entity type selected by the user. When set it takes
+ 	// precedence; when empty the repository falls back to the group's default.
+@@ -117,6 +118,22 @@ type EntityTemplateCreateItemRequest struct {
+ 	Quantity     *float64    `json:"quantity"`
+ }
+ 
++func (body *EntityTemplateCreateItemRequest) NormalizeBody() {
++	body.Barcode = strings.TrimSpace(body.Barcode)
++}
++
++func resolveTemplateItemMetadata(defaultManufacturer, defaultModelNumber string, body EntityTemplateCreateItemRequest) (string, string) {
++	manufacturer := defaultManufacturer
++	if body.Manufacturer != nil {
++		manufacturer = *body.Manufacturer
++	}
++	modelNumber := defaultModelNumber
++	if body.ModelNumber != nil {
++		modelNumber = *body.ModelNumber
++	}
++	return manufacturer, modelNumber
++}
++
+ // HandleEntityTemplatesCreateItem godoc
+ //
+ //	@Summary	Create Entity from Template
+@@ -140,14 +157,7 @@ func (ctrl *V1Controller) HandleEntityTemplatesCreateItem() errchain.HandlerFunc
+ 		if body.Quantity != nil {
+ 			quantity = *body.Quantity
+ 		}
+-		manufacturer := template.DefaultManufacturer
+-		if body.Manufacturer != "" {
+-			manufacturer = body.Manufacturer
+-		}
+-		modelNumber := template.DefaultModelNumber
+-		if body.ModelNumber != "" {
+-			modelNumber = body.ModelNumber
+-		}
++		manufacturer, modelNumber := resolveTemplateItemMetadata(template.DefaultManufacturer, template.DefaultModelNumber, body)
+ 
+ 		// Build custom fields from template
+ 		fields := lo.Map(template.Fields, func(f repo.TemplateField, _ int) repo.EntityFieldData {
+diff --git a/backend/app/api/handlers/v1/v1_ctrl_entity_templates_test.go b/backend/app/api/handlers/v1/v1_ctrl_entity_templates_test.go
+new file mode 100644
+index 00000000..7da47bb7
+--- /dev/null
++++ b/backend/app/api/handlers/v1/v1_ctrl_entity_templates_test.go
+@@ -0,0 +1,49 @@
++package v1
++
++import (
++	"fmt"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/sysadminsmedia/homebox/backend/internal/web/adapters"
++)
++
++func TestDecodeTemplateItemTrimsBarcodeBeforeLengthValidation(t *testing.T) {
++	barcode := strings.Repeat("x", 80)
++	body := fmt.Sprintf(`{"name":"Test item","parentId":"00000000-0000-4000-8000-000000000001","barcode":" %s "}`, barcode)
++	request := httptest.NewRequest("POST", "/", strings.NewReader(body))
++
++	decoded, err := adapters.DecodeBody[EntityTemplateCreateItemRequest](request)
++	require.NoError(t, err)
++	require.Equal(t, barcode, decoded.Barcode)
++}
++
++func TestTemplateItemMetadataUsesDefaultsWhenOmittedAndAllowsExplicitClearing(t *testing.T) {
++	t.Run("omitted fields retain defaults", func(t *testing.T) {
++		request := decodeTemplateItemRequest(t, `{"name":"Test item","parentId":"00000000-0000-4000-8000-000000000001"}`)
++		require.Nil(t, request.Manufacturer)
++		require.Nil(t, request.ModelNumber)
++		manufacturer, modelNumber := resolveTemplateItemMetadata("Maker default", "Model default", request)
++		require.Equal(t, "Maker default", manufacturer)
++		require.Equal(t, "Model default", modelNumber)
++	})
++
++	t.Run("explicit empty fields clear defaults", func(t *testing.T) {
++		request := decodeTemplateItemRequest(t, `{"name":"Test item","parentId":"00000000-0000-4000-8000-000000000001","manufacturer":"","modelNumber":""}`)
++		require.NotNil(t, request.Manufacturer)
++		require.NotNil(t, request.ModelNumber)
++		manufacturer, modelNumber := resolveTemplateItemMetadata("Maker default", "Model default", request)
++		require.Empty(t, manufacturer)
++		require.Empty(t, modelNumber)
++	})
++}
++
++func decodeTemplateItemRequest(t *testing.T, body string) EntityTemplateCreateItemRequest {
++	t.Helper()
++	request := httptest.NewRequest("POST", "/", strings.NewReader(body))
++	decoded, err := adapters.DecodeBody[EntityTemplateCreateItemRequest](request)
++	require.NoError(t, err)
++	return decoded
++}
+diff --git a/frontend/components/Entity/CreateModal.vue b/frontend/components/Entity/CreateModal.vue
+index c35360e4..d67c7f48 100644
+--- a/frontend/components/Entity/CreateModal.vue
++++ b/frontend/components/Entity/CreateModal.vue
+@@ -331,6 +331,7 @@
+   import {
+     appendDuplicatePage,
+     applyInitialBarcodeParam,
++    applyInitialBarcodeParamAfterContext,
+     applyBarcodeCandidate,
+     applyBarcodeLookupIfCurrent,
+     attachBarcode,
+@@ -629,6 +630,7 @@
+   onMounted(() => {
+     const cleanup = registerOpenDialogCallback(DialogID.CreateEntity, async params => {
+       if (params.baseType === "item" && params.resume) return;
++      const initialBarcode = params.baseType === "item" ? params.barcode : undefined;
+       invalidateBarcodeResults();
+       subItemCreate.value = false;
+       let parentItemLocationId = null;
+@@ -675,23 +677,23 @@
+ 
+         // Restore last used template if available
+         await restoreLastTemplate();
+-        applyInitialBarcodeParam(params.barcode, form, lookupBarcode);
+       } else {
+         selectedEntityType.value = entityTypes.value.find(t => t.isLocation) || null;
+       }
+ 
+       const locId = locationId.value ? locationId.value : parentItemLocationId;
+-
+-      if (locId) {
+-        const found = locations.value.find(l => l.id === locId);
+-        if (found) {
+-          form.location = found;
++      applyInitialBarcodeParamAfterContext(initialBarcode, form, lookupBarcode, () => {
++        if (locId) {
++          const found = locations.value.find(l => l.id === locId);
++          if (found) {
++            form.location = found;
++          }
+         }
+-      }
+ 
+-      if (tagId.value) {
+-        form.tags = tags.value.filter(l => l.id === tagId.value).map(l => l.id);
+-      }
++        if (tagId.value) {
++          form.tags = tags.value.filter(l => l.id === tagId.value).map(l => l.id);
++        }
++      });
+     });
+ 
+     onUnmounted(cleanup);
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+index 55c8cf6d..653333e1 100644
+--- a/frontend/components/Entity/barcode.test.ts
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -4,6 +4,7 @@ import type { BarcodeProduct, EntitySummary } from "~~/lib/api/types/data-contra
+ import {
+   applyBarcodeCandidate,
+   applyBarcodeLookupIfCurrent,
++  applyInitialBarcodeParamAfterContext,
+   applyInitialBarcodeParam,
+   attachBarcode,
+   appendDuplicatePage,
+@@ -187,6 +188,33 @@ describe("item barcode helpers", () => {
+     expect(lookup).toHaveBeenCalledOnce();
+   });
+ 
++  test.each([
++    {
++      contextName: "location",
++      context: { locationId: "location-1", tags: [] as string[] },
++      expected: { locationId: "location-1", tags: [] as string[] },
++    },
++    {
++      contextName: "tag",
++      context: { locationId: undefined, tags: ["tag-1"] },
++      expected: { locationId: undefined, tags: ["tag-1"] },
++    },
++  ])("standalone scanner barcode lookup sees the applied $contextName context", ({ context, expected }) => {
++    const draft = { barcode: "", locationId: undefined as string | undefined, tags: [] as string[] };
++    const observed: unknown[] = [];
++    const lookup = vi.fn(() => observed.push({ ...draft, tags: [...draft.tags] }));
++    const openStandaloneItem = (barcode: string) =>
++      applyInitialBarcodeParamAfterContext(barcode, draft, lookup, () => {
++        Object.assign(draft, context);
++      });
++
++    routeBarcodeScanResult({ type: "barcode", barcode: "0012345" }, () => false, openStandaloneItem);
++
++    expect(draft.barcode).toBe("0012345");
++    expect(observed).toEqual([expected]);
++    expect(lookup).toHaveBeenCalledWith(1, false);
++  });
++
+   test("barcode lookup button starts page one without passing its MouseEvent", () => {
+     const lookup = vi.fn();
+     handleBarcodeLookupClick(lookup);
+diff --git a/frontend/components/Entity/barcode.ts b/frontend/components/Entity/barcode.ts
+index f9f2063b..6681e2e4 100644
+--- a/frontend/components/Entity/barcode.ts
++++ b/frontend/components/Entity/barcode.ts
+@@ -108,6 +108,16 @@ export function applyInitialBarcodeParam(
+   return true;
+ }
+ 
++export function applyInitialBarcodeParamAfterContext(
++  barcode: string | undefined,
++  draft: { barcode: string },
++  lookup: BarcodePageLookup,
++  applyContext: () => void
++): boolean {
++  applyContext();
++  return applyInitialBarcodeParam(barcode, draft, lookup);
++}
++
+ export function loadNextBarcodePage(
+   currentPage: number,
+   total: number,

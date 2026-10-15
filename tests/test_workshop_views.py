@@ -268,6 +268,36 @@ class WorkshopViewTests(unittest.TestCase):
         short = self.client.add('Single character match', fields=[{'name': 'Manufacturer QR code', 'type': 'text', 'textValue': 'a'}])
         self.assertEqual(resolve_workshop_code(self.client, 'a')['entity_id'], short)
 
+    def test_short_code_resolves_case_insensitively_and_metadata_collision_fails_closed(self):
+        item = self.client.add('Battery', shortCode='DHP-001')
+        self.assertEqual(resolve_workshop_code(self.client, ' dhp-001 ')['entity_id'], item)
+        conflict = self.client.add('Other battery', serialNumber='dhp-001')
+        result = resolve_workshop_code(self.client, 'DHP-001')
+        self.assertIsNone(result['entity_id'])
+        self.assertEqual({row['id'] for row in result['candidates']}, {item, conflict})
+
+    def test_ambiguous_native_barcode_returns_selectable_candidates(self):
+        code = 'NETUM-C750-YELLOW'
+        first = self.client.add('Scanner one', barcode=code)
+        second = self.client.add('Scanner two', barcode=code)
+        result = resolve_workshop_code(self.client, code)
+        self.assertIsNone(result['entity_id'])
+        self.assertEqual({row['id'] for row in result['candidates']}, {first, second})
+
+    def test_ambiguous_candidates_are_unique_when_one_item_matches_barcode_and_gtin(self):
+        code = '4006381333931'
+        first = self.client.add('Barcode and GTIN', barcode=code, fields=[
+            {'name': 'Product GTIN', 'type': 'text', 'textValue': code}])
+        second = self.client.add('Barcode only', barcode=code)
+        result = resolve_workshop_code(self.client, code)
+        self.assertIsNone(result['entity_id'])
+        self.assertEqual({row['id'] for row in result['candidates']}, {first, second})
+        self.assertEqual(len(result['candidates']), 2)
+
+    def test_archived_short_code_is_not_resolvable(self):
+        archived = self.client.add('Archived tool', archived=True, shortCode='DHP-002')
+        self.assertIsNone(resolve_workshop_code(self.client, 'DHP-002')['entity_id'])
+
     def test_badge_metadata_never_resolves(self):
         self.client.nodes[self.tool]['fields'] = [{'name': 'Manufacturer QR code', 'type': 'text', 'textValue': 'LAB:U:badge'}]
         result = resolve_workshop_code(self.client, 'LAB:U:badge')

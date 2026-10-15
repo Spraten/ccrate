@@ -18,7 +18,7 @@ class Layouts:
         self.group,self.actor,self.item=group,actor,item;self.attached=None;self.resolved=False
         self.png=io.BytesIO();Image.new('L',(320,224),255).save(self.png,format='PNG');self.png=self.png.getvalue()
         self.doc={'id':str(uuid4()),'profile':'supvan'};self.fail_cleanup=False
-        self.meta={'review_id':str(uuid4()),'template_id':str(uuid4()),'template_revision':1,'template_hash':hashlib.sha256(json.dumps(self.doc,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest(),'sha256':hashlib.sha256(self.png).hexdigest(),'profile':'supvan','label_mm':[40,28],'dpi':203.2,'width':320,'height':224,'item_id':item,'item_updated_at':'v1','png':self.png,'actor_id':actor,'attached_job':None}
+        self.meta={'review_id':str(uuid4()),'template_id':str(uuid4()),'template_revision':1,'template_hash':hashlib.sha256(json.dumps(self.doc,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest(),'sha256':hashlib.sha256(self.png).hexdigest(),'profile':'supvan','label_mm':[40,28],'dpi':203.2,'width':320,'height':224,'item_id':item,'item_updated_at':'v1','item_display_id':'BIN-D-GC-C-1-A17-U1234567890ABCDEF1234567890ABCDEF','png':self.png,'actor_id':actor,'attached_job':None}
     def review(self,group,actor,review):return dict(self.meta) if (group,actor,review)==(self.group,self.actor,self.meta['review_id']) and not self.resolved else None
     def get(self,group,template):return {'revision':1,'document':self.doc}
     def attach_review(self,g,a,r,j):self.attached=j;self.meta['attached_job']=j
@@ -31,8 +31,8 @@ class PrintReviewTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.ledger=Ledger(pathlib.Path(self.temp.name)/'ledger.db');self.jobs=NativeJobs(self.ledger)
         self.group,self.actor,self.item,self.key=[str(uuid4()) for _ in range(4)]
-        self.client=Client({'id':self.item,'name':'Drill','updatedAt':'v1'})
         self.layouts=Layouts(self.group,self.actor,self.item);self.sent=[]
+        self.client=Client({'id':self.item,'name':'Drill','updatedAt':'v1','displayId':self.layouts.meta['item_display_id']})
     def tearDown(self):self.temp.cleanup()
     def send(self,*args,**kwargs):self.sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()
     def print_once(self):
@@ -44,6 +44,10 @@ class PrintReviewTests(unittest.TestCase):
         self.assertEqual(self.sent,[expected]);self.assertEqual(first['id'],second['id']);self.assertTrue(self.layouts.resolved)
     def test_changed_native_item_is_rejected_before_send(self):
         self.client.item['updatedAt']='v2'
+        with self.assertRaises(Conflict):self.print_once()
+        self.assertEqual(self.sent,[])
+    def test_changed_ancestor_display_id_is_rejected_before_send(self):
+        self.client.item['displayId']='DRILL-RELOCATED-A17-U1234567890ABCDEF1234567890ABCDEF'
         with self.assertRaises(Conflict):self.print_once()
         self.assertEqual(self.sent,[])
     def test_foreign_ticket_rejection_does_not_purge_another_actors_png(self):
@@ -110,6 +114,49 @@ class PrintReviewTests(unittest.TestCase):
         with store._conn() as db:db.execute('INSERT INTO reviews(id,group_id,actor_id,created,attached_job,resolved,metadata,png) VALUES(?,?,?,?,?,0,?,?)',(str(uuid4()),self.group,self.actor,1,job2['id'],'{}',self.layouts.png))
         store.reconcile_reviews(self.group,self.jobs)
         with store._conn() as db:self.assertEqual(db.execute('SELECT count(*) FROM reviews WHERE attached_job=? AND resolved=0',(job2['id'],)).fetchone()[0],1)
+
+
+class LegacyRasterReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();root=pathlib.Path(self.temp.name)
+        self.ledger=Ledger(root/'ledger.db');self.jobs=NativeJobs(self.ledger);self.layouts=LabelLayouts(root/'layouts.db')
+        self.group,self.actor,self.item,self.key=[str(uuid4()) for _ in range(4)]
+        self.client=Client({'id':self.item,'name':'Long multiword storage location','updatedAt':'v1','isLocation':True})
+    def tearDown(self):self.temp.cleanup()
+    def review_legacy_location(self):
+        image=Image.new('L',(320,208),255)
+        with patch.object(labels,'render',return_value=(image,'location-code')) as render,patch.object(labels,'probe',side_effect=AssertionError('preview must not require a printer')) as probe:
+            preview=labels.preview(self.client,self.item,layouts=self.layouts,group=self.group,actor=self.actor)
+        probe.assert_not_called();render.assert_called_once_with(self.client.item,40,28)
+        return image,preview
+    def test_legacy_location_preview_works_offline_at_fixed_supvan_dimensions(self):
+        image,preview=self.review_legacy_location()
+        self.assertEqual((preview['width'],preview['height']),(320,208))
+        self.assertIn('review_id',preview)
+    def test_40x28_physical_stock_is_rejected_and_review_invalidated(self):
+        _,preview=self.review_legacy_location()
+        printed=[]
+        def print_once(*args,**kwargs):
+            printed.append(kwargs['input'])
+            return type('Result',(),{'stdout':b'{"status":"printed"}'})()
+        with patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':28}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once):
+            with self.assertRaisesRegex(ValueError,'40 x 30 mm SUPVAN stock'):
+                labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
+        self.assertEqual(printed,[])
+        self.assertIsNone(self.layouts.review(self.group,self.actor,preview['review_id']))
+    def test_incomplete_stock_probe_fails_without_invalidating_review(self):
+        image,preview=self.review_legacy_location()
+        with patch.object(labels,'probe',return_value={}):
+            with self.assertRaisesRegex(ValueError,'Could not verify loaded label stock'):
+                labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
+        self.assertIsNotNone(self.layouts.review(self.group,self.actor,preview['review_id']))
+    def test_legacy_location_print_sends_exact_reviewed_raster(self):
+        image,preview=self.review_legacy_location();sent=[]
+        def print_once(*args,**kwargs):sent.append(kwargs['input']);return type('Result',(),{'stdout':b'{"status":"printed"}'})()
+        with patch.object(labels,'render',side_effect=AssertionError('print must use the reviewed raster')),patch.object(labels,'probe',return_value={'width_mm':40,'height_mm':30}),patch.object(labels,'printer_path',return_value='/dev/fixture'),patch.object(labels.subprocess,'run',side_effect=print_once):
+            printed=labels.print_label(self.client,self.jobs,self.group,self.actor,self.key,self.item,layouts=self.layouts,review_id=preview['review_id'])
+        self.assertEqual(printed['status'],'completed')
+        self.assertEqual(sent,[image.tobytes()])
 
 
 if __name__=='__main__':unittest.main()

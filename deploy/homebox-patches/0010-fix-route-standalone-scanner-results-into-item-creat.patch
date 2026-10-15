@@ -1,0 +1,370 @@
+From 856a0fecaa6026c1a279641f754e660afc70aa93 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 22:57:36 -0400
+Subject: [PATCH 10/23] fix: route standalone scanner results into item
+ creation
+
+---
+ frontend/components/App/ScannerModal.vue      | 10 ++-
+ frontend/components/Entity/CreateModal.vue    | 21 +++--
+ frontend/components/Entity/barcode.test.ts    | 90 ++++++++++++++++---
+ frontend/components/Entity/barcode.ts         | 41 +++++++++
+ .../ui/dialog-provider/DialogProvider.vue     | 11 ++-
+ .../components/ui/dialog-provider/utils.ts    |  8 +-
+ 6 files changed, 151 insertions(+), 30 deletions(-)
+
+diff --git a/frontend/components/App/ScannerModal.vue b/frontend/components/App/ScannerModal.vue
+index b08450a6..bf0661d2 100644
+--- a/frontend/components/App/ScannerModal.vue
++++ b/frontend/components/App/ScannerModal.vue
+@@ -70,10 +70,10 @@
+   import MdiAlertCircleOutline from "~icons/mdi/alert-circle-outline";
+   import MdiCameraOutline from "~icons/mdi/camera-outline";
+   import { useDialog } from "@/components/ui/dialog-provider";
+-  import { scannerStatusAfterFrame, type ScannerStatus } from "~/components/Entity/barcode";
++  import { routeBarcodeScanResult, scannerStatusAfterFrame, type ScannerStatus } from "~/components/Entity/barcode";
+ 
+   const { t } = useI18n();
+-  const { activeDialog, closeDialog } = useDialog();
++  const { activeDialog, closeDialog, openDialog } = useDialog();
+   const open = computed(() => activeDialog && activeDialog.value === DialogID.Scanner);
+ 
+   const sources = ref<MediaDeviceInfo[]>([]);
+@@ -102,7 +102,11 @@
+   };
+ 
+   const handleButtonClick = () => {
+-    closeDialog(DialogID.Scanner, { type: "barcode", barcode: detectedBarcode.value });
++    routeBarcodeScanResult(
++      { type: "barcode", barcode: detectedBarcode.value },
++      result => closeDialog(DialogID.Scanner, result),
++      barcode => openDialog(DialogID.CreateEntity, { params: { baseType: "item", barcode } })
++    );
+   };
+ 
+   const openArMode = () => {
+diff --git a/frontend/components/Entity/CreateModal.vue b/frontend/components/Entity/CreateModal.vue
+index 89afe8b6..c35360e4 100644
+--- a/frontend/components/Entity/CreateModal.vue
++++ b/frontend/components/Entity/CreateModal.vue
+@@ -179,9 +179,14 @@
+           :label="$t('items.barcode')"
+           :max-length="80"
+           autocomplete="off"
+-          @keydown.enter="handleBarcodeEnter($event, lookupBarcode)"
++          @keydown.enter="handleBarcodeEnter($event, () => startBarcodeLookup(lookupBarcode))"
+         />
+-        <Button type="button" variant="outline" :disabled="barcodeSearching || !form.barcode.trim()" @click="lookupBarcode">
++        <Button
++          type="button"
++          variant="outline"
++          :disabled="barcodeSearching || !form.barcode.trim()"
++          @click="handleBarcodeLookupClick(lookupBarcode)"
++        >
+           <MdiBarcode v-if="!barcodeSearching" class="mr-2 size-4" />
+           <MdiLoading v-else class="mr-2 size-4 animate-spin" />
+           {{ barcodeSearching ? $t("global.loading") : $t("components.entity.create_modal.barcode_lookup.action") }}
+@@ -325,16 +330,20 @@
+   import EntitySelector from "~/components/Entity/Selector.vue";
+   import {
+     appendDuplicatePage,
++    applyInitialBarcodeParam,
+     applyBarcodeCandidate,
+     applyBarcodeLookupIfCurrent,
+     attachBarcode,
+     barcodeDraftKey,
+     duplicatePageCount,
+     handleBarcodeEnter,
++    handleBarcodeLookupClick,
++    loadNextBarcodePage,
+     lookupBarcodePage,
+     lookupBarcodeProducts,
+     openBarcodeDuplicate,
+     prefillBarcodeDraft,
++    startBarcodeLookup,
+   } from "./barcode";
+ 
+   const { t } = useI18n();
+@@ -666,6 +675,7 @@
+ 
+         // Restore last used template if available
+         await restoreLastTemplate();
++        applyInitialBarcodeParam(params.barcode, form, lookupBarcode);
+       } else {
+         selectedEntityType.value = entityTypes.value.find(t => t.isLocation) || null;
+       }
+@@ -847,10 +857,9 @@
+     openDialog(DialogID.Scanner, {
+       onClose: result => {
+         if (result?.type === "navigate") return;
+-        if (result?.type === "barcode") prefillBarcodeDraft(form, result.barcode);
+         nextTick(() => {
+           openDialog(DialogID.CreateEntity, { params: { baseType: "item", resume: true } });
+-          if (result?.type === "barcode") void lookupBarcode();
++          if (result?.type === "barcode") applyInitialBarcodeParam(result.barcode, form, lookupBarcode);
+         });
+       },
+     });
+@@ -944,9 +953,7 @@
+   }
+ 
+   function loadMoreDuplicates() {
+-    if (duplicatePage.value < duplicatePageCount(duplicateTotal.value, duplicatePageSize)) {
+-      void lookupBarcode(duplicatePage.value + 1, true);
+-    }
++    loadNextBarcodePage(duplicatePage.value, duplicateTotal.value, duplicatePageSize, lookupBarcode);
+   }
+ 
+   function openDuplicate(id: string) {
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+index 2b420012..55c8cf6d 100644
+--- a/frontend/components/Entity/barcode.test.ts
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -4,19 +4,24 @@ import type { BarcodeProduct, EntitySummary } from "~~/lib/api/types/data-contra
+ import {
+   applyBarcodeCandidate,
+   applyBarcodeLookupIfCurrent,
++  applyInitialBarcodeParam,
+   attachBarcode,
+   appendDuplicatePage,
+   barcodeDraftKey,
+   duplicatePageCount,
+   handleBarcodeEnter,
++  handleBarcodeLookupClick,
+   isBarcodeLookupCurrent,
++  loadNextBarcodePage,
+   lookupBarcodeItems,
+   lookupBarcodePage,
+   lookupBarcodeProducts,
+   openBarcodeDuplicate,
+-  prefillBarcodeDraft,
++  routeBarcodeScanResult,
+   scannerStatusAfterFrame,
++  startBarcodeLookup,
+   type BarcodeDraft,
++  type BarcodeScanResult,
+ } from "./barcode";
+ 
+ describe("item barcode helpers", () => {
+@@ -118,21 +123,75 @@ describe("item barcode helpers", () => {
+     expect(draft).toMatchObject({ name: "My name", description: "My description", manufacturer: "Eventronic" });
+   });
+ 
+-  test("Enter is prevented and routed to lookup without invoking form creation", () => {
+-    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() };
++  test("Enter is prevented and routed to the same initial-lookup handler used by the field", () => {
++    const event = {
++      defaultPrevented: false,
++      propagationStopped: false,
++      preventDefault() {
++        this.defaultPrevented = true;
++      },
++      stopPropagation() {
++        this.propagationStopped = true;
++      },
++    };
+     const lookup = vi.fn();
+-    const create = vi.fn();
+-    handleBarcodeEnter(event, lookup);
+-    expect(event.preventDefault).toHaveBeenCalledOnce();
+-    expect(event.stopPropagation).toHaveBeenCalledOnce();
++    handleBarcodeEnter(event, () => handleBarcodeLookupClick(lookup));
++    expect(event.defaultPrevented).toBe(true);
++    expect(event.propagationStopped).toBe(true);
++    expect(lookup).toHaveBeenCalledWith(1, false);
+     expect(lookup).toHaveBeenCalledOnce();
+-    expect(create).not.toHaveBeenCalled();
+   });
+ 
+-  test("scanner handoff pre-fills the still-active item draft", () => {
+-    const draft = { barcode: "", name: "Already typed" };
+-    prefillBarcodeDraft(draft, " X9TEUJR4L ");
+-    expect(draft).toEqual({ barcode: "X9TEUJR4L", name: "Already typed" });
++  test("scanner result uses the current-form callback when present and standalone Add Item route otherwise", () => {
++    const result = { type: "barcode" as const, barcode: "X9TEUJR4L" };
++    const callbackDraft = { barcode: "", name: "Typed into current form" };
++    const callbackLookup = vi.fn();
++    const openStandaloneItem = vi.fn();
++    const closeWithCallback = vi.fn((value: BarcodeScanResult) => {
++      if (value.type === "barcode") applyInitialBarcodeParam(value.barcode, callbackDraft, callbackLookup);
++      return true;
++    });
++
++    expect(routeBarcodeScanResult(result, closeWithCallback, openStandaloneItem)).toBe(true);
++    expect(closeWithCallback).toHaveBeenCalledWith(result);
++    expect(callbackDraft).toEqual({ barcode: "X9TEUJR4L", name: "Typed into current form" });
++    expect(callbackLookup).toHaveBeenCalledWith(1, false);
++    expect(openStandaloneItem).not.toHaveBeenCalled();
++
++    const standaloneDraft = { barcode: "", name: "" };
++    const standaloneLookup = vi.fn();
++    const closeWithoutCallback = vi.fn(() => false);
++    expect(
++      routeBarcodeScanResult(result, closeWithoutCallback, barcode => {
++        openStandaloneItem(barcode);
++        applyInitialBarcodeParam(barcode, standaloneDraft, standaloneLookup);
++      })
++    ).toBe(false);
++    expect(closeWithoutCallback).toHaveBeenCalledWith(result);
++    expect(openStandaloneItem).toHaveBeenCalledWith("X9TEUJR4L");
++    expect(standaloneDraft.barcode).toBe("X9TEUJR4L");
++    expect(standaloneLookup).toHaveBeenCalledWith(1, false);
++
++    const navigate = vi.fn();
++    routeBarcodeScanResult({ type: "navigate" }, () => false, navigate);
++    expect(navigate).not.toHaveBeenCalled();
++  });
++
++  test("CreateEntity initial barcode params prefill and start page one", () => {
++    const draft = { barcode: "", name: "New item" };
++    const lookup = vi.fn();
++    expect(applyInitialBarcodeParam(" 0012345 ", draft, lookup)).toBe(true);
++    expect(draft).toEqual({ barcode: "0012345", name: "New item" });
++    expect(lookup).toHaveBeenCalledWith(1, false);
++    expect(applyInitialBarcodeParam(undefined, draft, lookup)).toBe(false);
++    expect(lookup).toHaveBeenCalledOnce();
++  });
++
++  test("barcode lookup button starts page one without passing its MouseEvent", () => {
++    const lookup = vi.fn();
++    handleBarcodeLookupClick(lookup);
++    expect(lookup).toHaveBeenCalledWith(1, false);
++    expect(lookup).toHaveBeenCalledOnce();
+   });
+ 
+   test("ignores a delayed lookup after the draft changes", () => {
+@@ -148,11 +207,16 @@ describe("item barcode helpers", () => {
+     expect(apply).toHaveBeenCalledOnce();
+   });
+ 
+-  test("duplicate continuation keeps all pages reachable without duplicate rows", () => {
++  test("duplicate continuation requests page two once and keeps all matches reachable", () => {
+     const pageOne = [{ id: "one" }, { id: "two" }];
+     const pageTwo = [{ id: "two" }, { id: "three" }];
+     expect(appendDuplicatePage(pageOne, pageTwo)).toEqual([{ id: "one" }, { id: "two" }, { id: "three" }]);
+     expect(duplicatePageCount(52, 25)).toBe(3);
++    const lookup = vi.fn();
++    startBarcodeLookup(lookup);
++    loadNextBarcodePage(1, 52, 25, lookup);
++    expect(lookup.mock.calls).toEqual([[1, false], [2, true]]);
++    expect(lookup.mock.calls.filter(([page]) => page === 1)).toHaveLength(1);
+   });
+ 
+   test("duplicate page lookup keeps later pages and degrades safely when inventory search fails", async () => {
+diff --git a/frontend/components/Entity/barcode.ts b/frontend/components/Entity/barcode.ts
+index a7e2eb94..f9f2063b 100644
+--- a/frontend/components/Entity/barcode.ts
++++ b/frontend/components/Entity/barcode.ts
+@@ -9,6 +9,8 @@ export type BarcodeDraft = {
+ };
+ 
+ export type ScannerStatus = "starting" | "scanning" | "detected" | "error";
++export type BarcodeScanResult = { type: "barcode"; barcode: string } | { type: "navigate" };
++export type BarcodePageLookup = (page: number, append: boolean) => unknown;
+ 
+ export function attachBarcode<T extends object>(payload: T, value: string): T & { barcode?: string } {
+   const barcode = value.trim();
+@@ -77,6 +79,45 @@ export function handleBarcodeEnter(event: Pick<KeyboardEvent, "preventDefault" |
+   void lookup();
+ }
+ 
++export function routeBarcodeScanResult(
++  result: BarcodeScanResult,
++  close: (result: BarcodeScanResult) => boolean,
++  openItem: (barcode: string) => void
++): boolean {
++  const handledByCaller = close(result);
++  if (!handledByCaller && result.type === "barcode") openItem(result.barcode);
++  return handledByCaller;
++}
++
++export function startBarcodeLookup(lookup: BarcodePageLookup): unknown {
++  return lookup(1, false);
++}
++
++export function handleBarcodeLookupClick(lookup: BarcodePageLookup): unknown {
++  return startBarcodeLookup(lookup);
++}
++
++export function applyInitialBarcodeParam(
++  barcode: string | undefined,
++  draft: { barcode: string },
++  lookup: BarcodePageLookup
++): boolean {
++  if (!barcode) return false;
++  prefillBarcodeDraft(draft, barcode);
++  startBarcodeLookup(lookup);
++  return true;
++}
++
++export function loadNextBarcodePage(
++  currentPage: number,
++  total: number,
++  pageSize: number,
++  lookup: BarcodePageLookup
++): unknown {
++  if (currentPage >= duplicatePageCount(total, pageSize)) return undefined;
++  return lookup(currentPage + 1, true);
++}
++
+ export function barcodeDraftKey(draft: Record<string, unknown>): string {
+   return JSON.stringify(draft);
+ }
+diff --git a/frontend/components/ui/dialog-provider/DialogProvider.vue b/frontend/components/ui/dialog-provider/DialogProvider.vue
+index 47e41782..3dcaedf3 100644
+--- a/frontend/components/ui/dialog-provider/DialogProvider.vue
++++ b/frontend/components/ui/dialog-provider/DialogProvider.vue
+@@ -35,24 +35,29 @@
+     }
+   };
+ 
+-  function closeDialog(dialogId?: DialogID, result?: any) {
++  function closeDialog(dialogId?: DialogID, result?: any): boolean {
+     // No dialogId passed -> close current active dialog without result
+     if (!dialogId) {
+       if (activeDialog.value) {
++        const hasCloseCallback = Boolean(activeOnCloseCallback);
+         // call onClose (if any) with no result
+         activeOnCloseCallback?.(undefined);
+         activeOnCloseCallback = undefined;
++        activeDialog.value = null;
++        return hasCloseCallback;
+       }
+-      activeDialog.value = null;
+-      return;
++      return false;
+     }
+ 
+     // dialogId passed -> if it's the active dialog, call onClose with result
+     if (activeDialog.value && activeDialog.value === dialogId) {
++      const hasCloseCallback = Boolean(activeOnCloseCallback);
+       activeOnCloseCallback?.(result);
+       activeOnCloseCallback = undefined;
+       activeDialog.value = null;
++      return hasCloseCallback;
+     }
++    return false;
+   }
+ 
+   const addAlert = (alertId: string) => {
+diff --git a/frontend/components/ui/dialog-provider/utils.ts b/frontend/components/ui/dialog-provider/utils.ts
+index 4ae44e64..92f44ced 100644
+--- a/frontend/components/ui/dialog-provider/utils.ts
++++ b/frontend/components/ui/dialog-provider/utils.ts
+@@ -130,12 +130,12 @@ type OpenDialog = {
+ 
+ type CloseDialog = {
+   // Close the currently active dialog, no ID specified. No result payload.
+-  (): void;
++  (): boolean;
+   // Close a specific dialog that has a defined result type.
+-  <T extends keyof DialogResultMap>(dialogId: T, result?: ResultOf<T>): void;
++  <T extends keyof DialogResultMap>(dialogId: T, result?: ResultOf<T>): boolean;
+   // Close a specific dialog that has NO defined result type.
+-  <T extends Exclude<DialogID, keyof DialogResultMap>>(dialogId: T, result?: never): void;
+-  <T extends DialogID>(dialogId: T): void;
++  <T extends Exclude<DialogID, keyof DialogResultMap>>(dialogId: T, result?: never): boolean;
++  <T extends DialogID>(dialogId: T): boolean;
+ };
+ 
+ type OpenCallback = {

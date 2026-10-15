@@ -1,10 +1,62 @@
 """Native validation around the approved operational ledger."""
 from conditions import checkout_blocker
 from ledger import Conflict,uuid
-from kits import validate_checkout
+from kits import manifest,validate_checkout
 
 
-def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None):
+def expand_cart_assets(client, cart_items):
+    """Expand each selected cart root through its current native kit manifest."""
+    if not isinstance(cart_items, list) or len(cart_items)>50:
+        raise ValueError('Select at most 50 distinct checkout cart items')
+    roots=[uuid(item) for item in cart_items]
+    if len(roots)!=len(set(roots)):
+        raise ValueError('Select distinct checkout cart items')
+    assets=set()
+    for root in roots:
+        kit=manifest(client,root)
+        if kit['kit']:
+            assets.update(entity['id'] for entity in kit['entities'])
+        else:
+            assets.add(root)
+    return sorted(assets)
+
+
+def checkout_status_actor(ledger, group, request_key, badge_actor, service_actor):
+    """Use the badge holder for checkout status, retaining service scope for other kiosk writes."""
+    operation=ledger.request(group,request_key)
+    return badge_actor if operation and operation['action']=='check_out' else service_actor
+
+
+def checkout_availability(client, ledger, group, entity_ids):
+    """Return current native and ledger blockers for a bounded set of checkout assets."""
+    group=uuid(group)
+    if not isinstance(entity_ids,list) or len(entity_ids)>50:
+        raise ValueError('Check at most 50 checkout assets at a time')
+    ids=[uuid(entity_id) for entity_id in entity_ids]
+    if len(ids)!=len(set(ids)):
+        raise ValueError('Check distinct checkout assets')
+    held={row['entity_id'] for row in ledger.custody(group)}
+    unresolved={}
+    for operation in ledger.unresolved():
+        if operation['group_id']!=group:
+            continue
+        action='Checkout' if operation['action']=='check_out' else 'Return'
+        reason=f"{action} operation requires recovery ({operation['status']})"
+        for entity_id in ledger.detail(group,operation['id'])['assets']:
+            unresolved[entity_id]=reason
+    result=[]
+    for entity_id in ids:
+        entity=client.entity(entity_id)
+        reason=checkout_blocker(entity)
+        if reason is None and entity_id in held:
+            reason='Already checked out'
+        if reason is None:
+            reason=unresolved.get(entity_id)
+        result.append({'id':entity_id,'name':entity['name'],'reason':reason})
+    return result
+
+
+def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None, cart_context=None):
     group,actor=uuid(group),uuid(actor)
     assets=[uuid(a) for a in assets]
     if not assets or len(assets)>50 or len(assets)!=len(set(assets)):
@@ -12,6 +64,24 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
     members=client.call('/api/v1/groups/members')
     if actor not in {m['id'] for m in members}:
         raise Conflict('Badge holder is no longer a C-Crate group member')
+    snapshot=None
+    if cart_context is not None:
+        revision=cart_context.get('revision') if isinstance(cart_context,dict) else None
+        items=cart_context.get('items') if isinstance(cart_context,dict) else None
+        if isinstance(revision,bool) or not isinstance(revision,int) or revision<0 or not isinstance(items,list) or len(items)>50:
+            raise ValueError('Checkout cart changed; reload the saved selection.')
+        items=[uuid(item) for item in items]
+        if len(items)!=len(set(items)) or set(expand_cart_assets(client,items))!=set(assets):
+            raise Conflict('Checkout items do not match the saved cart selection and current kit manifests.')
+        snapshot={'revision':revision,'items':sorted(items)}
+        if 'original_items' in cart_context:
+            original=cart_context['original_items']
+            if not isinstance(original,list) or len(original)>50:
+                raise ValueError('Checkout cart changed; reload the saved selection.')
+            original=[uuid(item) for item in original]
+            if len(original)!=len(set(original)):
+                raise ValueError('Checkout cart changed; reload the saved selection.')
+            snapshot['original_items']=sorted(original)
     entities=[]
     for asset in assets:
         entity=client.entity(asset)
@@ -22,6 +92,10 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
     validate_checkout(client,entities,verified,kit_versions)
     if not session_valid():
         raise Conflict('Session ended; scan your badge again')
-    operation=ledger.begin(group,actor,'check_out',assets,request_key)
+    operation_context = operation_intent = None
+    if snapshot is not None:
+        operation_context = {'checkout_cart': snapshot}
+        operation_intent = {'checkout_cart': snapshot}
+    operation=ledger.begin(group,actor,'check_out',assets,request_key,context=operation_context,intent=operation_intent)
     ledger.complete(operation['id'])
     return {'id':operation['id'],'status':'completed','action':'check_out','count':len(assets)}

@@ -1,7 +1,15 @@
+import importlib.util
 import os
+import pathlib
 import unittest
 from unittest.mock import patch
 from network_access import same_origin, trusted_native_origins, valid_native_host
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+_gateway_spec = importlib.util.spec_from_file_location('workshop_gateway_host_tests', ROOT / 'deploy' / 'workshop-gateway.py')
+gateway = importlib.util.module_from_spec(_gateway_spec)
+_gateway_spec.loader.exec_module(gateway)
+
 class NetworkAccess(unittest.TestCase):
     def test_local_and_network(self):
         for host in ['127.0.0.1:17749','192.168.1.62:17749','pi-Homebox.local:17749','[::1]:17749']:
@@ -33,3 +41,14 @@ class NetworkAccess(unittest.TestCase):
         self.assertTrue(valid_native_host('[2001:db8::42]:19333', 19333, hosts))
         for value in ('[2001:db8::99]:19333', '[::1]:17749', '[::1]:19333/path'):
             self.assertFalse(valid_native_host(value, 19333, hosts), value)
+
+    def test_gateway_accepts_published_port_only_in_local_test_mode(self):
+        hosts = {'localhost', '127.0.0.1'}
+        with patch.object(gateway, 'PORT', 17745), patch.object(gateway, 'local_hosts', return_value=hosts):
+            with patch.dict(os.environ, {'WORKSHOP_LOCAL_TEST': '1', 'WORKSHOP_LOCAL_TEST_PUBLIC_PORT': '17755'}):
+                self.assertTrue(gateway.valid_host('localhost:17745'))
+                self.assertTrue(gateway.valid_host('localhost:17755'))
+                self.assertFalse(gateway.valid_host('localhost:17756'))
+                self.assertFalse(gateway.valid_host('evil.example:17755'))
+            with patch.dict(os.environ, {'WORKSHOP_LOCAL_TEST': '0', 'WORKSHOP_LOCAL_TEST_PUBLIC_PORT': '17755'}):
+                self.assertFalse(gateway.valid_host('localhost:17755'))

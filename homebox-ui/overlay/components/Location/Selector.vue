@@ -9,7 +9,7 @@
         <PopoverTrigger as-child>
           <Button :id="id" variant="outline" role="combobox" :aria-expanded="open" class="w-full justify-between">
             <span class="min-w-0 flex-auto truncate text-left" :class="value ? 'pr-8' : ''">
-              {{ value && value.name ? value.name : "Top level / no parent" }}
+              {{ selectedLabel }}
             </span>
             <ChevronsUpDown class="ml-2 size-4 shrink-0 opacity-50" />
           </Button>
@@ -36,19 +36,32 @@
           <CommandList>
             <CommandGroup>
               <CommandItem
-                v-for="location in filteredLocations"
+                v-for="location in visibleLocations"
                 :key="location.id"
                 :value="location.id"
                 :disabled="loading"
                 @select="selectLocation(location as unknown as EntitySummary)"
               >
-                <Check :class="cn('mr-2 h-4 w-4', value?.id === location.id ? 'opacity-100' : 'opacity-0')" />
-                <div>
-                  <div class="flex w-full">
-                    {{ location.name }}
-                  </div>
-                  <div v-if="location.name !== location.treeString" class="mt-1 text-xs text-muted-foreground">
-                    {{ location.treeString }}
+                <div class="flex min-w-0 items-center" :style="{ paddingLeft: `${location.depth}rem` }">
+                  <button
+                    v-if="!search && location.hasChildren"
+                    type="button"
+                    class="mr-1 flex size-5 shrink-0 items-center justify-center rounded hover:bg-accent"
+                    :aria-expanded="expandedLocationIds.has(location.id)"
+                    :aria-label="location.treeString"
+                    @click.stop.prevent="toggleExpanded(location.id)"
+                    @keydown="event => handleLocationTreeButtonKeydown(event, () => { open = false; })"
+                  >
+                    <ChevronDown v-if="expandedLocationIds.has(location.id)" class="size-4" />
+                    <ChevronRight v-else class="size-4" />
+                  </button>
+                  <span v-else class="mr-1 size-5 shrink-0" aria-hidden="true" />
+                  <Check :class="cn('mr-2 h-4 w-4 shrink-0', value?.id === location.id ? 'opacity-100' : 'opacity-0')" />
+                  <div class="min-w-0">
+                    <div class="truncate">{{ location.name }}</div>
+                    <div v-if="search || duplicateLocationNames.has(location.name)" class="mt-1 truncate text-xs text-muted-foreground">
+                      {{ location.treeString }}
+                    </div>
                   </div>
                 </div>
               </CommandItem>
@@ -61,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-  import { Check, ChevronsUpDown, X } from "lucide-vue-next";
+  import { Check, ChevronDown, ChevronRight, ChevronsUpDown, X } from "lucide-vue-next";
   import fuzzysort from "fuzzysort";
   import { Button } from "~/components/ui/button";
   import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "~/components/ui/command";
@@ -69,6 +82,14 @@
   import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
   import { cn } from "~/lib/utils";
   import type { EntitySummary } from "~~/lib/api/types/data-contracts";
+  import {
+    buildLocationTree,
+    getDuplicateLocationNames,
+    getLocationLabel,
+    handleLocationTreeButtonKeydown,
+    getVisibleLocationTree,
+    toggleLocationExpanded,
+  } from "~~/lib/location-selector-tree";
 
   type Props = {
     modelValue?: EntitySummary | null;
@@ -107,35 +128,38 @@
     } catch (cause) { if (current === revision) error.value = (cause as Error).message; }
     finally { if (current === revision) loading.value = false; }
   }
-  watch(open, value => { if (value) void loadParents(); });
+  watch(open, value => { if (value && !loading.value) void loadParents(); });
   watch([selectedId, () => useAuthContext().user?.id], () => {
     revision++; rows.value = []; error.value = ""; loading.value = false;
-    if (open.value) void loadParents();
+    expandedLocationIds.value = new Set();
+    if (open.value || value.value) void loadParents();
   });
   onBeforeUnmount(() => { revision++; });
-  const locations = computed(() => {
-    const byId = new Map(rows.value.map(row => [row.id, row]));
-    const excluded = new Set([...(props.excludeIds || []), ...(props.currentLocation ? [props.currentLocation.id] : [])]);
-    return rows.value.filter(row => {
-      if (row.archived) return false;
-      const seen = new Set<string>();
-      let current: EntitySummary | undefined = row;
-      while (current) {
-        if (excluded.has(current.id) || seen.has(current.id)) return false;
-        seen.add(current.id); current = current.parent?.id ? byId.get(current.parent.id) : undefined;
-      }
-      return true;
-    }).map(row => {
-      const path: string[] = [], seen = new Set<string>();
-      let current: EntitySummary | undefined = row;
-      while (current && !seen.has(current.id)) {
-        seen.add(current.id); path.unshift(current.name);
-        current = current.parent?.id ? byId.get(current.parent.id) : undefined;
-      }
-      return { ...row, treeString: path.join(" / ") };
-    });
-  });
+  const locations = computed(() => buildLocationTree(rows.value, {
+    excludeIds: props.excludeIds,
+    currentLocation: props.currentLocation,
+  }));
   const value = useVModel(props, "modelValue", emit);
+  const expandedLocationIds = ref(new Set<string>());
+  const duplicateLocationNames = computed(() => getDuplicateLocationNames(locations.value));
+  const selectedLabel = computed(() => getLocationLabel(
+    locations.value,
+    value.value?.id,
+    value.value?.name || "Top level / no parent"
+  ));
+
+  watch(() => props.modelValue?.id, id => { if (id) void loadParents(); }, { immediate: true });
+  function expandSelectedAncestors() {
+    const locationsById = new Map(locations.value.map(location => [location.id, location]));
+    let parentId = locationsById.get(value.value?.id ?? "")?.parentId;
+    const next = new Set(expandedLocationIds.value);
+    while (parentId) {
+      next.add(parentId);
+      parentId = locationsById.get(parentId)?.parentId ?? null;
+    }
+    expandedLocationIds.value = next;
+  }
+  watch([() => value.value?.id, locations], expandSelectedAncestors, { immediate: true });
 
   function selectLocation(location: EntitySummary) {
     if (value.value?.id !== location.id) {
@@ -152,11 +176,16 @@
     open.value = false;
   }
 
-  const filteredLocations = computed(() => {
-    const filtered = fuzzysort.go(search.value, locations.value, { key: "treeString", all: true }).map(i => i.obj);
+  const matchingLocations = computed(() =>
+    fuzzysort.go(search.value, locations.value, { key: "treeString", all: true }).map(i => i.obj)
+  );
+  const visibleLocations = computed(() =>
+    getVisibleLocationTree(search.value ? matchingLocations.value : locations.value, expandedLocationIds.value, Boolean(search.value))
+  );
 
-    return filtered;
-  });
+  function toggleExpanded(locationId: string) {
+    expandedLocationIds.value = toggleLocationExpanded(expandedLocationIds.value, locationId);
+  }
 
   // Reset search when value is cleared
   watch(

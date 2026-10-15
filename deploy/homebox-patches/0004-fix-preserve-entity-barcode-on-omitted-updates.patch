@@ -1,0 +1,797 @@
+From 50d327482efef1b2cfc5e221deed6810238f9348 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 22:12:42 -0400
+Subject: [PATCH 04/23] fix: preserve entity barcode on omitted updates
+
+---
+ backend/app/api/static/docs/docs.go           | 17 +++++
+ backend/app/api/static/docs/openapi-3.json    | 17 +++++
+ backend/app/api/static/docs/openapi-3.yaml    | 13 ++++
+ backend/app/api/static/docs/swagger.json      | 17 +++++
+ backend/app/api/static/docs/swagger.yaml      | 13 ++++
+ backend/internal/data/ent/schema/entity.go    |  2 +-
+ backend/internal/data/repo/repo_entities.go   | 65 +++++++++++++++----
+ .../internal/data/repo/repo_entities_test.go  | 48 ++++++++++++--
+ backend/internal/web/adapters/decoders.go     |  4 ++
+ .../internal/web/adapters/decoders_test.go    | 30 +++++++++
+ docs/public/api/openapi-3.0.json              | 34 +++++-----
+ docs/public/api/openapi-3.0.yaml              | 13 ++++
+ docs/public/api/swagger-2.0.json              | 34 +++++-----
+ docs/public/api/swagger-2.0.yaml              | 13 ++++
+ 14 files changed, 267 insertions(+), 53 deletions(-)
+ create mode 100644 backend/internal/web/adapters/decoders_test.go
+
+diff --git a/backend/app/api/static/docs/docs.go b/backend/app/api/static/docs/docs.go
+index 279bc5eb..9323032e 100644
+--- a/backend/app/api/static/docs/docs.go
++++ b/backend/app/api/static/docs/docs.go
+@@ -3464,6 +3464,10 @@ const docTemplate = `{
+                     "description": "AssetID holds the value of the \"asset_id\" field.",
+                     "type": "integer"
+                 },
++                "barcode": {
++                    "description": "Barcode holds the value of the \"barcode\" field.",
++                    "type": "string"
++                },
+                 "created_at": {
+                     "description": "CreatedAt holds the value of the \"created_at\" field.",
+                     "type": "string"
+@@ -4764,6 +4768,11 @@ const docTemplate = `{
+                 "name"
+             ],
+             "properties": {
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
+                 "description": {
+                     "type": "string",
+                     "maxLength": 1000
+@@ -4854,6 +4863,9 @@ const docTemplate = `{
+                         "$ref": "#/definitions/repo.ItemAttachment"
+                     }
+                 },
++                "barcode": {
++                    "type": "string"
++                },
+                 "children": {
+                     "description": "Container-specific fields (for entities whose entity_type.is_location = true)",
+                     "type": "array",
+@@ -5471,6 +5483,11 @@ const docTemplate = `{
+                 "assetId": {
+                     "type": "string"
+                 },
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
+                 "description": {
+                     "type": "string",
+                     "maxLength": 1000
+diff --git a/backend/app/api/static/docs/openapi-3.json b/backend/app/api/static/docs/openapi-3.json
+index f2474084..bc53c3d4 100644
+--- a/backend/app/api/static/docs/openapi-3.json
++++ b/backend/app/api/static/docs/openapi-3.json
+@@ -3703,6 +3703,10 @@
+                         "description": "AssetID holds the value of the \"asset_id\" field.",
+                         "type": "integer"
+                     },
++                    "barcode": {
++                        "description": "Barcode holds the value of the \"barcode\" field.",
++                        "type": "string"
++                    },
+                     "created_at": {
+                         "description": "CreatedAt holds the value of the \"created_at\" field.",
+                         "type": "string"
+@@ -5003,6 +5007,11 @@
+                     "name"
+                 ],
+                 "properties": {
++                    "barcode": {
++                        "type": "string",
++                        "maxLength": 80,
++                        "nullable": true
++                    },
+                     "description": {
+                         "type": "string",
+                         "maxLength": 1000
+@@ -5093,6 +5102,9 @@
+                             "$ref": "#/components/schemas/repo.ItemAttachment"
+                         }
+                     },
++                    "barcode": {
++                        "type": "string"
++                    },
+                     "children": {
+                         "description": "Container-specific fields (for entities whose entity_type.is_location = true)",
+                         "type": "array",
+@@ -5710,6 +5722,11 @@
+                     "assetId": {
+                         "type": "string"
+                     },
++                    "barcode": {
++                        "type": "string",
++                        "maxLength": 80,
++                        "nullable": true
++                    },
+                     "description": {
+                         "type": "string",
+                         "maxLength": 1000
+diff --git a/backend/app/api/static/docs/openapi-3.yaml b/backend/app/api/static/docs/openapi-3.yaml
+index c074bb7b..58acb062 100644
+--- a/backend/app/api/static/docs/openapi-3.yaml
++++ b/backend/app/api/static/docs/openapi-3.yaml
+@@ -2231,6 +2231,9 @@ components:
+         asset_id:
+           description: AssetID holds the value of the "asset_id" field.
+           type: integer
++        barcode:
++          description: Barcode holds the value of the "barcode" field.
++          type: string
+         created_at:
+           description: CreatedAt holds the value of the "created_at" field.
+           type: string
+@@ -3145,6 +3148,10 @@ components:
+       required:
+         - name
+       properties:
++        barcode:
++          type: string
++          maxLength: 80
++          nullable: true
+         description:
+           type: string
+           maxLength: 1000
+@@ -3206,6 +3213,8 @@ components:
+           type: array
+           items:
+             $ref: "#/components/schemas/repo.ItemAttachment"
++        barcode:
++          type: string
+         children:
+           description: Container-specific fields (for entities whose
+             entity_type.is_location = true)
+@@ -3634,6 +3643,10 @@ components:
+           type: boolean
+         assetId:
+           type: string
++        barcode:
++          type: string
++          maxLength: 80
++          nullable: true
+         description:
+           type: string
+           maxLength: 1000
+diff --git a/backend/app/api/static/docs/swagger.json b/backend/app/api/static/docs/swagger.json
+index 666f56c4..1a73fc0f 100644
+--- a/backend/app/api/static/docs/swagger.json
++++ b/backend/app/api/static/docs/swagger.json
+@@ -3461,6 +3461,10 @@
+                     "description": "AssetID holds the value of the \"asset_id\" field.",
+                     "type": "integer"
+                 },
++                "barcode": {
++                    "description": "Barcode holds the value of the \"barcode\" field.",
++                    "type": "string"
++                },
+                 "created_at": {
+                     "description": "CreatedAt holds the value of the \"created_at\" field.",
+                     "type": "string"
+@@ -4761,6 +4765,11 @@
+                 "name"
+             ],
+             "properties": {
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
+                 "description": {
+                     "type": "string",
+                     "maxLength": 1000
+@@ -4851,6 +4860,9 @@
+                         "$ref": "#/definitions/repo.ItemAttachment"
+                     }
+                 },
++                "barcode": {
++                    "type": "string"
++                },
+                 "children": {
+                     "description": "Container-specific fields (for entities whose entity_type.is_location = true)",
+                     "type": "array",
+@@ -5468,6 +5480,11 @@
+                 "assetId": {
+                     "type": "string"
+                 },
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
+                 "description": {
+                     "type": "string",
+                     "maxLength": 1000
+diff --git a/backend/app/api/static/docs/swagger.yaml b/backend/app/api/static/docs/swagger.yaml
+index 2f828070..736d7673 100644
+--- a/backend/app/api/static/docs/swagger.yaml
++++ b/backend/app/api/static/docs/swagger.yaml
+@@ -193,6 +193,9 @@ definitions:
+       asset_id:
+         description: AssetID holds the value of the "asset_id" field.
+         type: integer
++      barcode:
++        description: Barcode holds the value of the "barcode" field.
++        type: string
+       created_at:
+         description: CreatedAt holds the value of the "created_at" field.
+         type: string
+@@ -1092,6 +1095,10 @@ definitions:
+     type: object
+   repo.EntityCreate:
+     properties:
++      barcode:
++        maxLength: 80
++        type: string
++        x-nullable: true
+       description:
+         maxLength: 1000
+         type: string
+@@ -1155,6 +1162,8 @@ definitions:
+         items:
+           $ref: '#/definitions/repo.ItemAttachment'
+         type: array
++      barcode:
++        type: string
+       children:
+         description: Container-specific fields (for entities whose entity_type.is_location
+           = true)
+@@ -1581,6 +1590,10 @@ definitions:
+         type: boolean
+       assetId:
+         type: string
++      barcode:
++        maxLength: 80
++        type: string
++        x-nullable: true
+       description:
+         maxLength: 1000
+         type: string
+diff --git a/backend/internal/data/ent/schema/entity.go b/backend/internal/data/ent/schema/entity.go
+index d0f1783c..46d51b68 100644
+--- a/backend/internal/data/ent/schema/entity.go
++++ b/backend/internal/data/ent/schema/entity.go
+@@ -60,7 +60,7 @@ func (Entity) Fields() []ent.Field {
+ 			MaxLen(255).
+ 			Optional(),
+ 		field.String("barcode").
+-			MaxLen(80).
++			MaxRuneLen(80).
+ 			Optional(),
+ 		field.String("model_number").
+ 			MaxLen(255).
+diff --git a/backend/internal/data/repo/repo_entities.go b/backend/internal/data/repo/repo_entities.go
+index 336e16b6..261adfa2 100644
+--- a/backend/internal/data/repo/repo_entities.go
++++ b/backend/internal/data/repo/repo_entities.go
+@@ -1,7 +1,9 @@
+ package repo
+ 
+ import (
++	"bytes"
+ 	"context"
++	"encoding/json"
+ 	"fmt"
+ 	"math"
+ 	"strings"
+@@ -46,6 +48,25 @@ type EntityRepository struct {
+ 	attachments *AttachmentRepo
+ }
+ 
++func (data *EntityUpdate) UnmarshalJSON(raw []byte) error {
++	type entityUpdateJSON EntityUpdate
++	var decoded entityUpdateJSON
++	if err := json.Unmarshal(raw, &decoded); err != nil {
++		return err
++	}
++	*data = EntityUpdate(decoded)
++
++	var fields map[string]json.RawMessage
++	if err := json.Unmarshal(raw, &fields); err != nil {
++		return err
++	}
++	if barcode, ok := fields["barcode"]; ok && bytes.Equal(bytes.TrimSpace(barcode), []byte("null")) {
++		clear := ""
++		data.Barcode = &clear
++	}
++	return nil
++}
++
+ type (
+ 	FieldQuery struct {
+ 		Name  string
+@@ -97,8 +118,8 @@ type (
+ 		EntityTypeID uuid.UUID `json:"entityTypeId"`
+ 
+ 		// Edges
+-		TagIDs []uuid.UUID `json:"tagIds"`
+-		Barcode string `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
++		TagIDs  []uuid.UUID `json:"tagIds"`
++		Barcode string      `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
+ 	}
+ 
+ 	EntityUpdate struct {
+@@ -117,10 +138,10 @@ type (
+ 		TagIDs []uuid.UUID `json:"tagIds"`
+ 
+ 		// Identifications
+-		SerialNumber string `json:"serialNumber"`
+-		Barcode      string `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
+-		ModelNumber  string `json:"modelNumber"`
+-		Manufacturer string `json:"manufacturer"`
++		SerialNumber string  `json:"serialNumber"`
++		Barcode      *string `json:"barcode,omitempty" validate:"omitempty,max=80" extensions:"x-nullable"`
++		ModelNumber  string  `json:"modelNumber"`
++		Manufacturer string  `json:"manufacturer"`
+ 
+ 		// Warranty
+ 		LifetimeWarranty bool       `json:"lifetimeWarranty"`
+@@ -987,6 +1008,18 @@ func normalizeBarcode(value string) (string, error) {
+ 	return value, nil
+ }
+ 
++func (data *EntityCreate) NormalizeBody() {
++	data.Barcode = strings.TrimSpace(data.Barcode)
++}
++
++func (data *EntityUpdate) NormalizeBody() {
++	if data.Barcode == nil {
++		return
++	}
++	barcode := strings.TrimSpace(*data.Barcode)
++	data.Barcode = &barcode
++}
++
+ func (r *EntityRepository) Create(ctx context.Context, gid uuid.UUID, data EntityCreate) (EntityOut, error) {
+ 	ctx, span := entityTracer().Start(ctx, "repo.EntityRepository.Create",
+ 		trace.WithAttributes(
+@@ -1482,9 +1515,13 @@ func (r *EntityRepository) UpdateByGroup(ctx context.Context, gid uuid.UUID, dat
+ 		recordSpanError(span, err)
+ 		return EntityOut{}, err
+ 	}
+-	barcode, err := normalizeBarcode(data.Barcode)
+-	if err != nil {
+-		return EntityOut{}, err
++	var barcode *string
++	if data.Barcode != nil {
++		value, err := normalizeBarcode(*data.Barcode)
++		if err != nil {
++			return EntityOut{}, err
++		}
++		barcode = &value
+ 	}
+ 
+ 	// See EntityRepository.Create for the rationale on these cross-group
+@@ -1522,10 +1559,12 @@ func (r *EntityRepository) UpdateByGroup(ctx context.Context, gid uuid.UUID, dat
+ 		SetQuantity(data.Quantity).
+ 		SetAssetID(int64(data.AssetID)).
+ 		SetSyncChildEntityLocations(data.SyncChildEntityLocations)
+-	if barcode == "" {
+-		q.ClearBarcode()
+-	} else {
+-		q.SetBarcode(barcode)
++	if barcode != nil {
++		if *barcode == "" {
++			q.ClearBarcode()
++		} else {
++			q.SetBarcode(*barcode)
++		}
+ 	}
+ 
+ 	// Date fields are nullable. Writing types.Date{}.Time() would persist
+diff --git a/backend/internal/data/repo/repo_entities_test.go b/backend/internal/data/repo/repo_entities_test.go
+index 2118c19e..3200c668 100644
+--- a/backend/internal/data/repo/repo_entities_test.go
++++ b/backend/internal/data/repo/repo_entities_test.go
+@@ -189,11 +189,20 @@ func TestEntityRepository_Barcode(t *testing.T) {
+ 			require.NoError(t, err)
+ 			assert.Equal(t, barcode, fetched.Barcode)
+ 
+-			update := EntityUpdate{ID: created.ID, Name: created.Name, Barcode: barcode}
++			update := EntityUpdate{ID: created.ID, Name: created.Name, Barcode: &barcode}
+ 			if created.EntityType != nil {
+ 				update.EntityTypeID = created.EntityType.ID
+ 			}
+-			updated, err := tRepos.Entities.UpdateByGroup(context.Background(), tGroup.ID, update)
++
++			omitted := EntityUpdate{ID: created.ID, Name: created.Name}
++			if created.EntityType != nil {
++				omitted.EntityTypeID = created.EntityType.ID
++			}
++			updated, err := tRepos.Entities.UpdateByGroup(context.Background(), tGroup.ID, omitted)
++			require.NoError(t, err)
++			assert.Equal(t, barcode, updated.Barcode)
++
++			updated, err = tRepos.Entities.UpdateByGroup(context.Background(), tGroup.ID, update)
+ 			require.NoError(t, err)
+ 			assert.Equal(t, barcode, updated.Barcode)
+ 
+@@ -201,9 +210,9 @@ func TestEntityRepository_Barcode(t *testing.T) {
+ 			require.NoError(t, err)
+ 			assert.Equal(t, barcode, fetched.Barcode)
+ 
+-			// An older client that omits the optional property clears it to SQL NULL
+-			// and still receives the backward-compatible empty string in the response.
+-			update.Barcode = ""
++			// An explicit empty value clears the nullable column.
++			clear := ""
++			update.Barcode = &clear
+ 			updated, err = tRepos.Entities.UpdateByGroup(context.Background(), tGroup.ID, update)
+ 			require.NoError(t, err)
+ 			assert.Empty(t, updated.Barcode)
+@@ -225,6 +234,35 @@ func TestEntityRepository_Barcode_MaxLen(t *testing.T) {
+ 	assert.Contains(t, err.Error(), "barcode: must be at most 80 characters")
+ }
+ 
++func TestEntityRepository_BarcodeRuneLength(t *testing.T) {
++	itemType := useItemEntityType(t)
++	barcode := strings.Repeat("é", 80)
++	item := entityFactory()
++	item.EntityTypeID = itemType.ID
++	item.Barcode = barcode
++
++	created, err := tRepos.Entities.Create(context.Background(), tGroup.ID, item)
++	require.NoError(t, err)
++	assert.Equal(t, barcode, created.Barcode)
++
++	update := EntityUpdate{ID: created.ID, Name: created.Name, EntityTypeID: itemType.ID, Barcode: &barcode}
++	updated, err := tRepos.Entities.UpdateByGroup(context.Background(), tGroup.ID, update)
++	require.NoError(t, err)
++	assert.Equal(t, barcode, updated.Barcode)
++
++	tooLong := strings.Repeat("é", 81)
++	item.Barcode = tooLong
++	_, err = tRepos.Entities.Create(context.Background(), tGroup.ID, item)
++	require.Error(t, err)
++	assert.Contains(t, err.Error(), "barcode: must be at most 80 characters")
++
++	update.Barcode = &tooLong
++	_, err = tRepos.Entities.UpdateByGroup(context.Background(), tGroup.ID, update)
++	require.Error(t, err)
++	assert.Contains(t, err.Error(), "barcode: must be at most 80 characters")
++	require.NoError(t, tRepos.Entities.Delete(context.Background(), created.ID))
++}
++
+ func TestEntityRepository_Create_WithFractionalQuantity(t *testing.T) {
+ 	containerET := useContainerEntityType(t)
+ 	itemET := useItemEntityType(t)
+diff --git a/backend/internal/web/adapters/decoders.go b/backend/internal/web/adapters/decoders.go
+index e9c9b348..5f36cfcf 100644
+--- a/backend/internal/web/adapters/decoders.go
++++ b/backend/internal/web/adapters/decoders.go
+@@ -41,6 +41,10 @@ func DecodeBody[T any](r *http.Request) (T, error) {
+ 		return val, errors.Wrap(err, "body decoding error")
+ 	}
+ 
++	if n, ok := any(&val).(interface{ NormalizeBody() }); ok {
++		n.NormalizeBody()
++	}
++
+ 	err = validate.Check(val)
+ 	if err != nil {
+ 		return val, err
+diff --git a/backend/internal/web/adapters/decoders_test.go b/backend/internal/web/adapters/decoders_test.go
+new file mode 100644
+index 00000000..0724fb9c
+--- /dev/null
++++ b/backend/internal/web/adapters/decoders_test.go
+@@ -0,0 +1,30 @@
++package adapters_test
++
++import (
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/sysadminsmedia/homebox/backend/internal/data/repo"
++	"github.com/sysadminsmedia/homebox/backend/internal/web/adapters"
++)
++
++func TestDecodeBodyTrimsBarcodeBeforeLengthValidation(t *testing.T) {
++	barcode := strings.Repeat("é", 80)
++	body := `{"name":"Test entity","barcode":"  ` + barcode + `  "}`
++	r := httptest.NewRequest("POST", "/", strings.NewReader(body))
++
++	decoded, err := adapters.DecodeBody[repo.EntityCreate](r)
++	require.NoError(t, err)
++	require.Equal(t, barcode, decoded.Barcode)
++}
++
++func TestDecodeBodyNullBarcodeMeansExplicitClear(t *testing.T) {
++	r := httptest.NewRequest("PUT", "/", strings.NewReader(`{"name":"Test entity","barcode":null}`))
++
++	decoded, err := adapters.DecodeBody[repo.EntityUpdate](r)
++	require.NoError(t, err)
++	require.NotNil(t, decoded.Barcode)
++	require.Empty(t, *decoded.Barcode)
++}
+diff --git a/docs/public/api/openapi-3.0.json b/docs/public/api/openapi-3.0.json
+index b31e750a..bc53c3d4 100644
+--- a/docs/public/api/openapi-3.0.json
++++ b/docs/public/api/openapi-3.0.json
+@@ -3703,6 +3703,10 @@
+                         "description": "AssetID holds the value of the \"asset_id\" field.",
+                         "type": "integer"
+                     },
++                    "barcode": {
++                        "description": "Barcode holds the value of the \"barcode\" field.",
++                        "type": "string"
++                    },
+                     "created_at": {
+                         "description": "CreatedAt holds the value of the \"created_at\" field.",
+                         "type": "string"
+@@ -3802,10 +3806,6 @@
+                     "warranty_expires": {
+                         "description": "WarrantyExpires holds the value of the \"warranty_expires\" field.",
+                         "type": "string"
+-                    },
+-                    "barcode": {
+-                        "description": "Barcode holds the value of the \"barcode\" field.",
+-                        "type": "string"
+                     }
+                 }
+             },
+@@ -5007,6 +5007,11 @@
+                     "name"
+                 ],
+                 "properties": {
++                    "barcode": {
++                        "type": "string",
++                        "maxLength": 80,
++                        "nullable": true
++                    },
+                     "description": {
+                         "type": "string",
+                         "maxLength": 1000
+@@ -5032,11 +5037,6 @@
+                         "items": {
+                             "type": "string"
+                         }
+-                    },
+-                    "barcode": {
+-                        "type": "string",
+-                        "maxLength": 80,
+-                        "nullable": true
+                     }
+                 }
+             },
+@@ -5102,6 +5102,9 @@
+                             "$ref": "#/components/schemas/repo.ItemAttachment"
+                         }
+                     },
++                    "barcode": {
++                        "type": "string"
++                    },
+                     "children": {
+                         "description": "Container-specific fields (for entities whose entity_type.is_location = true)",
+                         "type": "array",
+@@ -5226,9 +5229,6 @@
+                     },
+                     "warrantyExpires": {
+                         "type": "string"
+-                    },
+-                    "barcode": {
+-                        "type": "string"
+                     }
+                 }
+             },
+@@ -5722,6 +5722,11 @@
+                     "assetId": {
+                         "type": "string"
+                     },
++                    "barcode": {
++                        "type": "string",
++                        "maxLength": 80,
++                        "nullable": true
++                    },
+                     "description": {
+                         "type": "string",
+                         "maxLength": 1000
+@@ -5816,11 +5821,6 @@
+                     },
+                     "warrantyExpires": {
+                         "type": "string"
+-                    },
+-                    "barcode": {
+-                        "type": "string",
+-                        "maxLength": 80,
+-                        "nullable": true
+                     }
+                 }
+             },
+diff --git a/docs/public/api/openapi-3.0.yaml b/docs/public/api/openapi-3.0.yaml
+index c074bb7b..58acb062 100644
+--- a/docs/public/api/openapi-3.0.yaml
++++ b/docs/public/api/openapi-3.0.yaml
+@@ -2231,6 +2231,9 @@ components:
+         asset_id:
+           description: AssetID holds the value of the "asset_id" field.
+           type: integer
++        barcode:
++          description: Barcode holds the value of the "barcode" field.
++          type: string
+         created_at:
+           description: CreatedAt holds the value of the "created_at" field.
+           type: string
+@@ -3145,6 +3148,10 @@ components:
+       required:
+         - name
+       properties:
++        barcode:
++          type: string
++          maxLength: 80
++          nullable: true
+         description:
+           type: string
+           maxLength: 1000
+@@ -3206,6 +3213,8 @@ components:
+           type: array
+           items:
+             $ref: "#/components/schemas/repo.ItemAttachment"
++        barcode:
++          type: string
+         children:
+           description: Container-specific fields (for entities whose
+             entity_type.is_location = true)
+@@ -3634,6 +3643,10 @@ components:
+           type: boolean
+         assetId:
+           type: string
++        barcode:
++          type: string
++          maxLength: 80
++          nullable: true
+         description:
+           type: string
+           maxLength: 1000
+diff --git a/docs/public/api/swagger-2.0.json b/docs/public/api/swagger-2.0.json
+index 32927918..1a73fc0f 100644
+--- a/docs/public/api/swagger-2.0.json
++++ b/docs/public/api/swagger-2.0.json
+@@ -3461,6 +3461,10 @@
+                     "description": "AssetID holds the value of the \"asset_id\" field.",
+                     "type": "integer"
+                 },
++                "barcode": {
++                    "description": "Barcode holds the value of the \"barcode\" field.",
++                    "type": "string"
++                },
+                 "created_at": {
+                     "description": "CreatedAt holds the value of the \"created_at\" field.",
+                     "type": "string"
+@@ -3560,10 +3564,6 @@
+                 "warranty_expires": {
+                     "description": "WarrantyExpires holds the value of the \"warranty_expires\" field.",
+                     "type": "string"
+-                },
+-                "barcode": {
+-                    "description": "Barcode holds the value of the \"barcode\" field.",
+-                    "type": "string"
+                 }
+             }
+         },
+@@ -4765,6 +4765,11 @@
+                 "name"
+             ],
+             "properties": {
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
+                 "description": {
+                     "type": "string",
+                     "maxLength": 1000
+@@ -4790,11 +4795,6 @@
+                     "items": {
+                         "type": "string"
+                     }
+-                },
+-                "barcode": {
+-                    "type": "string",
+-                    "maxLength": 80,
+-                    "x-nullable": true
+                 }
+             }
+         },
+@@ -4860,6 +4860,9 @@
+                         "$ref": "#/definitions/repo.ItemAttachment"
+                     }
+                 },
++                "barcode": {
++                    "type": "string"
++                },
+                 "children": {
+                     "description": "Container-specific fields (for entities whose entity_type.is_location = true)",
+                     "type": "array",
+@@ -4984,9 +4987,6 @@
+                 },
+                 "warrantyExpires": {
+                     "type": "string"
+-                },
+-                "barcode": {
+-                    "type": "string"
+                 }
+             }
+         },
+@@ -5480,6 +5480,11 @@
+                 "assetId": {
+                     "type": "string"
+                 },
++                "barcode": {
++                    "type": "string",
++                    "maxLength": 80,
++                    "x-nullable": true
++                },
+                 "description": {
+                     "type": "string",
+                     "maxLength": 1000
+@@ -5574,11 +5579,6 @@
+                 },
+                 "warrantyExpires": {
+                     "type": "string"
+-                },
+-                "barcode": {
+-                    "type": "string",
+-                    "maxLength": 80,
+-                    "x-nullable": true
+                 }
+             }
+         },
+diff --git a/docs/public/api/swagger-2.0.yaml b/docs/public/api/swagger-2.0.yaml
+index 2f828070..736d7673 100644
+--- a/docs/public/api/swagger-2.0.yaml
++++ b/docs/public/api/swagger-2.0.yaml
+@@ -193,6 +193,9 @@ definitions:
+       asset_id:
+         description: AssetID holds the value of the "asset_id" field.
+         type: integer
++      barcode:
++        description: Barcode holds the value of the "barcode" field.
++        type: string
+       created_at:
+         description: CreatedAt holds the value of the "created_at" field.
+         type: string
+@@ -1092,6 +1095,10 @@ definitions:
+     type: object
+   repo.EntityCreate:
+     properties:
++      barcode:
++        maxLength: 80
++        type: string
++        x-nullable: true
+       description:
+         maxLength: 1000
+         type: string
+@@ -1155,6 +1162,8 @@ definitions:
+         items:
+           $ref: '#/definitions/repo.ItemAttachment'
+         type: array
++      barcode:
++        type: string
+       children:
+         description: Container-specific fields (for entities whose entity_type.is_location
+           = true)
+@@ -1581,6 +1590,10 @@ definitions:
+         type: boolean
+       assetId:
+         type: string
++      barcode:
++        maxLength: 80
++        type: string
++        x-nullable: true
+       description:
+         maxLength: 1000
+         type: string

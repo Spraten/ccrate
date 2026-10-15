@@ -19,6 +19,14 @@ export interface TextMeasurer {
   measure: (text: string) => number
 }
 
+/** Remove only line-ending spaces that CSS pre-wrap hangs beyond the box. */
+export function excludeOverflowingTrailingSpaces(line: string, maxWidth: number, measurer: TextMeasurer): string {
+  let aligned = line
+  while (aligned.endsWith(' ') && measurer.measure(aligned) > maxWidth)
+    aligned = aligned.slice(0, -1)
+  return aligned
+}
+
 /**
  * Break `content` into rendered lines fitting `maxWidth` (same unit the
  * measurer returns). Preserves empty lines from consecutive newlines.
@@ -26,29 +34,36 @@ export interface TextMeasurer {
 export function wrapText(content: string, maxWidth: number, measurer: TextMeasurer): string[] {
   const lines: string[] = []
 
-  for (const paragraph of content.split('\n')) {
+  for (const paragraph of content.replace(/\r\n?/g, '\n').split('\n')) {
     if (paragraph === '') {
       lines.push('')
       continue
     }
-    let current = ''
-    for (const word of paragraph.split(' ')) {
-      const candidate = current === '' ? word : `${current} ${word}`
-      if (measurer.measure(candidate) <= maxWidth) {
-        current = candidate
+    let current: string | undefined
+    let spaces = ''
+    for (const token of paragraph.match(/ +|[^ ]+/g) ?? []) {
+      if (token.startsWith(' ')) {
+        spaces += token
         continue
       }
-      // Word does not fit after the current line - flush what we have.
-      // (Both branches below reassign `current`.)
-      if (current !== '')
-        lines.push(current)
+      const candidate = current === undefined ? `${spaces}${token}` : `${current}${spaces}${token}`
+      if (measurer.measure(candidate) <= maxWidth) {
+        current = candidate
+        spaces = ''
+        continue
+      }
+      if (current !== undefined)
+        lines.push(`${current}${spaces}`)
+      else if (spaces !== '')
+        lines.push(spaces)
+      spaces = ''
       // break-words: a single word wider than the box splits per character.
-      if (measurer.measure(word) <= maxWidth) {
-        current = word
+      if (measurer.measure(token) <= maxWidth) {
+        current = token
       }
       else {
         let chunk = ''
-        for (const char of word) {
+        for (const char of splitGraphemes(token)) {
           if (chunk !== '' && measurer.measure(chunk + char) > maxWidth) {
             lines.push(chunk)
             chunk = char
@@ -60,7 +75,10 @@ export function wrapText(content: string, maxWidth: number, measurer: TextMeasur
         current = chunk
       }
     }
-    lines.push(current)
+    if (current !== undefined)
+      lines.push(`${current}${spaces}`)
+    else if (spaces !== '')
+      lines.push(spaces)
   }
 
   return lines
@@ -75,13 +93,21 @@ export function fitTextToBox(
   measurer: TextMeasurer,
 ): { lines: string[], truncated: boolean } {
   const maxLines = Math.floor(height / (fontSize * TEXT_LINE_HEIGHT) + 1e-7)
-  const wrapped = wrapText(content, width, measurer)
-  if (wrapped.length <= maxLines) return { lines: wrapped, truncated: false }
+  const graphemes = splitGraphemes(content)
+  const overWideIndex = graphemes.findIndex(grapheme => measurer.measure(grapheme) > width)
+  const truncated = overWideIndex !== -1
+  const fittingContent = truncated ? graphemes.slice(0, overWideIndex).join('') : content
+  const wrapped = wrapText(fittingContent, width, measurer)
+  if (!truncated && wrapped.length <= maxLines) return { lines: wrapped, truncated: false }
   if (maxLines < 1) return { lines: [], truncated: content.length > 0 }
   const lines = wrapped.slice(0, maxLines)
-  const chars = Array.from(lines[lines.length - 1] ?? '')
+  const chars = splitGraphemes(lines[lines.length - 1] ?? '')
   while (chars.length && measurer.measure(`${chars.join('')}…`) > width) chars.pop()
   if (measurer.measure('…') > width) return { lines: [], truncated: true }
   lines[lines.length - 1] = `${chars.join('')}…`
   return { lines, truncated: true }
+}
+
+function splitGraphemes(content: string): string[] {
+  return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(content), part => part.segment)
 }

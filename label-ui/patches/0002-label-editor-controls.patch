@@ -52,7 +52,7 @@ index 1c633bd..72fa997 100644
          {{ saving ? t('topbar.saving') : t('topbar.autosaved') }}
        </div>
 diff --git a/packages/editor/src/components/shell/ElementToolStrip.vue b/packages/editor/src/components/shell/ElementToolStrip.vue
-index fee9758..cbe6e77 100644
+index fee9758..3a31d29 100644
 --- a/packages/editor/src/components/shell/ElementToolStrip.vue
 +++ b/packages/editor/src/components/shell/ElementToolStrip.vue
 @@ -2,7 +2,8 @@
@@ -65,18 +65,20 @@ index fee9758..cbe6e77 100644
  import {
    createBarcode,
    createCircle,
-@@ -32,8 +33,8 @@ const TOOLS = [
+@@ -32,8 +33,10 @@ const TOOLS = [
    { key: 'line', glyph: '—', labelKey: 'palette.line', create: createLine },
    { key: 'circle', glyph: '◯', labelKey: 'palette.circle', create: createCircle },
    { key: 'text', glyph: 'Aa', labelKey: 'palette.text', create: createText },
 -  { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: createQr },
 -  { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: createBarcode },
++  { key: 'short-code', glyph: '#', labelKey: 'palette.shortCode', create: (place: { centerXMm: number, centerYMm: number }) => createText(place, '{{short_code}}') },
++  { key: 'display-id', glyph: 'ID', labelKey: 'palette.displayId', create: (place: { centerXMm: number, centerYMm: number }) => createText(place, '{{display_id}}') },
 +  { key: 'qr', glyph: '▦', labelKey: 'palette.qr', create: (place: { centerXMm: number, centerYMm: number }) => createQr(place, '{{item_path}}') },
 +  { key: 'barcode', glyph: '|||', labelKey: 'palette.barcode', create: (place: { centerXMm: number, centerYMm: number }) => createBarcode(place, '{{asset_code}}') },
    { key: 'table', glyph: '⊞', labelKey: 'palette.table', create: createTable },
  ] as const
  
-@@ -97,8 +98,21 @@ function addShape(kind: ShapeKind): void {
+@@ -97,8 +99,21 @@ function addShape(kind: ShapeKind): void {
    addElement(place => createShape(place, kind))
  }
  
@@ -99,7 +101,7 @@ index fee9758..cbe6e77 100644
    history.dispatch(addElementCommand(doc, element))
    selection.select(element.id)
  }
-@@ -112,12 +126,14 @@ async function addImage(): Promise<void> {
+@@ -112,12 +127,14 @@ async function addImage(): Promise<void> {
      if (!file)
        return
      const { src, aspectRatio } = await readImage(file)
@@ -116,7 +118,7 @@ index fee9758..cbe6e77 100644
      history.dispatch(addElementCommand(doc, element))
      selection.select(element.id)
    }
-@@ -141,7 +157,7 @@ async function addImage(): Promise<void> {
+@@ -141,7 +158,7 @@ async function addImage(): Promise<void> {
        :title="t(tool.labelKey)"
        class="pp:flex pp:h-[42px] pp:w-[46px] pp:shrink-0 pp:cursor-pointer pp:flex-col pp:items-center pp:justify-center pp:gap-0.5 pp:rounded-lg pp:text-app-text2 pp:hover:bg-brand-soft pp:hover:text-brand-500"
        :data-pp-palette-tile="tool.key"
@@ -125,6 +127,19 @@ index fee9758..cbe6e77 100644
      >
        <span class="pp:font-uimono pp:text-[15px] pp:font-medium pp:leading-none">{{ tool.glyph }}</span>
        <span class="pp:text-[9px] pp:font-medium">{{ t(tool.labelKey) }}</span>
+diff --git a/packages/editor/src/core/element-factories.ts b/packages/editor/src/core/element-factories.ts
+index 2899f3a..7c8ae04 100644
+--- a/packages/editor/src/core/element-factories.ts
++++ b/packages/editor/src/core/element-factories.ts
+@@ -176,7 +176,7 @@ export function createText(place: PlaceAt, content = 'Text'): TextElement {
+     type: 'text',
+     name: 'Text',
+     content,
+-    fontSizePt: 14,
++    fontSizePt: 9,
+     fontWeight: 400,
+     align: 'left',
+     color: '#0f172a',
 diff --git a/packages/editor/src/core/element-placement.js b/packages/editor/src/core/element-placement.js
 new file mode 100644
 index 0000000..4d875ab
@@ -229,6 +244,37 @@ index 0000000..4d875ab
 +function intersects(a, b) {
 +  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
 +}
+diff --git a/packages/editor/src/locales/messages.ts b/packages/editor/src/locales/messages.ts
+index 742dd85..c2992e0 100644
+--- a/packages/editor/src/locales/messages.ts
++++ b/packages/editor/src/locales/messages.ts
+@@ -8,6 +8,8 @@ export const messages = {
+     'palette.line': 'Line',
+     'palette.circle': 'Circle',
+     'palette.text': 'Text',
++    'palette.shortCode': 'Short code',
++    'palette.displayId': 'Display ID',
+     'palette.image': 'Image',
+     'palette.soon': 'Soon',
+     'palette.imageTooLarge': 'Image is too large (max 2MB)',
+@@ -161,6 +162,8 @@ export const messages = {
+     'palette.line': 'Đường kẻ',
+     'palette.circle': 'Hình tròn',
+     'palette.text': 'Văn bản',
++    'palette.shortCode': 'Mã ngắn',
++    'palette.displayId': 'Mã hiển thị',
+     'palette.image': 'Hình ảnh',
+     'palette.soon': 'Sắp có',
+     'palette.imageTooLarge': 'Ảnh quá lớn (tối đa 2MB)',
+@@ -314,6 +316,8 @@ export const messages = {
+     'palette.line': '直线',
+     'palette.circle': '圆形',
+     'palette.text': '文本',
++    'palette.shortCode': '短码',
++    'palette.displayId': '显示编号',
+     'palette.image': '图片',
+     'palette.soon': '即将推出',
+     'palette.imageTooLarge': '图片过大（最大 2MB）',
 diff --git a/packages/editor/src/stores/batch-data-store.ts b/packages/editor/src/stores/batch-data-store.ts
 index a406610..f2a5bd4 100644
 --- a/packages/editor/src/stores/batch-data-store.ts

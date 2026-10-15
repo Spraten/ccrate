@@ -75,12 +75,15 @@ def view(entity_id=None):
 class WorkshopBrowserTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        catalog = (ROOT / 'homebox-ui/overlay/lib/workshop-object-catalog.js').read_text()
+        catalog = (ROOT / 'homebox-ui/overlay/lib/workshop-object-catalog.js').read_text(encoding='utf-8')
         catalog = catalog.replace('export const workshopObjectPresets', 'const workshopObjectPresets').replace('export function workshopPresetForDrawing', 'function workshopPresetForDrawing')
-        cls.source = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text().replace(
+        recovery = (ROOT / 'homebox-ui/overlay/lib/label-print-recovery.js').read_text(encoding='utf-8')
+        recovery = recovery.replace('export function ', 'function ')
+        cls.source = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text(encoding='utf-8').replace(
             'import { mountLabelDesigner, exportReviewedPaper } from "./label-editor.js";\n',
             catalog + '\nconst mountLabelDesigner=()=>{}; const exportReviewedPaper=()=>{};\n')
         cls.source = cls.source.replace('import { workshopObjectPresets, workshopPresetForDrawing } from "./workshop-object-catalog.js";\n', '')
+        cls.source = cls.source.replace('import { labelPrintFailure, pendingLabelPrint } from "./label-print-recovery.js";\n', recovery + '\n')
         cls.source = cls.source.replace('export function mountWorkshopTools', 'function mountWorkshopTools')
         cls.source += '\nwindow.mountWorkshopTools=mountWorkshopTools;window.workshopObjectPresets=workshopObjectPresets;window.workshopPresetForDrawing=workshopPresetForDrawing;'
         cls.css = (ROOT / 'homebox-ui/overlay/assets/css/workshop.css').read_text()
@@ -1053,6 +1056,25 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.page.get_by_role('button',name='Save all room changes').click()
         saved=self.page.evaluate('window.writes.at(-1)[1].document.rooms[0].objects[0]')
         self.assertEqual((saved['x'],saved['y'],saved['width'],saved['height']),(1,1,6,1.25))
+        self.assertEqual(self.errors,[])
+
+    def test_wall_dimensions_commit_on_enter_and_stay_inside_room(self):
+        room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        document={'version':2,'rooms':[{'id':room,'location_id':LOCATION,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[{'id':DRAWING,'name':'Partition wall','kind':'Wall','x':6,'y':8,'width':8,'height':2,'rotation':0,'location_id':None}]}]}
+        self.install_rooms4_plan(document,selected_drawing=DRAWING)
+        self.page.get_by_role('button',name='Edit',exact=True).click()
+        width=self.page.get_by_label('Drawing width in feet')
+        width.evaluate("el=>{el.value='10';el.dispatchEvent(new Event('input',{bubbles:true}))}")
+        width.press('Enter')
+        self.assertEqual(width.input_value(),'10')
+        self.assertTrue(self.page.get_by_role('button',name='Save all room changes').is_enabled())
+        depth=self.page.get_by_label('Drawing depth in feet')
+        depth.evaluate("el=>{el.value='14';el.dispatchEvent(new Event('input',{bubbles:true}))}")
+        depth.press('Enter')
+        self.assertEqual(depth.input_value(),'14')
+        self.page.get_by_role('button',name='Save all room changes').click()
+        saved=self.page.evaluate('window.writes.at(-1)[1].document.rooms[0].objects[0]')
+        self.assertEqual((saved['x'],saved['y'],saved['width'],saved['height']),(4,6,10,14))
         self.assertEqual(self.errors,[])
 
     def test_native_rename_refresh_keeps_geometry_and_updates_paths(self):

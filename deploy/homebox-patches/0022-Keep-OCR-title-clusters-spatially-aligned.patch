@@ -1,0 +1,76 @@
+From 0726e78c5e1dc42ed61ec7fe2b6ce3a3f98d342d Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 06:38:40 -0400
+Subject: [PATCH 22/23] Keep OCR title clusters spatially aligned
+
+---
+ frontend/components/Form/camera.test.ts |  1 +
+ frontend/components/Form/camera.ts      | 42 ++++++++++++++-----------
+ 2 files changed, 24 insertions(+), 19 deletions(-)
+
+diff --git a/frontend/components/Form/camera.test.ts b/frontend/components/Form/camera.test.ts
+index d53a760c..b608cf96 100644
+--- a/frontend/components/Form/camera.test.ts
++++ b/frontend/components/Form/camera.test.ts
+@@ -68,6 +68,7 @@ describe("local camera helpers", () => {
+       async detect() {
+         return [
+           { rawValue: "Cordless Drill", boundingBox: { x: 30, y: 20, width: 180, height: 32 } },
++          { rawValue: "SALE 50% OFF", boundingBox: { x: 700, y: 20, width: 150, height: 32 } },
+           { rawValue: "Warranty and address", boundingBox: { x: 30, y: 360, width: 220, height: 9 } },
+           { rawValue: "Series 4", boundingBox: { x: 30, y: 61, width: 100, height: 30 } },
+           { rawValue: "Tiny serial", boundingBox: { x: 30, y: 400, width: 65, height: 8 } },
+diff --git a/frontend/components/Form/camera.ts b/frontend/components/Form/camera.ts
+index a9bd3aae..e4773422 100644
+--- a/frontend/components/Form/camera.ts
++++ b/frontend/components/Form/camera.ts
+@@ -97,26 +97,30 @@ export async function recognizeNameLocally(
+           ? candidate
+           : best
+       );
+-      const anchorIndex = ordered.indexOf(anchor);
+-      let first = anchorIndex;
+-      let last = anchorIndex;
+-      while (first > 0) {
+-        const previous = ordered[first - 1]!;
+-        const current = ordered[first]!;
+-        const gap = current.detection.boundingBox!.y! -
+-          previous.detection.boundingBox!.y! - previous.detection.boundingBox!.height;
+-        if (gap > Math.max(previous.detection.boundingBox!.height, current.detection.boundingBox!.height) * 1.5) break;
+-        first--;
++      const cluster = new Set<(typeof ordered)[number]>([anchor]);
++      const queue = [anchor];
++      for (let cursor = 0; cursor < queue.length; cursor++) {
++        const member = queue[cursor]!;
++        const other = member.detection.boundingBox!;
++        for (const candidate of ordered) {
++          if (cluster.has(candidate)) continue;
++          const box = candidate.detection.boundingBox!;
++          const verticalGap = Math.max(
++            0,
++            Math.max(box.y!, other.y!) - Math.min(box.y! + box.height, other.y! + other.height)
++          );
++          const horizontalGap = Math.max(
++            0,
++            Math.max(box.x!, other.x!) - Math.min(box.x! + box.width, other.x! + other.width)
++          );
++          const spacingLimit = Math.max(box.height, other.height) * 1.5;
++          if (verticalGap <= spacingLimit && horizontalGap <= spacingLimit) {
++            cluster.add(candidate);
++            queue.push(candidate);
++          }
++        }
+       }
+-      while (last + 1 < ordered.length) {
+-        const current = ordered[last]!;
+-        const next = ordered[last + 1]!;
+-        const gap = next.detection.boundingBox!.y! -
+-          current.detection.boundingBox!.y! - current.detection.boundingBox!.height;
+-        if (gap > Math.max(current.detection.boundingBox!.height, next.detection.boundingBox!.height) * 1.5) break;
+-        last++;
+-      }
+-      selected = ordered.slice(first, last + 1);
++      selected = ordered.filter(candidate => cluster.has(candidate));
+     } else {
+       selected = prominent.sort((a, b) => a.index - b.index);
+     }

@@ -62,7 +62,8 @@ from PIL import Image
 import zxingcpp, qrcode
 from urllib.parse import urlsplit, parse_qs
 from homebox import Homebox
-from checkout import confirm_checkout
+from checkout import confirm_checkout, checkout_availability, checkout_status_actor
+from checkout_cart import CheckoutCart
 from returns import confirm_return, recover, RETURN_STATES
 from maps import list_map,save_room,save_object,remove_object
 from native_jobs import NativeJobs
@@ -97,6 +98,7 @@ ops_path=ROOT/'work/ops'
 ops_path.mkdir(exist_ok=True,mode=0o700)
 os.chmod(ops_path,0o700)
 ledger=Ledger(ops_path/'ledger.db')
+checkout_cart=CheckoutCart(ledger)
 shelf_checks=ShelfChecks(ledger)
 badges=Badges(ledger)
 native_jobs=NativeJobs(ledger)
@@ -227,7 +229,7 @@ class Handler(BaseHTTPRequestHandler):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_POST(self):
-        if desktop_handle(self,{'root':ROOT,'lock':lock,'ledger':ledger,'shelf_checks':shelf_checks,'badges':badges,'native_jobs':native_jobs,'imports':imports,'workshop':workshop,'sessions':sessions,'label_layouts':label_layouts,'label_asset_root':LABEL_ASSET_ROOT}):return
+        if desktop_handle(self,{'root':ROOT,'lock':lock,'ledger':ledger,'checkout_cart':checkout_cart,'shelf_checks':shelf_checks,'badges':badges,'native_jobs':native_jobs,'imports':imports,'workshop':workshop,'sessions':sessions,'label_layouts':label_layouts,'label_asset_root':LABEL_ASSET_ROOT}):return
         try:self.session
         except ValueError as error:self.reply_json(400,{'error':str(error)});return
         if self.path == '/notes/confirm' or self.path.startswith('/workshop/checks/') or self.path in ('/workshop/get','/workshop/save','/workshop/move','/workshop/view','/workshop/resolve','/workshop/shelf-order') or self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/hardware/reconnect','/scan/cancel','/operation/status','/camera/focus','/decode','/scan','/badge/issue','/badge/revoke','/badge/reprint','/badge/replace','/session/end','/session/activity','/condition','/checkout/confirm','/return/session/start','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/label/templates/save','/label/templates/result','/label/paper','/accounts/create','/accounts/update','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print','/equipment/code'):
@@ -497,8 +499,20 @@ class Handler(BaseHTTPRequestHandler):
                     if data.get('session_generation')!=generation or data.get('session_instance')!=self.session.instance:raise Conflict('Badge session changed; review your selection again')
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
-                        result=confirm_checkout(client,ledger,native['defaultGroupId'],actor,data.get('assets',[]),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'))
-                        self.session.end(generation)
+                        group=native['defaultGroupId'];client.tenant=group
+                        cart_context=None
+                        if 'cart_revision' in data or 'cart_items' in data:
+                            saved=checkout_cart.get(group,actor)
+                            requested=data.get('cart_items')
+                            if data.get('cart_revision')!=saved['revision'] or not isinstance(requested,list):
+                                raise Conflict('Your saved checkout cart changed. Review it again.')
+                            requested=[str(NativeUUID(value)) for value in requested]
+                            if len(requested)>50 or len(requested)!=len(set(requested)):
+                                raise Conflict('Your saved checkout cart changed. Review it again.')
+                            cart_context={'revision':saved['revision'],'items':requested,'original_items':saved['items']}
+                        result=confirm_checkout(client,ledger,group,actor,data.get('assets',[]),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'),cart_context)
+                        if cart_context is not None:
+                            result['cart_consumption']=checkout_cart.consume_completed_receipt(group,actor,result['id'])
                     self.reply_json(200,result);return
                 if self.path=='/condition':
                     if not OPEN_ADMIN:self.send_error(403);return
@@ -526,7 +540,7 @@ class Handler(BaseHTTPRequestHandler):
                             except (ValueError,TypeError,AttributeError):
                                 raise Conflict('Workshop collection or service actor changed. Check the result in its original context.') from None
                             if (supplied_group!=canonical_group or supplied_actor!=canonical_actor or
-                                    canonical_group!=group or canonical_actor!=actor):
+                                    canonical_group!=group or canonical_actor!=native['id']):
                                 raise Conflict('Workshop collection or service actor changed. Check the result in its original context.')
                         else:
                             key=uuid(data.get('request_key'))
@@ -534,8 +548,21 @@ class Handler(BaseHTTPRequestHandler):
                             binding=workshop.save_binding(group,key)
                             if (prior and prior.get('kind')=='workshop/save') or binding:
                                 raise Conflict('This Workshop result requires its original collection and service actor context.')
-                        result=operation_status({'group':group,'actor':actor,'manager':True},globals(),data)
-                        if scoped:result['workshop_context']={'group_id':group,'actor_id':actor}
+                        badge_actor,generation=self.session.snapshot()
+                        key=uuid(data.get('request_key'))
+                        status_actor=checkout_status_actor(ledger,group,key,badge_actor,native['id'])
+                        result=operation_status({'group':group,'actor':status_actor,'manager':True},globals(),data)
+                        if result.get('action')=='check_out' and result.get('id'):
+                            with ledger.connection() as db:
+                                op=db.execute('SELECT actor_id FROM operations WHERE id=? AND group_id=?',(result['id'],group)).fetchone()
+                            if not badge_actor or not op or op['actor_id']!=badge_actor:
+                                result={'status':'not_started'}
+                            elif result.get('status')=='completed':
+                                with ledger.connection() as db:
+                                    ctxrow=db.execute('SELECT payload FROM operation_context WHERE operation_id=?',(result['id'],)).fetchone()
+                                if ctxrow and json.loads(ctxrow['payload']).get('checkout_cart'):
+                                    result['cart_consumption']=checkout_cart.consume_completed_receipt(group,badge_actor,result['id'])
+                        if scoped:result['workshop_context']={'group_id':group,'actor_id':native['id']}
                     self.reply_json(200,result);return
                 if self.path=='/scan/cancel':
                     from ledger import uuid
@@ -608,7 +635,40 @@ class Handler(BaseHTTPRequestHandler):
                 except ProcessLookupError:pass
         timer=threading.Timer(0.3,close_window);timer.daemon=True;timer.start()
     def do_GET(self):
-        if desktop_handle(self,{'root':ROOT,'lock':lock,'ledger':ledger,'shelf_checks':shelf_checks,'badges':badges,'native_jobs':native_jobs,'imports':imports,'workshop':workshop,'sessions':sessions,'label_layouts':label_layouts,'label_asset_root':LABEL_ASSET_ROOT}):return
+        if desktop_handle(self,{'root':ROOT,'lock':lock,'ledger':ledger,'checkout_cart':checkout_cart,'shelf_checks':shelf_checks,'badges':badges,'native_jobs':native_jobs,'imports':imports,'workshop':workshop,'sessions':sessions,'label_layouts':label_layouts,'label_asset_root':LABEL_ASSET_ROOT}):return
+        if urlsplit(self.path).path=='/checkout/cart':
+            actor,generation=self.session.snapshot()
+            if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
+            try:
+                with lock:
+                    client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId']
+                    client.tenant=group
+                    members=client.call('/api/v1/groups/members')
+                    if actor not in {member['id'] for member in members}:raise Conflict('Badge holder is no longer a collection member')
+                    result=checkout_cart.get(group,actor)
+                    if self.session.snapshot()!=(actor,generation):raise Conflict('Badge session changed; reload the checkout cart')
+                self.reply_json(200,result)
+            except (OSError,ValueError,Conflict) as error:self.reply_json(409,{'error':str(error)})
+            return
+        if urlsplit(self.path).path=='/checkout/availability':
+            actor,generation=self.session.snapshot()
+            if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
+            try:
+                query=parse_qs(urlsplit(self.path).query,keep_blank_values=True)
+                if set(query)!={'ids'} or len(query['ids'])!=1:raise ValueError('Choose checkout items to review')
+                ids=query['ids'][0].split(',')
+                with lock:
+                    client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId']
+                    client.tenant=group
+                    members=client.call('/api/v1/groups/members')
+                    if actor not in {member['id'] for member in members}:raise Conflict('Badge holder is no longer a collection member')
+                    result=checkout_availability(client,ledger,group,ids)
+                    if self.session.snapshot()!=(actor,generation):raise Conflict('Badge session changed; refresh checkout availability')
+                self.reply_json(200,result)
+            except (ValueError,KeyError) as error:self.reply_json(400,{'error':str(error)})
+            except Conflict as error:self.reply_json(409,{'error':str(error)})
+            except OSError as error:self.reply_json(503,{'error':str(error) or 'C-Crate unavailable'})
+            return
         terminal_path=urlsplit(self.path)
         if terminal_path.path.startswith('/workshop/checks/'):
             route=terminal_path.path.rsplit('/',1)[1]
@@ -782,7 +842,7 @@ class Handler(BaseHTTPRequestHandler):
             body=(terminal_assets()/'checkout-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/workshop-ui.js':
             body=(terminal_assets()/'workshop-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
-        elif self.path in ('/workflow-ui.js','/return-ui.js','/member-avatar.js','/users-ui.js','/label-editor.js'):
+        elif self.path in ('/workflow-ui.js','/return-ui.js','/member-avatar.js','/users-ui.js','/label-editor.js','/scanner_input.js'):
             body=(terminal_assets()/self.path.lstrip('/')).read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/import-ui.js':
             body=(terminal_assets()/'import-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200

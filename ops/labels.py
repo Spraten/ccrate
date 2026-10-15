@@ -1,5 +1,5 @@
 """Native QR label previews and one-shot USB printing with durable outcomes."""
-import io,base64,json,pathlib,subprocess,textwrap,hashlib,os
+import io,base64,json,pathlib,subprocess,hashlib,os,re,unicodedata
 import qrcode
 from PIL import Image,ImageDraw,ImageFont
 from ledger import Conflict,uuid
@@ -15,6 +15,56 @@ def probe():
     result=subprocess.run([adapter(),'probe',printer_path()],capture_output=True,timeout=15,check=True)
     return json.loads(result.stdout)
 def font(size):return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',size)
+def _fit_name_lines(content,draw,name_font,available,max_lines):
+    def measure(text):
+        bounds=draw.textbbox((0,0),text,font=name_font)
+        return bounds[2]-bounds[0]
+    graphemes=_split_graphemes(content)
+    over_wide=next((index for index,grapheme in enumerate(graphemes) if measure(grapheme)>available),None)
+    truncated=over_wide is not None
+    if truncated:graphemes=graphemes[:over_wide]
+    lines=[]
+    for paragraph in re.split(r'\r\n?|\n',''.join(graphemes)):
+        if paragraph=='':
+            lines.append('');continue
+        current=''
+        for word in paragraph.split(' '):
+            candidate=word if current=='' else current+' '+word
+            if measure(candidate)<=available:
+                current=candidate;continue
+            if current:lines.append(current)
+            if measure(word)<=available:
+                current=word;continue
+            chunk=''
+            for grapheme in _split_graphemes(word):
+                if chunk and measure(chunk+grapheme)>available:
+                    lines.append(chunk);chunk=grapheme
+                else:chunk+=grapheme
+            current=chunk
+        lines.append(current)
+    if not truncated and len(lines)<=max_lines:return lines
+    if max_lines<1:return []
+    lines=lines[:max_lines];characters=_split_graphemes(lines[-1] if lines else '')
+    while characters and measure(''.join(characters)+'…')>available:characters.pop()
+    if measure('…')>available:return []
+    lines[-1]=''.join(characters)+'…'
+    return lines
+
+def _split_graphemes(content):
+    graphemes=[];join_next=False;regional_count=0
+    for character in content:
+        codepoint=ord(character);category=unicodedata.category(character)
+        modifier=0x1F3FB<=codepoint<=0x1F3FF
+        variation=0xFE00<=codepoint<=0xFE0F or 0xE0100<=codepoint<=0xE01EF
+        regional=0x1F1E6<=codepoint<=0x1F1FF
+        extending=category in ('Mn','Mc','Me') or modifier or variation or character=='\u200d'
+        if graphemes and (extending or join_next or (regional and regional_count%2==1)):
+            graphemes[-1]+=character
+        else:
+            graphemes.append(character)
+        join_next=character=='\u200d'
+        regional_count=regional_count+1 if regional else 0
+    return graphemes
 def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=None):
     width=min(384,int(width_mm)*8);height=int(height_mm)*8-16
     if width<256 or height<208:raise ValueError('Loaded labels are too small for this QR layout (minimum 32 x 28 mm)')
@@ -29,43 +79,28 @@ def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=Non
             if black:draw.rectangle((x*scale,26+y*scale,(x+1)*scale-1,26+(y+1)*scale-1),fill=0)
     left=len(matrix)*scale+4;available=width-left-4;top=30
     # Bold, binary text avoids weak gray edge dots from thermal dithering.
-    name_font=font(18);lines=[];line=''
-    for character in ' '.join(entity['name'].split()):
-        candidate=line+character
-        if line and draw.textbbox((0,0),candidate,font=name_font)[2]>available:
-            lines.append(line.rstrip());line=character.lstrip()
-        else:line=candidate
-    if line:lines.append(line)
     max_lines=max(1,(height-74-top)//22)
+    name_font=font(18);lines=_fit_name_lines(entity['name'],draw,name_font,available,max_lines)
     for line in lines[:max_lines]:
-        draw.text((left,top),line,font=name_font,fill=0);top+=22
+        if line:draw.text((left,top),line,font=name_font,fill=0)
+        top+=22
     identifier=entity.get('assetId','');identifier_font=font(17)
     while identifier and draw.textbbox((0,0),identifier,font=identifier_font)[2]>available:identifier=identifier[:-1]
     draw.text((left,height-56),identifier,font=identifier_font,fill=0)
     draw.text((left,height-32),'C-Crate',font=font(13),fill=0)
     return image,code
 def preview(client,entity_id,*,layouts=None,group=None,actor=None,template_id=None,template_revision=None):
-    if layouts is not None:
+    if layouts is not None and (template_id is not None or template_revision is not None):
         return layouts.preview(client,group,actor,{'mode':'item','entity_id':entity_id,'template_id':template_id,'template_revision':template_revision})
-    entity=client.entity(uuid(entity_id));image,code=render(entity);stream=io.BytesIO();image.save(stream,format='PNG')
-    return {'entity_id':entity['id'],'name':entity['name'],'code':code,'width':image.width,'height':image.height,'image':'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()}
+    entity=client.entity(uuid(entity_id))
+    if not (entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation')):raise ValueError('Select a saved storage location to preview its QR label')
+    image,code=render(entity,40,28);stream=io.BytesIO();image.save(stream,format='PNG');png=stream.getvalue()
+    response={'entity_id':entity['id'],'name':entity['name'],'code':code,'width':image.width,'height':image.height,'image':'data:image/png;base64,'+base64.b64encode(png).decode()}
+    if layouts is not None:response['review_id']=layouts.save_legacy_review(group,actor,entity,png,image.width,image.height)
+    return response
 def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=None,valid_context=None):
     entity_id=uuid(entity_id)
-    if layouts is None:
-        entity=client.entity(entity_id)
-        if not (entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation')):raise ValueError('Select and review a saved label template before printing')
-        job=jobs.prepare(group,actor,'print_label',key,{'entity_id':entity_id})
-        if job['status']=='completed':return {'id':job['id'],'status':'completed','entity_id':entity_id}
-        if job['status']!='prepared':raise Conflict('Printer outcome needs Admin review. Do not retry automatically')
-        try:
-            material=probe();image,_=render(entity,material['width_mm'],material['height_mm']);jobs.sent(group,job['id']);jobs.bind(group,job['id'],entity_id)
-            result=subprocess.run([adapter(),'print',printer_path(),str(image.width),str(image.height)],input=image.tobytes(),capture_output=True,timeout=60,check=True)
-            if json.loads(result.stdout).get('status')!='printed':raise OSError('Printer did not confirm completion')
-            jobs.record(group,job['id'],'printer_completion',{'entity_id':entity_id});jobs.complete(group,job['id'])
-            return {'id':job['id'],'status':'completed','entity_id':entity_id}
-        except Exception:
-            if jobs.detail(group,job['id'])['status']=='prepared':jobs.cancel(group,job['id']);raise ValueError('Printer not ready. Check connection and loaded stock')
-            jobs.review(group,job['id'],'Printer outcome uncertain. Inspect the label; never auto-reprint');raise Conflict('Printing outcome is uncertain. Inspect the label and review in Admin')
+    if layouts is None:raise ValueError('Review the location label again before printing')
     if review_id is None:raise ValueError('Select and review a saved label template before printing')
     review_id=uuid(review_id)
     with jobs.ledger.connection() as db:
@@ -88,10 +123,31 @@ def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=N
         ticket=layouts.review(group,actor,review_id)
         if not ticket or ticket['item_id']!=entity_id:raise ValueError('Reviewed label is missing, expired, or belongs to another item')
         if ticket.get('attached_job') not in (None,job['id']):raise Conflict('Reviewed label is already attached to another print')
+        if ticket.get('kind')=='legacy_location':
+            entity=client.entity(entity_id)
+            if not (entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation')):raise Conflict('This item is no longer a storage location; review it again')
+            if entity.get('updatedAt')!=ticket.get('item_updated_at') or entity.get('displayId','')!=ticket.get('item_display_id') or entity.get('archived'):raise Conflict('Storage location changed since preview; review it again')
+            material=probe()
+            if not isinstance(material,dict) or type(material.get('width_mm')) is not int or type(material.get('height_mm')) is not int or material['width_mm']<=0 or material['height_mm']<=0:raise ValueError('Could not verify loaded label stock. Check the printer and preview the location again')
+            if (material['width_mm'],material['height_mm'])!=(40,30):
+                layouts.resolve_review(group,review_id)
+                raise ValueError('Load the reviewed 40 x 30 mm SUPVAN stock and preview the location again')
+            with Image.open(io.BytesIO(ticket['png'])) as image_file:
+                image_file.load()
+                if image_file.mode!='L' or image_file.size!=(ticket['width'],ticket['height']):raise ValueError('Reviewed label raster is invalid')
+                frozen=image_file.copy()
+            if hashlib.sha256(ticket['png']).hexdigest()!=ticket['sha256']:raise ValueError('Reviewed label raster failed its integrity check')
+            if valid_context and not valid_context():raise Conflict('Label manager or session changed; review the location again')
+            layouts.attach_review(group,actor,review_id,job['id']);attached=True
+            jobs.sent(group,job['id']);jobs.bind(group,job['id'],entity_id)
+            result=subprocess.run([adapter(),'print',printer_path(),str(frozen.width),str(frozen.height)],input=frozen.tobytes(),capture_output=True,timeout=60,check=True)
+            if json.loads(result.stdout).get('status')!='printed':raise OSError('Printer did not confirm completion')
+            jobs.record(group,job['id'],'printer_completion',{'entity_id':entity_id});jobs.complete(group,job['id']);layouts.resolve_review(group,review_id)
+            return {'id':job['id'],'status':'completed','entity_id':entity_id}
         template=layouts.get(group,ticket['template_id'])
         if template['revision']!=ticket['template_revision'] or hashlib.sha256(json.dumps(template['document'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()!=ticket['template_hash']:raise Conflict('Saved template changed; review the label again')
         entity=client.entity(entity_id)
-        if entity.get('updatedAt')!=ticket['item_updated_at'] or entity.get('archived'):raise Conflict('Item changed since review; preview it again')
+        if entity.get('updatedAt')!=ticket['item_updated_at'] or entity.get('displayId')!=ticket.get('item_display_id') or entity.get('archived'):raise Conflict('Item or storage path changed since review; preview it again')
         material=probe()
         if (material.get('width_mm'),material.get('height_mm'))!=(40,30):raise ValueError('Load the required 40 x 30 mm SUPVAN stock')
         with Image.open(io.BytesIO(ticket['png'])) as image_file:
@@ -167,7 +223,7 @@ def paper(client,layouts,group,actor,data,*,deadline=None):
         try:entity=client.entity(ticket['item_id'])
         finally:
             if old_timeout is not None:client.timeout=old_timeout
-        if entity.get('updatedAt')!=ticket['item_updated_at'] or entity.get('archived'):raise Conflict('An item changed since review; preview the items again')
+        if entity.get('updatedAt')!=ticket['item_updated_at'] or entity.get('displayId')!=ticket.get('item_display_id') or entity.get('archived'):raise Conflict('An item or storage path changed since review; preview the items again')
         template=layouts.get(group,ticket['template_id'])
         if template['revision']!=ticket['template_revision'] or hashlib.sha256(json.dumps(template['document'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()!=ticket['template_hash']:raise Conflict('A saved template changed since review')
         if geometry.get('label_mm')!=ticket['label_mm'] or ticket['profile']!='letter' or ticket['dpi']!=300:raise ValueError('Paper geometry must match Letter reviewed labels')

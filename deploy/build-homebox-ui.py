@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Build a native Homebox frontend overlay without modifying the upstream checkout.
 
-Install the pinned frontend dependencies in work/homebox-ui-build first. Output
-stays staged until a verified release is selected by work/homebox-ui-current.
+Install the pinned frontend dependencies in work/homebox-ui-build first. A
+fresh --build-root installs from its copied lockfile. Output stays staged until
+a verified release is selected by work/homebox-ui-current.
 """
 import argparse
 import os
@@ -12,9 +13,13 @@ import shutil
 import subprocess
 import sys
 import re
+import threading
 from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(pathlib.Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from homebox_patchset import source_commit
 BUILD = ROOT / 'work/homebox-ui-build'
 TOOLCHAIN_ROOT = ROOT / 'work/toolchains'
 UPSTREAM_ROOT = ROOT
@@ -26,6 +31,93 @@ def replace(path, old, new):
     if source.count(old) != 1:
         raise RuntimeError(f'Upstream changed: expected one patch anchor in {path}')
     target.write_text(source.replace(old, new))
+
+
+def configure_ui_component_discovery():
+    # Keep shadcn's TypeScript barrels importable while Nuxt auto-discovers only
+    # the Vue components they intentionally export. Register after shadcn-nuxt
+    # so its components:dirs hook has already appended its directory.
+    replace(
+        'nuxt.config.ts',
+        '''  modules: [
+    "@nuxtjs/tailwindcss",
+    "@pinia/nuxt",
+    "@vueuse/nuxt",
+    "@vite-pwa/nuxt",
+    "unplugin-icons/nuxt",
+    "shadcn-nuxt",
+    "@nuxt/eslint",
+  ],''',
+        '''  modules: [
+    "@nuxtjs/tailwindcss",
+    "@pinia/nuxt",
+    "@vueuse/nuxt",
+    "@vite-pwa/nuxt",
+    "unplugin-icons/nuxt",
+    "shadcn-nuxt",
+    "@nuxt/eslint",
+    (_options, nuxt) => {
+      nuxt.hook("components:dirs", dirs => {
+        for (let index = 0; index < dirs.length; index++) {
+          const source = dirs[index];
+          if (!source) continue;
+          const dir = typeof source === "string" ? { path: source, extensions: [] } : source;
+          if (dir.path.replaceAll("\\\\", "/").includes("components/ui")) {
+            dir.extensions = ["vue"];
+            dirs[index] = dir;
+          }
+        }
+      });
+    },
+  ],''',
+    )
+
+
+def filter_known_wasi_warning(output):
+    """Drop only the exact Node WASI notice known to accompany the Pi fallback."""
+    return re.sub(
+        r'(?m)^ERROR \(node:\d+\) ExperimentalWarning: WASI is an experimental feature and might change at any time(?:\r?\n|$)',
+        '',
+        output,
+    )
+
+
+def has_frontend_tool_failure(output):
+    """Recognize invocation failures that must never be waived as upstream TS errors."""
+    return re.search(
+        r'(?im)^(?:ERR_PNPM_[A-Z0-9_]+\b|\s*ERROR\s+spawn\b|Error:|Error \[ERR_[A-Z_]+\]:|'
+        r'Error: (?:Cannot find module|Cannot find package|spawn .* ENOENT)|'
+        r'.* is not recognized as an internal or external command\.?)',
+        output,
+    ) is not None
+
+
+def is_only_known_upstream_typecheck_failure(output, baseline, pin):
+    if has_frontend_tool_failure(output):
+        return False
+    nuxt_exit_codes = re.findall(
+        r'(?m)^\s*ERROR\s+Process exited with non-zero status \((\d+)\)\s*$',
+        output,
+    )
+    if nuxt_exit_codes != ['2']:
+        return False
+    diagnostics = [
+        list(match.groups())
+        for match in re.finditer(
+            r'^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$', output, re.M
+        )
+    ]
+    additional = Counter(map(tuple, diagnostics)) - Counter(map(tuple, baseline['diagnostics']))
+    return baseline['pin'] == pin and bool(diagnostics) and not additional
+
+
+def resolve_pnpm_launcher(toolchain_root, platform=None):
+    pnpm = toolchain_root/'pnpm/node_modules/.bin/pnpm'
+    if (platform or os.name) == 'nt':
+        pnpm_cmd = pnpm.with_suffix('.cmd')
+        if pnpm_cmd.exists():
+            return pnpm_cmd
+    return pnpm
 
 
 def brand_frontend():
@@ -43,7 +135,7 @@ def brand_frontend():
         if isinstance(value, list): return [values(item) for item in value]
         return value
     for path in (BUILD/'locales').glob('*.json'):
-        path.write_text(json.dumps(values(json.loads(path.read_text())), ensure_ascii=False, indent=2)+'\n')
+        path.write_text(json.dumps(values(json.loads(path.read_text(encoding='utf-8'))), ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     logo = (ROOT/'kiosk/branding/caci-create.svg').read_text()
     (BUILD/'components/App/Logo.vue').write_text('<template>\n'+logo+'</template>\n')
     shutil.copytree(ROOT/'kiosk/branding', BUILD/'public', dirs_exist_ok=True)
@@ -56,35 +148,134 @@ def item_log_frontend():
     path = 'pages/item/[id]/index.vue'
     replace(path, '  import LabelMaker from', '  import WorkshopItemLog from "@/components/Workshop/ItemLog.vue";\n  import ItemLoans from "@/components/Workshop/ItemLoans.vue";\n  import LabelMaker from')
     details_anchor = '          </DetailsSection>\n        </BaseCard>\n\n        <!-- anything in this is not rendered if on another page -->'
-    replace(path, details_anchor, '          </DetailsSection>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
+    replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Generated from item type and full storage path; regenerated when the item moves.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
+
+
+def move_create_actions_after_photo_preview(source):
+    """Keep both existing create actions after uploaded-photo previews."""
+    action_open = '      <div class="mt-4 flex flex-row-reverse">'
+    action_start = source.find(action_open)
+    preview_start = source.find('      <PhotoUploaderPreview\n')
+    if action_start < 0 or preview_start < 0:
+        raise RuntimeError('Upstream changed: expected the create actions and photo preview in CreateModal.vue')
+    if source.count(action_open) != 1 or source.count('      <PhotoUploaderPreview\n') != 1:
+        raise RuntimeError('Upstream changed: expected one create action block and photo preview in CreateModal.vue')
+
+    action_close = source.find('\n      </div>', action_start)
+    button_group_start = source.find('        <ButtonGroup>', action_start, action_close)
+    if action_close < 0 or button_group_start < 0:
+        raise RuntimeError('Upstream changed: expected the create buttons inside their actions block')
+    button_group_end = source.find('        </ButtonGroup>', button_group_start)
+    if button_group_end < 0 or button_group_end > action_close:
+        raise RuntimeError('Upstream changed: expected the create buttons inside their actions block')
+    if source[action_start + len(action_open):button_group_start].strip() or source[button_group_end + len('        </ButtonGroup>'):action_close].strip():
+        raise RuntimeError('Upstream changed: expected only the create button group inside its actions block')
+    action_end = action_close + len('\n      </div>')
+    actions = source[action_start:action_end]
+    if actions.count('type="submit"') != 1 or actions.count('@click="create(false)"') != 1:
+        raise RuntimeError('Upstream changed: expected both existing create actions in CreateModal.vue')
+    if preview_start < action_start:
+        return source
+
+    if source[action_end:preview_start] != '\n\n':
+        raise RuntimeError('Upstream changed: expected create actions directly before the photo preview')
+    preview_tag_end = source.find('>', preview_start)
+    if preview_tag_end < 0 or source[preview_tag_end - 1] != '/':
+        raise RuntimeError('Upstream changed: expected a self-closing photo preview in CreateModal.vue')
+    preview_end = preview_tag_end + 1
+    return source[:action_start] + '\n\n' + source[preview_start:preview_end] + '\n\n' + actions + source[preview_end:]
 
 
 def nest_frontend():
     replace('lib/api/classes/items.ts', '  orderBy?: string;', '  orderBy?: string;\n  isLocation?: boolean;')
-    replace('components/ui/dialog-provider/utils.ts', '[DialogID.CreateEntity]: { baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" };', '[DialogID.CreateEntity]: ({ baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" }) & { parentId?: string };')
+    replace(
+        'components/ui/dialog-provider/utils.ts',
+        '  [DialogID.CreateEntity]:\n    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true; resume?: true }\n    | { baseType: "location" };',
+        '  [DialogID.CreateEntity]: (\n    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true; resume?: true }\n    | { baseType: "location" }\n  ) & { parentId?: string };',
+    )
     path = 'components/Entity/CreateModal.vue'
     replace(path, ':entity-types="subItemCreate ? entityTypes.filter(t => !t.isLocation) : entityTypes"', ':entity-types="entityTypes"')
     target = BUILD/path
+    source = target.read_text()
+    # Older frontend pins did not yet include model-number handling. Add it
+    # only when absent; barcode-aware pins already supply the complete flow.
+    if 'v-model="form.modelNumber"' not in source:
+        replace(path, '      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"', '      <FormTextField v-if="!selectedEntityType?.isLocation" v-model="form.modelNumber" label="Model number" :max-length="255" />\n      <FormTextField\n        v-if="!selectedEntityType?.isLocation"\n        v-model.number="form.quantity"')
+    elif source.count('v-model="form.modelNumber"') != 1:
+        raise RuntimeError(f'Upstream changed: expected one model-number control in {path}')
+    if 'modelNumber: "",' not in source:
+        replace(path, '    name: "",\n    quantity: 1,', '    name: "",\n    modelNumber: "",\n    quantity: 1,')
+    elif source.count('modelNumber: "",') != 1:
+        raise RuntimeError(f'Upstream changed: expected one model-number form field in {path}')
+    if 'form.modelNumber = "";' not in source:
+        replace(path, '    form.name = "";\n    form.quantity = 1;', '    form.name = "";\n    form.modelNumber = "";\n    form.quantity = 1;')
+    target = BUILD/path
     text = target.read_text()
-    start = text.index('      <ItemSelector\n'); end = text.index('      <FormTextField', start)
+    selector = '      <ItemSelector\n'
+    if text.count(selector) != 1:
+        raise RuntimeError(f'Upstream changed: expected one sub-item selector in {path}')
+    start = text.index(selector)
+    end = text.index('\n      />', start) + len('\n      />')
     text = text[:start]+text[end:]
-    text = text.replace('    EntityCreate,', '    EntityCreate,\n    EntitySummary,')
+    import_block = text[text.index('  import type {'):text.index('  } from "~~/lib/api/types/data-contracts";')]
+    if 'EntitySummary,' not in import_block:
+        if text.count('    EntityCreate,') != 1:
+            raise RuntimeError(f'Upstream changed: expected one EntityCreate import in {path}')
+        text = text.replace('    EntityCreate,', '    EntityCreate,\n    EntitySummary,')
+    elif import_block.count('EntitySummary,') != 1:
+        raise RuntimeError(f'Upstream changed: expected one EntitySummary import in {path}')
     text = text.replace('const found = locations.value.find(l => l.id === data.defaultLocation!.id);', 'const { data: found } = await api.items.get(data.defaultLocation.id);')
     text = text.replace('location: locations.value && locations.value.length > 0 ? locations.value[0] : ({} as EntityOut)', 'location: null as EntitySummary | null')
     text = text.replace('      form.parentId = null;', '      form.parentId = null;\n      form.location = null;')
     text = text.replace('            parent.value = data;', '            parentItemLocationId = data.id;')
     start = text.index('          if (data.parent) {'); end = text.index('\n        }', start)
     text = text[:start]+text[end:]
-    start = text.index('      const locId = locationId.value ? locationId.value : parentItemLocationId;'); end = text.index('\n      if (tagId.value)', start)
-    text = text[:start]+'''      const locId = params.parentId || locationId.value || parentItemLocationId;
+    location_context_anchor = '''      const locId = locationId.value ? locationId.value : parentItemLocationId;
+      applyInitialBarcodeParamAfterContext(initialBarcode, form, lookupBarcode, () => {
+        if (locId) {
+          const found = locations.value.find(l => l.id === locId);
+          if (found) {
+            form.location = found;
+          }
+        }
+
+        if (tagId.value) {'''
+    if text.count(location_context_anchor) != 1:
+        raise RuntimeError(f'Upstream changed: expected one barcode-aware location context anchor in {path}')
+    text = text.replace(
+        location_context_anchor,
+        '''      const locId = params.parentId || locationId.value || parentItemLocationId;
       if (locId) {
         const { data } = await api.items.get(String(locId));
         if (data) form.location = data;
       }
-'''+text[end:]
+
+      applyInitialBarcodeParamAfterContext(initialBarcode, form, lookupBarcode, () => {
+        if (tagId.value) {''',
+    )
     start = text.index('    // Items must live somewhere'); end = text.index('    if (loading.value)', start)
     text = text[:start]+text[end:]
     text = text.replace('parentId: form.location.id as string', 'parentId: form.location?.id || null').replace('parentId: form.parentId || (form.location.id as string)', 'parentId: form.location?.id || null')
+    # Barcode-aware upstream already owns the model-number field, state and
+    # create payloads. Keep the overlay from reinserting duplicate keys/imports.
+    existing_model_number_payloads = text.count('modelNumber: form.modelNumber,')
+    if existing_model_number_payloads not in (0, 3):
+        raise RuntimeError(f'Upstream changed: expected zero or three model-number payloads in {path}')
+    if existing_model_number_payloads == 0:
+        if text.count('const templateRequest = {') != 1:
+            raise RuntimeError(f'Upstream changed: expected one template request in {path}')
+        text = text.replace('const templateRequest = {', 'const templateRequest = {\n        modelNumber: form.modelNumber?.trim() || undefined,')
+        payload_anchor = '        name: form.name,\n        quantity: form.quantity,\n        description: form.description,'
+        if text.count(payload_anchor) != 1:
+            raise RuntimeError(f'Upstream changed: expected one normal item payload in {path}')
+        text = text.replace(payload_anchor, '        name: form.name,\n        modelNumber: form.modelNumber?.trim() || undefined,\n        quantity: form.quantity,\n        description: form.description,')
+    import_block = text[text.index('  import type {'):text.index('  } from "~~/lib/api/types/data-contracts";')]
+    form_block = text[text.index('  const form = reactive({'):text.index('\n  });', text.index('  const form = reactive({'))]
+    if import_block.count('EntitySummary,') != 1 or form_block.count('modelNumber: "",') != 1:
+        raise RuntimeError(f'Upstream changed: expected one EntitySummary import and modelNumber form field in {path}')
+    if text.count('modelNumber: form.modelNumber,') != 3:
+        raise RuntimeError(f'Upstream changed: expected modelNumber in each native create payload in {path}')
+    text = move_create_actions_after_photo_preview(text)
     target.write_text(text)
     path = 'pages/item/[id]/index/edit.vue'; target=BUILD/path; text=target.read_text()
     start=text.index('    if (data.parent && data.parent.entityType'); end=text.index('\n    return data;',start)
@@ -115,7 +306,12 @@ def nest_frontend():
       </section>
       <ItemViewSelectable v-if="items && items.length" :items="items || []" @refresh="refreshItemList" />''')
 
-    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  displayId: string;\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  displayId: string;\n  shortCode: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    for interface_name in ('EntityCreate', 'EntityTemplateCreateItemRequest'):
+        start = text.index(f'export interface {interface_name} {{')
+        end = text.index('\n}', start)
+        if 'modelNumber?: string;' not in text[start:end]:
+            text = text[:start] + text[start:end].replace('{', '{\n  modelNumber?: string;', 1) + text[end:]
     start=text.index('export interface EntityTemplateCreateItemRequest {');end=text.index('\n}',start)
     text=text[:start]+text[start:end].replace('parentId: string;','parentId: string | null;')+text[end:];target.write_text(text)
     replace('composables/use-barcode-detector.ts','api.items.getAll({ locations: [id] })','api.items.getAll({ parentIds: [id] })')
@@ -158,6 +354,8 @@ def navigation_frontend():
     replace('layouts/default.vue', '    collapsible?: {\n      active: ComputedRef<boolean>;', '    collapsible?: {\n      action?: () => void;\n      active: ComputedRef<boolean>;')
     replace('layouts/default.vue', '<SidebarMenuLink\n                            :href="c.to"', '<SidebarMenuLink v-if="!c.action"\n                            :href="c.to"')
     replace('layouts/default.vue', '                          </SidebarMenuLink>\n                        </SidebarMenuSubItem>', '                          </SidebarMenuLink>\n                          <SidebarMenuButton v-else @click.prevent="c.action?.()"><span>{{ c.name.value }}</span></SidebarMenuButton>\n                        </SidebarMenuSubItem>')
+
+
     layout = BUILD/'layouts/default.vue'
     source = layout.read_text()
     start = source.index('              <!-- makes scanner accessible easily if using legacy header -->')
@@ -168,6 +366,7 @@ def navigation_frontend():
   const { selectedId: workshopGroup } = useCollections();
   const workshopLinks = computed(() => [
     ["loans", "Loans & notes"], ["map", "Workshop & storage"],
+    ["checkout-cart", "Checkout cart"],
     ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
   ]);
   const nav = computed<typeof baseNav>(() => [
@@ -183,6 +382,7 @@ def navigation_frontend():
         ...baseNav.slice(1, 3), baseNav[4]!, baseNav[5]!, baseNav[6]!,
         ...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members"),
         ...workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels").map(([id, name], index) => ({ id: 80 + index, name: computed(() => name!), to: `/workshop/${id}`, active: computed(() => route.path === `/workshop/${id}`) })),
+        { id: 92, name: computed(() => "Report feedback"), to: "/feedback", active: computed(() => route.path === "/feedback") },
         { id: 90, name: computed(() => "Equipment Terminal"), to: terminalURL.value, active: computed(() => false) },
         { id: 91, name: computed(() => t("menu.scanner")), to: "", active: computed(() => false), action: openScanner },
       ],
@@ -194,6 +394,26 @@ def navigation_frontend():
     replace('layouts/default.vue', '...nav.map(v => ({', '...nav.value.filter(v => v.name.value !== "More").map(v => ({')
     target = BUILD/'layouts/default.vue'
     target.write_text(target.read_text().replace('text: computed(() => v.name.value),', 'text: v.name.value,'))
+
+
+def location_child_contents_frontend():
+    replace(
+        'pages/location/[id]/index/index.vue',
+        '  import LocationCard from "~/components/Location/Card.vue";',
+        '  import ChildContents from "~/components/Location/ChildContents.vue";',
+    )
+    replace(
+        'pages/location/[id]/index/index.vue',
+        '''      <!-- Child locations -->
+      <section v-if="location && location.children && location.children.length > 0" class="mt-6">
+        <BaseSectionHeader class="mb-5"> {{ $t("locations.child_locations") }} </BaseSectionHeader>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <LocationCard v-for="child in location.children" :key="child.id" :location="child" />
+        </div>
+      </section>''',
+        '''      <!-- Expandable, read-only previews for child locations -->
+      <ChildContents v-if="location && location.children?.length" :locations="location.children" />''',
+    )
 
 
 def shell_frontend():
@@ -228,17 +448,201 @@ def shell_frontend():
     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import DeviceStatus from "~/components/Workshop/DeviceStatus.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
 
 
+def ocr_popover_frontend():
+    regular = '<DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="shrink-0" />'
+    replace('layouts/default.vue', regular, regular + '\n              <div id="orc-launcher-toolbar" class="contents"></div>')
+    legacy = '<SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />'
+    replace('layouts/default.vue', legacy, legacy + '\n            <div id="orc-launcher-legacy" class="absolute left-14 top-2 z-30 hidden lg:flex"></div>')
+    replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" />\n      </SidebarInset>')
+    replace('layouts/default.vue', '  const search = ref("");', '  const orcLauncherTarget = computed(() => preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
+    replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import OcrPopover from "~/components/Workshop/OcrPopover.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
+
+
+def strip_item_response_short_codes_from_update_tests():
+    """Keep response-only identifiers out of update payloads in pinned API tests."""
+    relative = pathlib.Path('lib/api/__test__/user/items.test.ts')
+    target = BUILD / relative
+    source = target.read_text()
+    if not re.search(r'\b(?:displayId|shortCode)\b', source):
+        return
+    rewrites = (
+        ("    const itemUpdate = {\n      ...item,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,", "    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemDisplayID;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,"),
+        ("    const child1ItemUpdate = {\n      ...child1Item,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild1DisplayID, shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1DisplayID;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,"),
+        ("    const child2ItemUpdate = {\n      ...child2Item,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild2DisplayID, shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2DisplayID;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,"),
+        ("    const itemUpdate = {\n      ...parent,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,", "    const { displayId: omittedParentDisplayID, shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentDisplayID;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,"),
+    )
+    if len(rewrites) != 4:
+        raise RuntimeError('Expected four pinned item update test fixtures')
+    for original, replacement in rewrites:
+        count = source.count(original)
+        if count == 0 and source.count(replacement) == 1:
+            continue
+        if count != 1:
+            raise RuntimeError(f'Expected exactly one item update fixture anchor in {relative}, found {count}')
+        source = source.replace(original, replacement)
+    target.write_text(source)
+
+
+def camera_ocr_frontend():
+    path = 'pages/item/[id]/index/edit.vue'
+    replace(
+        path,
+        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
+        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
+    )
+    replace(
+        path,
+        '''  async function suggestItemNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      item.value.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+        '''  async function suggestItemNameFromPhoto(file: File) {
+    try {
+      nameOcrMessage.value = t("components.form.camera.ocr_running");
+      const outcome = await suggestNameWithoutOverwritingEdits({
+        getName: () => item.value.name,
+        getRevision: () => nameEditRevision.value,
+        setName: (value: string) => { item.value.name = value; },
+        recognize: recognizeNameFromImage,
+        image: file,
+      });
+      if (outcome === "empty") {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+      } else if (outcome === "edited-during-recognition") {
+        nameOcrMessage.value = t("components.form.camera.name_preserved");
+      } else {
+        nameOcrMessage.value = t("components.form.camera.name_suggested");
+      }
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+    )
+    replace(path, '  const nameOcrMessage = ref("");', '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);')
+    replace(
+        path,
+        '                    v-model="item[field.ref]"\n                    class="min-w-0 flex-1"',
+        '                    v-model="item[field.ref]"\n                    @update:model-value="nameEditRevision++"\n                    class="min-w-0 flex-1"',
+    )
+    replace(
+        path,
+        '''                  </Button>
+                </div>
+                <FormTextField
+                  v-else-if="field.type === 'text'"''',
+        '''                  </Button>
+                </div>
+                <p v-if="field.ref === 'name'" class="mt-1 text-xs text-muted-foreground">
+                  {{ $t("components.form.camera.local_ocr_notice") }}
+                </p>
+                <FormTextField
+                  v-else-if="field.type === 'text'"''',
+    )
+
+    modal = 'components/Entity/CreateModal.vue'
+    replace(
+        modal,
+        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
+        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
+    )
+    replace(
+        modal,
+        '  const { openDialog, closeDialog, registerOpenDialogCallback } = useDialog();',
+        '  const { activeDialog, openDialog, closeDialog, registerOpenDialogCallback } = useDialog();',
+    )
+    replace(
+        modal,
+        '  const nameOcrMessage = ref("");',
+        '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);\n  let nameOcrGeneration = 0;\n  watch(activeDialog, value => { if (value !== DialogID.CreateEntity) { nameOcrGeneration++; nameOcrMessage.value = ""; } }, { flush: "sync" });',
+    )
+    replace(
+        modal,
+        '''  async function suggestNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      form.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+        '''  async function suggestNameFromPhoto(file: File) {
+    const request = ++nameOcrGeneration;
+    try {
+      nameOcrMessage.value = t("components.form.camera.ocr_running");
+      const outcome = await suggestNameWithoutOverwritingEdits({
+        getName: () => form.name,
+        getRevision: () => nameEditRevision.value,
+        setName: (value: string) => { form.name = value; },
+        recognize: recognizeNameFromImage,
+        isCurrent: () => request === nameOcrGeneration,
+        image: file,
+      });
+      if (outcome === "stale") return;
+      if (outcome === "empty") {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+      } else if (outcome === "edited-during-recognition") {
+        nameOcrMessage.value = t("components.form.camera.name_preserved");
+      } else {
+        nameOcrMessage.value = t("components.form.camera.name_suggested");
+      }
+    } catch {
+      if (request !== nameOcrGeneration) return;
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+    )
+    replace(modal, '    form.name = "";', '    nameOcrGeneration++;\n    nameOcrMessage.value = "";\n    form.name = "";')
+    replace(
+        modal,
+        '          v-model="form.name"\n          class="min-w-0 flex-1"',
+        '          v-model="form.name"\n          @update:model-value="nameEditRevision++"\n          class="min-w-0 flex-1"',
+    )
+    replace(
+        modal,
+        '      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>',
+        '      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>\n      <p class="text-xs text-muted-foreground">{{ $t("components.form.camera.local_ocr_notice") }}</p>',
+    )
+    locale = BUILD/'locales/en.json'
+    data = json.loads(locale.read_text(encoding='utf-8'))
+    camera = data['components']['form']['camera']
+    camera['name_preserved'] = 'Your typed name was kept. OCR finished in the background.'
+    camera['ocr_running'] = 'Reading the label in this browser… first use may download OCR code and the English model.'
+    camera['local_ocr_notice'] = 'Name suggestions run in this browser, and the suggestion photo is not uploaded. OCR code and the English model download on first use.'
+    locale.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+
+
 def prepare():
-    shutil.copytree(UPSTREAM_ROOT/'upstream/homebox/frontend', BUILD, dirs_exist_ok=True,
+    from homebox_patchset import materialize
+    native_source = materialize(UPSTREAM_ROOT)
+    shutil.copytree(native_source/'frontend', BUILD, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('node_modules', '.nuxt', '.output'))
+    strip_item_response_short_codes_from_update_tests()
     shutil.copytree(ROOT/'homebox-ui/overlay', BUILD, dirs_exist_ok=True)
+    camera_ocr_frontend()
     shutil.copy2(ROOT/'kiosk/member-avatar.js', BUILD/'lib/member-avatar.js')
     shutil.copy2(ROOT/'kiosk/label-editor.js', BUILD/'lib/label-editor.js')
     package = json.loads((BUILD/'package.json').read_text())
-    package['pnpm'] = {'overrides': {name: '3.5.20' for name in ('vue', '@vue/runtime-core', '@vue/runtime-dom', '@vue/reactivity', '@vue/shared', '@vue/compiler-sfc', '@vue/compiler-core', '@vue/compiler-dom', '@vue/compiler-ssr', '@vue/server-renderer')}}
+    overrides = {name: '3.5.20' for name in ('vue', '@vue/runtime-core', '@vue/runtime-dom', '@vue/reactivity', '@vue/shared', '@vue/compiler-sfc', '@vue/compiler-core', '@vue/compiler-dom', '@vue/compiler-ssr', '@vue/server-renderer')}
+    package.pop('pnpm', None)
     (BUILD/'package.json').write_text(json.dumps(package, indent=2)+'\n')
+    (BUILD/'pnpm-workspace.yaml').write_text('overrides:\n'+''.join(f"  '{name}': {version}\n" for name, version in overrides.items()))
     if (ROOT/'homebox-ui/pnpm-lock.yaml').exists():
         shutil.copy2(ROOT/'homebox-ui/pnpm-lock.yaml', BUILD/'pnpm-lock.yaml')
+    configure_ui_component_discovery()
     replace('nuxt.config.ts', 'css: ["@/assets/css/main.css"],', 'css: ["@/assets/css/main.css", "@/assets/css/workshop.css", "@/assets/css/ccrate.css"],')
     # The Home dashboard shows the same current custody as the equipment terminal.
     replace('pages/home/index.vue', '  import BaseCard from', '  import CheckedOutItems from "@/components/Workshop/CheckedOutItems.vue";\n  import BaseCard from')
@@ -246,6 +650,8 @@ def prepare():
     # Native sidebar and quick menu, with manager-only entries hidden for members.
     navigation_frontend()
     shell_frontend()
+    ocr_popover_frontend()
+    location_child_contents_frontend()
     replace('layouts/default.vue', 'class="h-9 grow sm:max-w-sm"', 'class="h-9 min-w-0 grow sm:max-w-sm"')
     # Put badges on the actual existing Collection members table.
     path = 'pages/collection/index/members.vue'
@@ -352,17 +758,68 @@ def prepare():
     brand_frontend()
 
 
+def run_frontend_command(command, *, cwd, env):
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    def forward(source, destination):
+        try:
+            for line in source:
+                line = filter_known_wasi_warning(line)
+                if line:
+                    destination.write(line)
+                    destination.flush()
+        finally:
+            source.close()
+
+    output_threads = [
+        threading.Thread(target=forward, args=(process.stdout, sys.stdout)),
+        threading.Thread(target=forward, args=(process.stderr, sys.stderr)),
+    ]
+    for thread in output_threads:
+        thread.start()
+    returncode = process.wait()
+    for thread in output_threads:
+        thread.join()
+    if returncode:
+        print(f'Frontend command failed with exit code {returncode}.', file=sys.stderr, flush=True)
+        raise subprocess.CalledProcessError(returncode, command)
+    return subprocess.CompletedProcess(command, returncode)
+
+
+
 def build():
-    global TOOLCHAIN_ROOT, UPSTREAM_ROOT
+    global BUILD, TOOLCHAIN_ROOT, UPSTREAM_ROOT
     parser = argparse.ArgumentParser()
     parser.add_argument('--toolchain-root', type=pathlib.Path, default=TOOLCHAIN_ROOT)
     parser.add_argument('--upstream-root', type=pathlib.Path, default=UPSTREAM_ROOT)
+    parser.add_argument('--build-root', type=pathlib.Path, help='use a new or empty frontend workspace for disposable validation')
     parser.add_argument('--prepare', action='store_true', help='prepare dependencies without running typecheck or build')
     args = parser.parse_args()
+    if args.build_root is not None and args.build_root.exists() and (
+        not args.build_root.is_dir() or any(args.build_root.iterdir())
+    ):
+        parser.error('--build-root must be empty so stale files cannot contaminate a disposable build')
+    if args.build_root is not None:
+        BUILD = args.build_root.resolve()
     TOOLCHAIN_ROOT, UPSTREAM_ROOT = args.toolchain_root.resolve(), args.upstream_root.resolve()
-    prepare()
     node = pathlib.Path((TOOLCHAIN_ROOT/'node-path.txt').read_text().strip())
     env = dict(os.environ, PATH=str(node/'bin')+os.pathsep+os.environ['PATH'])
+    pnpm = resolve_pnpm_launcher(TOOLCHAIN_ROOT)
+    print('Preparing frontend source workspace...', flush=True)
+    prepare()
+    if args.build_root is not None:
+        print('Installing frontend dependencies in disposable workspace...', flush=True)
+        run_frontend_command([str(pnpm), 'install', '--frozen-lockfile', '--ignore-scripts'], cwd=BUILD, env=env)
+        print('Frontend dependencies installed.', flush=True)
     # oxc-parser 0.72's native ARM binding requires instructions absent on this Pi.
     # Use the same version's upstream WASI binding only for this build dependency.
     wasi = TOOLCHAIN_ROOT/'oxc-wasi/node_modules/@oxc-parser/binding-wasm32-wasi'
@@ -372,22 +829,33 @@ def build():
         anchor = 'nativeBinding = requireNative()'
         if anchor in source:
             binding.write_text(source.replace(anchor, 'nativeBinding = require('+repr(str(wasi))+')'))
-    pnpm = TOOLCHAIN_ROOT/'pnpm/node_modules/.bin/pnpm'
-    subprocess.run([str(pnpm), 'exec', 'nuxt', 'prepare'], cwd=BUILD, env=env, check=True)
+    print('Preparing Nuxt components...', flush=True)
+    run_frontend_command([str(pnpm), 'exec', 'nuxt', 'prepare'], cwd=BUILD, env=env)
+    print('Nuxt preparation complete.', flush=True)
     if not args.prepare:
+        print('Running frontend typecheck...', flush=True)
         result = subprocess.run([str(pnpm), 'exec', 'nuxi', 'typecheck'], cwd=BUILD, env=env, capture_output=True, text=True)
-        (ROOT/'work/homebox-ui-typecheck.log').write_text(result.stdout+result.stderr)
-        diagnostics = [list(match.groups()) for match in re.finditer(r'^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$', result.stdout+result.stderr, re.M)]
+        typecheck_output = result.stdout + result.stderr
+        typecheck_log = BUILD/'homebox-ui-typecheck.log' if args.build_root is not None else ROOT/'work/homebox-ui-typecheck.log'
+        typecheck_log.write_text(typecheck_output)
+        if has_frontend_tool_failure(typecheck_output):
+            print(typecheck_output)
+            print(f'Frontend typecheck tool failed with exit code {result.returncode}.', file=sys.stderr, flush=True)
+            raise RuntimeError('Frontend typecheck could not be invoked successfully.')
+        diagnostics = [list(match.groups()) for match in re.finditer(r'^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$', typecheck_output, re.M)]
         if result.returncode:
             baseline = json.loads((ROOT/'homebox-ui/upstream-typecheck.json').read_text())
-            pin = subprocess.check_output(['git', '-C', str(UPSTREAM_ROOT/'upstream/homebox'), 'rev-parse', 'HEAD'], text=True).strip()
-            additional = Counter(map(tuple, diagnostics))-Counter(map(tuple, baseline['diagnostics']))
-            if baseline['pin'] != pin or not diagnostics or additional:
-                print(result.stdout+result.stderr)
+            pin = source_commit(UPSTREAM_ROOT/'upstream/homebox')
+            if result.returncode != 1 or not is_only_known_upstream_typecheck_failure(typecheck_output, baseline, pin):
+                print(typecheck_output)
+                print(f'Frontend typecheck failed with exit code {result.returncode}.', file=sys.stderr, flush=True)
                 raise RuntimeError('Frontend typecheck introduced errors or its upstream baseline changed.')
             print(f'Typecheck: no added diagnostics; {len(diagnostics)} pre-existing upstream diagnostics.', flush=True)
-        subprocess.run([str(pnpm), 'run', 'build'], cwd=BUILD, env=env, check=True)
-
+        else:
+            print('Frontend typecheck passed.', flush=True)
+        print('Building frontend...', flush=True)
+        run_frontend_command([str(pnpm), 'run', 'build'], cwd=BUILD, env=env)
+        print('Frontend build completed successfully.', flush=True)
 
 if __name__ == '__main__':
     build()

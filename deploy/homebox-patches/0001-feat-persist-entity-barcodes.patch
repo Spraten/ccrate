@@ -1,0 +1,261 @@
+From e600dac2ea65e20b4d8044dd755d21b2c0ca81a0 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 21:36:52 -0400
+Subject: [PATCH 01/23] feat: persist entity barcodes
+
+---
+ backend/internal/data/ent/schema/entity.go    |  4 ++
+ .../20261013000000_add_entity_barcode.sql     |  7 +++
+ .../20261013000000_add_entity_barcode.sql     |  7 +++
+ backend/internal/data/repo/repo_entities.go   | 28 ++++++++++
+ .../internal/data/repo/repo_entities_test.go  | 54 +++++++++++++++++++
+ frontend/lib/api/types/data-contracts.ts      |  5 ++
+ 6 files changed, 105 insertions(+)
+ create mode 100644 backend/internal/data/migrations/postgres/20261013000000_add_entity_barcode.sql
+ create mode 100644 backend/internal/data/migrations/sqlite3/20261013000000_add_entity_barcode.sql
+
+diff --git a/backend/internal/data/ent/schema/entity.go b/backend/internal/data/ent/schema/entity.go
+index c5cf5c87..d0f1783c 100644
+--- a/backend/internal/data/ent/schema/entity.go
++++ b/backend/internal/data/ent/schema/entity.go
+@@ -28,6 +28,7 @@ func (Entity) Indexes() []ent.Index {
+ 		index.Fields("manufacturer"),
+ 		index.Fields("model_number"),
+ 		index.Fields("serial_number"),
++		index.Fields("barcode"),
+ 		index.Fields("archived"),
+ 		index.Fields("asset_id"),
+ 	}
+@@ -58,6 +59,9 @@ func (Entity) Fields() []ent.Field {
+ 		field.String("serial_number").
+ 			MaxLen(255).
+ 			Optional(),
++		field.String("barcode").
++			MaxLen(80).
++			Optional(),
+ 		field.String("model_number").
+ 			MaxLen(255).
+ 			Optional(),
+diff --git a/backend/internal/data/migrations/postgres/20261013000000_add_entity_barcode.sql b/backend/internal/data/migrations/postgres/20261013000000_add_entity_barcode.sql
+new file mode 100644
+index 00000000..f59b2ef0
+--- /dev/null
++++ b/backend/internal/data/migrations/postgres/20261013000000_add_entity_barcode.sql
+@@ -0,0 +1,7 @@
++-- +goose Up
++ALTER TABLE public.entities ADD COLUMN barcode VARCHAR(80) NULL;
++CREATE INDEX entity_barcode ON public.entities(barcode);
++
++-- +goose Down
++DROP INDEX entity_barcode;
++ALTER TABLE public.entities DROP COLUMN barcode;
+diff --git a/backend/internal/data/migrations/sqlite3/20261013000000_add_entity_barcode.sql b/backend/internal/data/migrations/sqlite3/20261013000000_add_entity_barcode.sql
+new file mode 100644
+index 00000000..8f5d2aa9
+--- /dev/null
++++ b/backend/internal/data/migrations/sqlite3/20261013000000_add_entity_barcode.sql
+@@ -0,0 +1,7 @@
++-- +goose Up
++ALTER TABLE entities ADD COLUMN barcode TEXT NULL CHECK (barcode IS NULL OR length(barcode) <= 80);
++CREATE INDEX entity_barcode ON entities(barcode);
++
++-- +goose Down
++DROP INDEX entity_barcode;
++ALTER TABLE entities DROP COLUMN barcode;
+diff --git a/backend/internal/data/repo/repo_entities.go b/backend/internal/data/repo/repo_entities.go
+index 2f550010..6cf5a08c 100644
+--- a/backend/internal/data/repo/repo_entities.go
++++ b/backend/internal/data/repo/repo_entities.go
+@@ -98,6 +98,7 @@ type (
+ 
+ 		// Edges
+ 		TagIDs []uuid.UUID `json:"tagIds"`
++		Barcode string `json:"barcode,omitempty" validate:"max=80"`
+ 	}
+ 
+ 	EntityUpdate struct {
+@@ -117,6 +118,7 @@ type (
+ 
+ 		// Identifications
+ 		SerialNumber string `json:"serialNumber"`
++		Barcode      string `json:"barcode,omitempty" validate:"max=80"`
+ 		ModelNumber  string `json:"modelNumber"`
+ 		Manufacturer string `json:"manufacturer"`
+ 
+@@ -187,6 +189,7 @@ type (
+ 		SyncChildEntityLocations bool `json:"syncChildEntityLocations"`
+ 
+ 		SerialNumber string `json:"serialNumber"`
++		Barcode      string `json:"barcode"`
+ 		ModelNumber  string `json:"modelNumber"`
+ 		Manufacturer string `json:"manufacturer"`
+ 
+@@ -337,6 +340,7 @@ func mapEntityOut(e *ent.Entity) EntityOut {
+ 
+ 		// Identification
+ 		SerialNumber: e.SerialNumber,
++		Barcode:      e.Barcode,
+ 		ModelNumber:  e.ModelNumber,
+ 		Manufacturer: e.Manufacturer,
+ 
+@@ -975,6 +979,14 @@ func validateQuantity(op string, quantity float64) error {
+ 	return nil
+ }
+ 
++func normalizeBarcode(value string) (string, error) {
++	value = strings.TrimSpace(value)
++	if len([]rune(value)) > 80 {
++		return "", fmt.Errorf("barcode: must be at most 80 characters")
++	}
++	return value, nil
++}
++
+ func (r *EntityRepository) Create(ctx context.Context, gid uuid.UUID, data EntityCreate) (EntityOut, error) {
+ 	ctx, span := entityTracer().Start(ctx, "repo.EntityRepository.Create",
+ 		trace.WithAttributes(
+@@ -992,6 +1004,10 @@ func (r *EntityRepository) Create(ctx context.Context, gid uuid.UUID, data Entit
+ 		recordSpanError(span, err)
+ 		return EntityOut{}, err
+ 	}
++	barcode, err := normalizeBarcode(data.Barcode)
++	if err != nil {
++		return EntityOut{}, err
++	}
+ 
+ 	// Reject cross-group UUIDs in the request body before any write hits the DB.
+ 	// Without these checks, an authenticated caller in group A could reparent
+@@ -1017,6 +1033,9 @@ func (r *EntityRepository) Create(ctx context.Context, gid uuid.UUID, data Entit
+ 		SetDescription(data.Description).
+ 		SetGroupID(gid).
+ 		SetAssetID(int64(data.AssetID))
++	if barcode != "" {
++		q.SetBarcode(barcode)
++	}
+ 
+ 	if data.ParentID != uuid.Nil {
+ 		q.SetParentID(data.ParentID)
+@@ -1463,6 +1482,10 @@ func (r *EntityRepository) UpdateByGroup(ctx context.Context, gid uuid.UUID, dat
+ 		recordSpanError(span, err)
+ 		return EntityOut{}, err
+ 	}
++	barcode, err := normalizeBarcode(data.Barcode)
++	if err != nil {
++		return EntityOut{}, err
++	}
+ 
+ 	// See EntityRepository.Create for the rationale on these cross-group
+ 	// reference checks. Applied before the update so a rejected request never
+@@ -1499,6 +1522,11 @@ func (r *EntityRepository) UpdateByGroup(ctx context.Context, gid uuid.UUID, dat
+ 		SetQuantity(data.Quantity).
+ 		SetAssetID(int64(data.AssetID)).
+ 		SetSyncChildEntityLocations(data.SyncChildEntityLocations)
++	if barcode == "" {
++		q.ClearBarcode()
++	} else {
++		q.SetBarcode(barcode)
++	}
+ 
+ 	// Date fields are nullable. Writing types.Date{}.Time() would persist
+ 	// the 0001-01-01 sentinel that ZeroOutTimeFields then has to chase —
+diff --git a/backend/internal/data/repo/repo_entities_test.go b/backend/internal/data/repo/repo_entities_test.go
+index 8917f047..2118c19e 100644
+--- a/backend/internal/data/repo/repo_entities_test.go
++++ b/backend/internal/data/repo/repo_entities_test.go
+@@ -163,6 +163,7 @@ func TestEntityRepository_Create(t *testing.T) {
+ 	result, err := tRepos.Entities.Create(context.Background(), tGroup.ID, itm)
+ 	require.NoError(t, err)
+ 	assert.NotEmpty(t, result.ID)
++	assert.Empty(t, result.Barcode)
+ 
+ 	// Cleanup
+ 	err = tRepos.Entities.Delete(context.Background(), result.ID)
+@@ -171,6 +172,59 @@ func TestEntityRepository_Create(t *testing.T) {
+ 	require.NoError(t, err)
+ }
+ 
++func TestEntityRepository_Barcode(t *testing.T) {
++	itemType := useItemEntityType(t)
++
++	for _, barcode := range []string{"X9TEUJR4L", "0012345"} {
++		t.Run(barcode, func(t *testing.T) {
++			item := entityFactory()
++			item.EntityTypeID = itemType.ID
++			item.Barcode = "  " + barcode + "  "
++
++			created, err := tRepos.Entities.Create(context.Background(), tGroup.ID, item)
++			require.NoError(t, err)
++			assert.Equal(t, barcode, created.Barcode)
++
++			fetched, err := tRepos.Entities.GetOne(context.Background(), created.ID)
++			require.NoError(t, err)
++			assert.Equal(t, barcode, fetched.Barcode)
++
++			update := EntityUpdate{ID: created.ID, Name: created.Name, Barcode: barcode}
++			if created.EntityType != nil {
++				update.EntityTypeID = created.EntityType.ID
++			}
++			updated, err := tRepos.Entities.UpdateByGroup(context.Background(), tGroup.ID, update)
++			require.NoError(t, err)
++			assert.Equal(t, barcode, updated.Barcode)
++
++			fetched, err = tRepos.Entities.GetOne(context.Background(), created.ID)
++			require.NoError(t, err)
++			assert.Equal(t, barcode, fetched.Barcode)
++
++			// An older client that omits the optional property clears it to SQL NULL
++			// and still receives the backward-compatible empty string in the response.
++			update.Barcode = ""
++			updated, err = tRepos.Entities.UpdateByGroup(context.Background(), tGroup.ID, update)
++			require.NoError(t, err)
++			assert.Empty(t, updated.Barcode)
++			fetched, err = tRepos.Entities.GetOne(context.Background(), created.ID)
++			require.NoError(t, err)
++			assert.Empty(t, fetched.Barcode)
++			require.NoError(t, tRepos.Entities.Delete(context.Background(), created.ID))
++		})
++	}
++}
++
++func TestEntityRepository_Barcode_MaxLen(t *testing.T) {
++	item := entityFactory()
++	item.EntityTypeID = useItemEntityType(t).ID
++	item.Barcode = strings.Repeat("x", 81)
++
++	_, err := tRepos.Entities.Create(context.Background(), tGroup.ID, item)
++	require.Error(t, err)
++	assert.Contains(t, err.Error(), "barcode: must be at most 80 characters")
++}
++
+ func TestEntityRepository_Create_WithFractionalQuantity(t *testing.T) {
+ 	containerET := useContainerEntityType(t)
+ 	itemET := useItemEntityType(t)
+diff --git a/frontend/lib/api/types/data-contracts.ts b/frontend/lib/api/types/data-contracts.ts
+index e59d220f..ffc3ffc6 100644
+--- a/frontend/lib/api/types/data-contracts.ts
++++ b/frontend/lib/api/types/data-contracts.ts
+@@ -740,6 +740,8 @@ export interface DuplicateOptions {
+ }
+ 
+ export interface EntityCreate {
++  /** @maxLength 80 */
++  barcode?: string;
+   /** @maxLength 1000 */
+   description: string;
+   entityTypeId: string;
+@@ -775,6 +777,7 @@ export interface EntityOut {
+   archived: boolean;
+   /** @example "0" */
+   assetId: string;
++  barcode: string;
+   attachments: ItemAttachment[];
+   /** Container-specific fields (for entities whose entity_type.is_location = true) */
+   children: EntitySummary[];
+@@ -990,6 +993,8 @@ export interface EntityTypeUpdate {
+ export interface EntityUpdate {
+   archived: boolean;
+   assetId: string;
++  /** @maxLength 80 */
++  barcode?: string;
+   /** @maxLength 1000 */
+   description: string;
+   entityTypeId: string;

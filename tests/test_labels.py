@@ -8,6 +8,74 @@ from ledger import Ledger,Conflict
 from native_jobs import NativeJobs
 from badges import Badges
 import labels
+
+def _drawn_name_lines(name):
+    real_draw=labels.ImageDraw.Draw;drawn=[]
+    class TrackingDraw:
+        def __init__(self,*args,**kwargs):self.inner=real_draw(*args,**kwargs)
+        def __getattr__(self,name):return getattr(self.inner,name)
+        def text(self,xy,text,*args,**kwargs):
+            if 30 <= xy[1] < 152:drawn.append(text)
+            return self.inner.text(xy,text,*args,**kwargs)
+    with patch.object(labels,'font',side_effect=lambda size:ImageFont.load_default(size=size)),patch.object(labels.ImageDraw,'Draw',side_effect=TrackingDraw):
+        labels.render({'id':str(uuid4()),'name':name},32,28,code_override='x')
+    return drawn
+
+class _FixedWidthDraw:
+    def __init__(self,width):self.width=width
+    def textbbox(self,xy,text,font=None):
+        if text=='e\u0301':return (0,0,3,1)
+        if text=='e\u0301…':return (0,0,4,1)
+        width=sum(10 if ord(character)>0xffff else self.width for character in text)
+        return (0,0,width,1)
+
+class _NegativeBearingDraw:
+    def textbbox(self,xy,text,font=None):
+        if text=='…':return (0,0,3,1)
+        if text=='J':return (-2,0,5,1)
+        return (0,0,len(text),1)
+
+class LegacyLabelTextTests(unittest.TestCase):
+    def test_single_glyph_wider_than_box_due_to_negative_bearing_is_truncated(self):
+        self.assertEqual(labels._fit_name_lines('J',_NegativeBearingDraw(),None,6,1),['…'])
+
+    def test_explicit_newline_remains_a_line_break_in_the_legacy_preview(self):
+        self.assertEqual(_drawn_name_lines('Alpha\nBeta'),['Alpha','Beta'])
+
+    def test_multiword_overflow_is_marked_with_an_ellipsis(self):
+        drawn=_drawn_name_lines('alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu')
+        self.assertTrue(drawn[-1].endswith('…'),drawn)
+
+    def test_unbroken_overflow_wraps_and_is_marked_with_an_ellipsis(self):
+        drawn=_drawn_name_lines('ABCDEFGHIJKLMNOPQRSTUVWXYZ' * 5)
+        self.assertGreater(len(drawn),1,drawn)
+        self.assertTrue(drawn[-1].endswith('…'),drawn)
+
+    def test_crlf_preserves_line_breaks_and_marks_overflow(self):
+        drawn=_drawn_name_lines('Alpha\r\nBeta\r\nGamma\r\nDelta\r\nEpsilon')
+        self.assertEqual(len(drawn),4,drawn)
+        self.assertEqual(drawn[:3],['Alpha','Beta','Gamma'])
+        self.assertTrue(drawn[-1].endswith('…'),drawn)
+
+    def test_overwide_grapheme_is_omitted_from_name_lines(self):
+        self.assertEqual(labels._fit_name_lines('🧰',_FixedWidthDraw(10),None,5,1),[])
+
+    def test_truncation_does_not_split_combining_grapheme(self):
+        self.assertEqual(labels._fit_name_lines('e\u0301🧰',_FixedWidthDraw(1),None,3,1),['…'])
+
+class LegacyLabelPreviewTests(unittest.TestCase):
+    def test_legacy_preview_uses_fixed_stock_dimensions_without_probing(self):
+        user=str(uuid4())
+        entity={'id':user,'name':'Multiword storage location','entityType':{'isLocation':True}}
+        class Client:
+            def entity(self,entity_id):return entity
+        image=SimpleNamespace(width=320,height=208,save=lambda stream,format:stream.write(b'png'))
+        with patch.object(labels,'probe',side_effect=AssertionError('offline preview must not probe')) as probe,patch.object(labels,'render',return_value=(image,'location-code')) as render:
+            result=labels.preview(Client(),user)
+        probe.assert_not_called()
+        render.assert_called_once_with(entity,40,28)
+        self.assertEqual((result['width'],result['height']),(320,208))
+
 class LabelTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.ledger=Ledger(Path(self.temp.name)/'ledger.db');self.jobs=NativeJobs(self.ledger);self.badges=Badges(self.ledger);self.group=str(uuid4());self.user=str(uuid4());self.badge=self.badges.issue(self.group,self.user,[self.user]);self.prints=[]

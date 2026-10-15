@@ -11,8 +11,8 @@
   const labelWorkspace = shallowRef<any>(null);
   const labelStatus = ref("Loading equipment and saved designs…");
   const tool = computed(() => String(route.params.tool));
-  const allowed = ["loans", "map", "imports", "labels", "recovery", "system"];
-  const pageTitle = computed(() => tool.value === 'labels' ? 'Label maker' : tool.value === 'map' ? 'Workshop & storage' : tool.value.charAt(0).toUpperCase() + tool.value.slice(1));
+  const allowed = ["loans", "map", "checkout-cart", "imports", "labels", "recovery", "system"];
+  const pageTitle = computed(() => tool.value === 'labels' ? 'Label maker' : tool.value === 'map' ? 'Workshop & storage' : tool.value === 'checkout-cart' ? 'Checkout cart' : tool.value.charAt(0).toUpperCase() + tool.value.slice(1));
   useHead({ title: computed(() => `C-Crate | ${pageTitle.value}`) });
   let mounted: ReturnType<typeof mountWorkshopTools> | null = null;
   const queryId = (value: unknown) => Array.isArray(value) ? String(value[0] || "") : String(value || "");

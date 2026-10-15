@@ -60,6 +60,7 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertNotIn('<!-- makes scanner accessible easily if using legacy header -->', self.output)
 
     def test_workshop_manager_routes_keep_their_access_gate(self):
+        self.assertIn('["checkout-cart", "Checkout cart"]', self.output)
         self.assertIn('...(workshop.manager.value ? [["imports"', self.output)
         self.assertIn('workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels")', self.output)
 
@@ -94,6 +95,28 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn('"@/assets/css/ccrate.css"', builder)
         self.assertNotIn(".theme-dark", css)
 
+    def test_container_geometry_is_independent_of_the_selected_theme(self):
+        css = (ROOT / "homebox-ui/overlay/assets/css/ccrate.css").read_text()
+        self.assertIn(":root #app .container", css)
+        self.assertNotIn(":root.theme-homebox #app .container", css)
+
+    def test_label_designer_refreshes_theme_tokens_after_palette_changes(self):
+        component = (ROOT / "homebox-ui/overlay/components/Workshop/LabelDesigner.vue").read_text()
+        self.assertIn("const { theme } = useTheme()", component)
+        self.assertIn('watch(theme, () => { if (frame) frame.updateContext?.(editorContext()); }, { flush: "post" });', component)
+        self.assertIn("watch(() => props.selectedItem", component)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HomeboxShortCodeBuilderContractTests(unittest.TestCase):
+    def test_native_item_and_create_modal_keep_readonly_short_code_contract(self):
+        builder = (ROOT / 'deploy/build-homebox-ui.py').read_text()
+        self.assertIn('item.shortCode', builder)
+        self.assertIn('CopyText :text="item.shortCode"', builder)
+        self.assertIn('v-model="form.modelNumber" label="Model number"', builder)
+        self.assertIn('modelNumber: form.modelNumber?.trim() || undefined', builder)
+        self.assertIn("export interface EntitySummary {\\n  displayId: string;\\n  shortCode: string;", builder)
+        self.assertIn("export interface EntityOut {\\n  displayId: string;\\n  shortCode: string;", builder)

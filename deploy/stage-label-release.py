@@ -8,6 +8,8 @@ import pathlib
 import shutil
 import stat
 import sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from homebox_patchset import export_source_snapshot, load_patchset, source_tree_digest
 
 
 def sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -65,6 +67,35 @@ def validate_editor_bundle(source_root, bundle_root):
     return manifest
 
 
+def validate_backend_build(source_root, expected_native_pin):
+    build = source_root/'work/homebox-backend-build'
+    binary, receipt_path = build/'homebox', build/'build-receipt.json'
+    if not binary.is_file() or binary.is_symlink() or not receipt_path.is_file() or receipt_path.is_symlink():
+        raise ValueError('A current patched Homebox backend build and receipt are required')
+    receipt = json.loads(receipt_path.read_text())
+    base, _, patchset_sha256 = load_patchset(source_root)
+    frontend = source_root/'work/homebox-ui-current'
+    if base != expected_native_pin or receipt.get('upstream') != expected_native_pin:
+        raise ValueError('Backend build source pin does not match the staged Homebox source')
+    if receipt.get('patchset_sha256') != patchset_sha256:
+        raise ValueError('Backend build was produced from a different Homebox patchset')
+    if receipt.get('backend_overlay_sha256') != source_tree_digest(source_root/'homebox-backend'):
+        raise ValueError('Backend build was produced from different C-Crate backend sources')
+    builder = source_root/'deploy/build-homebox-backend.py'
+    if receipt.get('backend_builder_sha256') != sha(builder):
+        raise ValueError('Backend build was produced by a different builder')
+    generated = source_root/'work/homebox-ui-build/.output/public'
+    if not frontend.is_dir() or receipt.get('frontend_sha256') != source_tree_digest(frontend):
+        raise ValueError('Backend embedded frontend does not match the staged UI')
+    if not generated.is_dir() or source_tree_digest(frontend) != source_tree_digest(generated):
+        raise ValueError('Selected UI differs from the staged frontend build')
+    if receipt.get('binary_sha256') != sha(binary):
+        raise ValueError('Backend build binary does not match its build receipt')
+    if receipt.get('version') != '0.26.2-caci.2-shortcodes':
+        raise ValueError('Backend build version is not the current C-Crate build')
+    return receipt_path
+
+
 def stage_release(source_root, public_root, output, *, expected_native_pin='e01dd737238a3fa7e1a6454b37de6c6fc88c86e4'):
     source_root, public_root, output = map(pathlib.Path, (source_root, public_root, output))
     work_root = source_root / 'work'
@@ -80,7 +111,8 @@ def stage_release(source_root, public_root, output, *, expected_native_pin='e01d
     accepted_pin=expected_native_pin
     native_commit=subprocess.check_output(['git','-C',str(public_root/'upstream/homebox'),'rev-parse','HEAD'],text=True).strip()
     if native_commit!=accepted_pin:raise ValueError('Accepted native source pin mismatch: '+native_commit)
-    copy_tree(public_root,output,'upstream/homebox')
+    backend_receipt = validate_backend_build(source_root, native_commit)
+    export_source_snapshot(public_root/'upstream/homebox',output/'upstream/homebox',native_commit)
     for tree in ('homebox-backend','ops','kiosk'):
         copy_tree(source_root,output,tree)
     copy_tree(public_root,output,'work/hardware/python')
@@ -90,10 +122,12 @@ def stage_release(source_root, public_root, output, *, expected_native_pin='e01d
     copy_tree(source_root,output,'work/homebox-ui-build/.output/public','native/static')
     copy_tree(source_root,output,'work/homebox-ui-build/.output/public','work/homebox-ui-current')
     copy_tree(source_root,output,'kiosk','work/kiosk-ui-current')
-    copy_file(public_root,output,'work/homebox-bin/homebox','native/homebox')
+    copy_file(source_root,output,'work/homebox-backend-build/homebox','native/homebox')
+    copy_file(source_root,output,'work/homebox-backend-build/build-receipt.json','native/homebox-build-receipt.json')
     copy_file(public_root,output,'work/supvan-cups/target/release/examples/kiosk-label','native/kiosk-label')
-    for name in ('deploy/kiosk-server.py','deploy/workshop-gateway.py','deploy/run-homebox.py','deploy/backup-deployment.py','deploy/build-homebox-ui.py','deploy/build-label-ui.py','deploy/install-shared-tools.py','deploy/runtime-manifest.py','deploy/stage-label-release.py','deploy/verify-label-layouts.py','deploy/homebox-native.service','deploy/homebox-companion.service','deploy/homebox-workshop-gateway.service','deploy/Equipment Terminal.desktop','deploy/Open-Workshop.ps1'):
+    for name in ('deploy/kiosk-server.py','deploy/workshop-gateway.py','deploy/run-homebox.py','deploy/backup-deployment.py','deploy/build-homebox-ui.py','deploy/build-homebox-backend.py','deploy/homebox_patchset.py','deploy/homebox_display_id_overlay.py','deploy/homebox-patchset.json','deploy/build-label-ui.py','deploy/install-shared-tools.py','deploy/runtime-manifest.py','deploy/stage-label-release.py','deploy/verify-label-layouts.py','deploy/homebox-native.service','deploy/homebox-companion.service','deploy/homebox-workshop-gateway.service','deploy/Equipment Terminal.desktop','deploy/Open-Workshop.ps1'):
         copy_file(source_root,output,name)
+    copy_tree(source_root,output,'deploy/homebox-patches')
     for tree in ('src','vendor','public','patches'):
         copy_tree(source_root,output,'label-ui/'+tree)
     for name in ('package.json','pnpm-lock.yaml','vite.config.ts','editor.html','render.html','vendor-manifest.json'):
@@ -138,6 +172,7 @@ def stage_release(source_root, public_root, output, *, expected_native_pin='e01d
         'format': 1, 'builder': 'deploy/stage-label-release.py',
         'source_commit': subprocess.check_output(['git','rev-parse','HEAD'],cwd=source_root,text=True).strip() if (source_root/'.git').exists() else None,
         'native_source_commit': native_commit, 'native_source_pin': accepted_pin,
+        'backend_build_receipt_sha256': sha(backend_receipt),
         'editor_upstream_commit': editor_manifest['upstream_commit'],
         'editor_manifest_sha256': sha(output/'work/label-ui-build/manifest.json'),
         'editor_build': {key:editor_manifest.get(key) for key in ('upstream_commit','vendor_source_sha256','patch_sha256','dependencies_lock_sha256','font_sha256','font_license_sha256','upstream_license_sha256')},

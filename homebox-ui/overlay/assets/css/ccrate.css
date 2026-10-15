@@ -33,7 +33,7 @@
   background: hsl(var(--background-accent));
 }
 
-:root.theme-homebox #app .container {
+:root #app .container {
   width: 100%;
   max-width: 88rem;
   padding-inline: clamp(1rem, 2.5vw, 2rem);
@@ -55,4 +55,8 @@
 :root.theme-homebox #app .shadow-lg,
 :root.theme-homebox #app .shadow-md {
   box-shadow: 0 1px 3px rgb(31 52 39 / 7%);
+}
+
+:root.theme-night #app .ccrate-feedback-submitted {
+  color: rgb(134 239 172);
 }

@@ -1,7 +1,9 @@
-import copy,pathlib,tempfile,unittest
+import copy,json,pathlib,tempfile,unittest
 from uuid import uuid4
 from ledger import Ledger,Conflict
-from checkout import confirm_checkout
+from checkout import checkout_availability, checkout_status_actor, confirm_checkout, expand_cart_assets
+from checkout_cart import CheckoutCart
+from kits import manifest
 
 
 class Client:
@@ -20,7 +22,7 @@ class Tests(unittest.TestCase):
         self.client=Client(self.user,{self.asset:self.entity})
     def tearDown(self):self.temp.cleanup()
     def confirm(self,**kwargs):
-        return confirm_checkout(self.client,self.ledger,self.group,self.user,kwargs.get('assets',[self.asset]),kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True))
+        return confirm_checkout(self.client,self.ledger,self.group,self.user,kwargs.get('assets',[self.asset]),kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True),kwargs.get('verified'),kwargs.get('kit_versions'),kwargs.get('cart_context'))
     def test_native_shelf_preserved_and_repeat_confirm_idempotent(self):
         original=copy.deepcopy(self.entity);key=str(uuid4())
         first=self.confirm(key=key);second=self.confirm(key=key)
@@ -38,6 +40,84 @@ class Tests(unittest.TestCase):
         with self.assertRaises(Conflict):self.confirm()
     def test_duplicate_asset_rejected(self):
         with self.assertRaises(ValueError):self.confirm(assets=[self.asset,self.asset])
+    def test_completed_checkout_receipt_consumes_only_the_saved_cart_selection(self):
+        cart=CheckoutCart(self.ledger);other=str(uuid4())
+        other_entity=copy.deepcopy(self.entity);other_entity['id']=other;self.client.assets[other]=other_entity
+        saved=cart.save(self.group,self.user,[self.asset,other],0,str(uuid4()))
+
+        receipt=self.confirm(cart_context={'revision':saved['revision'],'items':[self.asset]})
+        consumed=cart.consume_completed_receipt(self.group,self.user,receipt['id'])
+
+        self.assertEqual(consumed['consumed'],[self.asset])
+        self.assertEqual(consumed['cart']['items'],[other])
+
+    def test_completed_kiosk_edit_consumes_checked_out_and_removed_saved_rows(self):
+        cart=CheckoutCart(self.ledger);other=str(uuid4())
+        other_entity=copy.deepcopy(self.entity);other_entity['id']=other;self.client.assets[other]=other_entity
+        saved=cart.save(self.group,self.user,[self.asset,other],0,str(uuid4()))
+
+        receipt=self.confirm(assets=[self.asset],cart_context={'revision':saved['revision'],'items':[self.asset],
+                                                               'original_items':[self.asset,other]})
+
+        result=cart.consume_completed_receipt(self.group,self.user,receipt['id'])
+        self.assertEqual(result['cart']['items'],[])
+        self.assertEqual(result['cart']['revision'],saved['revision']+1)
+
+    def test_kiosk_can_confirm_items_added_beyond_the_desk_cart(self):
+        cart=CheckoutCart(self.ledger);other=str(uuid4())
+        other_entity=copy.deepcopy(self.entity);other_entity['id']=other;self.client.assets[other]=other_entity
+        saved=cart.save(self.group,self.user,[self.asset],0,str(uuid4()))
+
+        receipt=self.confirm(assets=[self.asset,other],cart_context={'revision':saved['revision'],'items':[self.asset,other]})
+
+        self.assertEqual(self.ledger.detail(self.group,receipt['id'])['assets'],sorted([self.asset,other]))
+        self.assertEqual(cart.consume_completed_receipt(self.group,self.user,receipt['id'])['cart']['items'],[])
+
+    def test_atomic_ledger_revalidation_rejects_asset_checked_out_before_confirmation(self):
+        self.ledger.begin(self.group,self.user,'check_out',[self.asset],str(uuid4()))
+
+        with self.assertRaises(Conflict):self.confirm()
+
+        self.assertEqual(len(self.ledger.unresolved()),1)
+
+    def test_availability_reports_unresolved_operation_blockers(self):
+        self.ledger.begin(self.group,self.user,'check_out',[self.asset],str(uuid4()))
+
+        result=checkout_availability(self.client,self.ledger,self.group,[self.asset])
+
+        self.assertEqual(result,[{'id':self.asset,'name':'Test equipment',
+                                  'reason':'Checkout operation requires recovery (pending)'}])
+        operation=self.ledger.unresolved()[0]
+        self.ledger.review(operation['id'],'Native result needs inspection')
+
+        result=checkout_availability(self.client,self.ledger,self.group,[self.asset])
+
+        self.assertEqual(result[0]['reason'],'Checkout operation requires recovery (review)')
+
+    def test_saved_kit_root_expands_only_to_its_current_verified_manifest(self):
+        child=str(uuid4())
+        self.client.assets[child]={'id':child,'name':'Kit component','quantity':1,'archived':False,
+                                   'parent':{'id':str(uuid4())},'entityType':{'isLocation':False},
+                                   'fields':[{'name':'Equipment condition','type':'text','textValue':'Ready'}]}
+        self.entity['fields'].append({'name':'Equipment kit manifest','type':'text',
+                                      'textValue':json.dumps({'version':1,'members':[child]})})
+        expanded=expand_cart_assets(self.client,[self.asset])
+        versions=manifest(self.client,self.asset)['versions']
+
+        self.assertEqual(set(expanded),{self.asset,child})
+        receipt=self.confirm(assets=expanded,verified=expanded,kit_versions=versions,
+                            cart_context={'revision':4,'items':[self.asset]})
+        self.assertEqual(self.ledger.detail(self.group,receipt['id'])['context']['checkout_cart'],
+                         {'revision':4,'items':[self.asset]})
+        with self.assertRaises(Conflict):
+            self.confirm(assets=expanded,verified=expanded,kit_versions=versions,
+                         cart_context={'revision':4,'items':[child]})
+
+    def test_checkout_status_uses_badge_actor_instead_of_native_service_actor(self):
+        operation=self.ledger.begin(self.group,self.user,'check_out',[self.asset],str(uuid4()))
+
+        self.assertEqual(checkout_status_actor(self.ledger,self.group,operation['request_key'],self.user,'service-actor'),self.user)
+        self.assertIsNone(checkout_status_actor(self.ledger,self.group,operation['request_key'],None,'service-actor'))
 
 
 if __name__=='__main__':unittest.main()

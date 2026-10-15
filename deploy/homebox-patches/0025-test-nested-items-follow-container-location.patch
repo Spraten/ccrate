@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000025 Mon Sep 17 00:00:00 2001
+From: C-Crate <ccrate@users.noreply.github.com>
+Date: Wed, 14 Oct 2026 13:00:00 -0400
+Subject: [PATCH 25/25] Test nested item containment when a container moves
+
+---
+ frontend/lib/api/__test__/user/items.test.ts | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/frontend/lib/api/__test__/user/items.test.ts b/frontend/lib/api/__test__/user/items.test.ts
+--- a/frontend/lib/api/__test__/user/items.test.ts
++++ b/frontend/lib/api/__test__/user/items.test.ts
+@@ -228,7 +228,7 @@
+     cleanup();
+   });
+-
++
+-  test("child items sync their location to their parent", async () => {
++  test("child items stay inside their parent when its location changes", async () => {
+     const api = await sharedUserClient();
+     const [parentLocation, parentCleanup] = await useLocation(api);
+     const [childsLocation, childsCleanup] = await useLocation(api);
+@@ -280,7 +280,7 @@
+     const itemUpdate = {
+       ...parent,
+       entityTypeId: parent.entityType?.id || "",
+-      parentId: parentLocation.id,
++      parentId: childsLocation.id,
+       tagIds: [],
+       syncChildEntityLocations: true,
+     };
+@@ -289,11 +289,17 @@
+-
++
+     const { response: child1FinalResponse, data: child1FinalData } = await api.items.get(child1Item.id);
+     expect(child1FinalResponse.status).toBe(200);
+-    expect(child1FinalData.parent?.id).toBe(parentLocation.id);
++    expect(child1FinalData.parent?.id).toBe(parent.id);
++    const { response: child1PathResponse, data: child1Path } = await api.items.fullpath(child1Item.id);
++    expect(child1PathResponse.status).toBe(200);
++    expect(new Set(child1Path.map(path => path.id))).toEqual(new Set([childsLocation.id, parent.id, child1Item.id]));
+-
++
+     const { response: child2FinalResponse, data: child2FinalData } = await api.items.get(child2Item.id);
+     expect(child2FinalResponse.status).toBe(200);
+-    expect(child2FinalData.parent?.id).toBe(parentLocation.id);
++    expect(child2FinalData.parent?.id).toBe(parent.id);
++    const { response: child2PathResponse, data: child2Path } = await api.items.fullpath(child2Item.id);
++    expect(child2PathResponse.status).toBe(200);
++    expect(new Set(child2Path.map(path => path.id))).toEqual(new Set([childsLocation.id, parent.id, child2Item.id]));
+-
++
+     parentCleanup();
+     childsCleanup();

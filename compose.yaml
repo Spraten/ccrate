@@ -4,10 +4,11 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:17745:17745"
+      - "127.0.0.1:${CCRATE_LOCAL_TEST_PORT:-17745}:17745"
       - "127.0.0.1:17749:17749"
     environment:
       WORKSHOP_LOCAL_TEST: "1"
+      WORKSHOP_LOCAL_TEST_PUBLIC_PORT: "${CCRATE_LOCAL_TEST_PORT:-17745}"
       WORKSHOP_ROOT: /data
       WORKSHOP_CODE_ROOT: /app
       HOMEBOX_UI_ROOT: /app/public

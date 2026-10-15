@@ -1,0 +1,629 @@
+From 57bfc1386a468764b9fd3962befb14f27ad9407c Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 21:44:31 -0400
+Subject: [PATCH 02/23] feat: generate Ent barcode support
+
+---
+ backend/go.sum                              |  2 +
+ backend/internal/data/ent/entity.go         | 13 +++-
+ backend/internal/data/ent/entity/entity.go  | 10 +++
+ backend/internal/data/ent/entity/where.go   | 80 +++++++++++++++++++++
+ backend/internal/data/ent/entity_create.go  | 23 ++++++
+ backend/internal/data/ent/entity_update.go  | 62 ++++++++++++++++
+ backend/internal/data/ent/migrate/schema.go | 16 +++--
+ backend/internal/data/ent/mutation.go       | 75 ++++++++++++++++++-
+ backend/internal/data/ent/runtime.go        | 18 +++--
+ 9 files changed, 285 insertions(+), 14 deletions(-)
+
+diff --git a/backend/go.sum b/backend/go.sum
+index 9493468f..e06603cd 100644
+--- a/backend/go.sum
++++ b/backend/go.sum
+@@ -290,6 +290,8 @@ github.com/hashicorp/hcl/v2 v2.18.1 h1:6nxnOJFku1EuSawSD81fuviYUV8DxFr3fp2dUi3ZY
+ github.com/hashicorp/hcl/v2 v2.18.1/go.mod h1:ThLC89FV4p9MPW804KVbe/cEXoQ8NZEh+JtMeeGErHE=
+ github.com/hay-kot/httpkit v0.0.11 h1:ZdB2uqsFBSDpfUoClGK5c5orjBjQkEVSXh7fZX5FKEk=
+ github.com/hay-kot/httpkit v0.0.11/go.mod h1:0kZdk5/swzdfqfg2c6pBWimcgeJ9PTyO97EbHnYl2Sw=
++github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
++github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
+ github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
+ github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
+ github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
+diff --git a/backend/internal/data/ent/entity.go b/backend/internal/data/ent/entity.go
+index 7de03133..088866e8 100644
+--- a/backend/internal/data/ent/entity.go
++++ b/backend/internal/data/ent/entity.go
+@@ -44,6 +44,8 @@ type Entity struct {
+ 	SyncChildEntityLocations bool `json:"sync_child_entity_locations,omitempty"`
+ 	// SerialNumber holds the value of the "serial_number" field.
+ 	SerialNumber string `json:"serial_number,omitempty"`
++	// Barcode holds the value of the "barcode" field.
++	Barcode string `json:"barcode,omitempty"`
+ 	// ModelNumber holds the value of the "model_number" field.
+ 	ModelNumber string `json:"model_number,omitempty"`
+ 	// Manufacturer holds the value of the "manufacturer" field.
+@@ -189,7 +191,7 @@ func (*Entity) scanValues(columns []string) ([]any, error) {
+ 			values[i] = new(sql.NullFloat64)
+ 		case entity.FieldAssetID:
+ 			values[i] = new(sql.NullInt64)
+-		case entity.FieldName, entity.FieldDescription, entity.FieldImportRef, entity.FieldNotes, entity.FieldSerialNumber, entity.FieldModelNumber, entity.FieldManufacturer, entity.FieldWarrantyDetails, entity.FieldPurchaseFrom, entity.FieldSoldTo, entity.FieldSoldNotes:
++		case entity.FieldName, entity.FieldDescription, entity.FieldImportRef, entity.FieldNotes, entity.FieldSerialNumber, entity.FieldBarcode, entity.FieldModelNumber, entity.FieldManufacturer, entity.FieldWarrantyDetails, entity.FieldPurchaseFrom, entity.FieldSoldTo, entity.FieldSoldNotes:
+ 			values[i] = new(sql.NullString)
+ 		case entity.FieldCreatedAt, entity.FieldUpdatedAt, entity.FieldWarrantyExpires, entity.FieldPurchaseDate, entity.FieldSoldDate:
+ 			values[i] = new(sql.NullTime)
+@@ -294,6 +296,12 @@ func (_m *Entity) assignValues(columns []string, values []any) error {
+ 			} else if value.Valid {
+ 				_m.SerialNumber = value.String
+ 			}
++		case entity.FieldBarcode:
++			if value, ok := values[i].(*sql.NullString); !ok {
++				return fmt.Errorf("unexpected type %T for field barcode", values[i])
++			} else if value.Valid {
++				_m.Barcode = value.String
++			}
+ 		case entity.FieldModelNumber:
+ 			if value, ok := values[i].(*sql.NullString); !ok {
+ 				return fmt.Errorf("unexpected type %T for field model_number", values[i])
+@@ -499,6 +507,9 @@ func (_m *Entity) String() string {
+ 	builder.WriteString("serial_number=")
+ 	builder.WriteString(_m.SerialNumber)
+ 	builder.WriteString(", ")
++	builder.WriteString("barcode=")
++	builder.WriteString(_m.Barcode)
++	builder.WriteString(", ")
+ 	builder.WriteString("model_number=")
+ 	builder.WriteString(_m.ModelNumber)
+ 	builder.WriteString(", ")
+diff --git a/backend/internal/data/ent/entity/entity.go b/backend/internal/data/ent/entity/entity.go
+index 86695dcb..b0e3b1ee 100644
+--- a/backend/internal/data/ent/entity/entity.go
++++ b/backend/internal/data/ent/entity/entity.go
+@@ -39,6 +39,8 @@ const (
+ 	FieldSyncChildEntityLocations = "sync_child_entity_locations"
+ 	// FieldSerialNumber holds the string denoting the serial_number field in the database.
+ 	FieldSerialNumber = "serial_number"
++	// FieldBarcode holds the string denoting the barcode field in the database.
++	FieldBarcode = "barcode"
+ 	// FieldModelNumber holds the string denoting the model_number field in the database.
+ 	FieldModelNumber = "model_number"
+ 	// FieldManufacturer holds the string denoting the manufacturer field in the database.
+@@ -146,6 +148,7 @@ var Columns = []string{
+ 	FieldAssetID,
+ 	FieldSyncChildEntityLocations,
+ 	FieldSerialNumber,
++	FieldBarcode,
+ 	FieldModelNumber,
+ 	FieldManufacturer,
+ 	FieldLifetimeWarranty,
+@@ -216,6 +219,8 @@ var (
+ 	DefaultSyncChildEntityLocations bool
+ 	// SerialNumberValidator is a validator for the "serial_number" field. It is called by the builders before save.
+ 	SerialNumberValidator func(string) error
++	// BarcodeValidator is a validator for the "barcode" field. It is called by the builders before save.
++	BarcodeValidator func(string) error
+ 	// ModelNumberValidator is a validator for the "model_number" field. It is called by the builders before save.
+ 	ModelNumberValidator func(string) error
+ 	// ManufacturerValidator is a validator for the "manufacturer" field. It is called by the builders before save.
+@@ -302,6 +307,11 @@ func BySerialNumber(opts ...sql.OrderTermOption) OrderOption {
+ 	return sql.OrderByField(FieldSerialNumber, opts...).ToFunc()
+ }
+ 
++// ByBarcode orders the results by the barcode field.
++func ByBarcode(opts ...sql.OrderTermOption) OrderOption {
++	return sql.OrderByField(FieldBarcode, opts...).ToFunc()
++}
++
+ // ByModelNumber orders the results by the model_number field.
+ func ByModelNumber(opts ...sql.OrderTermOption) OrderOption {
+ 	return sql.OrderByField(FieldModelNumber, opts...).ToFunc()
+diff --git a/backend/internal/data/ent/entity/where.go b/backend/internal/data/ent/entity/where.go
+index 2115f63f..8b40be0d 100644
+--- a/backend/internal/data/ent/entity/where.go
++++ b/backend/internal/data/ent/entity/where.go
+@@ -116,6 +116,11 @@ func SerialNumber(v string) predicate.Entity {
+ 	return predicate.Entity(sql.FieldEQ(FieldSerialNumber, v))
+ }
+ 
++// Barcode applies equality check predicate on the "barcode" field. It's identical to BarcodeEQ.
++func Barcode(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldEQ(FieldBarcode, v))
++}
++
+ // ModelNumber applies equality check predicate on the "model_number" field. It's identical to ModelNumberEQ.
+ func ModelNumber(v string) predicate.Entity {
+ 	return predicate.Entity(sql.FieldEQ(FieldModelNumber, v))
+@@ -731,6 +736,81 @@ func SerialNumberContainsFold(v string) predicate.Entity {
+ 	return predicate.Entity(sql.FieldContainsFold(FieldSerialNumber, v))
+ }
+ 
++// BarcodeEQ applies the EQ predicate on the "barcode" field.
++func BarcodeEQ(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldEQ(FieldBarcode, v))
++}
++
++// BarcodeNEQ applies the NEQ predicate on the "barcode" field.
++func BarcodeNEQ(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldNEQ(FieldBarcode, v))
++}
++
++// BarcodeIn applies the In predicate on the "barcode" field.
++func BarcodeIn(vs ...string) predicate.Entity {
++	return predicate.Entity(sql.FieldIn(FieldBarcode, vs...))
++}
++
++// BarcodeNotIn applies the NotIn predicate on the "barcode" field.
++func BarcodeNotIn(vs ...string) predicate.Entity {
++	return predicate.Entity(sql.FieldNotIn(FieldBarcode, vs...))
++}
++
++// BarcodeGT applies the GT predicate on the "barcode" field.
++func BarcodeGT(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldGT(FieldBarcode, v))
++}
++
++// BarcodeGTE applies the GTE predicate on the "barcode" field.
++func BarcodeGTE(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldGTE(FieldBarcode, v))
++}
++
++// BarcodeLT applies the LT predicate on the "barcode" field.
++func BarcodeLT(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldLT(FieldBarcode, v))
++}
++
++// BarcodeLTE applies the LTE predicate on the "barcode" field.
++func BarcodeLTE(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldLTE(FieldBarcode, v))
++}
++
++// BarcodeContains applies the Contains predicate on the "barcode" field.
++func BarcodeContains(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldContains(FieldBarcode, v))
++}
++
++// BarcodeHasPrefix applies the HasPrefix predicate on the "barcode" field.
++func BarcodeHasPrefix(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldHasPrefix(FieldBarcode, v))
++}
++
++// BarcodeHasSuffix applies the HasSuffix predicate on the "barcode" field.
++func BarcodeHasSuffix(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldHasSuffix(FieldBarcode, v))
++}
++
++// BarcodeIsNil applies the IsNil predicate on the "barcode" field.
++func BarcodeIsNil() predicate.Entity {
++	return predicate.Entity(sql.FieldIsNull(FieldBarcode))
++}
++
++// BarcodeNotNil applies the NotNil predicate on the "barcode" field.
++func BarcodeNotNil() predicate.Entity {
++	return predicate.Entity(sql.FieldNotNull(FieldBarcode))
++}
++
++// BarcodeEqualFold applies the EqualFold predicate on the "barcode" field.
++func BarcodeEqualFold(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldEqualFold(FieldBarcode, v))
++}
++
++// BarcodeContainsFold applies the ContainsFold predicate on the "barcode" field.
++func BarcodeContainsFold(v string) predicate.Entity {
++	return predicate.Entity(sql.FieldContainsFold(FieldBarcode, v))
++}
++
+ // ModelNumberEQ applies the EQ predicate on the "model_number" field.
+ func ModelNumberEQ(v string) predicate.Entity {
+ 	return predicate.Entity(sql.FieldEQ(FieldModelNumber, v))
+diff --git a/backend/internal/data/ent/entity_create.go b/backend/internal/data/ent/entity_create.go
+index fdf2917b..dccb65b2 100644
+--- a/backend/internal/data/ent/entity_create.go
++++ b/backend/internal/data/ent/entity_create.go
+@@ -187,6 +187,20 @@ func (_c *EntityCreate) SetNillableSerialNumber(v *string) *EntityCreate {
+ 	return _c
+ }
+ 
++// SetBarcode sets the "barcode" field.
++func (_c *EntityCreate) SetBarcode(v string) *EntityCreate {
++	_c.mutation.SetBarcode(v)
++	return _c
++}
++
++// SetNillableBarcode sets the "barcode" field if the given value is not nil.
++func (_c *EntityCreate) SetNillableBarcode(v *string) *EntityCreate {
++	if v != nil {
++		_c.SetBarcode(*v)
++	}
++	return _c
++}
++
+ // SetModelNumber sets the "model_number" field.
+ func (_c *EntityCreate) SetModelNumber(v string) *EntityCreate {
+ 	_c.mutation.SetModelNumber(v)
+@@ -617,6 +631,11 @@ func (_c *EntityCreate) check() error {
+ 			return &ValidationError{Name: "serial_number", err: fmt.Errorf(`ent: validator failed for field "Entity.serial_number": %w`, err)}
+ 		}
+ 	}
++	if v, ok := _c.mutation.Barcode(); ok {
++		if err := entity.BarcodeValidator(v); err != nil {
++			return &ValidationError{Name: "barcode", err: fmt.Errorf(`ent: validator failed for field "Entity.barcode": %w`, err)}
++		}
++	}
+ 	if v, ok := _c.mutation.ModelNumber(); ok {
+ 		if err := entity.ModelNumberValidator(v); err != nil {
+ 			return &ValidationError{Name: "model_number", err: fmt.Errorf(`ent: validator failed for field "Entity.model_number": %w`, err)}
+@@ -735,6 +754,10 @@ func (_c *EntityCreate) createSpec() (*Entity, *sqlgraph.CreateSpec) {
+ 		_spec.SetField(entity.FieldSerialNumber, field.TypeString, value)
+ 		_node.SerialNumber = value
+ 	}
++	if value, ok := _c.mutation.Barcode(); ok {
++		_spec.SetField(entity.FieldBarcode, field.TypeString, value)
++		_node.Barcode = value
++	}
+ 	if value, ok := _c.mutation.ModelNumber(); ok {
+ 		_spec.SetField(entity.FieldModelNumber, field.TypeString, value)
+ 		_node.ModelNumber = value
+diff --git a/backend/internal/data/ent/entity_update.go b/backend/internal/data/ent/entity_update.go
+index f3dbf1f4..3c14abdf 100644
+--- a/backend/internal/data/ent/entity_update.go
++++ b/backend/internal/data/ent/entity_update.go
+@@ -219,6 +219,26 @@ func (_u *EntityUpdate) ClearSerialNumber() *EntityUpdate {
+ 	return _u
+ }
+ 
++// SetBarcode sets the "barcode" field.
++func (_u *EntityUpdate) SetBarcode(v string) *EntityUpdate {
++	_u.mutation.SetBarcode(v)
++	return _u
++}
++
++// SetNillableBarcode sets the "barcode" field if the given value is not nil.
++func (_u *EntityUpdate) SetNillableBarcode(v *string) *EntityUpdate {
++	if v != nil {
++		_u.SetBarcode(*v)
++	}
++	return _u
++}
++
++// ClearBarcode clears the value of the "barcode" field.
++func (_u *EntityUpdate) ClearBarcode() *EntityUpdate {
++	_u.mutation.ClearBarcode()
++	return _u
++}
++
+ // SetModelNumber sets the "model_number" field.
+ func (_u *EntityUpdate) SetModelNumber(v string) *EntityUpdate {
+ 	_u.mutation.SetModelNumber(v)
+@@ -762,6 +782,11 @@ func (_u *EntityUpdate) check() error {
+ 			return &ValidationError{Name: "serial_number", err: fmt.Errorf(`ent: validator failed for field "Entity.serial_number": %w`, err)}
+ 		}
+ 	}
++	if v, ok := _u.mutation.Barcode(); ok {
++		if err := entity.BarcodeValidator(v); err != nil {
++			return &ValidationError{Name: "barcode", err: fmt.Errorf(`ent: validator failed for field "Entity.barcode": %w`, err)}
++		}
++	}
+ 	if v, ok := _u.mutation.ModelNumber(); ok {
+ 		if err := entity.ModelNumberValidator(v); err != nil {
+ 			return &ValidationError{Name: "model_number", err: fmt.Errorf(`ent: validator failed for field "Entity.model_number": %w`, err)}
+@@ -854,6 +879,12 @@ func (_u *EntityUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+ 	if _u.mutation.SerialNumberCleared() {
+ 		_spec.ClearField(entity.FieldSerialNumber, field.TypeString)
+ 	}
++	if value, ok := _u.mutation.Barcode(); ok {
++		_spec.SetField(entity.FieldBarcode, field.TypeString, value)
++	}
++	if _u.mutation.BarcodeCleared() {
++		_spec.ClearField(entity.FieldBarcode, field.TypeString)
++	}
+ 	if value, ok := _u.mutation.ModelNumber(); ok {
+ 		_spec.SetField(entity.FieldModelNumber, field.TypeString, value)
+ 	}
+@@ -1439,6 +1470,26 @@ func (_u *EntityUpdateOne) ClearSerialNumber() *EntityUpdateOne {
+ 	return _u
+ }
+ 
++// SetBarcode sets the "barcode" field.
++func (_u *EntityUpdateOne) SetBarcode(v string) *EntityUpdateOne {
++	_u.mutation.SetBarcode(v)
++	return _u
++}
++
++// SetNillableBarcode sets the "barcode" field if the given value is not nil.
++func (_u *EntityUpdateOne) SetNillableBarcode(v *string) *EntityUpdateOne {
++	if v != nil {
++		_u.SetBarcode(*v)
++	}
++	return _u
++}
++
++// ClearBarcode clears the value of the "barcode" field.
++func (_u *EntityUpdateOne) ClearBarcode() *EntityUpdateOne {
++	_u.mutation.ClearBarcode()
++	return _u
++}
++
+ // SetModelNumber sets the "model_number" field.
+ func (_u *EntityUpdateOne) SetModelNumber(v string) *EntityUpdateOne {
+ 	_u.mutation.SetModelNumber(v)
+@@ -1995,6 +2046,11 @@ func (_u *EntityUpdateOne) check() error {
+ 			return &ValidationError{Name: "serial_number", err: fmt.Errorf(`ent: validator failed for field "Entity.serial_number": %w`, err)}
+ 		}
+ 	}
++	if v, ok := _u.mutation.Barcode(); ok {
++		if err := entity.BarcodeValidator(v); err != nil {
++			return &ValidationError{Name: "barcode", err: fmt.Errorf(`ent: validator failed for field "Entity.barcode": %w`, err)}
++		}
++	}
+ 	if v, ok := _u.mutation.ModelNumber(); ok {
+ 		if err := entity.ModelNumberValidator(v); err != nil {
+ 			return &ValidationError{Name: "model_number", err: fmt.Errorf(`ent: validator failed for field "Entity.model_number": %w`, err)}
+@@ -2104,6 +2160,12 @@ func (_u *EntityUpdateOne) sqlSave(ctx context.Context) (_node *Entity, err erro
+ 	if _u.mutation.SerialNumberCleared() {
+ 		_spec.ClearField(entity.FieldSerialNumber, field.TypeString)
+ 	}
++	if value, ok := _u.mutation.Barcode(); ok {
++		_spec.SetField(entity.FieldBarcode, field.TypeString, value)
++	}
++	if _u.mutation.BarcodeCleared() {
++		_spec.ClearField(entity.FieldBarcode, field.TypeString)
++	}
+ 	if value, ok := _u.mutation.ModelNumber(); ok {
+ 		_spec.SetField(entity.FieldModelNumber, field.TypeString, value)
+ 	}
+diff --git a/backend/internal/data/ent/migrate/schema.go b/backend/internal/data/ent/migrate/schema.go
+index b214fbc8..26c14005 100644
+--- a/backend/internal/data/ent/migrate/schema.go
++++ b/backend/internal/data/ent/migrate/schema.go
+@@ -144,6 +144,7 @@ var (
+ 		{Name: "asset_id", Type: field.TypeInt64, Default: 0},
+ 		{Name: "sync_child_entity_locations", Type: field.TypeBool, Default: false},
+ 		{Name: "serial_number", Type: field.TypeString, Nullable: true, Size: 255},
++		{Name: "barcode", Type: field.TypeString, Nullable: true, Size: 80},
+ 		{Name: "model_number", Type: field.TypeString, Nullable: true, Size: 255},
+ 		{Name: "manufacturer", Type: field.TypeString, Nullable: true, Size: 255},
+ 		{Name: "lifetime_warranty", Type: field.TypeBool, Default: false},
+@@ -168,19 +169,19 @@ var (
+ 		ForeignKeys: []*schema.ForeignKey{
+ 			{
+ 				Symbol:     "entities_entities_children",
+-				Columns:    []*schema.Column{EntitiesColumns[25]},
++				Columns:    []*schema.Column{EntitiesColumns[26]},
+ 				RefColumns: []*schema.Column{EntitiesColumns[0]},
+ 				OnDelete:   schema.SetNull,
+ 			},
+ 			{
+ 				Symbol:     "entities_entity_types_entities",
+-				Columns:    []*schema.Column{EntitiesColumns[26]},
++				Columns:    []*schema.Column{EntitiesColumns[27]},
+ 				RefColumns: []*schema.Column{EntityTypesColumns[0]},
+ 				OnDelete:   schema.Restrict,
+ 			},
+ 			{
+ 				Symbol:     "entities_groups_entities",
+-				Columns:    []*schema.Column{EntitiesColumns[27]},
++				Columns:    []*schema.Column{EntitiesColumns[28]},
+ 				RefColumns: []*schema.Column{GroupsColumns[0]},
+ 				OnDelete:   schema.Cascade,
+ 			},
+@@ -194,18 +195,23 @@ var (
+ 			{
+ 				Name:    "entity_manufacturer",
+ 				Unique:  false,
+-				Columns: []*schema.Column{EntitiesColumns[14]},
++				Columns: []*schema.Column{EntitiesColumns[15]},
+ 			},
+ 			{
+ 				Name:    "entity_model_number",
+ 				Unique:  false,
+-				Columns: []*schema.Column{EntitiesColumns[13]},
++				Columns: []*schema.Column{EntitiesColumns[14]},
+ 			},
+ 			{
+ 				Name:    "entity_serial_number",
+ 				Unique:  false,
+ 				Columns: []*schema.Column{EntitiesColumns[12]},
+ 			},
++			{
++				Name:    "entity_barcode",
++				Unique:  false,
++				Columns: []*schema.Column{EntitiesColumns[13]},
++			},
+ 			{
+ 				Name:    "entity_archived",
+ 				Unique:  false,
+diff --git a/backend/internal/data/ent/mutation.go b/backend/internal/data/ent/mutation.go
+index 70dbae1d..2045016e 100644
+--- a/backend/internal/data/ent/mutation.go
++++ b/backend/internal/data/ent/mutation.go
+@@ -2628,6 +2628,7 @@ type EntityMutation struct {
+ 	addasset_id                 *int64
+ 	sync_child_entity_locations *bool
+ 	serial_number               *string
++	barcode                     *string
+ 	model_number                *string
+ 	manufacturer                *string
+ 	lifetime_warranty           *bool
+@@ -3297,6 +3298,55 @@ func (m *EntityMutation) ResetSerialNumber() {
+ 	delete(m.clearedFields, entity.FieldSerialNumber)
+ }
+ 
++// SetBarcode sets the "barcode" field.
++func (m *EntityMutation) SetBarcode(s string) {
++	m.barcode = &s
++}
++
++// Barcode returns the value of the "barcode" field in the mutation.
++func (m *EntityMutation) Barcode() (r string, exists bool) {
++	v := m.barcode
++	if v == nil {
++		return
++	}
++	return *v, true
++}
++
++// OldBarcode returns the old "barcode" field's value of the Entity entity.
++// If the Entity object wasn't provided to the builder, the object is fetched from the database.
++// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
++func (m *EntityMutation) OldBarcode(ctx context.Context) (v string, err error) {
++	if !m.op.Is(OpUpdateOne) {
++		return v, errors.New("OldBarcode is only allowed on UpdateOne operations")
++	}
++	if m.id == nil || m.oldValue == nil {
++		return v, errors.New("OldBarcode requires an ID field in the mutation")
++	}
++	oldValue, err := m.oldValue(ctx)
++	if err != nil {
++		return v, fmt.Errorf("querying old value for OldBarcode: %w", err)
++	}
++	return oldValue.Barcode, nil
++}
++
++// ClearBarcode clears the value of the "barcode" field.
++func (m *EntityMutation) ClearBarcode() {
++	m.barcode = nil
++	m.clearedFields[entity.FieldBarcode] = struct{}{}
++}
++
++// BarcodeCleared returns if the "barcode" field was cleared in this mutation.
++func (m *EntityMutation) BarcodeCleared() bool {
++	_, ok := m.clearedFields[entity.FieldBarcode]
++	return ok
++}
++
++// ResetBarcode resets all changes to the "barcode" field.
++func (m *EntityMutation) ResetBarcode() {
++	m.barcode = nil
++	delete(m.clearedFields, entity.FieldBarcode)
++}
++
+ // SetModelNumber sets the "model_number" field.
+ func (m *EntityMutation) SetModelNumber(s string) {
+ 	m.model_number = &s
+@@ -4307,7 +4357,7 @@ func (m *EntityMutation) Type() string {
+ // order to get all numeric fields that were incremented/decremented, call
+ // AddedFields().
+ func (m *EntityMutation) Fields() []string {
+-	fields := make([]string, 0, 24)
++	fields := make([]string, 0, 25)
+ 	if m.created_at != nil {
+ 		fields = append(fields, entity.FieldCreatedAt)
+ 	}
+@@ -4344,6 +4394,9 @@ func (m *EntityMutation) Fields() []string {
+ 	if m.serial_number != nil {
+ 		fields = append(fields, entity.FieldSerialNumber)
+ 	}
++	if m.barcode != nil {
++		fields = append(fields, entity.FieldBarcode)
++	}
+ 	if m.model_number != nil {
+ 		fields = append(fields, entity.FieldModelNumber)
+ 	}
+@@ -4412,6 +4465,8 @@ func (m *EntityMutation) Field(name string) (ent.Value, bool) {
+ 		return m.SyncChildEntityLocations()
+ 	case entity.FieldSerialNumber:
+ 		return m.SerialNumber()
++	case entity.FieldBarcode:
++		return m.Barcode()
+ 	case entity.FieldModelNumber:
+ 		return m.ModelNumber()
+ 	case entity.FieldManufacturer:
+@@ -4469,6 +4524,8 @@ func (m *EntityMutation) OldField(ctx context.Context, name string) (ent.Value,
+ 		return m.OldSyncChildEntityLocations(ctx)
+ 	case entity.FieldSerialNumber:
+ 		return m.OldSerialNumber(ctx)
++	case entity.FieldBarcode:
++		return m.OldBarcode(ctx)
+ 	case entity.FieldModelNumber:
+ 		return m.OldModelNumber(ctx)
+ 	case entity.FieldManufacturer:
+@@ -4586,6 +4643,13 @@ func (m *EntityMutation) SetField(name string, value ent.Value) error {
+ 		}
+ 		m.SetSerialNumber(v)
+ 		return nil
++	case entity.FieldBarcode:
++		v, ok := value.(string)
++		if !ok {
++			return fmt.Errorf("unexpected type %T for field %s", value, name)
++		}
++		m.SetBarcode(v)
++		return nil
+ 	case entity.FieldModelNumber:
+ 		v, ok := value.(string)
+ 		if !ok {
+@@ -4763,6 +4827,9 @@ func (m *EntityMutation) ClearedFields() []string {
+ 	if m.FieldCleared(entity.FieldSerialNumber) {
+ 		fields = append(fields, entity.FieldSerialNumber)
+ 	}
++	if m.FieldCleared(entity.FieldBarcode) {
++		fields = append(fields, entity.FieldBarcode)
++	}
+ 	if m.FieldCleared(entity.FieldModelNumber) {
+ 		fields = append(fields, entity.FieldModelNumber)
+ 	}
+@@ -4816,6 +4883,9 @@ func (m *EntityMutation) ClearField(name string) error {
+ 	case entity.FieldSerialNumber:
+ 		m.ClearSerialNumber()
+ 		return nil
++	case entity.FieldBarcode:
++		m.ClearBarcode()
++		return nil
+ 	case entity.FieldModelNumber:
+ 		m.ClearModelNumber()
+ 		return nil
+@@ -4887,6 +4957,9 @@ func (m *EntityMutation) ResetField(name string) error {
+ 	case entity.FieldSerialNumber:
+ 		m.ResetSerialNumber()
+ 		return nil
++	case entity.FieldBarcode:
++		m.ResetBarcode()
++		return nil
+ 	case entity.FieldModelNumber:
+ 		m.ResetModelNumber()
+ 		return nil
+diff --git a/backend/internal/data/ent/runtime.go b/backend/internal/data/ent/runtime.go
+index d34282c3..f59262dc 100644
+--- a/backend/internal/data/ent/runtime.go
++++ b/backend/internal/data/ent/runtime.go
+@@ -197,32 +197,36 @@ func init() {
+ 	entityDescSerialNumber := entityFields[7].Descriptor()
+ 	// entity.SerialNumberValidator is a validator for the "serial_number" field. It is called by the builders before save.
+ 	entity.SerialNumberValidator = entityDescSerialNumber.Validators[0].(func(string) error)
++	// entityDescBarcode is the schema descriptor for barcode field.
++	entityDescBarcode := entityFields[8].Descriptor()
++	// entity.BarcodeValidator is a validator for the "barcode" field. It is called by the builders before save.
++	entity.BarcodeValidator = entityDescBarcode.Validators[0].(func(string) error)
+ 	// entityDescModelNumber is the schema descriptor for model_number field.
+-	entityDescModelNumber := entityFields[8].Descriptor()
++	entityDescModelNumber := entityFields[9].Descriptor()
+ 	// entity.ModelNumberValidator is a validator for the "model_number" field. It is called by the builders before save.
+ 	entity.ModelNumberValidator = entityDescModelNumber.Validators[0].(func(string) error)
+ 	// entityDescManufacturer is the schema descriptor for manufacturer field.
+-	entityDescManufacturer := entityFields[9].Descriptor()
++	entityDescManufacturer := entityFields[10].Descriptor()
+ 	// entity.ManufacturerValidator is a validator for the "manufacturer" field. It is called by the builders before save.
+ 	entity.ManufacturerValidator = entityDescManufacturer.Validators[0].(func(string) error)
+ 	// entityDescLifetimeWarranty is the schema descriptor for lifetime_warranty field.
+-	entityDescLifetimeWarranty := entityFields[10].Descriptor()
++	entityDescLifetimeWarranty := entityFields[11].Descriptor()
+ 	// entity.DefaultLifetimeWarranty holds the default value on creation for the lifetime_warranty field.
+ 	entity.DefaultLifetimeWarranty = entityDescLifetimeWarranty.Default.(bool)
+ 	// entityDescWarrantyDetails is the schema descriptor for warranty_details field.
+-	entityDescWarrantyDetails := entityFields[12].Descriptor()
++	entityDescWarrantyDetails := entityFields[13].Descriptor()
+ 	// entity.WarrantyDetailsValidator is a validator for the "warranty_details" field. It is called by the builders before save.
+ 	entity.WarrantyDetailsValidator = entityDescWarrantyDetails.Validators[0].(func(string) error)
+ 	// entityDescPurchasePrice is the schema descriptor for purchase_price field.
+-	entityDescPurchasePrice := entityFields[15].Descriptor()
++	entityDescPurchasePrice := entityFields[16].Descriptor()
+ 	// entity.DefaultPurchasePrice holds the default value on creation for the purchase_price field.
+ 	entity.DefaultPurchasePrice = entityDescPurchasePrice.Default.(float64)
+ 	// entityDescSoldPrice is the schema descriptor for sold_price field.
+-	entityDescSoldPrice := entityFields[18].Descriptor()
++	entityDescSoldPrice := entityFields[19].Descriptor()
+ 	// entity.DefaultSoldPrice holds the default value on creation for the sold_price field.
+ 	entity.DefaultSoldPrice = entityDescSoldPrice.Default.(float64)
+ 	// entityDescSoldNotes is the schema descriptor for sold_notes field.
+-	entityDescSoldNotes := entityFields[19].Descriptor()
++	entityDescSoldNotes := entityFields[20].Descriptor()
+ 	// entity.SoldNotesValidator is a validator for the "sold_notes" field. It is called by the builders before save.
+ 	entity.SoldNotesValidator = entityDescSoldNotes.Validators[0].(func(string) error)
+ 	// entityDescID is the schema descriptor for id field.

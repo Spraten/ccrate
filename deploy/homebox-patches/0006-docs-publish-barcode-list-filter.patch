@@ -1,0 +1,263 @@
+From df519812509211bad24ac6c3a04eebe94844dd76 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 22:21:57 -0400
+Subject: [PATCH 06/23] docs: publish barcode list filter
+
+---
+ backend/app/api/static/docs/docs.go        | 10 ++++++++++
+ backend/app/api/static/docs/openapi-3.json | 12 ++++++++++++
+ backend/app/api/static/docs/openapi-3.yaml |  8 ++++++++
+ backend/app/api/static/docs/swagger.json   | 10 ++++++++++
+ backend/app/api/static/docs/swagger.yaml   |  7 +++++++
+ docs/public/api/openapi-3.0.json           | 12 ++++++++++++
+ docs/public/api/openapi-3.0.yaml           |  8 ++++++++
+ docs/public/api/swagger-2.0.json           | 10 ++++++++++
+ docs/public/api/swagger-2.0.yaml           |  7 +++++++
+ 9 files changed, 84 insertions(+)
+
+diff --git a/backend/app/api/static/docs/docs.go b/backend/app/api/static/docs/docs.go
+index 9323032e..dcb7b006 100644
+--- a/backend/app/api/static/docs/docs.go
++++ b/backend/app/api/static/docs/docs.go
+@@ -251,6 +251,12 @@ const docTemplate = `{
+                         "name": "q",
+                         "in": "query"
+                     },
++                    {
++                        "type": "string",
++                        "description": "exact barcode",
++                        "name": "barcode",
++                        "in": "query"
++                    },
+                     {
+                         "type": "integer",
+                         "description": "page number",
+@@ -4278,6 +4284,10 @@ const docTemplate = `{
+                 "used_at": {
+                     "description": "UsedAt holds the value of the \"used_at\" field.",
+                     "type": "string"
++                },
++                "user_id": {
++                    "description": "UserID holds the value of the \"user_id\" field.",
++                    "type": "string"
+                 }
+             }
+         },
+diff --git a/backend/app/api/static/docs/openapi-3.json b/backend/app/api/static/docs/openapi-3.json
+index bc53c3d4..7ccd9ded 100644
+--- a/backend/app/api/static/docs/openapi-3.json
++++ b/backend/app/api/static/docs/openapi-3.json
+@@ -252,6 +252,14 @@
+                             "type": "string"
+                         }
+                     },
++                    {
++                        "description": "exact barcode",
++                        "name": "barcode",
++                        "in": "query",
++                        "schema": {
++                            "type": "string"
++                        }
++                    },
+                     {
+                         "description": "page number",
+                         "name": "page",
+@@ -4517,6 +4525,10 @@
+                     "used_at": {
+                         "description": "UsedAt holds the value of the \"used_at\" field.",
+                         "type": "string"
++                    },
++                    "user_id": {
++                        "description": "UserID holds the value of the \"user_id\" field.",
++                        "type": "string"
+                     }
+                 }
+             },
+diff --git a/backend/app/api/static/docs/openapi-3.yaml b/backend/app/api/static/docs/openapi-3.yaml
+index 58acb062..0d6f5d4d 100644
+--- a/backend/app/api/static/docs/openapi-3.yaml
++++ b/backend/app/api/static/docs/openapi-3.yaml
+@@ -149,6 +149,11 @@ paths:
+           in: query
+           schema:
+             type: string
++        - description: exact barcode
++          name: barcode
++          in: query
++          schema:
++            type: string
+         - description: page number
+           name: page
+           in: query
+@@ -2808,6 +2813,9 @@ components:
+         used_at:
+           description: UsedAt holds the value of the "used_at" field.
+           type: string
++        user_id:
++          description: UserID holds the value of the "user_id" field.
++          type: string
+     ent.PasswordResetTokensEdges:
+       type: object
+       properties:
+diff --git a/backend/app/api/static/docs/swagger.json b/backend/app/api/static/docs/swagger.json
+index 1a73fc0f..3e80db40 100644
+--- a/backend/app/api/static/docs/swagger.json
++++ b/backend/app/api/static/docs/swagger.json
+@@ -248,6 +248,12 @@
+                         "name": "q",
+                         "in": "query"
+                     },
++                    {
++                        "type": "string",
++                        "description": "exact barcode",
++                        "name": "barcode",
++                        "in": "query"
++                    },
+                     {
+                         "type": "integer",
+                         "description": "page number",
+@@ -4275,6 +4281,10 @@
+                 "used_at": {
+                     "description": "UsedAt holds the value of the \"used_at\" field.",
+                     "type": "string"
++                },
++                "user_id": {
++                    "description": "UserID holds the value of the \"user_id\" field.",
++                    "type": "string"
+                 }
+             }
+         },
+diff --git a/backend/app/api/static/docs/swagger.yaml b/backend/app/api/static/docs/swagger.yaml
+index 736d7673..c210deb9 100644
+--- a/backend/app/api/static/docs/swagger.yaml
++++ b/backend/app/api/static/docs/swagger.yaml
+@@ -761,6 +761,9 @@ definitions:
+       used_at:
+         description: UsedAt holds the value of the "used_at" field.
+         type: string
++      user_id:
++        description: UserID holds the value of the "user_id" field.
++        type: string
+     type: object
+   ent.PasswordResetTokensEdges:
+     properties:
+@@ -2496,6 +2499,10 @@ paths:
+         in: query
+         name: q
+         type: string
++      - description: exact barcode
++        in: query
++        name: barcode
++        type: string
+       - description: page number
+         in: query
+         name: page
+diff --git a/docs/public/api/openapi-3.0.json b/docs/public/api/openapi-3.0.json
+index bc53c3d4..7ccd9ded 100644
+--- a/docs/public/api/openapi-3.0.json
++++ b/docs/public/api/openapi-3.0.json
+@@ -252,6 +252,14 @@
+                             "type": "string"
+                         }
+                     },
++                    {
++                        "description": "exact barcode",
++                        "name": "barcode",
++                        "in": "query",
++                        "schema": {
++                            "type": "string"
++                        }
++                    },
+                     {
+                         "description": "page number",
+                         "name": "page",
+@@ -4517,6 +4525,10 @@
+                     "used_at": {
+                         "description": "UsedAt holds the value of the \"used_at\" field.",
+                         "type": "string"
++                    },
++                    "user_id": {
++                        "description": "UserID holds the value of the \"user_id\" field.",
++                        "type": "string"
+                     }
+                 }
+             },
+diff --git a/docs/public/api/openapi-3.0.yaml b/docs/public/api/openapi-3.0.yaml
+index 58acb062..0d6f5d4d 100644
+--- a/docs/public/api/openapi-3.0.yaml
++++ b/docs/public/api/openapi-3.0.yaml
+@@ -149,6 +149,11 @@ paths:
+           in: query
+           schema:
+             type: string
++        - description: exact barcode
++          name: barcode
++          in: query
++          schema:
++            type: string
+         - description: page number
+           name: page
+           in: query
+@@ -2808,6 +2813,9 @@ components:
+         used_at:
+           description: UsedAt holds the value of the "used_at" field.
+           type: string
++        user_id:
++          description: UserID holds the value of the "user_id" field.
++          type: string
+     ent.PasswordResetTokensEdges:
+       type: object
+       properties:
+diff --git a/docs/public/api/swagger-2.0.json b/docs/public/api/swagger-2.0.json
+index 1a73fc0f..3e80db40 100644
+--- a/docs/public/api/swagger-2.0.json
++++ b/docs/public/api/swagger-2.0.json
+@@ -248,6 +248,12 @@
+                         "name": "q",
+                         "in": "query"
+                     },
++                    {
++                        "type": "string",
++                        "description": "exact barcode",
++                        "name": "barcode",
++                        "in": "query"
++                    },
+                     {
+                         "type": "integer",
+                         "description": "page number",
+@@ -4275,6 +4281,10 @@
+                 "used_at": {
+                     "description": "UsedAt holds the value of the \"used_at\" field.",
+                     "type": "string"
++                },
++                "user_id": {
++                    "description": "UserID holds the value of the \"user_id\" field.",
++                    "type": "string"
+                 }
+             }
+         },
+diff --git a/docs/public/api/swagger-2.0.yaml b/docs/public/api/swagger-2.0.yaml
+index 736d7673..c210deb9 100644
+--- a/docs/public/api/swagger-2.0.yaml
++++ b/docs/public/api/swagger-2.0.yaml
+@@ -761,6 +761,9 @@ definitions:
+       used_at:
+         description: UsedAt holds the value of the "used_at" field.
+         type: string
++      user_id:
++        description: UserID holds the value of the "user_id" field.
++        type: string
+     type: object
+   ent.PasswordResetTokensEdges:
+     properties:
+@@ -2496,6 +2499,10 @@ paths:
+         in: query
+         name: q
+         type: string
++      - description: exact barcode
++        in: query
++        name: barcode
++        type: string
+       - description: page number
+         in: query
+         name: page

@@ -1,0 +1,1002 @@
+From 972f99b77a2a493134c1c9ace29bac047423144f Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Tue, 13 Oct 2026 22:38:19 -0400
+Subject: [PATCH 08/23] feat: integrate barcode capture into item creation
+
+---
+ .../task-3-report.md                          |  35 +++++
+ .../handlers/v1/v1_ctrl_entity_templates.go   |  22 ++-
+ backend/internal/data/repo/repo_entities.go   |  17 +-
+ .../internal/data/repo/repo_entities_test.go  |  62 ++++++++
+ frontend/components/App/ScannerModal.vue      |  32 +++-
+ frontend/components/Entity/CreateModal.vue    | 147 ++++++++++++++++--
+ frontend/components/Entity/barcode.test.ts    |  97 ++++++++++++
+ frontend/components/Entity/barcode.ts         |  64 ++++++++
+ .../components/ui/dialog-provider/utils.ts    |   4 +-
+ frontend/lib/api/__test__/user/items.test.ts  |  28 ++++
+ frontend/lib/api/classes/items.ts             |   1 +
+ frontend/lib/api/types/data-contracts.ts      |   6 +
+ frontend/locales/en.json                      |  19 ++-
+ frontend/pages/item/[id]/index.vue            |   5 +
+ frontend/pages/item/[id]/index/edit.vue       |   6 +
+ 15 files changed, 518 insertions(+), 27 deletions(-)
+ create mode 100644 .superpowers/sdd/2026-10-13-ccrate-item-barcode/task-3-report.md
+ create mode 100644 frontend/components/Entity/barcode.test.ts
+ create mode 100644 frontend/components/Entity/barcode.ts
+
+diff --git a/.superpowers/sdd/2026-10-13-ccrate-item-barcode/task-3-report.md b/.superpowers/sdd/2026-10-13-ccrate-item-barcode/task-3-report.md
+new file mode 100644
+index 00000000..7b69ec5c
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-13-ccrate-item-barcode/task-3-report.md
+@@ -0,0 +1,35 @@
++# Task 3 report: barcode capture and item details
++
++## Implemented
++
++- Added an optional barcode field to item create, edit, and detail views, including copied display and validation at 80 characters.
++- Routed the camera scanner result into the regular item form. Added scanning/detected/error feedback and retained manual entry when camera access or catalog lookup is unavailable.
++- Added optional numeric barcode catalog lookup, explicit candidate selection, and duplicate-item navigation. Candidate fields only prefill empty values; internal alphanumeric codes and leading zeroes remain supported.
++- Persisted manufacturer and model number on standard item creation. Extended template-based item creation to persist barcode while keeping omitted fields optional and preserving template defaults.
++- Added frontend helper/API tests and focused repository tests.
++
++## Verification
++
++- `git diff --check`: passed.
++- `frontend/locales/en.json` JSON parse using PowerShell `ConvertFrom-Json`: passed.
++- Go tests: not run successfully. The previous focused invocation stopped before tests because the required Go modules were absent locally and `proxy.golang.org` DNS/network access was unavailable. The cached Go executable path was also not present in this checkout.
++- Frontend Vitest, `pnpm typecheck`, and `pnpm lint:ci`: blocked before project scripts load. pnpm cannot resolve the nested frontend workspace path (`EPERM: operation not permitted, realpath ...\frontend`) and attempts to install dependencies; no local node_modules/test binaries are present. No network retry or permission escalation was used.
++
++The test assertions were added before implementation, but RED/GREEN execution could not be observed because of the tooling limitations above.
++
++## Files
++
++- `backend/app/api/handlers/v1/v1_ctrl_entity_templates.go`
++- `backend/internal/data/repo/repo_entities.go`
++- `backend/internal/data/repo/repo_entities_test.go`
++- `frontend/components/App/ScannerModal.vue`
++- `frontend/components/Entity/CreateModal.vue`
++- `frontend/components/Entity/barcode.ts`
++- `frontend/components/Entity/barcode.test.ts`
++- `frontend/components/ui/dialog-provider/utils.ts`
++- `frontend/lib/api/__test__/user/items.test.ts`
++- `frontend/lib/api/classes/items.ts`
++- `frontend/lib/api/types/data-contracts.ts`
++- `frontend/locales/en.json`
++- `frontend/pages/item/[id]/index.vue`
++- `frontend/pages/item/[id]/index/edit.vue`
+diff --git a/backend/app/api/handlers/v1/v1_ctrl_entity_templates.go b/backend/app/api/handlers/v1/v1_ctrl_entity_templates.go
+index 2663a640..a87d52dc 100644
+--- a/backend/app/api/handlers/v1/v1_ctrl_entity_templates.go
++++ b/backend/app/api/handlers/v1/v1_ctrl_entity_templates.go
+@@ -104,9 +104,12 @@ func (ctrl *V1Controller) HandleEntityTemplatesDelete() errchain.HandlerFunc {
+ }
+ 
+ type EntityTemplateCreateItemRequest struct {
+-	Name        string    `json:"name"         validate:"required,min=1,max=255"`
+-	Description string    `json:"description"  validate:"max=1000"`
+-	ParentID    uuid.UUID `json:"parentId"     validate:"required"`
++	Name         string    `json:"name"         validate:"required,min=1,max=255"`
++	Description  string    `json:"description"  validate:"max=1000"`
++	Barcode      string    `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
++	Manufacturer string    `json:"manufacturer,omitempty" validate:"max=255"`
++	ModelNumber  string    `json:"modelNumber,omitempty" validate:"max=255"`
++	ParentID     uuid.UUID `json:"parentId"     validate:"required"`
+ 	// EntityTypeID is the entity type selected by the user. When set it takes
+ 	// precedence; when empty the repository falls back to the group's default.
+ 	EntityTypeID uuid.UUID   `json:"entityTypeId"`
+@@ -137,6 +140,14 @@ func (ctrl *V1Controller) HandleEntityTemplatesCreateItem() errchain.HandlerFunc
+ 		if body.Quantity != nil {
+ 			quantity = *body.Quantity
+ 		}
++		manufacturer := template.DefaultManufacturer
++		if body.Manufacturer != "" {
++			manufacturer = body.Manufacturer
++		}
++		modelNumber := template.DefaultModelNumber
++		if body.ModelNumber != "" {
++			modelNumber = body.ModelNumber
++		}
+ 
+ 		// Build custom fields from template
+ 		fields := lo.Map(template.Fields, func(f repo.TemplateField, _ int) repo.EntityFieldData {
+@@ -153,13 +164,14 @@ func (ctrl *V1Controller) HandleEntityTemplatesCreateItem() errchain.HandlerFunc
+ 		return ctrl.repo.Entities.CreateFromTemplate(r.Context(), auth.GID, repo.EntityCreateFromTemplate{
+ 			Name:             body.Name,
+ 			Description:      body.Description,
++			Barcode:          body.Barcode,
+ 			Quantity:         quantity,
+ 			ParentID:         body.ParentID,
+ 			EntityTypeID:     body.EntityTypeID,
+ 			TagIDs:           body.TagIDs,
+ 			Insured:          template.DefaultInsured,
+-			Manufacturer:     template.DefaultManufacturer,
+-			ModelNumber:      template.DefaultModelNumber,
++			Manufacturer:     manufacturer,
++			ModelNumber:      modelNumber,
+ 			LifetimeWarranty: template.DefaultLifetimeWarranty,
+ 			WarrantyDetails:  template.DefaultWarrantyDetails,
+ 			Fields:           fields,
+diff --git a/backend/internal/data/repo/repo_entities.go b/backend/internal/data/repo/repo_entities.go
+index 0af90d2b..96b24a30 100644
+--- a/backend/internal/data/repo/repo_entities.go
++++ b/backend/internal/data/repo/repo_entities.go
+@@ -119,8 +119,10 @@ type (
+ 		EntityTypeID uuid.UUID `json:"entityTypeId"`
+ 
+ 		// Edges
+-		TagIDs  []uuid.UUID `json:"tagIds"`
+-		Barcode string      `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
++		TagIDs       []uuid.UUID `json:"tagIds"`
++		Barcode      string      `json:"barcode,omitempty" validate:"max=80" extensions:"x-nullable"`
++		Manufacturer string      `json:"manufacturer,omitempty" validate:"max=255"`
++		ModelNumber  string      `json:"modelNumber,omitempty" validate:"max=255"`
+ 	}
+ 
+ 	EntityUpdate struct {
+@@ -1070,6 +1072,8 @@ func (r *EntityRepository) Create(ctx context.Context, gid uuid.UUID, data Entit
+ 		SetName(data.Name).
+ 		SetQuantity(data.Quantity).
+ 		SetDescription(data.Description).
++		SetManufacturer(data.Manufacturer).
++		SetModelNumber(data.ModelNumber).
+ 		SetGroupID(gid).
+ 		SetAssetID(int64(data.AssetID))
+ 	if barcode != "" {
+@@ -1113,6 +1117,7 @@ func (r *EntityRepository) Create(ctx context.Context, gid uuid.UUID, data Entit
+ type EntityCreateFromTemplate struct {
+ 	Name             string
+ 	Description      string
++	Barcode          string
+ 	Quantity         float64
+ 	ParentID         uuid.UUID
+ 	EntityTypeID     uuid.UUID
+@@ -1143,6 +1148,11 @@ func (r *EntityRepository) CreateFromTemplate(ctx context.Context, gid uuid.UUID
+ 		recordSpanError(span, err)
+ 		return EntityOut{}, err
+ 	}
++	barcode, err := normalizeBarcode(data.Barcode)
++	if err != nil {
++		recordSpanError(span, err)
++		return EntityOut{}, err
++	}
+ 
+ 	// Same group-ownership checks as Create. Done before opening the tx so a
+ 	// rejected request doesn't leave a dangling transaction.
+@@ -1211,6 +1221,9 @@ func (r *EntityRepository) CreateFromTemplate(ctx context.Context, gid uuid.UUID
+ 		SetModelNumber(data.ModelNumber).
+ 		SetLifetimeWarranty(data.LifetimeWarranty).
+ 		SetWarrantyDetails(data.WarrantyDetails)
++	if barcode != "" {
++		entityBuilder.SetBarcode(barcode)
++	}
+ 
+ 	if data.ParentID != uuid.Nil {
+ 		entityBuilder.SetParentID(data.ParentID)
+diff --git a/backend/internal/data/repo/repo_entities_test.go b/backend/internal/data/repo/repo_entities_test.go
+index 1018aceb..6689821a 100644
+--- a/backend/internal/data/repo/repo_entities_test.go
++++ b/backend/internal/data/repo/repo_entities_test.go
+@@ -572,6 +572,68 @@ func TestEntityRepository_CreateFromTemplate_DefaultsEntityType(t *testing.T) {
+ 	require.NoError(t, err)
+ }
+ 
++func TestEntityRepository_CreateFromTemplate_Barcode(t *testing.T) {
++	containerET := useContainerEntityType(t)
++	cf := containerFactory()
++	cf.EntityTypeID = containerET.ID
++	container, err := tRepos.Entities.Create(context.Background(), tGroup.ID, cf)
++	require.NoError(t, err)
++
++	out, err := tRepos.Entities.CreateFromTemplate(context.Background(), tGroup.ID, EntityCreateFromTemplate{
++		Name:         "Template item with barcode",
++		Description:  "",
++		Quantity:     1,
++		ParentID:     container.ID,
++		Barcode:      " 0012345 ",
++		Manufacturer: "Eventronic",
++		ModelNumber:  "ET1001",
++	})
++	require.NoError(t, err)
++	assert.Equal(t, "0012345", out.Barcode)
++	assert.Equal(t, "Eventronic", out.Manufacturer)
++	assert.Equal(t, "ET1001", out.ModelNumber)
++
++	withoutBarcode, err := tRepos.Entities.CreateFromTemplate(context.Background(), tGroup.ID, EntityCreateFromTemplate{
++		Name:     "Template item without barcode",
++		Quantity: 1,
++		ParentID: container.ID,
++	})
++	require.NoError(t, err)
++	assert.Empty(t, withoutBarcode.Barcode)
++
++	t.Cleanup(func() {
++		_ = tRepos.Entities.Delete(context.Background(), out.ID)
++		_ = tRepos.Entities.Delete(context.Background(), withoutBarcode.ID)
++		_ = tRepos.Entities.Delete(context.Background(), container.ID)
++	})
++}
++
++func TestEntityRepository_Create_ProductDetails(t *testing.T) {
++	containerET := useContainerEntityType(t)
++	cf := containerFactory()
++	cf.EntityTypeID = containerET.ID
++	container, err := tRepos.Entities.Create(context.Background(), tGroup.ID, cf)
++	require.NoError(t, err)
++	item, err := tRepos.Entities.Create(context.Background(), tGroup.ID, EntityCreate{
++		Name:         "Product details",
++		Description:  "Catalog description",
++		Quantity:     1,
++		ParentID:     container.ID,
++		Barcode:      "0012345",
++		Manufacturer: "Eventronic",
++		ModelNumber:  "ET1001",
++	})
++	require.NoError(t, err)
++	assert.Equal(t, "0012345", item.Barcode)
++	assert.Equal(t, "Eventronic", item.Manufacturer)
++	assert.Equal(t, "ET1001", item.ModelNumber)
++
++	t.Cleanup(func() {
++		_ = tRepos.Entities.Delete(context.Background(), item.ID)
++		_ = tRepos.Entities.Delete(context.Background(), container.ID)
++	})
++}
++
+ // TestEntityRepository_CreateFromTemplate_UsesSelectedEntityType verifies that
+ // the user-selected entity type takes precedence over the default fallback.
+ func TestEntityRepository_CreateFromTemplate_UsesSelectedEntityType(t *testing.T) {
+diff --git a/frontend/components/App/ScannerModal.vue b/frontend/components/App/ScannerModal.vue
+index de0fc99f..1f8e989d 100644
+--- a/frontend/components/App/ScannerModal.vue
++++ b/frontend/components/App/ScannerModal.vue
+@@ -5,6 +5,9 @@
+         <DialogTitle>{{ t("scanner.title") }}</DialogTitle>
+       </DialogHeader>
+       <div>
++        <p class="mb-3 text-sm text-muted-foreground" role="status">
++          {{ scannerStatusMessage }}
++        </p>
+         <div
+           v-if="errorMessage"
+           class="mb-5 flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 p-4 text-destructive"
+@@ -27,8 +30,8 @@
+           </div>
+ 
+           <ButtonGroup>
+-            <Button :disabled="loading" type="submit" @click="handleButtonClick">
+-              {{ $t("scanner.barcode_fetch_data") }}
++            <Button :disabled="loading" type="button" @click="handleButtonClick">
++              {{ $t("scanner.use_barcode") }}
+             </Button>
+           </ButtonGroup>
+         </div>
+@@ -67,6 +70,7 @@
+   import MdiAlertCircleOutline from "~icons/mdi/alert-circle-outline";
+   import MdiCameraOutline from "~icons/mdi/camera-outline";
+   import { useDialog } from "@/components/ui/dialog-provider";
++  import { scannerStatusAfterFrame, type ScannerStatus } from "~/components/Entity/barcode";
+ 
+   const { t } = useI18n();
+   const { activeDialog, openDialog, closeDialog } = useDialog();
+@@ -80,16 +84,23 @@
+   const errorMessage = ref<string | null>(null);
+   const detectedBarcode = ref<string>("");
+   const detectedBarcodeType = ref<string>("");
++  const scannerStatus = ref<ScannerStatus>("starting");
++  const scannerStatusMessage = computed(() => {
++    if (scannerStatus.value === "error") return errorMessage.value || t("scanner.camera_error_action");
++    if (scannerStatus.value === "detected") return t("scanner.detected_status");
++    return t(`scanner.${scannerStatus.value}`);
++  });
+ 
+   const LAST_USED_DEVICE_ID_KEY = "homebox:lastUsedDeviceId";
+ 
+   const handleError = (error: unknown) => {
+     console.error("Scanner error:", error);
+     errorMessage.value = t("scanner.error");
++    scannerStatus.value = "error";
+   };
+ 
+   const handleButtonClick = () => {
+-    openDialog(DialogID.ProductImport, { params: { barcode: detectedBarcode.value } });
++    openDialog(DialogID.CreateEntity, { params: { baseType: "item", barcode: detectedBarcode.value } });
+   };
+ 
+   const openArMode = () => {
+@@ -98,9 +109,11 @@
+   };
+ 
+   const startScanner = async () => {
++    scannerStatus.value = "starting";
+     errorMessage.value = null;
+     if (!(navigator && navigator.mediaDevices && "enumerateDevices" in navigator.mediaDevices)) {
+       errorMessage.value = t("scanner.unsupported");
++      scannerStatus.value = "error";
+       return;
+     }
+ 
+@@ -112,6 +125,7 @@
+       } catch (err: unknown) {
+         if (err instanceof Error && err.name === "NotAllowedError") {
+           errorMessage.value = t("scanner.permission_denied");
++          scannerStatus.value = "error";
+           return;
+         }
+         throw err;
+@@ -139,6 +153,7 @@
+         }
+       } else {
+         errorMessage.value = t("scanner.no_sources");
++        scannerStatus.value = "error";
+       }
+     } catch (err) {
+       handleError(err);
+@@ -155,6 +170,7 @@
+   watch(open, async isOpen => {
+     if (isOpen) {
+       detectedBarcode.value = "";
++      detectedBarcodeType.value = "";
+       await startScanner();
+     } else {
+       stopScanner();
+@@ -164,6 +180,7 @@
+   watch(selectedSource, async newSource => {
+     if (!open.value || !newSource) return;
+     codeReader.reset();
++    scannerStatus.value = "starting";
+ 
+     try {
+       localStorage.setItem(LAST_USED_DEVICE_ID_KEY, newSource);
+@@ -192,23 +209,30 @@
+               case BarcodeFormat.UPC_A:
+               case BarcodeFormat.UPC_E:
+               case BarcodeFormat.UPC_EAN_EXTENSION:
++              case BarcodeFormat.CODE_128:
+                 console.info("Barcode detected");
+                 detectedBarcode.value = result.getText();
+                 detectedBarcodeType.value = BarcodeFormat[bcfmt].replaceAll("_", "-");
++                errorMessage.value = null;
++                scannerStatus.value = scannerStatusAfterFrame(scannerStatus.value, true);
+                 break;
+ 
+               default:
+-                handleError(err);
++                errorMessage.value = t("scanner.unsupported_barcode");
++                scannerStatus.value = "error";
+             }
+ 
+             loading.value = false;
+           }
++        } else {
++          scannerStatus.value = scannerStatusAfterFrame(scannerStatus.value, false, err);
+         }
+         if (err && !(err instanceof NotFoundException)) {
+           console.error(err);
+           handleError(err);
+         }
+       });
++      if (scannerStatus.value === "starting") scannerStatus.value = "scanning";
+     } catch (err) {
+       handleError(err);
+     }
+diff --git a/frontend/components/Entity/CreateModal.vue b/frontend/components/Entity/CreateModal.vue
+index ba1b8641..ce9d0c90 100644
+--- a/frontend/components/Entity/CreateModal.vue
++++ b/frontend/components/Entity/CreateModal.vue
+@@ -35,16 +35,6 @@
+                 <p>{{ $t("components.entity.create_modal.product_tooltip_scan_barcode") }}</p>
+               </TooltipContent>
+             </Tooltip>
+-            <Tooltip>
+-              <TooltipTrigger>
+-                <Button variant="outline" :disabled="loading" size="icon" data-pos="end" @click="openBarcodeDialog()">
+-                  <MdiBarcode class="size-5" />
+-                </Button>
+-              </TooltipTrigger>
+-              <TooltipContent>
+-                <p>{{ $t("components.entity.create_modal.product_tooltip_input_barcode") }}</p>
+-              </TooltipContent>
+-            </Tooltip>
+           </ButtonGroup>
+         </TooltipProvider>
+       </div>
+@@ -182,6 +172,61 @@
+         "
+         :max-length="1000"
+       />
++      <div v-if="!selectedEntityType?.isLocation" class="flex items-end gap-2">
++        <FormTextField
++          v-model="form.barcode"
++          class="min-w-0 flex-1"
++          :label="$t('items.barcode')"
++          :max-length="80"
++          autocomplete="off"
++          @keyup.enter="lookupBarcode"
++        />
++        <Button type="button" variant="outline" :disabled="barcodeSearching || !form.barcode.trim()" @click="lookupBarcode">
++          <MdiBarcode v-if="!barcodeSearching" class="mr-2 size-4" />
++          <MdiLoading v-else class="mr-2 size-4 animate-spin" />
++          {{ barcodeSearching ? $t("global.loading") : $t("components.entity.create_modal.barcode_lookup.action") }}
++        </Button>
++      </div>
++      <div v-if="!selectedEntityType?.isLocation" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
++        <FormTextField v-model="form.manufacturer" :label="$t('items.manufacturer')" :max-length="255" />
++        <FormTextField v-model="form.modelNumber" :label="$t('items.model_number')" :max-length="255" />
++      </div>
++      <p v-if="barcodeLookupMessage" class="text-sm text-muted-foreground" role="status">{{ barcodeLookupMessage }}</p>
++      <div v-if="barcodeProducts.length" class="rounded-md border p-3">
++        <p class="mb-2 text-sm font-medium">{{ $t("components.entity.create_modal.barcode_lookup.candidates") }}</p>
++        <div class="flex flex-col gap-2">
++          <Button
++            v-for="(product, index) in barcodeProducts"
++            :key="`${product.barcode}-${index}`"
++            type="button"
++            variant="outline"
++            class="h-auto justify-start gap-3 whitespace-normal py-2 text-left"
++            @click="selectBarcodeProduct(product)"
++          >
++            <img v-if="product.imageBase64" :src="product.imageBase64" class="size-10 rounded object-cover" alt="" />
++            <span class="flex flex-col items-start">
++              <span>{{ product.item.name }}</span>
++              <span class="text-xs text-muted-foreground">{{ [product.manufacturer, product.modelNumber].filter(Boolean).join(" · ") }}</span>
++            </span>
++          </Button>
++        </div>
++      </div>
++      <div v-if="duplicateItems.length" class="rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
++        <p class="mb-2 text-sm font-medium">{{ $t("components.entity.create_modal.barcode_lookup.duplicates") }}</p>
++        <div class="flex flex-col gap-1">
++          <Button
++            v-for="item in duplicateItems"
++            :key="item.id"
++            type="button"
++            variant="ghost"
++            class="h-auto justify-start whitespace-normal py-1 text-left"
++            @click="openDuplicate(item.id)"
++          >
++            {{ item.name }}
++          </Button>
++        </div>
++        <p class="mt-2 text-xs text-muted-foreground">{{ $t("components.entity.create_modal.barcode_lookup.duplicate_save_allowed") }}</p>
++      </div>
+       <TagSelector v-model="form.tags" :tags="tags ?? []" />
+       <PhotoUploader
+         :label="
+@@ -229,16 +274,19 @@
+   import { Button, ButtonGroup } from "~/components/ui/button";
+   import BaseModal from "@/components/App/CreateModal.vue";
+   import type {
++    BarcodeProduct,
+     EntityCreate,
+     EntityTemplateOut,
+     EntityTemplateSummary,
+     EntityOut,
++    EntitySummary,
+     EntityTypeSummary,
+   } from "~~/lib/api/types/data-contracts";
+   import { useTagStore } from "~/stores/tags";
+   import { useLocationStore } from "~~/stores/locations";
+   import MdiBarcode from "~icons/mdi/barcode";
+   import MdiBarcodeScan from "~icons/mdi/barcode-scan";
++  import MdiLoading from "~icons/mdi/loading";
+   import MdiPackageVariant from "~icons/mdi/package-variant";
+   import MdiPackageVariantClosed from "~icons/mdi/package-variant-closed";
+   import MdiFileDocumentOutline from "~icons/mdi/file-document-outline";
+@@ -264,6 +312,7 @@
+   } from "~/components/Form/photo-uploader";
+   import { useEntityTypeStore } from "~~/stores/entityTypes";
+   import EntitySelector from "~/components/Entity/Selector.vue";
++  import { applyBarcodeCandidate, attachBarcode, lookupBarcodeItems, lookupBarcodeProducts } from "./barcode";
+ 
+   const { t } = useI18n();
+   const { openDialog, closeDialog, registerOpenDialogCallback } = useDialog();
+@@ -344,6 +393,8 @@
+         form.quantity = data.defaultQuantity;
+         if (data.defaultName) form.name = data.defaultName;
+         if (data.defaultDescription) form.description = data.defaultDescription;
++        if (data.defaultManufacturer) form.manufacturer = data.defaultManufacturer;
++        if (data.defaultModelNumber) form.modelNumber = data.defaultModelNumber;
+         if (data.defaultLocation) {
+           const found = locations.value.find(l => l.id === data.defaultLocation!.id);
+           if (found) form.location = found;
+@@ -372,11 +423,19 @@
+     name: "",
+     quantity: 1,
+     description: "",
++    barcode: "",
++    manufacturer: "",
++    modelNumber: "",
+     color: "",
+     tags: [] as string[],
+     photos: [] as PhotoPreview[],
+   });
+ 
++  const barcodeProducts = ref<BarcodeProduct[]>([]);
++  const duplicateItems = ref<EntitySummary[]>([]);
++  const barcodeSearching = ref(false);
++  const barcodeLookupMessage = ref("");
++
+   async function handleTemplateSelected(template: EntityTemplateSummary | null) {
+     if (!template) {
+       // Template was deselected, clear template data and remove from storage
+@@ -407,6 +466,8 @@
+     if (data.defaultDescription) {
+       form.description = data.defaultDescription;
+     }
++    if (data.defaultManufacturer) form.manufacturer = data.defaultManufacturer;
++    if (data.defaultModelNumber) form.modelNumber = data.defaultModelNumber;
+     // Pre-fill location if template has one and current form doesn't
+     if (data.defaultLocation && !form.location?.id) {
+       const found = locations.value.find(l => l.id === data.defaultLocation!.id);
+@@ -449,6 +510,8 @@
+     if (data.defaultDescription) {
+       form.description = data.defaultDescription;
+     }
++    if (data.defaultManufacturer) form.manufacturer = data.defaultManufacturer;
++    if (data.defaultModelNumber) form.modelNumber = data.defaultModelNumber;
+     // Pre-fill location if template has one
+     if (data.defaultLocation) {
+       const found = locations.value.find(l => l.id === data.defaultLocation!.id);
+@@ -539,8 +602,7 @@
+         }
+ 
+         if (params.product) {
+-          form.name = params.product.item.name;
+-          form.description = params.product.item.description;
++          applyBarcodeCandidate(form, params.product);
+ 
+           if (params.product.imageURL) {
+             appendPhotos([
+@@ -554,6 +616,11 @@
+           }
+         }
+ 
++        if (params.barcode) {
++          form.barcode = params.barcode;
++          void lookupBarcode();
++        }
++
+         // Restore last used template if available
+         await restoreLastTemplate();
+       } else {
+@@ -601,6 +668,14 @@
+       return;
+     }
+ 
++    let barcodeFields: { barcode?: string };
++    try {
++      barcodeFields = attachBarcode({}, form.barcode);
++    } catch {
++      toast.error(t("components.entity.create_modal.barcode_lookup.invalid"));
++      return;
++    }
++
+     loading.value = true;
+ 
+     if (shift?.value) close = false;
+@@ -624,6 +699,9 @@
+       const templateRequest = {
+         name: form.name,
+         description: form.description,
++        ...barcodeFields,
++        manufacturer: form.manufacturer,
++        modelNumber: form.modelNumber,
+         parentId: form.location.id as string,
+         tagIds: form.tags,
+         quantity: form.quantity,
+@@ -640,6 +718,9 @@
+         name: form.name,
+         quantity: form.quantity,
+         description: form.description,
++        ...barcodeFields,
++        manufacturer: form.manufacturer,
++        modelNumber: form.modelNumber,
+         tagIds: form.tags,
+         entityTypeId: selectedEntityType.value?.id || "",
+       };
+@@ -693,8 +774,14 @@
+     form.name = "";
+     form.quantity = 1;
+     form.description = "";
++    form.barcode = "";
++    form.manufacturer = "";
++    form.modelNumber = "";
+     form.color = "";
+     form.photos = [];
++    barcodeProducts.value = [];
++    duplicateItems.value = [];
++    barcodeLookupMessage.value = "";
+     form.tags = [];
+     selectedTemplate.value = null;
+     templateData.value = null;
+@@ -717,7 +804,39 @@
+     openDialog(DialogID.Scanner);
+   }
+ 
+-  function openBarcodeDialog() {
+-    openDialog(DialogID.ProductImport);
++  async function lookupBarcode() {
++    const barcode = form.barcode.trim();
++    if (!barcode) return;
++
++    try {
++      attachBarcode({}, barcode);
++    } catch {
++      barcodeLookupMessage.value = t("components.entity.create_modal.barcode_lookup.invalid");
++      return;
++    }
++
++    form.barcode = barcode;
++    barcodeSearching.value = true;
++    barcodeProducts.value = [];
++    duplicateItems.value = [];
++    barcodeLookupMessage.value = "";
++
++    const productLookup = await lookupBarcodeProducts(barcode, value => api.products.searchFromBarcode(value));
++    barcodeProducts.value = productLookup.products;
++    if (productLookup.status !== "found") {
++      barcodeLookupMessage.value = t(`components.entity.create_modal.barcode_lookup.${productLookup.status}`);
++    }
++
++    duplicateItems.value = await lookupBarcodeItems(barcode, value => api.items.getAll({ barcode: value, page: 1, pageSize: 25 }));
++    barcodeSearching.value = false;
++  }
++
++  function selectBarcodeProduct(product: BarcodeProduct) {
++    openDialog(DialogID.CreateEntity, { params: { baseType: "item", product } });
++  }
++
++  function openDuplicate(id: string) {
++    closeDialog(DialogID.CreateEntity);
++    navigateTo(`/item/${id}`);
+   }
+ </script>
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+new file mode 100644
+index 00000000..1a98f98c
+--- /dev/null
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -0,0 +1,97 @@
++import { describe, expect, test, vi } from "vitest";
++import { NotFoundException } from "@zxing/library";
++import type { BarcodeProduct, EntitySummary } from "~~/lib/api/types/data-contracts";
++import {
++  applyBarcodeCandidate,
++  attachBarcode,
++  lookupBarcodeItems,
++  lookupBarcodeProducts,
++  scannerStatusAfterFrame,
++  type BarcodeDraft,
++} from "./barcode";
++
++describe("item barcode helpers", () => {
++  test("keeps a manually entered alphanumeric code and leading zeroes in create data", () => {
++    expect(attachBarcode({ name: "Heat shrink tubing" }, "  X9TEUJR4L ")).toEqual({
++      name: "Heat shrink tubing",
++      barcode: "X9TEUJR4L",
++    });
++    expect(attachBarcode({}, " 0012345 ")).toEqual({ barcode: "0012345" });
++  });
++
++  test("leaves an empty optional barcode out and rejects values over 80 characters", () => {
++    expect(attachBarcode({ name: "Item" }, " ")).toEqual({ name: "Item" });
++    expect(() => attachBarcode({ name: "Item" }, "x".repeat(81))).toThrow(RangeError);
++  });
++
++  test("reports lookup miss without blocking manual creation", async () => {
++    const search = vi.fn().mockResolvedValue({ data: [], error: null });
++    await expect(lookupBarcodeProducts("0012345", search)).resolves.toEqual({ status: "not-found", products: [] });
++    expect(search).toHaveBeenCalledWith("0012345");
++  });
++
++  test("reports provider errors without throwing", async () => {
++    const search = vi.fn().mockRejectedValue(new Error("offline"));
++    await expect(lookupBarcodeProducts("123456", search)).resolves.toEqual({ status: "error", products: [] });
++  });
++
++  test("reports a returned provider error without throwing", async () => {
++    const search = vi.fn().mockResolvedValue({ data: undefined, error: new Error("offline") });
++    await expect(lookupBarcodeProducts("123456", search)).resolves.toEqual({ status: "error", products: [] });
++  });
++
++  test("keeps all exact duplicate matches available for review", async () => {
++    const matches = [{ id: "one" }, { id: "two" }] as unknown as EntitySummary[];
++    const search = vi.fn().mockResolvedValue({ data: { items: matches }, error: null });
++    await expect(lookupBarcodeItems("X9TEUJR4L", search)).resolves.toEqual(matches);
++    expect(search).toHaveBeenCalledWith("X9TEUJR4L");
++  });
++
++  test("only fills blank fields when a product candidate is explicitly chosen", () => {
++    const draft: BarcodeDraft = { name: "", description: "", manufacturer: "", modelNumber: "" };
++    const candidate = {
++      barcode: "0012345",
++      imageBase64: "",
++      imageURL: "",
++      item: {
++        name: "Heat shrink tubing",
++        description: "560 piece assortment",
++        entityTypeId: "",
++        quantity: 1,
++        tagIds: [],
++      },
++      manufacturer: "Eventronic",
++      modelNumber: "ET1001",
++      notes: "",
++      search_engine_name: "catalog",
++    } satisfies BarcodeProduct;
++    applyBarcodeCandidate(draft, candidate);
++    expect(draft).toEqual({
++      name: "Heat shrink tubing",
++      description: "560 piece assortment",
++      manufacturer: "Eventronic",
++      modelNumber: "ET1001",
++    });
++
++    draft.name = "My edited title";
++    draft.description = "My notes";
++    applyBarcodeCandidate(draft, {
++      ...candidate,
++      item: { ...candidate.item, name: "Catalog title", description: "Catalog description" },
++      manufacturer: "Catalog maker",
++      modelNumber: "CAT-01",
++    });
++    expect(draft.name).toBe("My edited title");
++    expect(draft.description).toBe("My notes");
++  });
++
++  test("keeps ordinary not-found camera frames in scanning state", () => {
++    expect(scannerStatusAfterFrame("scanning", false, new NotFoundException())).toBe("scanning");
++  });
++
++  test("moves scanner state from startup to scanning, detected, or actionable error", () => {
++    expect(scannerStatusAfterFrame("starting", false)).toBe("scanning");
++    expect(scannerStatusAfterFrame("scanning", true)).toBe("detected");
++    expect(scannerStatusAfterFrame("scanning", false, new Error("camera failure"))).toBe("error");
++  });
++});
+diff --git a/frontend/components/Entity/barcode.ts b/frontend/components/Entity/barcode.ts
+new file mode 100644
+index 00000000..c6aabb9c
+--- /dev/null
++++ b/frontend/components/Entity/barcode.ts
+@@ -0,0 +1,64 @@
++import type { BarcodeProduct, EntitySummary } from "~~/lib/api/types/data-contracts";
++import { NotFoundException } from "@zxing/library";
++
++export type BarcodeDraft = {
++  name: string;
++  description: string;
++  manufacturer: string;
++  modelNumber: string;
++};
++
++export type ScannerStatus = "starting" | "scanning" | "detected" | "error";
++
++export function attachBarcode<T extends object>(payload: T, value: string): T & { barcode?: string } {
++  const barcode = value.trim();
++  if (barcode.length > 80) throw new RangeError("Barcode must be 80 characters or fewer");
++  return barcode ? { ...payload, barcode } : payload;
++}
++
++export async function lookupBarcodeProducts(
++  value: string,
++  search: (barcode: string) => Promise<{ data?: BarcodeProduct[]; error?: unknown }>
++): Promise<{ status: "found" | "not-found" | "unsupported" | "error"; products: BarcodeProduct[] }> {
++  const barcode = value.trim();
++  if (!/^\d+$/.test(barcode)) return { status: "unsupported", products: [] };
++
++  try {
++    const result = await search(barcode);
++    if (result.error) return { status: "error", products: [] };
++    const products = result.data ?? [];
++    return { status: products.length ? "found" : "not-found", products };
++  } catch {
++    return { status: "error", products: [] };
++  }
++}
++
++export async function lookupBarcodeItems(
++  barcode: string,
++  search: (barcode: string) => Promise<{ data?: { items?: EntitySummary[] }; error?: unknown }>
++): Promise<EntitySummary[]> {
++  try {
++    const result = await search(barcode);
++    return result.error ? [] : (result.data?.items ?? []);
++  } catch {
++    return [];
++  }
++}
++
++export function applyBarcodeCandidate(draft: BarcodeDraft, product: BarcodeProduct) {
++  if (!draft.name.trim()) draft.name = product.item.name;
++  if (!draft.description.trim()) draft.description = product.item.description;
++  if (!draft.manufacturer.trim()) draft.manufacturer = product.manufacturer;
++  if (!draft.modelNumber.trim()) draft.modelNumber = product.modelNumber;
++}
++
++export function scannerStatusAfterFrame(
++  current: ScannerStatus,
++  hasResult: boolean,
++  error?: unknown
++): ScannerStatus {
++  if (hasResult) return "detected";
++  if (error instanceof NotFoundException) return current;
++  if (error) return "error";
++  return current === "starting" ? "scanning" : current;
++}
+diff --git a/frontend/components/ui/dialog-provider/utils.ts b/frontend/components/ui/dialog-provider/utils.ts
+index ca60e6c5..5ff8c5c0 100644
+--- a/frontend/components/ui/dialog-provider/utils.ts
++++ b/frontend/components/ui/dialog-provider/utils.ts
+@@ -63,7 +63,9 @@ export type DialogParamsMap = {
+     itemId: string;
+     attachmentId: string;
+   };
+-  [DialogID.CreateEntity]: { baseType: "item"; product?: BarcodeProduct; subItem?: true } | { baseType: "location" };
++  [DialogID.CreateEntity]:
++    | { baseType: "item"; product?: BarcodeProduct; barcode?: string; subItem?: true }
++    | { baseType: "location" };
+   [DialogID.ProductImport]?: { barcode?: string };
+   [DialogID.EditMaintenance]:
+     | { type: "create"; itemId: string | string[] }
+diff --git a/frontend/lib/api/__test__/user/items.test.ts b/frontend/lib/api/__test__/user/items.test.ts
+index d3dfd9e1..68ae642b 100644
+--- a/frontend/lib/api/__test__/user/items.test.ts
++++ b/frontend/lib/api/__test__/user/items.test.ts
+@@ -64,6 +64,34 @@ describe("user should be able to create an item and add an attachment", () => {
+     await cleanup();
+   });
+ 
++  test("user should be able to create an item with an internal barcode and product details", async () => {
++    const api = await sharedUserClient();
++    const [location, cleanupLocation] = await useLocation(api);
++    const barcode = "X9TEUJR4L";
++    const { response, data: item } = await api.items.create({
++      name: "Heat shrink tubing",
++      description: "560 piece assortment",
++      parentId: location.id,
++      quantity: 1,
++      tagIds: [],
++      barcode,
++      manufacturer: "Eventronic",
++      modelNumber: "ET1001",
++    });
++    expect(response.status).toBe(201);
++    expect(item.barcode).toBe(barcode);
++    expect(item.manufacturer).toBe("Eventronic");
++    expect(item.modelNumber).toBe("ET1001");
++
++    const { data: saved } = await api.items.get(item.id);
++    expect(saved.barcode).toBe(barcode);
++    expect(saved.manufacturer).toBe("Eventronic");
++    expect(saved.modelNumber).toBe("ET1001");
++
++    await api.items.delete(item.id);
++    await cleanupLocation();
++  });
++
+   test("user should be able to create and delete fields on an item", async () => {
+     const api = await sharedUserClient();
+     const [location, cleanup] = await useLocation(api);
+diff --git a/frontend/lib/api/classes/items.ts b/frontend/lib/api/classes/items.ts
+index 5bb28bba..e3e398da 100644
+--- a/frontend/lib/api/classes/items.ts
++++ b/frontend/lib/api/classes/items.ts
+@@ -28,6 +28,7 @@ export type ItemsQuery = {
+   onlyWithoutPhoto?: boolean;
+   onlyWithPhoto?: boolean;
+   q?: string;
++  barcode?: string;
+   fields?: string[];
+ };
+ 
+diff --git a/frontend/lib/api/types/data-contracts.ts b/frontend/lib/api/types/data-contracts.ts
+index d4697a84..81c00511 100644
+--- a/frontend/lib/api/types/data-contracts.ts
++++ b/frontend/lib/api/types/data-contracts.ts
+@@ -756,6 +756,8 @@ export interface EntityCreate {
+   quantity: number;
+   /** Edges */
+   tagIds: string[];
++  manufacturer?: string;
++  modelNumber?: string;
+ }
+ 
+ export interface EntityFieldData {
+@@ -1347,8 +1349,12 @@ export interface CreateRequest {
+ }
+ 
+ export interface EntityTemplateCreateItemRequest {
++  /** @maxLength 80 */
++  barcode?: string | null;
+   /** @maxLength 1000 */
+   description: string;
++  manufacturer?: string;
++  modelNumber?: string;
+   /**
+    * EntityTypeID is the entity type selected by the user. When set it takes
+    * precedence; when empty the repository falls back to the group's default.
+diff --git a/frontend/locales/en.json b/frontend/locales/en.json
+index d88fe4dd..f41083d2 100644
+--- a/frontend/locales/en.json
++++ b/frontend/locales/en.json
+@@ -185,6 +185,17 @@
+                 "entity_quantity": "{type} Quantity",
+                 "entity_description": "{type} Description",
+                 "entity_photo": "{type} Photo 📷",
++                "barcode_lookup": {
++                    "action": "Look up",
++                    "candidates": "Possible products — choose one to prefill",
++                    "duplicates": "Items already using this barcode",
++                    "duplicate_save_allowed": "You can still save this item with the same barcode.",
++                    "error": "Product lookup is unavailable. You can continue entering the item manually.",
++                    "found": "Product matches found. Choose one to prefill fields.",
++                    "invalid": "Barcode must be 80 characters or fewer.",
++                    "not-found": "No product match found. You can continue entering the item manually.",
++                    "unsupported": "Catalog lookup supports numeric codes. This barcode will still be saved for internal tracking."
++                },
+                 "upload_photos": "Upload Photos",
+                 "uploaded": "Uploaded Photo",
+                 "toast": {
+@@ -551,6 +562,7 @@
+         "advanced": "Advanced",
+         "archived": "Archived",
+         "asset_id": "Asset ID",
++        "barcode": "Barcode",
+         "associated_with_multiple": "This Asset Id is associated with multiple items",
+         "attachment": "Attachment",
+         "attachments": "Attachments",
+@@ -899,13 +911,18 @@
+     },
+     "scanner": {
+         "barcode_detected_message": "product barcode detected",
+-        "barcode_fetch_data": "Fetch product data",
++        "camera_error_action": "Check camera permissions or connection, or close the scanner and enter the barcode manually.",
++        "detected_status": "Barcode recognized. Use it to add an item.",
+         "error": "An error occurred while scanning",
+         "invalid_url": "Invalid barcode URL",
+         "no_sources": "No video sources available",
+         "permission_denied": "Camera permission denied, please allow access to the camera in your browser settings",
++        "scanning": "Camera ready. Point it at a barcode.",
+         "select_video_source": "Pick a video source",
++        "starting": "Starting camera…",
+         "title": "Scanner",
++        "unsupported_barcode": "This barcode format is not supported. Try a UPC, EAN, or Code 128 barcode.",
++        "use_barcode": "Use this code",
+         "unsupported": "Media Stream API is not supported without HTTPS"
+     },
+     "scanner_ar": {
+diff --git a/frontend/pages/item/[id]/index.vue b/frontend/pages/item/[id]/index.vue
+index 4334790a..2b067cbb 100644
+--- a/frontend/pages/item/[id]/index.vue
++++ b/frontend/pages/item/[id]/index.vue
+@@ -229,6 +229,11 @@
+         text: item.value?.serialNumber,
+         copyable: true,
+       },
++      {
++        name: "items.barcode",
++        text: item.value?.barcode,
++        copyable: true,
++      },
+       {
+         name: "items.model_number",
+         text: item.value?.modelNumber,
+diff --git a/frontend/pages/item/[id]/index/edit.vue b/frontend/pages/item/[id]/index/edit.vue
+index 76a07ecb..0da0e29d 100644
+--- a/frontend/pages/item/[id]/index/edit.vue
++++ b/frontend/pages/item/[id]/index/edit.vue
+@@ -206,6 +206,12 @@
+       ref: "serialNumber",
+       maxLength: 255,
+     },
++    {
++      type: "text",
++      label: "items.barcode",
++      ref: "barcode",
++      maxLength: 80,
++    },
+     {
+       type: "text",
+       label: "items.model_number",

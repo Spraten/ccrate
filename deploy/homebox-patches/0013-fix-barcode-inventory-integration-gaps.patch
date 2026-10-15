@@ -1,0 +1,239 @@
+From 04f74411e00a1f90a012d438f6aec1ba8de7dbc0 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 05:43:57 -0400
+Subject: [PATCH 13/23] fix barcode inventory integration gaps
+
+---
+ .../core/services/reporting/io_row.go         |  1 +
+ .../core/services/reporting/io_sheet.go       |  1 +
+ .../core/services/service_entities.go         |  1 +
+ .../core/services/service_exports_test.go     | 73 +++++++++++++++++++
+ backend/internal/data/repo/repo_entities.go   |  1 +
+ .../internal/data/repo/repo_entities_test.go  | 17 +++++
+ frontend/components/Entity/barcode.test.ts    |  9 +++
+ frontend/components/Entity/barcode.ts         |  6 ++
+ frontend/pages/items.vue                      |  3 +-
+ 9 files changed, 111 insertions(+), 1 deletion(-)
+
+diff --git a/backend/internal/core/services/reporting/io_row.go b/backend/internal/core/services/reporting/io_row.go
+index 7e239e43..1f264cdb 100644
+--- a/backend/internal/core/services/reporting/io_row.go
++++ b/backend/internal/core/services/reporting/io_row.go
+@@ -23,6 +23,7 @@ type ExportCSVRow struct {
+ 	URL             string         `csv:"HB.url"`
+ 
+ 	Name        string  `csv:"HB.name"`
++	Barcode     string  `csv:"HB.barcode"`
+ 	Quantity    float64 `csv:"HB.quantity"`
+ 	Description string  `csv:"HB.description"`
+ 	Insured     bool    `csv:"HB.insured"`
+diff --git a/backend/internal/core/services/reporting/io_sheet.go b/backend/internal/core/services/reporting/io_sheet.go
+index 0e2adacb..1fc28c76 100644
+--- a/backend/internal/core/services/reporting/io_sheet.go
++++ b/backend/internal/core/services/reporting/io_sheet.go
+@@ -259,6 +259,7 @@ func (s *IOSheet) ReadItems(ctx context.Context, entities []repo.EntityOut, gid
+ 			ParentImportRef: parentImportRef,
+ 			AssetID:         item.AssetID,
+ 			Name:            item.Name,
++			Barcode:         item.Barcode,
+ 			Quantity:        item.Quantity,
+ 			Description:     item.Description,
+ 			Insured:         item.Insured,
+diff --git a/backend/internal/core/services/service_entities.go b/backend/internal/core/services/service_entities.go
+index f0e1d6b5..11be94c8 100644
+--- a/backend/internal/core/services/service_entities.go
++++ b/backend/internal/core/services/service_entities.go
+@@ -413,6 +413,7 @@ func (svc *EntityService) CsvImport(ctx context.Context, gid uuid.UUID, data io.
+ 			newEntity := repo.EntityCreate{
+ 				ImportRef:   row.ImportRef,
+ 				Name:        row.Name,
++				Barcode:     row.Barcode,
+ 				Description: row.Description,
+ 				AssetID:     effAID,
+ 				ParentID:    locationID,
+diff --git a/backend/internal/core/services/service_exports_test.go b/backend/internal/core/services/service_exports_test.go
+index b97560d9..3e8fa8b7 100644
+--- a/backend/internal/core/services/service_exports_test.go
++++ b/backend/internal/core/services/service_exports_test.go
+@@ -303,6 +303,79 @@ func TestCSVExportImportPreservesItemParent(t *testing.T) {
+ 	assert.Equal(t, "Toolbox", importedChild.Parent.Name)
+ }
+ 
++func TestCSVExportImportPreservesBarcodeAndAcceptsOlderFiles(t *testing.T) {
++	ctx := context.Background()
++
++	src, err := tRepos.Groups.GroupCreate(ctx, "csv-barcode-src-"+fk.Str(4), uuid.Nil)
++	require.NoError(t, err)
++	locationType, err := tRepos.EntityTypes.GetDefault(ctx, src.ID, true)
++	require.NoError(t, err)
++	itemType, err := tRepos.EntityTypes.GetDefault(ctx, src.ID, false)
++	require.NoError(t, err)
++	location, err := tRepos.Entities.Create(ctx, src.ID, repo.EntityCreate{
++		Name:         "Barcode Storage",
++		EntityTypeID: locationType.ID,
++	})
++	require.NoError(t, err)
++	_, err = tRepos.Entities.Create(ctx, src.ID, repo.EntityCreate{
++		ImportRef:    "barcode-roundtrip-ref",
++		Name:         "Barcode item",
++		ParentID:     location.ID,
++		EntityTypeID: itemType.ID,
++		Barcode:      "0012345",
++	})
++	require.NoError(t, err)
++
++	rows, err := tSvc.Entities.ExportCSV(ctx, src.ID, "https://homebox.example")
++	require.NoError(t, err)
++	header := rows[0]
++	barcodeCol := -1
++	nameCol := -1
++	for i, name := range header {
++		switch name {
++		case "HB.barcode":
++			barcodeCol = i
++		case "HB.name":
++			nameCol = i
++		}
++	}
++	require.NotEqual(t, -1, barcodeCol, "export must include the barcode column")
++	require.NotEqual(t, -1, nameCol, "export must include the name column")
++
++	var itemRow []string
++	for _, row := range rows[1:] {
++		if row[nameCol] == "Barcode item" {
++			itemRow = row
++			break
++		}
++	}
++	require.NotNil(t, itemRow)
++	assert.Equal(t, "0012345", itemRow[barcodeCol])
++
++	var csvBuf bytes.Buffer
++	writer := csv.NewWriter(&csvBuf)
++	require.NoError(t, writer.WriteAll([][]string{header, itemRow}))
++	require.NoError(t, writer.Error())
++	dst, err := tRepos.Groups.GroupCreate(ctx, "csv-barcode-dst-"+fk.Str(4), uuid.Nil)
++	require.NoError(t, err)
++	imported, err := tSvc.Entities.CsvImport(ctx, dst.ID, bytes.NewReader(csvBuf.Bytes()))
++	require.NoError(t, err)
++	require.Equal(t, 1, imported)
++	importedItem, err := tRepos.Entities.GetByRef(ctx, dst.ID, "barcode-roundtrip-ref")
++	require.NoError(t, err)
++	assert.Equal(t, "0012345", importedItem.Barcode)
++
++	legacyDst, err := tRepos.Groups.GroupCreate(ctx, "csv-barcode-legacy-"+fk.Str(4), uuid.Nil)
++	require.NoError(t, err)
++	legacyCSV := "HB.import_ref,HB.location,HB.name\nlegacy-barcode-ref,Legacy Storage,Older item\n"
++	legacyImported, err := tSvc.Entities.CsvImport(ctx, legacyDst.ID, strings.NewReader(legacyCSV))
++	require.NoError(t, err)
++	require.Equal(t, 1, legacyImported)
++	legacyItem, err := tRepos.Entities.GetByRef(ctx, legacyDst.ID, "legacy-barcode-ref")
++	require.NoError(t, err)
++	assert.Empty(t, legacyItem.Barcode)
++}
++
+ func TestCSVImportRejectsSelfParentRef(t *testing.T) {
+ 	ctx := context.Background()
+ 
+diff --git a/backend/internal/data/repo/repo_entities.go b/backend/internal/data/repo/repo_entities.go
+index 96b24a30..0f7d7a37 100644
+--- a/backend/internal/data/repo/repo_entities.go
++++ b/backend/internal/data/repo/repo_entities.go
+@@ -2298,6 +2298,7 @@ func (r *EntityRepository) Duplicate(ctx context.Context, gid, id uuid.UUID, opt
+ 		SetID(newEntityID).
+ 		SetName(options.CopyPrefix + originalEntity.Name).
+ 		SetDescription(originalEntity.Description).
++		SetBarcode(originalEntity.Barcode).
+ 		SetQuantity(originalEntity.Quantity).
+ 		SetGroupID(gid).
+ 		SetAssetID(int64(nextAssetID)).
+diff --git a/backend/internal/data/repo/repo_entities_test.go b/backend/internal/data/repo/repo_entities_test.go
+index 6689821a..73cd0385 100644
+--- a/backend/internal/data/repo/repo_entities_test.go
++++ b/backend/internal/data/repo/repo_entities_test.go
+@@ -989,3 +989,20 @@ func TestEntityRepository_BarcodeQuery(t *testing.T) {
+ 	}
+ 	assert.ElementsMatch(t, []uuid.UUID{first.ID, second.ID}, pagedIDs)
+ }
++
++func TestEntityRepository_DuplicateCopiesBarcode(t *testing.T) {
++	ctx := context.Background()
++	itemType := useItemEntityType(t)
++	original, err := tRepos.Entities.Create(ctx, tGroup.ID, EntityCreate{
++		Name:         "duplicate-barcode-source",
++		EntityTypeID: itemType.ID,
++		Barcode:      "0012345",
++	})
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, original.ID) })
++
++	duplicate, err := tRepos.Entities.Duplicate(ctx, tGroup.ID, original.ID, DuplicateOptions{})
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = tRepos.Entities.Delete(ctx, duplicate.ID) })
++	assert.Equal(t, "0012345", duplicate.Barcode)
++}
+diff --git a/frontend/components/Entity/barcode.test.ts b/frontend/components/Entity/barcode.test.ts
+index 8ecab58d..70a1a9ef 100644
+--- a/frontend/components/Entity/barcode.test.ts
++++ b/frontend/components/Entity/barcode.test.ts
+@@ -12,6 +12,7 @@ import {
+   duplicatePageCount,
+   handleBarcodeEnter,
+   handleBarcodeLookupClick,
++  inventorySearchQuery,
+   isBarcodeLookupCurrent,
+   loadNextBarcodePage,
+   lookupBarcodeItems,
+@@ -26,6 +27,14 @@ import {
+ } from "./barcode";
+ 
+ describe("item barcode helpers", () => {
++  test("normal inventory search treats a numeric query as an exact barcode and keeps leading zeroes", () => {
++    expect(inventorySearchQuery(" 0012345 ")).toEqual({ q: "", barcode: "0012345" });
++  });
++
++  test("normal inventory search leaves nonnumeric queries as text searches", () => {
++    expect(inventorySearchQuery("cordless drill")).toEqual({ q: "cordless drill" });
++  });
++
+   test("keeps a manually entered alphanumeric code and leading zeroes in create data", () => {
+     expect(attachBarcode({ name: "Heat shrink tubing" }, "  X9TEUJR4L ")).toEqual({
+       name: "Heat shrink tubing",
+diff --git a/frontend/components/Entity/barcode.ts b/frontend/components/Entity/barcode.ts
+index 6681e2e4..7a45b2db 100644
+--- a/frontend/components/Entity/barcode.ts
++++ b/frontend/components/Entity/barcode.ts
+@@ -10,6 +10,12 @@ export type BarcodeDraft = {
+ 
+ export type ScannerStatus = "starting" | "scanning" | "detected" | "error";
+ export type BarcodeScanResult = { type: "barcode"; barcode: string } | { type: "navigate" };
++
++export function inventorySearchQuery(value: string): { q: string; barcode?: string } {
++  const query = value.trim();
++  if (/^\d+$/.test(query)) return { q: "", barcode: query };
++  return { q: query };
++}
+ export type BarcodePageLookup = (page: number, append: boolean) => unknown;
+ 
+ export function attachBarcode<T extends object>(payload: T, value: string): T & { barcode?: string } {
+diff --git a/frontend/pages/items.vue b/frontend/pages/items.vue
+index 99762bb2..e54cab41 100644
+--- a/frontend/pages/items.vue
++++ b/frontend/pages/items.vue
+@@ -18,6 +18,7 @@
+   import SearchFilter from "~/components/Search/Filter.vue";
+   import ItemViewSelectable from "~/components/Item/View/Selectable.vue";
+   import type { LocationQueryRaw } from "vue-router";
++  import { inventorySearchQuery } from "~/components/Entity/barcode";
+ 
+   const { t } = useI18n();
+ 
+@@ -308,7 +309,7 @@
+     await router.push({ query: push_query as LocationQueryRaw });
+ 
+     const { data, error } = await api.items.getAll({
+-      q: query.value || "",
++      ...inventorySearchQuery(query.value),
+       parentIds: locIDs.value,
+       tags: tagIDs.value,
+       negateTags: negateTags.value,

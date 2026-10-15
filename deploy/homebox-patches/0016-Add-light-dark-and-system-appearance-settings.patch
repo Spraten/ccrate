@@ -1,0 +1,320 @@
+From e99f7104a92d4ea6d8020ecb4a85c042f2869c7e Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 06:08:31 -0400
+Subject: [PATCH 16/23] Add light dark and system appearance settings
+
+---
+ frontend/components/App/ThemePicker.vue    | 82 ++++++++++++++--------
+ frontend/composables/use-preferences.ts    |  3 +
+ frontend/composables/use-theme.ts          | 27 ++++++-
+ frontend/lib/data/theme-preference.test.ts | 29 ++++++++
+ frontend/lib/data/theme-preference.ts      | 26 +++++++
+ frontend/locales/en.json                   |  4 ++
+ frontend/public/set-theme.js               | 28 ++++++--
+ 7 files changed, 163 insertions(+), 36 deletions(-)
+ create mode 100644 frontend/lib/data/theme-preference.test.ts
+ create mode 100644 frontend/lib/data/theme-preference.ts
+
+diff --git a/frontend/components/App/ThemePicker.vue b/frontend/components/App/ThemePicker.vue
+index 3465b441..de48efc4 100644
+--- a/frontend/components/App/ThemePicker.vue
++++ b/frontend/components/App/ThemePicker.vue
+@@ -1,38 +1,64 @@
+ <script setup lang="ts">
+   import { themes } from "~~/lib/data/themes";
++  import type { ThemeMode } from "~~/lib/data/theme-preference";
+   import { useTheme } from "~/composables/use-theme";
++  import { Button } from "~/components/ui/button";
+ 
+-  const { setTheme } = useTheme();
++  const { themeMode, setTheme, setThemeMode } = useTheme();
++  const appearanceModes: { value: ThemeMode; label: string }[] = [
++    { value: "light", label: "profile.theme_mode_light" },
++    { value: "dark", label: "profile.theme_mode_dark" },
++    { value: "system", label: "profile.theme_mode_system" },
++  ];
+ </script>
+ 
+ <template>
+-  <div class="homebox grid grid-cols-1 gap-4 font-sans sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+-    <div
+-      v-for="theme in themes"
+-      :key="theme.value"
+-      :class="'theme-' + theme.value"
+-      class="overflow-hidden rounded-lg border outline-2 outline-offset-2"
+-      :data-theme="theme.value"
+-      :data-set-theme="theme.value"
+-      data-act-class="outline"
+-      @click="setTheme(theme.value)"
+-    >
+-      <div :data-theme="theme.value" class="w-full cursor-pointer bg-background-accent text-foreground">
+-        <div class="grid grid-cols-5 grid-rows-3">
+-          <div class="col-start-1 row-start-1 bg-background" />
+-          <div class="col-start-1 row-start-2 bg-sidebar" />
+-          <div class="col-start-1 row-start-3 bg-background-accent" />
+-          <div class="col-span-4 col-start-2 row-span-3 row-start-1 flex flex-col gap-1 bg-background p-2">
+-            <div class="font-bold">{{ theme.label }}</div>
+-            <div class="flex flex-wrap gap-1">
+-              <div class="flex size-5 items-center justify-center rounded bg-primary lg:size-6">
+-                <div class="text-sm font-bold text-primary-foreground">A</div>
+-              </div>
+-              <div class="flex size-5 items-center justify-center rounded bg-secondary lg:size-6">
+-                <div class="text-sm font-bold text-secondary-foreground">A</div>
+-              </div>
+-              <div class="flex size-5 items-center justify-center rounded bg-accent lg:size-6">
+-                <div class="text-sm font-bold text-accent-foreground">A</div>
++  <div class="space-y-4">
++    <div>
++      <div id="theme-mode-label" class="mb-2 text-sm font-medium">{{ $t("profile.theme_mode") }}</div>
++      <div class="flex flex-wrap gap-2" role="group" aria-labelledby="theme-mode-label">
++        <Button
++          v-for="mode in appearanceModes"
++          :key="mode.value"
++          type="button"
++          size="sm"
++          :variant="themeMode === mode.value ? 'default' : 'outline'"
++          :aria-pressed="themeMode === mode.value"
++          @click="setThemeMode(mode.value)"
++        >
++          {{ $t(mode.label) }}
++        </Button>
++      </div>
++    </div>
++
++    <div class="homebox grid grid-cols-1 gap-4 font-sans sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
++      <div
++        v-for="theme in themes"
++        :key="theme.value"
++        :class="'theme-' + theme.value"
++        class="overflow-hidden rounded-lg border outline-2 outline-offset-2"
++        :data-theme="theme.value"
++        :data-set-theme="theme.value"
++        data-act-class="outline"
++        @click="setTheme(theme.value)"
++      >
++        <div :data-theme="theme.value" class="w-full cursor-pointer bg-background-accent text-foreground">
++          <div class="grid grid-cols-5 grid-rows-3">
++            <div class="col-start-1 row-start-1 bg-background" />
++            <div class="col-start-1 row-start-2 bg-sidebar" />
++            <div class="col-start-1 row-start-3 bg-background-accent" />
++            <div class="col-span-4 col-start-2 row-span-3 row-start-1 flex flex-col gap-1 bg-background p-2">
++              <div class="font-bold">{{ theme.label }}</div>
++              <div class="flex flex-wrap gap-1">
++                <div class="flex size-5 items-center justify-center rounded bg-primary lg:size-6">
++                  <div class="text-sm font-bold text-primary-foreground">A</div>
++                </div>
++                <div class="flex size-5 items-center justify-center rounded bg-secondary lg:size-6">
++                  <div class="text-sm font-bold text-secondary-foreground">A</div>
++                </div>
++                <div class="flex size-5 items-center justify-center rounded bg-accent lg:size-6">
++                  <div class="text-sm font-bold text-accent-foreground">A</div>
++                </div>
+               </div>
+             </div>
+           </div>
+diff --git a/frontend/composables/use-preferences.ts b/frontend/composables/use-preferences.ts
+index af3aa287..73606f7f 100644
+--- a/frontend/composables/use-preferences.ts
++++ b/frontend/composables/use-preferences.ts
+@@ -1,6 +1,7 @@
+ import type { Ref } from "vue";
+ import type { EntitySummary } from "~/lib/api/types/data-contracts";
+ import type { DaisyTheme } from "~~/lib/data/themes";
++import type { ThemeMode } from "~~/lib/data/theme-preference";
+ 
+ export type ViewType = "table" | "card";
+ 
+@@ -17,6 +18,7 @@ export type LocationViewPreferences = {
+   editorAdvancedView: boolean;
+   itemDisplayView: ViewType;
+   theme: DaisyTheme;
++  themeMode: ThemeMode | null;
+   itemsPerTablePage: number;
+   tableHeaders?: {
+     value: keyof EntitySummary;
+@@ -41,6 +43,7 @@ const DEFAULT_PREFERENCES: LocationViewPreferences = {
+   editorAdvancedView: false,
+   itemDisplayView: "card",
+   theme: "homebox",
++  themeMode: null,
+   itemsPerTablePage: 10,
+   displayLegacyHeader: false,
+   legacyImageFit: false,
+diff --git a/frontend/composables/use-theme.ts b/frontend/composables/use-theme.ts
+index 1949ab4a..a74da704 100644
+--- a/frontend/composables/use-theme.ts
++++ b/frontend/composables/use-theme.ts
+@@ -1,14 +1,31 @@
+ import type { ComputedRef } from "vue";
++import { usePreferredDark } from "@vueuse/core";
+ import type { DaisyTheme } from "~~/lib/data/themes";
++import { darkThemes } from "~~/lib/data/themes";
++import { resolveTheme, type ThemeMode } from "~~/lib/data/theme-preference";
+ 
+ export interface UseTheme {
+   theme: ComputedRef<DaisyTheme>;
++  themeMode: ComputedRef<ThemeMode>;
+   setTheme: (theme: DaisyTheme) => void;
++  setThemeMode: (mode: ThemeMode) => void;
+ }
+ 
+ export function useTheme(): UseTheme {
+   const preferences = useViewPreferences();
+-  const theme = computed(() => preferences.value.theme);
++  const prefersDark = usePreferredDark();
++  const theme = computed(() => resolveTheme(preferences.value.theme, preferences.value.themeMode, prefersDark.value));
++  const themeMode = computed<ThemeMode>(() => {
++    if (preferences.value.themeMode) {
++      return preferences.value.themeMode;
++    }
++
++    if (preferences.value.theme === "homebox") {
++      return "system";
++    }
++
++    return preferences.value.theme === "dark" || darkThemes.includes(preferences.value.theme) ? "dark" : "light";
++  });
+   const htmlEl = ref<HTMLElement | null>(null);
+ 
+   const applyThemeToDom = (newTheme: DaisyTheme) => {
+@@ -29,6 +46,12 @@ export function useTheme(): UseTheme {
+ 
+   const setTheme = (newTheme: DaisyTheme) => {
+     preferences.value.theme = newTheme;
++    preferences.value.themeMode = newTheme === "homebox" ? "system" : darkThemes.includes(newTheme) ? "dark" : "light";
++  };
++
++  const setThemeMode = (mode: ThemeMode) => {
++    preferences.value.themeMode = mode;
++    preferences.value.theme = mode === "system" ? "homebox" : mode === "dark" ? "night" : "light";
+   };
+ 
+   onMounted(() => {
+@@ -40,7 +63,7 @@ export function useTheme(): UseTheme {
+     applyThemeToDom(newTheme);
+   });
+ 
+-  return { theme, setTheme };
++  return { theme, themeMode, setTheme, setThemeMode };
+ }
+ 
+ export function useIsThemeInList(list: DaisyTheme[]) {
+diff --git a/frontend/lib/data/theme-preference.test.ts b/frontend/lib/data/theme-preference.test.ts
+new file mode 100644
+index 00000000..4f1b152a
+--- /dev/null
++++ b/frontend/lib/data/theme-preference.test.ts
+@@ -0,0 +1,29 @@
++import { describe, expect, it } from "vitest";
++import { resolveTheme } from "./theme-preference";
++
++describe("resolveTheme", () => {
++  it("follows the OS when the Homebox default has no saved mode", () => {
++    expect(resolveTheme("homebox", null, false)).toBe("homebox");
++    expect(resolveTheme("homebox", null, true)).toBe("night");
++  });
++
++  it("uses an explicit light or dark mode", () => {
++    expect(resolveTheme("homebox", "light", true)).toBe("light");
++    expect(resolveTheme("homebox", "dark", false)).toBe("night");
++  });
++
++  it("preserves existing custom theme choices across system preference", () => {
++    expect(resolveTheme("forest", "system", false)).toBe("forest");
++    expect(resolveTheme("dracula", null, false)).toBe("dracula");
++  });
++
++  it("preserves legacy explicit base themes until a mode is selected", () => {
++    expect(resolveTheme("light", null, true)).toBe("light");
++    expect(resolveTheme("dark", null, false)).toBe("night");
++  });
++
++  it("uses OS preference when system mode is explicitly selected", () => {
++    expect(resolveTheme("homebox", "system", false)).toBe("homebox");
++    expect(resolveTheme("homebox", "system", true)).toBe("night");
++  });
++});
+diff --git a/frontend/lib/data/theme-preference.ts b/frontend/lib/data/theme-preference.ts
+new file mode 100644
+index 00000000..dcf5bc8b
+--- /dev/null
++++ b/frontend/lib/data/theme-preference.ts
+@@ -0,0 +1,26 @@
++import type { DaisyTheme } from "./themes";
++
++export type ThemeMode = "light" | "dark" | "system";
++
++/** Resolve the selected palette, preserving saved custom and legacy themes. */
++export function resolveTheme(theme: DaisyTheme, mode: ThemeMode | null, prefersDark: boolean): DaisyTheme {
++  if (theme !== "homebox" && theme !== "light" && theme !== "dark") {
++    return theme;
++  }
++
++  if (mode === "light") {
++    return "light";
++  }
++
++  if (mode === "dark") {
++    return "night";
++  }
++
++  // Older preferences stored only a theme. Keep an explicit light/dark choice
++  // until the user chooses a mode in the new controls.
++  if (mode === null && (theme === "light" || theme === "dark")) {
++    return theme === "dark" ? "night" : "light";
++  }
++
++  return prefersDark ? "night" : "homebox";
++}
+diff --git a/frontend/locales/en.json b/frontend/locales/en.json
+index 25880313..4e732bc2 100644
+--- a/frontend/locales/en.json
++++ b/frontend/locales/en.json
+@@ -846,6 +846,10 @@
+         "test": "Test",
+         "theme_settings": "Theme Settings",
+         "theme_settings_sub": "Theme settings are stored in your browser's local storage. You can change the theme at any time. If you're\n having trouble setting your theme try refreshing your browser.",
++        "theme_mode": "Appearance",
++        "theme_mode_light": "Light",
++        "theme_mode_dark": "Dark",
++        "theme_mode_system": "System",
+         "toast": {
+             "account_deleted": "Your account has been deleted.",
+             "api_key_created": "API key created.",
+diff --git a/frontend/public/set-theme.js b/frontend/public/set-theme.js
+index a8c0cea9..86480ed7 100644
+--- a/frontend/public/set-theme.js
++++ b/frontend/public/set-theme.js
+@@ -1,10 +1,26 @@
+ try {
+-  console.log("Setting theme");
+-  const theme = JSON.parse(localStorage.getItem("homebox/preferences/location")).theme;
+-  if (theme) {
+-    document.documentElement.setAttribute("data-theme", theme);
+-    document.documentElement.classList.add("theme-" + theme);
++  const preferences = JSON.parse(localStorage.getItem("homebox/preferences/location") || "null");
++  const savedTheme = preferences && typeof preferences.theme === "string" ? preferences.theme : null;
++  const mode = preferences && preferences.themeMode;
++  const isCustomTheme = savedTheme && !["homebox", "light", "dark"].includes(savedTheme);
++  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
++  let theme;
++  if (isCustomTheme) {
++    theme = savedTheme;
++  } else if (mode === "light") {
++    theme = "light";
++  } else if (mode === "dark") {
++    theme = "night";
++  } else if (mode == null && savedTheme === "light") {
++    theme = "light";
++  } else if (mode == null && savedTheme === "dark") {
++    theme = "night";
++  } else {
++    theme = prefersDark ? "night" : "homebox";
+   }
++
++  document.documentElement.setAttribute("data-theme", theme);
++  document.documentElement.classList.add("theme-" + theme);
+ } catch (e) {
+-  console.error("Failed to set theme", e);
++  // Keep the default Homebox theme if storage or matchMedia is unavailable.
+ }

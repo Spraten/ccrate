@@ -1,0 +1,87 @@
+From 78a32fe000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: C-Crate <ccrate@example.invalid>
+Date: Wed, 14 Oct 2026 00:00:00 -0400
+Subject: [PATCH 26/26] Make theme palette choices keyboard accessible
+
+---
+ frontend/components/App/ThemePicker.vue | 53 ++++++++++++++++++++++++++++-------------------------
+ 1 file changed, 28 insertions(+), 25 deletions(-)
+
+diff --git a/frontend/components/App/ThemePicker.vue b/frontend/components/App/ThemePicker.vue
+--- a/frontend/components/App/ThemePicker.vue
++++ b/frontend/components/App/ThemePicker.vue
+@@ -4,7 +4,7 @@
+   import { useTheme } from "~/composables/use-theme";
+   import { Button } from "~/components/ui/button";
+ 
+-  const { themeMode, setTheme, setThemeMode } = useTheme();
++  const { theme: selectedTheme, themeMode, setTheme, setThemeMode } = useTheme();
+   const appearanceModes: { value: ThemeMode; label: string }[] = [
+     { value: "light", label: "profile.theme_mode_light" },
+     { value: "dark", label: "profile.theme_mode_dark" },
+@@ -32,38 +32,41 @@
+     </div>
+ 
+     <div class="homebox grid grid-cols-1 gap-4 font-sans sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+-      <div
++      <button
+         v-for="theme in themes"
+         :key="theme.value"
++        type="button"
++        :aria-label="theme.label"
++        :aria-pressed="selectedTheme === theme.value"
+         :class="'theme-' + theme.value"
+-        class="overflow-hidden rounded-lg border outline-2 outline-offset-2"
++        class="block w-full cursor-pointer overflow-hidden rounded-lg border p-0 text-left outline-2 outline-offset-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+         :data-theme="theme.value"
+         :data-set-theme="theme.value"
+         data-act-class="outline"
+         @click="setTheme(theme.value)"
+       >
+-        <div :data-theme="theme.value" class="w-full cursor-pointer bg-background-accent text-foreground">
+-          <div class="grid grid-cols-5 grid-rows-3">
+-            <div class="col-start-1 row-start-1 bg-background" />
+-            <div class="col-start-1 row-start-2 bg-sidebar" />
+-            <div class="col-start-1 row-start-3 bg-background-accent" />
+-            <div class="col-span-4 col-start-2 row-span-3 row-start-1 flex flex-col gap-1 bg-background p-2">
+-              <div class="font-bold">{{ theme.label }}</div>
+-              <div class="flex flex-wrap gap-1">
+-                <div class="flex size-5 items-center justify-center rounded bg-primary lg:size-6">
+-                  <div class="text-sm font-bold text-primary-foreground">A</div>
+-                </div>
+-                <div class="flex size-5 items-center justify-center rounded bg-secondary lg:size-6">
+-                  <div class="text-sm font-bold text-secondary-foreground">A</div>
+-                </div>
+-                <div class="flex size-5 items-center justify-center rounded bg-accent lg:size-6">
+-                  <div class="text-sm font-bold text-accent-foreground">A</div>
+-                </div>
+-              </div>
+-            </div>
+-          </div>
+-        </div>
+-      </div>
++        <span :data-theme="theme.value" class="block w-full bg-background-accent text-foreground" aria-hidden="true">
++          <span class="grid grid-cols-5 grid-rows-3">
++            <span class="col-start-1 row-start-1 bg-background" />
++            <span class="col-start-1 row-start-2 bg-sidebar" />
++            <span class="col-start-1 row-start-3 bg-background-accent" />
++            <span class="col-span-4 col-start-2 row-span-3 row-start-1 flex flex-col gap-1 bg-background p-2">
++              <span class="font-bold">{{ theme.label }}</span>
++              <span class="flex flex-wrap gap-1">
++                <span class="flex size-5 items-center justify-center rounded bg-primary lg:size-6">
++                  <span class="text-sm font-bold text-primary-foreground">A</span>
++                </span>
++                <span class="flex size-5 items-center justify-center rounded bg-secondary lg:size-6">
++                  <span class="text-sm font-bold text-secondary-foreground">A</span>
++                </span>
++                <span class="flex size-5 items-center justify-center rounded bg-accent lg:size-6">
++                  <span class="text-sm font-bold text-accent-foreground">A</span>
++                </span>
++              </span>
++            </span>
++          </span>
++        </span>
++      </button>
+     </div>
+   </div>
+ </template>

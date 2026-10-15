@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { mountLabelDesigner } from "../../lib/label-editor.js";
-type SelectedItem = { id: string; name: string; assetId?: string };
+type SelectedItem = { id: string; name: string; assetId?: string; shortCode?: string; displayId?: string };
 const props = defineProps<{ selectedItem?: SelectedItem }>();
 const emit = defineEmits<{ dirty: [value: boolean]; busy: [value: boolean]; ready: [handle: ReturnType<typeof mountLabelDesigner>]; closed: [] }>();
 const workshop = useWorkshop();
+const { theme } = useTheme();
 const { selectedId } = useCollections();
 const frameRoot = ref<HTMLElement | null>(null);
 let frame: ReturnType<typeof mountLabelDesigner> | null = null;
@@ -13,7 +14,8 @@ function editorContext() {
   const token = (name: string, fallback: string) => `hsl(${css.getPropertyValue(name).trim() || fallback})`;
   return {
     ...workshop.context.value,
-    selected_item: props.selectedItem ? { entity_id: props.selectedItem.id, name: props.selectedItem.name, asset_code: props.selectedItem.assetId || "" } : null,
+    pending_template_save: workshop.pendingTemplateSave(),
+    selected_item: props.selectedItem ? { entity_id: props.selectedItem.id, name: props.selectedItem.name, asset_code: props.selectedItem.assetId || "", short_code: props.selectedItem.shortCode || "", display_id: props.selectedItem.displayId || "" } : null,
     theme: {
       background: token("--background", "0 0% 100%"), foreground: token("--foreground", "222 47% 11%"),
       muted: token("--muted", "210 40% 96%"), mutedForeground: token("--muted-foreground", "215 16% 47%"),
@@ -23,7 +25,9 @@ function editorContext() {
 }
 async function request(action: string, data?: any) {
   if (action === "labels/templates") return workshop.request("labels/templates");
-  return workshop.request(action, data);
+  const result = await workshop.request(action, data);
+  if (action === "labels/templates/result" && result && typeof data?.request_key === "string") workshop.confirmTemplateSave(data.request_key);
+  return result;
 }
 watch([selectedId, () => workshop.context.value?.identity], () => { if (!frame) return; frame.dispose(); frame = null; emit('dirty', false); emit('busy', false); });
 onMounted(() => {
@@ -32,6 +36,7 @@ onMounted(() => {
   emit("ready", frame);
 });
 watch(() => props.selectedItem, () => { if (frame) frame.updateContext?.(editorContext()); }, { deep: true });
+watch(theme, () => { if (frame) frame.updateContext?.(editorContext()); }, { flush: "post" });
 onBeforeUnmount(() => { frame?.dispose(); emit("closed"); });
 defineExpose({ canLeave: () => frame?.canLeave() ?? true, dispose: () => frame?.dispose() });
 </script>

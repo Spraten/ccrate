@@ -1,0 +1,106 @@
+From a54c9084044c32e5399328682b717a923003fb95 Mon Sep 17 00:00:00 2001
+From: Spraten <UncraftedSpraten@gmail.com>
+Date: Wed, 14 Oct 2026 06:22:34 -0400
+Subject: [PATCH 18/23] Keep location search results navigable
+
+---
+ frontend/components/Location/Selector.vue     | 11 +++-----
+ .../composables/use-location-helpers.test.ts  | 29 +++++++++++++++++++++
+ frontend/composables/use-location-helpers.ts  | 10 +++++++-
+ 3 files changed, 42 insertions(+), 8 deletions(-)
+
+diff --git a/frontend/components/Location/Selector.vue b/frontend/components/Location/Selector.vue
+index e89e54fb..708136fa 100644
+--- a/frontend/components/Location/Selector.vue
++++ b/frontend/components/Location/Selector.vue
+@@ -44,7 +44,7 @@
+               >
+                 <div class="flex min-w-0 items-center" :style="{ paddingLeft: `${location.depth}rem` }">
+                   <button
+-                    v-if="location.hasChildren"
++                    v-if="!search && location.hasChildren"
+                     type="button"
+                     class="mr-1 flex size-5 shrink-0 items-center justify-center rounded hover:bg-accent"
+                     :aria-expanded="expandedLocationIds.has(location.id)"
+@@ -60,7 +60,7 @@
+                   <div class="min-w-0">
+                     <div class="truncate">{{ location.name }}</div>
+                     <div
+-                      v-if="duplicateLocationNames.has(location.name)"
++                      v-if="search || duplicateLocationNames.has(location.name)"
+                       class="mt-1 truncate text-xs text-muted-foreground"
+                     >
+                       {{ location.treeString }}
+@@ -131,11 +131,8 @@
+   );
+ 
+   const visibleLocations = computed(() => {
+-    if (search.value) {
+-      return matchingLocations.value;
+-    }
+-
+-    return getVisibleLocations(locations.value, expandedLocationIds.value);
++    const candidates = search.value ? matchingLocations.value : locations.value;
++    return getVisibleLocations(candidates, expandedLocationIds.value, Boolean(search.value));
+   });
+ 
+   function toggleExpanded(locationId: string) {
+diff --git a/frontend/composables/use-location-helpers.test.ts b/frontend/composables/use-location-helpers.test.ts
+index e01c3160..2833a6ef 100644
+--- a/frontend/composables/use-location-helpers.test.ts
++++ b/frontend/composables/use-location-helpers.test.ts
+@@ -58,4 +58,33 @@ describe("flatTree", () => {
+       "shelf",
+     ]);
+   });
++
++  test("keeps matching locations visible with full paths while searching", () => {
++    const locations = flatTree([
++      {
++        id: "home",
++        name: "Home",
++        type: "location",
++        children: [
++          { id: "office", name: "Office", type: "location", children: [] },
++          {
++            id: "garage",
++            name: "Garage",
++            type: "location",
++            children: [{ id: "office-2", name: "Office", type: "location", children: [] }],
++          },
++        ],
++      },
++    ]);
++    const searchResults = locations.filter(location => location.name === "Office");
++
++    const collapsedResults = getVisibleLocations(searchResults, new Set(), true);
++    const expandedResults = getVisibleLocations(searchResults, new Set(["home"]), true);
++
++    expect(collapsedResults.map(location => location.treeString)).toEqual([
++      "Home > Office",
++      "Home > Garage > Office",
++    ]);
++    expect(expandedResults).toEqual(collapsedResults);
++  });
+ });
+diff --git a/frontend/composables/use-location-helpers.ts b/frontend/composables/use-location-helpers.ts
+index 6960ae32..578e5d4c 100644
+--- a/frontend/composables/use-location-helpers.ts
++++ b/frontend/composables/use-location-helpers.ts
+@@ -41,7 +41,15 @@ export function flatTree(tree: TreeItem[]): FlatTreeItem[] {
+   return v;
+ }
+ 
+-export function getVisibleLocations(locations: FlatTreeItem[], expandedLocationIds: Set<string>): FlatTreeItem[] {
++export function getVisibleLocations(
++  locations: FlatTreeItem[],
++  expandedLocationIds: Set<string>,
++  isSearchMode = false
++): FlatTreeItem[] {
++  if (isSearchMode) {
++    return locations;
++  }
++
+   const locationsById = new Map(locations.map(location => [location.id, location]));
+   return locations.filter(location => {
+     let parentId = location.parentId;
