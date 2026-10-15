@@ -310,9 +310,8 @@ class FeedbackReportService:
             return 404, {"error": "Report request not found."}
         if row["status"] == "ready":
             status, result = self._dispatch_ready(actor_id, normalized)
-            return (200 if result.get("status") == "submitted" else status), result
+            return (200 if result.get("status") in {"submitted", "rejected"} else status), result
         if row["status"] == "pending":
             result = self._reconcile(actor_id, normalized)
             return (200 if result["status"] == "submitted" else 202), result
         return 200, self._response(row["status"], normalized, issue_url=row["issue_url"])
-
