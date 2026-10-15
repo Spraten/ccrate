@@ -47,9 +47,9 @@ class DisplayIDContractTests(unittest.TestCase):
         self.assertNotIn('modelNumber := template.DefaultModelNumber', builder)
 
     def test_backend_derives_full_path_and_keeps_native_identity_separate(self):
-        source = (ROOT / 'homebox-backend/repo_display_ids.go').read_text()
-        tests = (ROOT / 'homebox-backend/repo_display_ids_test.go').read_text()
-        builder = (ROOT / 'deploy/build-homebox-backend.py').read_text()
+        source = (ROOT / 'homebox-backend/repo_display_ids.go').read_text(encoding='utf-8')
+        tests = (ROOT / 'homebox-backend/repo_display_ids_test.go').read_text(encoding='utf-8')
+        builder = (ROOT / 'deploy/build-homebox-backend.py').read_text(encoding='utf-8')
         self.assertIn('displayids.Assign(entries)', source)
         self.assertIn('func isDisplayIDSearch(value string) bool', source)
         self.assertIn('WithParent().WithEntityType()', source)
@@ -137,12 +137,12 @@ class DisplayIDContractTests(unittest.TestCase):
             self.assertIn('tx.Commit()', body)
 
     def test_item_details_search_and_label_designer_use_display_id(self):
-        backend = (ROOT / 'deploy/build-homebox-backend.py').read_text()
-        details = (ROOT / 'deploy/build-homebox-ui.py').read_text()
-        designer = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text()
-        editor = (ROOT / 'label-ui/src/editor-host.ts').read_text()
-        label_backend = (ROOT / 'ops/label_layouts.py').read_text()
-        label_tool = (ROOT / 'label-ui/patches/0002-label-editor-controls.patch').read_text()
+        backend = (ROOT / 'deploy/build-homebox-backend.py').read_text(encoding='utf-8')
+        details = (ROOT / 'deploy/build-homebox-ui.py').read_text(encoding='utf-8')
+        designer = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text(encoding='utf-8')
+        editor = (ROOT / 'label-ui/src/editor-host.ts').read_text(encoding='utf-8')
+        label_backend = (ROOT / 'ops/label_layouts.py').read_text(encoding='utf-8')
+        label_tool = (ROOT / 'label-ui/patches/0002-label-editor-controls.patch').read_text(encoding='utf-8')
         self.assertIn('isDisplayIDSearch(q.Search)', backend)
         self.assertNotIn('q.AssetID = id', backend)
         self.assertIn('r.findDisplayIDSearchMatch(ctx, gid, displayIDSearch)', backend)
@@ -152,7 +152,7 @@ class DisplayIDContractTests(unittest.TestCase):
         self.assertIn('display_id: nextDisplayId', editor)
         self.assertIn("'display_id':display_id", label_backend)
         self.assertIn("'item_display_id':entity.get('displayId','')", label_backend)
-        self.assertIn("entity.get('displayId')!=ticket.get('item_display_id')", (ROOT / 'ops/labels.py').read_text())
+        self.assertIn("entity.get('displayId')!=ticket.get('item_display_id')", (ROOT / 'ops/labels.py').read_text(encoding='utf-8'))
         self.assertIn("createText(place, '{{display_id}}')", label_tool)
 
 
