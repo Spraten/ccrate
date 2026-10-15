@@ -181,6 +181,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
                   v-else-if="field.type === 'text'"
 ''')
             modal.write_text('''  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
+  const { openDialog, closeDialog, registerOpenDialogCallback } = useDialog();
   const nameOcrMessage = ref("");
   async function suggestNameFromPhoto(file: File) {
     try {
@@ -201,6 +202,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
           />
           {{ $t("components.form.camera.suggest_name") }}
       <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>
+    form.name = "";
 ''')
             locale = BUILDER.BUILD / "locales/en.json"
             locale.parent.mkdir(parents=True)
@@ -225,6 +227,10 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertIn('@update:model-value="nameEditRevision++"', generated_modal)
             self.assertIn('nameOcrMessage.value = t("components.form.camera.ocr_running")', generated_modal)
             self.assertIn('setName: (value: string) => { form.name = value; }', generated_modal)
+            self.assertIn('const { activeDialog, openDialog, closeDialog, registerOpenDialogCallback } = useDialog();', generated_modal)
+            self.assertIn('watch(activeDialog, value => { if (value !== DialogID.CreateEntity) { nameOcrGeneration++; nameOcrMessage.value = ""; } }, { flush: "sync" });', generated_modal)
+            self.assertIn('isCurrent: () => request === nameOcrGeneration', generated_modal)
+            self.assertIn('nameOcrGeneration++;\n    nameOcrMessage.value = "";\n    form.name = "";', generated_modal)
 
     def test_orc_popover_is_mounted_globally_and_uses_local_ocr_helper(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:

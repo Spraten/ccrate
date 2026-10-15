@@ -7,3 +7,15 @@ export function nextOcrPopoverState(state, action) {
   if (action === 'close') return { enabled: state.enabled, open: false };
   return { ...state };
 }
+
+/** @param {number} captureGeneration @param {number} currentGeneration @param {{ enabled: boolean, open: boolean, minimized: boolean, cameraActive: boolean, disposed: boolean }} state */
+export function isOcrCaptureCurrent(captureGeneration, currentGeneration, state) {
+  return captureGeneration === currentGeneration
+    && state.enabled && state.open && !state.minimized && state.cameraActive && !state.disposed;
+}
+
+/** @param {number} scanGeneration @param {number} currentGeneration @param {{ enabled: boolean, open: boolean, minimized: boolean, disposed: boolean }} state */
+export function isOcrScanCurrent(scanGeneration, currentGeneration, state) {
+  return scanGeneration === currentGeneration
+    && state.enabled && state.open && !state.minimized && !state.disposed;
+}

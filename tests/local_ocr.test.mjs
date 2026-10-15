@@ -401,6 +401,26 @@ test('full-text OCR respects edits even when the user restores the previous text
   assert.equal(currentText, 'Earlier scan');
 });
 
+test('name OCR discards results from a Create Item form that was closed and reset', async () => {
+  let currentName = '';
+  let formGeneration = 2;
+  let resolveRecognition;
+  const pending = new Promise(resolve => { resolveRecognition = resolve; });
+  const result = suggestNameWithoutOverwritingEdits({
+    getName: () => currentName,
+    getRevision: () => 0,
+    setName: value => { currentName = value; },
+    recognize: () => pending,
+    isCurrent: () => formGeneration === 2,
+    image: { local: true },
+  });
+
+  formGeneration++;
+  resolveRecognition('Text from previous form');
+  assert.equal(await result, 'stale');
+  assert.equal(currentName, '');
+});
+
 test('full-text OCR discards recognition for a photo that was retaken while scanning', async () => {
   let currentText = '';
   let currentImage = { id: 'first' };

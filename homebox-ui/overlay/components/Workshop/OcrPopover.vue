@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { Camera, Copy, Minus, ScanText, X } from "lucide-vue-next";
   import { applyRecognizedTextWithoutOverwritingEdits, recognizeTextFromImage } from "~/lib/local-ocr";
-  import { nextOcrPopoverState } from "~/lib/orc-popover-state";
+  import { isOcrCaptureCurrent, isOcrScanCurrent, nextOcrPopoverState } from "~/lib/orc-popover-state";
 
   const props = defineProps<{ launcherTarget: string }>();
   const enabled = ref(false), open = ref(false), minimized = ref(false), cameraBusy = ref(false), cameraActive = ref(false), scanning = ref(false), copying = ref(false);
@@ -16,6 +16,7 @@
     open.value = next.open;
     if (!next.enabled) {
       stopCamera();
+      cancelPendingScan();
       minimized.value = false;
     }
     if (action === "open" && next.open) {
@@ -33,10 +34,14 @@
     if (video.value) video.value.srcObject = null;
     cameraBusy.value = false;
   }
+  function cancelPendingScan() {
+    scanGeneration++;
+    scanning.value = false;
+  }
   function show() { transitionVisibility("open"); }
-  function close() { stopCamera(); minimized.value = false; transitionVisibility("close"); }
+  function close() { stopCamera(); cancelPendingScan(); minimized.value = false; transitionVisibility("close"); }
   function toggleEnabled() { transitionVisibility("toggle-enabled"); }
-  function minimize() { stopCamera(); minimized.value = true; }
+  function minimize() { stopCamera(); cancelPendingScan(); minimized.value = true; }
   async function startCamera() {
     if (cameraBusy.value || cameraActive.value) return;
     error.value = "";
@@ -75,12 +80,19 @@
   async function capture() {
     const source = video.value;
     if (!source?.videoWidth || !source.videoHeight) { error.value = "The camera is not ready yet. Start it and try again."; return; }
+    const generation = cameraGeneration;
     const canvas = document.createElement("canvas");
     canvas.width = source.videoWidth;
     canvas.height = source.videoHeight;
     canvas.getContext("2d")?.drawImage(source, 0, 0);
     const photo = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", 0.9));
-    if (disposed) return;
+    if (!isOcrCaptureCurrent(generation, cameraGeneration, {
+      enabled: enabled.value,
+      open: open.value,
+      minimized: minimized.value,
+      cameraActive: cameraActive.value,
+      disposed,
+    })) return;
     if (!photo) { error.value = "Could not capture a photo. Try again."; return; }
     scanGeneration++;
     scanning.value = false;
@@ -101,7 +113,12 @@
         getRevision: () => resultRevision.value,
         setText: (text: string) => { result.value = text; },
         recognize: recognizeTextFromImage,
-        isCurrent: () => generation === scanGeneration && image === scannedImage && !disposed,
+        isCurrent: () => image === scannedImage && isOcrScanCurrent(generation, scanGeneration, {
+          enabled: enabled.value,
+          open: open.value,
+          minimized: minimized.value,
+          disposed,
+        }),
         image: scannedImage,
       });
       if (outcome === "stale") return;
@@ -121,8 +138,7 @@
     finally { copying.value = false; }
   }
   function retake() {
-    scanGeneration++;
-    scanning.value = false;
+    cancelPendingScan();
     error.value = "";
     if (imageURL.value) URL.revokeObjectURL(imageURL.value);
     imageURL.value = "";

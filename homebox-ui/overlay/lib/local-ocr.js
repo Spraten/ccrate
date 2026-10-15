@@ -114,11 +114,12 @@ export async function recognizeNameFromImage(image, loadEngine = loadTesseract) 
   }
 }
 
-/** @returns {Promise<'applied' | 'empty' | 'edited-during-recognition'>} */
-export async function suggestNameWithoutOverwritingEdits({ getName, getRevision = () => 0, setName, recognize, image }) {
+/** @returns {Promise<'applied' | 'empty' | 'edited-during-recognition' | 'stale'>} */
+export async function suggestNameWithoutOverwritingEdits({ getName, getRevision = () => 0, setName, recognize, isCurrent = () => true, image }) {
   const initialName = getName();
   const initialRevision = getRevision();
   const suggestion = await recognize(image);
+  if (!isCurrent()) return 'stale';
   if (!suggestion) return 'empty';
   if (getName() !== initialName || getRevision() !== initialRevision) return 'edited-during-recognition';
   setName(suggestion);

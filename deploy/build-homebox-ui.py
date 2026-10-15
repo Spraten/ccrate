@@ -548,7 +548,16 @@ def camera_ocr_frontend():
         '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
         '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
     )
-    replace(modal, '  const nameOcrMessage = ref("");', '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);')
+    replace(
+        modal,
+        '  const { openDialog, closeDialog, registerOpenDialogCallback } = useDialog();',
+        '  const { activeDialog, openDialog, closeDialog, registerOpenDialogCallback } = useDialog();',
+    )
+    replace(
+        modal,
+        '  const nameOcrMessage = ref("");',
+        '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);\n  let nameOcrGeneration = 0;\n  watch(activeDialog, value => { if (value !== DialogID.CreateEntity) { nameOcrGeneration++; nameOcrMessage.value = ""; } }, { flush: "sync" });',
+    )
     replace(
         modal,
         '''  async function suggestNameFromPhoto(file: File) {
@@ -565,6 +574,7 @@ def camera_ocr_frontend():
     }
   }''',
         '''  async function suggestNameFromPhoto(file: File) {
+    const request = ++nameOcrGeneration;
     try {
       nameOcrMessage.value = t("components.form.camera.ocr_running");
       const outcome = await suggestNameWithoutOverwritingEdits({
@@ -572,8 +582,10 @@ def camera_ocr_frontend():
         getRevision: () => nameEditRevision.value,
         setName: (value: string) => { form.name = value; },
         recognize: recognizeNameFromImage,
+        isCurrent: () => request === nameOcrGeneration,
         image: file,
       });
+      if (outcome === "stale") return;
       if (outcome === "empty") {
         nameOcrMessage.value = t("components.form.camera.name_not_found");
       } else if (outcome === "edited-during-recognition") {
@@ -582,10 +594,12 @@ def camera_ocr_frontend():
         nameOcrMessage.value = t("components.form.camera.name_suggested");
       }
     } catch {
+      if (request !== nameOcrGeneration) return;
       nameOcrMessage.value = t("components.form.camera.name_unavailable");
     }
   }''',
     )
+    replace(modal, '    form.name = "";', '    nameOcrGeneration++;\n    nameOcrMessage.value = "";\n    form.name = "";')
     replace(
         modal,
         '          v-model="form.name"\n          class="min-w-0 flex-1"',
