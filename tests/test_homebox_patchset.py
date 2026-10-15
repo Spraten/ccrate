@@ -1,7 +1,9 @@
+Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 import hashlib
 import io
 import json
 import pathlib
+import re
 import subprocess
 import tarfile
 import tempfile
@@ -217,6 +219,45 @@ class HomeboxPatchsetTests(unittest.TestCase):
         self.assertIn("if (savingCapturedPhotos.value || capturedPhotoSaveUncertain.value", save_photos)
         self.assertIn("return false", save_photos)
 
+    def test_item_edit_camera_flow_wires_capture_staging_upload_and_reload_fetch(self):
+        base, patches, _ = load_patchset(ROOT)
+        upstream = ROOT / "upstream" / "homebox"
+
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+            source = pathlib.Path(temporary)
+            archive = subprocess.check_output(["git", "-C", str(upstream), "archive", "--format=tar", base])
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as snapshot:
+                snapshot.extractall(source)
+            apply_patchset(source, patches)
+            page = (source / "frontend/pages/item/[id]/index/edit.vue").read_text()
+
+        self.assertIn('<CameraCaptureDialog v-model:open="photoCameraOpen" @captured="stageCameraPhoto" />', page)
+        self.assertRegex(page, r'<PhotoUploaderPreview\s+:photos="capturedPhotos"')
+
+        stage_start = page.index("async function stageCameraPhoto(file: File)")
+        stage_end = page.index("function removeCapturedPhoto", stage_start)
+        stage = page[stage_start:stage_end]
+        self.assertIn("capturedPhotos.value.push(await fileToPhotoPreview(file, primary))", stage)
+
+        save_start = page.index("async function saveItem(redirect: boolean)")
+        save_end = page.index("async function uploadAttachment", save_start)
+        save = page[save_start:save_end]
+        update_ok = save.index("await api.items.update(itemId.value, payload)")
+        photo_save = save.index("await saveCapturedPhotos()", update_ok)
+        self.assertLess(update_ok, photo_save)
+
+        upload_start = page.index("async function saveCapturedPhotos()")
+        upload_end = page.index("async function saveItem", upload_start)
+        upload = page[upload_start:upload_end]
+        self.assertIn("api.items.attachments.add(", upload)
+        self.assertIn("item.value.attachments = data.attachments", upload)
+
+        reload_start = page.index("useAsyncData(async () => {")
+        reload_end = page.index("});", reload_start)
+        reload = page[reload_start:reload_end]
+        self.assertIn("api.items.get(itemId.value)", reload)
+        self.assertIn("return data", reload)
+
     def test_docker_build_stage_copies_homebox_patchset_inputs(self):
         dockerfile = (ROOT / "Dockerfile").read_text()
 
@@ -330,4 +371,5 @@ class HomeboxPatchsetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 
