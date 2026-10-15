@@ -76,7 +76,7 @@ main.workshop-view{gap:10px}
 .storage-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}.storage-grid button{min-height:90px;text-align:left;padding:14px!important;background:white!important;color:#203448!important;border:1px solid #cedae2}.storage-grid small{display:block;margin-top:8px;line-height:1.4;font-size:14px;font-weight:400}
 .workshop-native-link{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;margin:4px;background:#dce6ee;color:#203448}.workshop-native-photo{max-width:100%;height:auto}.workshop-object-button{width:100%}
 .storage-breadcrumb{display:flex;gap:6px;overflow:auto;padding:8px 0}
-.task5-input{min-height:44px;margin:0 0 7px}.task5-label{display:block;font-size:13px}.task5-location-select{min-height:44px}.task5-title{font-size:17px;margin:0 4px 0 0;white-space:nowrap}.task5-room-select{min-height:44px;max-width:245px}.task5-floorplan{width:100%;height:100%;touch-action:none}
+.task5-input{min-height:44px;margin:0 0 7px}.task5-label{display:block;font-size:13px}.task5-location-select{min-height:44px}.task5-title{font-size:17px;margin:0 4px 0 0;white-space:nowrap}.task5-room-select{min-height:44px;max-width:245px}.task5-floorplan{width:100%;height:100%;touch-action:none}.task5-canvas svg.task5-floorplan{min-height:230px;background:#f7fafb}
 @media(min-width:1100px){.workshop-side{position:relative;width:320px;flex:0 0 320px}.workshop-details-tab{display:none}.workshop-body{gap:18px}.workshop-canvas{min-height:400px}}
 @media(max-width:600px){.workshop-body{flex-direction:column}.workshop-canvas{min-height:260px;flex:none}.workshop-side{width:260px;max-width:80%;overflow:auto}.storage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
