@@ -75,7 +75,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             nonstandard = re.sub(r"\(2\)", f"({exit_code})", known_diagnostic)
             self.assertFalse(BUILDER.is_only_known_upstream_typecheck_failure(nonstandard, baseline, "a" * 40))
 
-    def test_pnpm_launcher_uses_cmd_fallback_only_on_windows_and_prefers_extensionless(self):
+    def test_pnpm_launcher_prefers_cmd_on_windows_when_both_exist(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             toolchain = pathlib.Path(directory)
             extensionless = toolchain / "pnpm/node_modules/.bin/pnpm"
@@ -87,6 +87,8 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertEqual(BUILDER.resolve_pnpm_launcher(toolchain, platform="posix"), extensionless)
 
             extensionless.write_text("#!/bin/sh")
+            self.assertEqual(BUILDER.resolve_pnpm_launcher(toolchain, platform="nt"), windows_launcher)
+            windows_launcher.unlink()
             self.assertEqual(BUILDER.resolve_pnpm_launcher(toolchain, platform="nt"), extensionless)
 
     def test_cli_typecheck_waiver_requires_expected_outer_status(self):

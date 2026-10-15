@@ -113,8 +113,10 @@ def is_only_known_upstream_typecheck_failure(output, baseline, pin):
 
 def resolve_pnpm_launcher(toolchain_root, platform=None):
     pnpm = toolchain_root/'pnpm/node_modules/.bin/pnpm'
-    if (platform or os.name) == 'nt' and not pnpm.exists():
-        return pnpm.with_suffix('.cmd')
+    if (platform or os.name) == 'nt':
+        pnpm_cmd = pnpm.with_suffix('.cmd')
+        if pnpm_cmd.exists():
+            return pnpm_cmd
     return pnpm
 
 

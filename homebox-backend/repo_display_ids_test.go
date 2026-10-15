@@ -7,7 +7,112 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/sysadminsmedia/homebox/backend/internal/data/ent"
+	"github.com/sysadminsmedia/homebox/backend/internal/data/ent/entity"
 )
+
+// BenchmarkDisplayIDCollisionFamily5K measures returned-page population and
+// exact generated-ID lookup against a 5,000-item collision family. Run with
+// go test -run '^$' -bench BenchmarkDisplayIDCollisionFamily5K -benchmem.
+func BenchmarkDisplayIDCollisionFamily5K(b *testing.B) {
+	ctx, gid := context.Background(), tGroup.ID
+	const population = 5000
+	ids := make([]uuid.UUID, 0, population)
+	var rootID, middleID, columnID, leafID, itemTypeID uuid.UUID
+	b.Cleanup(func() {
+		for start := 0; start < len(ids); start += 500 {
+			end := start + 500
+			if end > len(ids) {
+				end = len(ids)
+			}
+			_, _ = tClient.Entity.Delete().Where(entity.IDIn(ids[start:end]...)).Exec(ctx)
+		}
+		for _, id := range []uuid.UUID{leafID, columnID, middleID, rootID} {
+			if id != uuid.Nil {
+				_ = tRepos.Entities.DeleteContainerByGroup(ctx, gid, id)
+			}
+		}
+		if itemTypeID != uuid.Nil {
+			_ = tRepos.EntityTypes.Delete(ctx, gid, itemTypeID)
+		}
+	})
+	locationType, err := tRepos.EntityTypes.GetDefault(ctx, gid, true)
+	if err != nil {
+		b.Fatal(err)
+	}
+	root, err := tRepos.Entities.CreateContainer(ctx, gid, EntityCreate{Name: "D", EntityTypeID: locationType.ID})
+	if err != nil {
+		b.Fatal(err)
+	}
+	rootID = root.ID
+	middle, err := tRepos.Entities.CreateContainer(ctx, gid, EntityCreate{Name: "GC", ParentID: root.ID, EntityTypeID: locationType.ID})
+	if err != nil {
+		b.Fatal(err)
+	}
+	middleID = middle.ID
+	column, err := tRepos.Entities.CreateContainer(ctx, gid, EntityCreate{Name: "C", ParentID: middle.ID, EntityTypeID: locationType.ID})
+	if err != nil {
+		b.Fatal(err)
+	}
+	columnID = column.ID
+	leaf, err := tRepos.Entities.CreateContainer(ctx, gid, EntityCreate{Name: "1", ParentID: column.ID, EntityTypeID: locationType.ID})
+	if err != nil {
+		b.Fatal(err)
+	}
+	leafID = leaf.ID
+	itemType, err := tRepos.EntityTypes.Create(ctx, gid, EntityTypeCreate{Name: "Bin"})
+	if err != nil {
+		b.Fatal(err)
+	}
+	itemTypeID = itemType.ID
+	builders := make([]*ent.EntityCreate, population)
+	for i := range builders {
+		id := uuid.New()
+		ids = append(ids, id)
+		builders[i] = tClient.Entity.Create().
+			SetID(id).SetName("Synthetic bin").SetDescription("").
+			SetGroupID(gid).SetEntityTypeID(itemType.ID).SetParentID(leaf.ID).
+			SetDisplayIDBase("BIN-D-GC-C-1").SetAssetID(int64(i + 1))
+	}
+	for start := 0; start < len(builders); start += 500 {
+		end := start + 500
+		if end > len(builders) {
+			end = len(builders)
+		}
+		if _, err := tClient.Entity.CreateBulk(builders[start:end]...).Save(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+	pageRecords, err := tClient.Entity.Query().Where(entity.IDIn(ids[:50]...)).WithParent().WithEntityType().All(ctx)
+	if err != nil {
+		b.Fatal(err)
+	}
+	page := make([]EntitySummary, 0, len(pageRecords))
+	for _, record := range pageRecords {
+		page = append(page, mapEntitySummary(record))
+	}
+	target := "BIN-D-GC-C-1-5000"
+	b.Run("page_population_50_of_5000", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ReportMetric(population, "entities/family")
+		b.ReportMetric(float64(len(page)), "entities/page")
+		for i := 0; i < b.N; i++ {
+			items := append([]EntitySummary(nil), page...)
+			if err := tRepos.Entities.populateDisplayIDs(ctx, gid, items); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("exact_generated_id_lookup", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ReportMetric(population, "entities/family")
+		for i := 0; i < b.N; i++ {
+			if _, found, err := tRepos.Entities.findDisplayIDSearchMatch(ctx, gid, target); err != nil || !found {
+				b.Fatalf("exact lookup found=%v err=%v", found, err)
+			}
+		}
+	})
+}
 
 func TestFormatDisplayIDUsesTypeAndFullLocationPath(t *testing.T) {
 	got := formatDisplayID("Bin", []string{"D", "GC", "C", "1"})
