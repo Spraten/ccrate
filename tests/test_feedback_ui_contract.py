@@ -7,6 +7,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class FeedbackUiContractTests(unittest.TestCase):
+    def test_terminal_rejection_from_status_check_unlocks_an_edited_retry(self):
+        helper = (ROOT / "homebox-ui/overlay/lib/feedback-report-state.js").resolve().as_uri()
+        page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
+        status_check = page[page.index("  async function checkStatus()"):page.index("  watch([reportType, description]")]
+        self.assertIn("applyResult(result, capture)", status_check)
+        script = f'''import {{ feedbackCanSubmit, feedbackRequestIdForSubmit, feedbackStatusFromResult }} from "{helper}";
+const response = {{ status: 200, ok: true, payload: {{ status: "rejected", request_id: "old-request", error: "GitHub rejected the report." }} }};
+let ui = {{ status: "pending", requestId: "old-request", description: "Edited report description." }};
+if (!response.ok) process.exit(1);
+ui.status = feedbackStatusFromResult(response.payload);
+if (!feedbackCanSubmit(ui.status, ui.description)) process.exit(2);
+ui.requestId = feedbackRequestIdForSubmit(ui.status, ui.requestId);
+if (ui.requestId !== "") process.exit(3);
+'''
+        completed = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_tweak_category_uses_the_existing_type_payload_field(self):
         page = (ROOT / "homebox-ui/overlay/pages/feedback.vue").read_text()
         self.assertIn('<option value="tweak">Tweak / improvement</option>', page)
