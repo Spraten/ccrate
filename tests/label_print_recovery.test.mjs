@@ -22,14 +22,28 @@ test('other saved workshop actions do not lock the label print queue', () => {
 });
 
 test('confirmed-unsent retry requires a fresh preview while keeping successful labels suppressed', async () => {
-  const queue = { reviews: [{ entity_id: 'A', review_id: 'a-old' }, { entity_id: 'B', review_id: 'b-old' }], printedReviewIds: ['a-old'], printedEntityIds: [] };
-  const printed = [];
-  queue.printedEntityIds.push('A');
-  const failed = labelPrintFailure(new Error('Printer unavailable'), [], 'b-request', queue);
+  const queue = { reviews: [{ entity_id: 'A', review_id: 'a-old' }, { entity_id: 'B', review_id: 'b-old' }], printedReviewIds: [], printedEntityIds: [] };
+  const submittedReviewIds = [];
+  await submitReviewedLabel(queue, 'A', 'a-old', async () => {
+    submittedReviewIds.push('a-old');
+    return true;
+  });
+
+  let failure;
+  await assert.rejects(submitReviewedLabel(queue, 'B', 'b-old', async () => {
+    submittedReviewIds.push('b-old');
+    failure = new Error('Printer unavailable');
+    throw failure;
+  }));
+  const failed = labelPrintFailure(failure, [], 'b-request', queue);
   assert.equal(failed.invalidateReview, true);
   assert.deepEqual(queue.reviews, []);
   assert.deepEqual(queue.printedEntityIds, ['A']);
-  await assert.rejects(submitReviewedLabel(queue, 'B', 'b-old', async () => printed.push('B')));
+  await assert.rejects(submitReviewedLabel(queue, 'B', 'b-old', async () => {
+    submittedReviewIds.push('b-old');
+    return true;
+  }));
+  assert.deepEqual(submittedReviewIds, ['a-old', 'b-old'], 'the stale B review must be rejected before another print is submitted');
   let previewCalls = 0;
   const freshPreview = async () => {
     previewCalls++;
@@ -37,10 +51,15 @@ test('confirmed-unsent retry requires a fresh preview while keeping successful l
   };
   await freshPreview();
   assert.equal(previewCalls, 1);
-  await assert.rejects(submitReviewedLabel(queue, 'A', 'a-new', async () => printed.push('A')));
-  await submitReviewedLabel(queue, 'B', 'b-new', async () => printed.push('B'));
-  assert.deepEqual(printed, ['B']);
-  assert.equal(labelReviewCanPrint(queue, 'B', 'b-new'), false);
+  await assert.rejects(submitReviewedLabel(queue, 'A', 'a-new', async () => {}));
+  const currentReview = queue.reviews.find(row => row.entity_id === 'B');
+  assert.equal(currentReview.review_id, 'b-new');
+  await submitReviewedLabel(queue, 'B', currentReview.review_id, async () => {
+    submittedReviewIds.push(currentReview.review_id);
+    return true;
+  });
+  assert.deepEqual(submittedReviewIds, ['a-old', 'b-old', 'b-new']);
+  assert.equal(labelReviewCanPrint(queue, 'B', currentReview.review_id), false);
 });
 
 test('uncertain failure keeps the queue locked and cannot reuse a review', async () => {
