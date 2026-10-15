@@ -16,6 +16,7 @@
   const { selectedId } = useCollections();
   const data = ref<any>(null), loan = ref<any>(null), history = ref<any[]>([]), kit = ref<any>(null);
   const loading = ref(true), error = ref(""), mode = ref<"condition" | "return" | null>(null);
+  const dialogKind = ref<"condition" | "return">("condition");
   const state = ref(""), notes = ref<Record<string, string>>({}), verified = ref<Record<string, boolean>>({});
   const destinations = ref<Record<string, EntitySummary | null>>({});
   let generation = 0;
@@ -35,7 +36,7 @@
   }
   async function reviewReturn() {
     error.value = "";
-    try { kit.value = await workshop.request("kit?id=" + props.itemId); notes.value = {}; verified.value = {}; destinations.value = Object.fromEntries(returnItems.value.map(item => [item.id, item.parent || null])); mode.value = "return"; }
+    try { kit.value = await workshop.request("kit?id=" + props.itemId); notes.value = {}; verified.value = {}; destinations.value = Object.fromEntries(returnItems.value.map(item => [item.id, item.parent || null])); dialogKind.value = "return"; mode.value = "return"; }
     catch (cause) { error.value = (cause as Error).message; }
   }
   async function confirm() {
@@ -44,7 +45,7 @@
       if (mode.value === "condition") {
         await workshop.write("condition", { entity_id: props.itemId, state: state.value }, "Review condition", props.itemId);
         toast.success("Condition saved in C-Crate.");
-      } else {
+      } else if (mode.value === "return") {
         if (kit.value?.kit && returnItems.value.some(item => !verified.value[item.id])) throw new Error("Physically verify every kit component before confirming.");
         await workshop.write("return", { targets: returnItems.value.map(item => ({ entity_id: item.id, condition: null, destination_id: destinations.value[item.id]?.id || null, clear_destination: !destinations.value[item.id], note: null, return_note: (notes.value[item.id] || "").trim() })), verified: Object.keys(verified.value).filter(id => verified.value[id]), kit_versions: kit.value?.versions || {} }, "Administrative return", props.itemId);
         toast.success("Return recorded with your name and completion time.");
@@ -65,7 +66,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="space-y-2"><Badge variant="outline">{{ data.condition }}</Badge><p>{{ loan ? "Currently with " + loan.borrower : "No current borrower." }}</p><p v-if="data.blocker" class="text-sm text-muted-foreground">Checkout blocked: {{ data.blocker }}</p></div>
           <Button v-if="compact" as-child variant="outline"><NuxtLink :to="'/item/' + itemId + '/loans'">Loans &amp; return notes</NuxtLink></Button>
-          <div v-else-if="manager" class="flex flex-wrap gap-2"><Button variant="outline" :disabled="busy" @click="state = data.condition; mode = 'condition'">Review condition</Button><Button v-if="loan" :disabled="busy" @click="reviewReturn">Record return</Button></div>
+          <div v-else-if="manager" class="flex flex-wrap gap-2"><Button variant="outline" :disabled="busy" @click="state = data.condition; dialogKind = 'condition'; mode = 'condition'">Review condition</Button><Button v-if="loan" :disabled="busy" @click="reviewReturn">Record return</Button></div>
         </div>
         <template v-if="!compact">
           <div class="space-y-3 border-t pt-4"><h3 class="font-medium">Return notes</h3><p v-if="!returnNotes.length" class="text-sm text-muted-foreground">No return notes recorded for this item.</p><article v-for="(note, index) in returnNotes" :key="index" class="space-y-1 border-l-2 pl-4"><p class="whitespace-pre-wrap">{{ note.text }}</p><p class="text-sm text-muted-foreground">{{ note.author }} · {{ date(note.created_at) }}</p></article></div>
@@ -74,12 +75,12 @@
       </template>
       <p v-if="error && !mode" role="alert" class="text-sm text-destructive">{{ error }} <Button variant="link" @click="load">Reload</Button></p>
     </div>
-    <ActionDialog :model-value="mode !== null" :title="mode === 'condition' ? 'Review condition' : 'Review administrative return'" :description="data?.entity.name" :busy="busy" @update:model-value="!$event && (mode = null)">
+    <ActionDialog :model-value="mode !== null" :title="dialogKind === 'return' ? 'Review administrative return' : 'Review condition'" :description="data?.entity.name" :busy="busy" @update:model-value="!$event && (mode = null)">
       <template v-if="mode === 'condition'"><Label>Condition</Label><Select v-model="state"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="value in data.states" :key="value" :value="value">{{ value }}</SelectItem></SelectContent></Select><p class="text-sm text-muted-foreground">Mark Ready only after physically checking the item.</p></template>
-      <template v-else><p class="text-sm text-muted-foreground">Borrower: {{ loan?.borrower }}. This return is recorded under {{ workshop.context.value?.user.name }}. Choose an optional return parent. Condition stays as recorded.</p><div v-for="item in returnItems" :key="item.id" class="space-y-2"><LocationSelector v-model="destinations[item.id]" :current-location="item" />
+      <template v-else-if="mode === 'return'"><p class="text-sm text-muted-foreground">Borrower: {{ loan?.borrower }}. This return is recorded under {{ workshop.context.value?.user.name }}. Choose an optional return parent. Condition stays as recorded.</p><div v-for="item in returnItems" :key="item.id" class="space-y-2"><LocationSelector v-model="destinations[item.id]" :current-location="item" />
 <Label :for="'return-note-' + item.id">Return note: {{ item.name }}</Label><Textarea :id="'return-note-' + item.id" v-model="notes[item.id]" :maxlength="1000" /><label v-if="kit?.kit" class="flex items-center gap-2"><Checkbox v-model="verified[item.id]" />Physically verified: {{ item.name }}</label></div></template>
       <p v-if="error" role="alert" class="text-sm text-destructive">{{ error }} <NuxtLink to="/workshop/recovery" class="underline">Open recovery</NuxtLink></p>
-      <template #actions><Button variant="outline" :disabled="busy" @click="mode = null">Cancel</Button><Button :disabled="busy" @click="confirm">{{ mode === 'condition' ? "Confirm condition" : "Confirm return" }}</Button></template>
+      <template #actions><template v-if="mode !== null"><Button variant="outline" :disabled="busy" @click="mode = null">Cancel</Button><Button :disabled="busy" @click="confirm">{{ mode === 'condition' ? "Confirm condition" : "Confirm return" }}</Button></template></template>
     </ActionDialog>
   </BaseCard>
 </template>
