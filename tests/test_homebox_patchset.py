@@ -129,6 +129,45 @@ class HomeboxPatchsetTests(unittest.TestCase):
         camera_save = page[camera_save_start:camera_save_end]
         self.assertIn("item.value.attachments = data.attachments", camera_save)
 
+    def test_item_edit_main_save_updates_before_upload_and_never_retries_uncertain_upload(self):
+        patch = (ROOT / "deploy/homebox-patches/0020-Fix-item-camera-save-and-OCR-races.patch").read_text()
+        edit_start = patch.index("diff --git a/frontend/pages/item/[id]/index/edit.vue")
+        edit_end = patch.find("\ndiff --git ", edit_start + 1)
+        edit_patch = patch[edit_start:edit_end if edit_end >= 0 else None]
+
+        def changed_source_lines(diff):
+            return "\n".join(
+                line[1:] for line in diff.splitlines()
+                if line.startswith(" ") or (line.startswith("+") and not line.startswith("+++"))
+            )
+
+        save_source = changed_source_lines(edit_patch)
+        save_start = save_source.index("async function saveItem(redirect: boolean) {")
+        save_end = save_source.index("async function uploadAttachment", save_start)
+        save_item = save_source[save_start:save_end]
+        photo_start = edit_patch.index("+  async function saveCapturedPhotos()")
+        photo_end = edit_patch.index("   async function saveItem", photo_start)
+        save_photos = changed_source_lines(edit_patch[photo_start:photo_end])
+
+        update_call = save_item.index("await api.items.update(itemId.value, payload)")
+        update_failure = save_item.index("if (error)", update_call)
+        update_failure_return = save_item.index("return;", update_failure)
+        upload_call = save_item.index("await saveCapturedPhotos()", update_failure)
+        upload_failure_return = save_item.index("return;", upload_call)
+        navigation_call = save_item.index('navigateTo("/location/" + itemId.value)', upload_call)
+        self.assertLess(update_call, update_failure)
+        self.assertLess(update_failure, update_failure_return)
+        self.assertLess(update_failure_return, upload_call)
+        self.assertLess(upload_call, upload_failure_return)
+        self.assertLess(upload_failure_return, navigation_call)
+        self.assertLess(upload_call, navigation_call)
+        self.assertIn("if (capturedPhotos.value.length && !(await saveCapturedPhotos()))", save_item)
+        upload_error_start = save_photos.index("if (!uploaded)")
+        upload_error_end = save_photos.index("return false", upload_error_start)
+        self.assertIn("capturedPhotoSaveUncertain.value = true", save_photos[upload_error_start:upload_error_end])
+        self.assertIn("if (savingCapturedPhotos.value || capturedPhotoSaveUncertain.value", save_photos)
+        self.assertIn("return false", save_photos)
+
     def test_docker_build_stage_copies_homebox_patchset_inputs(self):
         dockerfile = (ROOT / "Dockerfile").read_text()
 
@@ -242,3 +281,4 @@ class HomeboxPatchsetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
