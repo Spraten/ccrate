@@ -50,6 +50,123 @@ def isolated_builder_prepare(build_root, materializer_work_root):
 
 
 class HomeboxUiBuilderTests(unittest.TestCase):
+    def test_typecheck_tool_failure_is_not_misclassified_as_upstream_diagnostics(self):
+        known_diagnostic = "frontend/example.ts(4,8): error TS2307: Cannot find module 'upstream-module'.\n"
+        tool_failure = "ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command \"nuxi\" not found\n"
+        baseline = {"pin": "a" * 40, "diagnostics": [["frontend/example.ts", "TS2307", "Cannot find module 'upstream-module'."]]}
+
+        self.assertFalse(BUILDER.has_frontend_tool_failure(known_diagnostic))
+        self.assertTrue(BUILDER.has_frontend_tool_failure(known_diagnostic + tool_failure))
+        for tool_error in (
+            "Error: ENOSPC: no space left on device\n",
+            "Error: EACCES: permission denied\n",
+        ):
+            self.assertTrue(BUILDER.has_frontend_tool_failure(known_diagnostic + tool_error))
+        self.assertTrue(BUILDER.is_only_known_upstream_typecheck_failure(known_diagnostic, baseline, "a" * 40))
+        self.assertFalse(BUILDER.is_only_known_upstream_typecheck_failure(known_diagnostic + tool_failure, baseline, "a" * 40))
+        self.assertFalse(BUILDER.is_only_known_upstream_typecheck_failure(known_diagnostic + "Error: ENOSPC: no space left on device\n", baseline, "a" * 40))
+
+    def test_cli_full_build_uses_a_fresh_disposable_root_and_scopes_typecheck_log(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            test_root = pathlib.Path(directory)
+            build_root = test_root / "disposable-frontend"
+            toolchain_root = test_root / "toolchain"
+            repo_work = test_root / "work"
+            repo_work.mkdir()
+            default_typecheck_log = repo_work / "homebox-ui-typecheck.log"
+            default_typecheck_log.write_text("keep default build log")
+            (toolchain_root / "node-path.txt").parent.mkdir(parents=True)
+            (toolchain_root / "node-path.txt").write_text(str(test_root / "node"))
+            wasi_binding = toolchain_root / "oxc-wasi/node_modules/@oxc-parser/binding-wasm32-wasi"
+            wasi_binding.mkdir(parents=True)
+            oxc_binding = pathlib.Path("node_modules/.pnpm/oxc-parser@0.72.3/node_modules/oxc-parser/bindings.js")
+
+            previous_build = BUILDER.BUILD
+            previous_root = BUILDER.ROOT
+            previous_toolchain = BUILDER.TOOLCHAIN_ROOT
+            previous_upstream = BUILDER.UPSTREAM_ROOT
+            previous_prepare = BUILDER.prepare
+            previous_runner = BUILDER.run_frontend_command
+            previous_subprocess_run = BUILDER.subprocess.run
+            previous_argv = sys.argv
+            prepared_roots = []
+            commands = []
+            stdout = io.StringIO()
+
+            def prepare():
+                prepared_roots.append(BUILDER.BUILD)
+                binding = BUILDER.BUILD / oxc_binding
+                binding.parent.mkdir(parents=True)
+                binding.write_text("nativeBinding = requireNative()")
+
+            def run_command(command, *, cwd, env):
+                prepared_roots.append(cwd)
+                commands.append(command)
+                if command[1:3] == ["install", "--frozen-lockfile"]:
+                    self.assertIn("--ignore-scripts", command)
+                    self.assertIn("requireNative()", (cwd / oxc_binding).read_text())
+                if command[1:] == ["exec", "nuxt", "prepare"]:
+                    configured_binding = (cwd / oxc_binding).read_text()
+                    self.assertNotIn("requireNative()", configured_binding)
+                    self.assertIn(repr(str(wasi_binding)), configured_binding)
+
+            BUILDER.prepare = prepare
+            BUILDER.run_frontend_command = run_command
+            BUILDER.subprocess.run = lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
+            BUILDER.ROOT = test_root
+            sys.argv = [
+                "build-homebox-ui.py",
+                "--build-root",
+                str(build_root),
+                "--toolchain-root",
+                str(toolchain_root),
+            ]
+            try:
+                with contextlib.redirect_stdout(stdout):
+                    BUILDER.build()
+            finally:
+                BUILDER.BUILD = previous_build
+                BUILDER.ROOT = previous_root
+                BUILDER.TOOLCHAIN_ROOT = previous_toolchain
+                BUILDER.UPSTREAM_ROOT = previous_upstream
+                BUILDER.prepare = previous_prepare
+                BUILDER.run_frontend_command = previous_runner
+                BUILDER.subprocess.run = previous_subprocess_run
+                sys.argv = previous_argv
+
+            self.assertEqual(prepared_roots, [build_root.resolve()] * 4)
+            self.assertEqual(
+                [command[1:] for command in commands],
+                [["install", "--frozen-lockfile", "--ignore-scripts"], ["exec", "nuxt", "prepare"], ["run", "build"]],
+            )
+            self.assertIn("Installing frontend dependencies in disposable workspace", stdout.getvalue())
+            self.assertIn("Nuxt preparation complete", stdout.getvalue())
+            self.assertTrue((build_root / "homebox-ui-typecheck.log").is_file())
+            self.assertEqual(default_typecheck_log.read_text(), "keep default build log")
+            self.assertTrue(build_root.is_dir())
+
+    def test_cli_rejects_a_nonempty_disposable_build_root_without_touching_it(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            test_root = pathlib.Path(directory)
+            build_root = test_root / "disposable-frontend"
+            build_root.mkdir()
+            sentinel = build_root / "keep-me.txt"
+            sentinel.write_text("existing workspace")
+            previous_argv = sys.argv
+            stderr = io.StringIO()
+            sys.argv = ["build-homebox-ui.py", "--build-root", str(build_root)]
+            try:
+                with contextlib.redirect_stderr(stderr):
+                    with self.assertRaises(SystemExit) as raised:
+                        BUILDER.build()
+            finally:
+                sys.argv = previous_argv
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("must be empty", stderr.getvalue())
+            self.assertEqual(sentinel.read_text(), "existing workspace")
+
+
     def test_create_item_actions_are_after_photo_preview_without_changing_form_actions(self):
         source = '''      <PhotoUploader />
       <div class="mt-4 flex flex-row-reverse">
@@ -429,6 +546,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
         self.assertIn("ordinary output", stdout.getvalue())
         self.assertNotIn("WASI is an experimental feature", stderr.getvalue())
         self.assertIn("another API is experimental", stderr.getvalue())
+        self.assertIn("frontend command failed with exit code 7", stderr.getvalue().lower())
 
 
 if __name__ == "__main__":
