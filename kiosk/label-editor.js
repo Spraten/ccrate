@@ -1,4 +1,15 @@
 const LABEL_ACTIONS = new Set(['labels/templates', 'labels/templates/save', 'labels/templates/result', 'labels/preview', 'labels/paper', 'labels/print', 'touch-field']);
+export function createLabelDesignerSaveHandlers({ workspace, setDirty, clearReviews, refresh, onTemplates, onError }) {
+  return {
+    designerDirty(value) { setDirty(value); },
+    designerSaved() {
+      workspace.templateId = '';
+      clearReviews();
+      Promise.resolve().then(refresh).then(onTemplates).catch(onError);
+    },
+  };
+}
+
 function secureNonce() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
   const bytes = new Uint8Array(16); globalThis.crypto.getRandomValues(bytes);
@@ -28,6 +39,7 @@ export function mountLabelDesigner(container, options) {
     if (msg.type === 'session-activity') { options.activity?.(); return; }
     if (msg.type === 'dirty') { dirty = !!msg.data?.dirty; options.dirty?.(dirty); return; }
     if (msg.type === 'busy') { busy = !!msg.data?.busy; options.busy?.(busy); return; }
+    if (msg.type === 'template-saved') { options.saved?.(msg.data); return; }
     if (msg.type === 'ready') { postContext(options.context?.()); return; }
     if (msg.type !== 'request' || !msg.id || !LABEL_ACTIONS.has(msg.action)) return;
     const requestEpoch = epoch;

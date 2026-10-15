@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mountLabelDesigner } from '../kiosk/label-editor.js'
+import { createLabelDesignerSaveHandlers, mountLabelDesigner } from '../kiosk/label-editor.js'
 
 test('proxied selected item context is plain-cloned through the validated bridge and old async results are discarded', async (t) => {
   const prior = Object.fromEntries(['window', 'document', 'location'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
@@ -117,4 +117,62 @@ test('label template saves use the write callback and preserve their idempotency
   await listeners.get('message')({ origin: location.origin, source: iframe.contentWindow, data: { channel: 'label-designer', nonce, type: 'request', id: 'save-2', action: 'labels/templates/save', data: { ...payload, request_key: 'save-key-2' } } })
   assert.equal(sent.at(-1)[0].ok, false)
   assert.equal(sent.at(-1)[0].status, 409, 'the iframe bridge preserves an authoritative rejection status for recovery')
+})
+
+test('only an explicit confirmed template-saved bridge message invokes the saved callback', async (t) => {
+  const prior = Object.fromEntries(['window', 'document', 'location'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
+  t.after(() => {
+    for (const [key, descriptor] of Object.entries(prior)) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else delete globalThis[key]
+    }
+  })
+
+  const listeners = new Map(), style = {}, iframe = { contentWindow: { postMessage() {} }, setAttribute() {}, src: '', title: '' }
+  Object.defineProperty(iframe, 'style', { get: () => style, set: cssText => Object.assign(style, Object.fromEntries(cssText.split(';').filter(Boolean).map(rule => { const [name, value] = rule.split(':').map(part => part.trim()); return [name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()), value] }))) })
+  globalThis.location = { origin: 'https://ccrate.test' }
+  globalThis.document = { createElement: () => iframe }
+  globalThis.window = { innerHeight: 800, crypto: { randomUUID: () => 'nonce-test' }, addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) }
+  const container = { getBoundingClientRect: () => ({ top: 0 }), replaceChildren() {}, append() {}, addEventListener() {}, removeEventListener() {} }
+  const saved = []
+  mountLabelDesigner(container, { src: '/editor.html', context: () => ({ generation: 1, instance: 'a' }), request: async () => null, saved: result => saved.push(result) })
+  const nonce = new URL(iframe.src, location.origin).searchParams.get('nonce')
+  const dispatch = data => listeners.get('message')({ origin: location.origin, source: iframe.contentWindow, data: { channel: 'label-designer', nonce, ...data } })
+
+  dispatch({ type: 'dirty', data: { dirty: true } })
+  dispatch({ type: 'dirty', data: { dirty: false } })
+  assert.deepEqual(saved, [])
+  dispatch({ type: 'template-saved', data: { id: 'template-1', revision: 2 } })
+  assert.deepEqual(saved, [{ id: 'template-1', revision: 2 }])
+})
+
+test('dirty transitions preserve parent label reviews, while confirmed save invalidates before a failed refresh', async () => {
+  const workspace = { templateId: 'template-kept', templates: [], reviews: ['review'], pages: ['letter-page'] }
+  let dirty = false, invalidations = 0, refreshStarted = false, refreshFailure
+  const handlers = createLabelDesignerSaveHandlers({
+    workspace,
+    setDirty: value => { dirty = value },
+    clearReviews: () => { invalidations++; workspace.reviews = []; workspace.pages = [] },
+    refresh: async () => { refreshStarted = true; throw new Error('503') },
+    onTemplates: rows => { workspace.templates = rows },
+    onError: error => { refreshFailure = error.message },
+  })
+
+  handlers.designerDirty(true)
+  handlers.designerDirty(false)
+  assert.equal(dirty, false)
+  assert.equal(workspace.templateId, 'template-kept')
+  assert.deepEqual(workspace.reviews, ['review'])
+  assert.deepEqual(workspace.pages, ['letter-page'])
+  assert.equal(invalidations, 0)
+
+  handlers.designerSaved()
+  assert.equal(invalidations, 1)
+  assert.equal(workspace.templateId, '')
+  assert.deepEqual(workspace.reviews, [])
+  assert.deepEqual(workspace.pages, [])
+  assert.equal(refreshStarted, false, 'refresh starts after synchronous invalidation')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(refreshStarted, true)
+  assert.equal(refreshFailure, '503')
 })

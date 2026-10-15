@@ -2,7 +2,7 @@
 import { mountLabelDesigner } from "../../lib/label-editor.js";
 type SelectedItem = { id: string; name: string; assetId?: string; shortCode?: string; displayId?: string };
 const props = defineProps<{ selectedItem?: SelectedItem }>();
-const emit = defineEmits<{ dirty: [value: boolean]; busy: [value: boolean]; ready: [handle: ReturnType<typeof mountLabelDesigner>]; closed: [] }>();
+const emit = defineEmits<{ dirty: [value: boolean]; busy: [value: boolean]; saved: [result: any]; ready: [handle: ReturnType<typeof mountLabelDesigner>]; closed: [] }>();
 const workshop = useWorkshop();
 const { theme } = useTheme();
 const { selectedId } = useCollections();
@@ -32,7 +32,7 @@ async function request(action: string, data?: any) {
 watch([selectedId, () => workshop.context.value?.identity], () => { if (!frame) return; frame.dispose(); frame = null; emit('dirty', false); emit('busy', false); });
 onMounted(() => {
   if (!frameRoot.value) return;
-  frame = mountLabelDesigner(frameRoot.value, { src: source, context: editorContext, request, write: (action: string, data: any, label: string, subject: string) => { if (action !== "labels/templates/save") throw Error("Use the reviewed item action to confirm physical printing."); return workshop.write(action, data, label, subject); }, dirty: (v: boolean) => emit("dirty", v), busy: (v: boolean) => emit("busy", v) });
+  frame = mountLabelDesigner(frameRoot.value, { src: source, context: editorContext, request, write: (action: string, data: any, label: string, subject: string) => { if (action !== "labels/templates/save") throw Error("Use the reviewed item action to confirm physical printing."); return workshop.write(action, data, label, subject); }, dirty: (v: boolean) => emit("dirty", v), busy: (v: boolean) => emit("busy", v), saved: (result: any) => emit("saved", result) });
   emit("ready", frame);
 });
 watch(() => props.selectedItem, () => { if (frame) frame.updateContext?.(editorContext()); }, { deep: true });
