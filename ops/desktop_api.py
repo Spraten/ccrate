@@ -397,6 +397,11 @@ def get_action(route, query, ctx, deps):
         return {'user': ctx['user'], 'group': ctx['collection'], 'manager': ctx['manager'], 'identity': ctx['identity']}
     if route == 'checkout-cart':
         return checkout_cart_service(deps).get(group, ctx['actor'])
+    if route == 'checkout-availability':
+        values = query.get('ids', [])
+        if len(values) != 1 or not values[0]:
+            raise ValueError('Choose checkout assets to check.')
+        return native_op('checkout', 'checkout_availability', client, dependency(deps, 'ledger'), group, values[0].split(','))
     if route in MANAGER_READS:
         require_manager(ctx)
     if route == 'workshop/checks/list':
