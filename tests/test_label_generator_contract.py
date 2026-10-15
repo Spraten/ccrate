@@ -16,7 +16,7 @@ class LabelGeneratorContractTests(unittest.TestCase):
         self.assertIn('workshop.confirmTemplateSave(data.request_key)', designer)
 
     def test_print_failures_are_visible_and_only_uncertain_outcomes_lock_retry(self):
-        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
+        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text(encoding='utf-8')
         workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text(encoding='utf-8')
         self.assertIn('workspace.printError', component)
         self.assertIn('workspace.printUncertain', component)
@@ -29,11 +29,11 @@ class LabelGeneratorContractTests(unittest.TestCase):
         self.assertIn('if(state.invalidateReview){', workflow, 'a confirmed-unsent print failure must invalidate its old review ID before an explicit retry')
         self.assertIn('clearReviews(false)', workflow, 'failed review invalidation must retain completed physical prints in a multi-item queue')
         self.assertIn('workspace.printedEntityIds?.includes(row.entity_id)', component, 'a fresh preview must not offer labels that already printed before a later queue failure')
-        self.assertIn("invalidateReview: !uncertain", (ROOT / 'homebox-ui/overlay/lib/label-print-recovery.js').read_text())
+        self.assertIn("invalidateReview: !uncertain", (ROOT / 'homebox-ui/overlay/lib/label-print-recovery.js').read_text(encoding='utf-8'))
         self.assertIn('workspace.actions.recovery()', component)
 
     def test_routine_printing_keeps_in_context_preview_and_physical_confirmation(self):
-        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
+        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text(encoding='utf-8')
         workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text(encoding='utf-8')
         self.assertIn('Preview selected labels', component)
         self.assertIn('Preview and print', component)
@@ -56,15 +56,15 @@ class LabelGeneratorContractTests(unittest.TestCase):
         self.assertIn("write('labels/print'", print_action)
 
     def test_generated_asset_id_is_searchable_and_visible_in_label_selection(self):
-        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
+        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text(encoding='utf-8')
         self.assertIn('displayId?: string', component)
         self.assertIn('${item.displayId || ""}', component)
         self.assertIn('Generated ID · {{ item.displayId }}', component)
 
     def test_generator_uses_native_review_and_export_flow(self):
-        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text()
-        route = (ROOT / 'homebox-ui/overlay/pages/workshop/[tool].vue').read_text()
-        workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text()
+        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text(encoding='utf-8')
+        route = (ROOT / 'homebox-ui/overlay/pages/workshop/[tool].vue').read_text(encoding='utf-8')
+        workflow = (ROOT / 'homebox-ui/overlay/lib/workshop-tools.js').read_text(encoding='utf-8')
         self.assertIn('Preview selected labels', component)
         self.assertIn('Compose Letter sheet', component)
         self.assertIn('Download Letter PDF', component)
@@ -84,16 +84,16 @@ class LabelGeneratorContractTests(unittest.TestCase):
         self.assertIn('applyLabelPreview(workspace,ids,result)', workflow)
         self.assertIn('workspace.printedReviewIds.includes(reviewId)', workflow)
         self.assertIn('labelWorkspaceChanged(null', workflow)
-        self.assertIn("if (action !== \"labels/templates/save\")", (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text())
-        editor = (ROOT / 'label-ui/src/editor-host.ts').read_text()
+        self.assertIn("if (action !== \"labels/templates/save\")", (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text(encoding='utf-8'))
+        editor = (ROOT / 'label-ui/src/editor-host.ts').read_text(encoding='utf-8')
         self.assertIn('nextShortCode', editor)
         self.assertIn('nextShortCode !== sampleShortCode.value', editor)
         self.assertIn('draftPreview.invalidate(); closePreview()', editor)
         self.assertIn('short_code', editor)
-        designer = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text()
+        designer = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text(encoding='utf-8')
         self.assertIn('shortCode?: string', designer)
         self.assertIn('short_code:', designer)
-        patch = (ROOT / 'label-ui/patches/0002-label-editor-controls.patch').read_text()
+        patch = (ROOT / 'label-ui/patches/0002-label-editor-controls.patch').read_text(encoding='utf-8')
         self.assertIn("key: 'short-code'", patch)
         self.assertIn("createText(place, '{{short_code}}')", patch)
         self.assertIn("labelKey: 'palette.shortCode'", patch)
@@ -106,8 +106,8 @@ class LabelGeneratorContractTests(unittest.TestCase):
     def test_reference_license_and_attribution_are_retained(self):
         license_file = ROOT / 'homebox-ui/HOMESORTSTUFF-LICENSE.txt'
         self.assertTrue(license_file.is_file())
-        self.assertIn('GNU AFFERO GENERAL PUBLIC LICENSE', license_file.read_text())
-        readme = (ROOT / 'homebox-ui/README.md').read_text()
+        self.assertIn('GNU AFFERO GENERAL PUBLIC LICENSE', license_file.read_text(encoding='utf-8'))
+        readme = (ROOT / 'homebox-ui/README.md').read_text(encoding='utf-8')
         self.assertIn('HomeSortStuff', readme)
         self.assertIn('85b96e5060a48dd11db24addfbc63407eed4e74c', readme)
 
