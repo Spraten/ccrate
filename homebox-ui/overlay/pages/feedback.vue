@@ -3,7 +3,7 @@
   import { Button } from "@/components/ui/button";
   import { Textarea } from "@/components/ui/textarea";
   import { feedbackActionIsCurrent, persistFeedbackStatus, writeFeedbackDraft } from "@/lib/feedback-report-identity.js";
-  import { recoverFeedbackSubmissionError } from "@/lib/feedback-report-state.js";
+  import { feedbackCanSubmit, feedbackRequestIdForSubmit, feedbackStatusFromResult, recoverFeedbackSubmissionError } from "@/lib/feedback-report-state.js";
 
   definePageMeta({ middleware: ["auth"] });
   useHead({ title: "Report feedback · C-Crate" });
@@ -16,7 +16,7 @@
   const issueUrl = ref(""), error = ref(""), checking = ref(false);
   let loadingDraft = false;
   const draftKey = computed(() => auth.user?.id ? `ccrate-feedback-draft:${auth.user.id}` : "");
-  const canSubmit = computed(() => !!description.value.trim() && description.value.trim().length >= 10 && !["sending", "pending", "submitted"].includes(status.value));
+  const canSubmit = computed(() => feedbackCanSubmit(status.value, description.value));
 
   function currentAction() {
     return { actorId: String(auth.user?.id || ""), draftKey: draftKey.value, requestId: requestId.value };
@@ -97,16 +97,14 @@
       error.value = "";
       return;
     }
-    if (result.status === "rejected") status.value = "rejected";
-    else if (result.status === "pending") status.value = "pending";
-    else status.value = "idle";
+    status.value = feedbackStatusFromResult(result);
     error.value = result.error || (status.value === "pending" ? "The result is not confirmed yet. Check status again; the report will not be sent a second time." : "");
   }
 
   async function submit() {
     if (!canSubmit.value) return;
     error.value = "";
-    if (status.value === "rejected") requestId.value = "";
+    requestId.value = feedbackRequestIdForSubmit(status.value, requestId.value);
     if (!requestId.value) requestId.value = newRequestId();
     status.value = "sending";
     const capture = currentAction();
