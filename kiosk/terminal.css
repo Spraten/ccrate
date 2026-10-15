@@ -55,3 +55,38 @@ main:has(.checkout-shell){display:flex;overflow:hidden}.checkout-shell{display:f
 /* Shared workflow controls and forms */
 .workflow-focus-slider{width:180px;height:44px}
 .item-note-textarea{width:100%;font:inherit}
+
+/* Workshop map, planner, storage and controls */
+main.workshop-view{gap:10px}
+.workshop-button{min-height:44px;padding:0 12px;margin:0;font-size:15px}
+.workshop-body{position:relative;display:flex;gap:14px;flex:1;min-height:0}
+.workshop-canvas{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;background:#fff;border:1px solid #cedae2;border-radius:12px;overflow:hidden}
+.workshop-floorplan{display:block;min-width:100%;touch-action:none}
+.workshop-view-tab,.workshop-details-tab{position:absolute;top:50%;transform:translateY(-50%);width:48px;min-height:72px!important;background:#22557d!important;color:white!important;padding:0 5px!important;z-index:3}
+.workshop-view-tab{left:0;border-radius:0 9px 9px 0}.view-tools-open .workshop-view-tab{left:168px}
+.workshop-controls{position:absolute;left:0;top:50%;transform:translateY(-50%);width:168px;display:flex;flex-direction:column;gap:10px;align-items:stretch;padding:14px;background:#fff;border:1px solid #cedae2;border-left:0;border-radius:0 12px 12px 0;box-shadow:3px 2px 12px #20344820;z-index:3}
+.workshop-controls[hidden],.workshop-side[hidden]{display:none}.workshop-controls>span{text-align:center;font-size:18px;font-weight:700}.workshop-controls button{width:100%}
+.workshop-scroll{overflow:auto;flex:1;min-height:0;touch-action:none}
+.workshop-side{position:absolute;right:0;top:0;bottom:0;z-index:4;background:#f7fafb;border:1px solid #cedae2;border-radius:12px;padding:14px!important;width:260px;flex:none;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.workshop-details-tab{right:0;border-radius:9px 0 0 9px;z-index:5}.workshop-body:has(.workshop-side:not([hidden])) .workshop-details-tab{right:260px}
+.workshop-navigator{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.workshop-side h1{font-size:22px}.workshop-side p{font-size:15px;margin:0}
+.workshop-pad{display:flex;gap:5px}.workshop-pad button{flex:1}.workshop-message{padding:10px;background:#fff0cf}
+.workshop-dialog{position:fixed;inset:0;background:#20344899;z-index:11;display:flex;align-items:center;justify-content:center;padding:20px}.workshop-dialog>.notice{max-width:600px;width:100%;max-height:100%;overflow:auto}.workshop-dialog button{margin:6px!important}
+.rack-front{border-left:8px solid #587080;border-right:8px solid #587080;margin:16px 0;padding:8px 12px;max-width:650px;background:#edf2f5}.rack-shelf{display:flex;gap:12px;align-items:center;min-height:75px;border-bottom:7px solid #587080;padding:10px 0}.rack-shelf button{min-width:90px;background:#22557d!important;color:white!important}
+.storage-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}.storage-grid button{min-height:90px;text-align:left;padding:14px!important;background:white!important;color:#203448!important;border:1px solid #cedae2}.storage-grid small{display:block;margin-top:8px;line-height:1.4;font-size:14px;font-weight:400}
+.workshop-native-link{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;margin:4px;background:#dce6ee;color:#203448}.workshop-native-photo{max-width:100%;height:auto}.workshop-object-button{width:100%}
+.storage-breadcrumb{display:flex;gap:6px;overflow:auto;padding:8px 0}
+.task5-input{min-height:44px;margin:0 0 7px}.task5-label{display:block;font-size:13px}.task5-location-select{min-height:44px}.task5-title{font-size:17px;margin:0 4px 0 0;white-space:nowrap}.task5-room-select{min-height:44px;max-width:245px}.task5-floorplan{width:100%;height:100%;touch-action:none}
+@media(min-width:1100px){.workshop-side{position:relative;width:320px;flex:0 0 320px}.workshop-details-tab{display:none}.workshop-body{gap:18px}.workshop-canvas{min-height:400px}}
+@media(max-width:600px){.workshop-body{flex-direction:column}.workshop-canvas{min-height:260px;flex:none}.workshop-side{width:260px;max-width:80%;overflow:auto}.storage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Import review and label selection */
+.import-select{font:inherit;padding:10px;border:1px solid #a3b6c5;border-radius:8px;display:block;width:100%;min-height:48px;margin:8px 0 14px}.import-file{display:block;min-height:52px;max-width:100%}
+.import-row{display:block}.import-row-checkbox{width:auto;margin-right:8px}.import-label-preview{display:block;width:280px;max-width:100%;image-rendering:pixelated}
+
+/* Member and badge controls */
+.member-badge-qr{width:220px;height:220px}.member-badge-revoke{background:#245c89;color:white;padding:0 18px;margin:8px 10px 8px 0}
+.member-avatar-small{vertical-align:middle;margin-right:12px;border-radius:6px}.member-loan-card{display:flex;gap:12px;align-items:flex-start;margin:8px 0}.member-loan-image{width:64px;height:64px;object-fit:contain;flex:none}.member-profile-picture{border-radius:8px}
+
+/* Label editor frames */
+.label-designer-frame{display:block;width:100%;min-height:0;border:0;background:#fff}.reviewed-paper-export-frame{position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:.01;pointer-events:none;z-index:-1}

@@ -29,7 +29,7 @@ export function mountLabelDesigner(container, options) {
     const available = window.innerHeight - container.getBoundingClientRect().top - 72;
     iframe.style.height = `${Math.max(390, Math.min(900, available))}px`;
   };
-  iframe.style = 'display:block;width:100%;min-height:0;border:0;background:#fff';
+  iframe.className = 'label-designer-frame';
   fitFrame();
   window.addEventListener('resize', fitFrame);
   iframe.setAttribute('allow', 'clipboard-read; clipboard-write'); container.replaceChildren(iframe);
@@ -70,7 +70,7 @@ export const createLabelEditorFrame = mountLabelDesigner;
 
 export async function exportReviewedPaper(renderUrl, result, format, isCurrent = () => true) {
   if (!['print', 'pdf'].includes(format) || !Array.isArray(result?.pages) || !result.pages.length || result.pages.length > 2 || result.geometry?.dpi !== 300 || result.geometry.page_mm?.join(',') !== '215.9,279.4') throw new Error('Review a valid Letter sheet before exporting.');
-  const frame = document.createElement('iframe'); frame.title = 'Reviewed paper exporter'; frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0.01;pointer-events:none;z-index:-1'; frame.src = renderUrl;
+  const frame = document.createElement('iframe'); frame.title = 'Reviewed paper exporter'; frame.className = 'reviewed-paper-export-frame'; frame.src = renderUrl;
   document.body.append(frame);
   try {
     await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error('Offline label exporter did not load.')), 10000); frame.onload = () => { clearTimeout(timer); resolve(); }; frame.onerror = () => { clearTimeout(timer); reject(new Error('Offline label exporter did not load.')); }; });

@@ -89,7 +89,7 @@ function memberBadgeAction(action, member, badge = null, returnAction = null) {
             : 'Replacement badge issued. The older badge is revoked; printing is a separate confirmation.'));
       if (savedAction.error) panel.append(node('p', savedAction.error));
       if (['issue', 'replace'].includes(action) && result.qr && result.code) {
-        const image = node('img'); image.src = result.qr; image.alt = 'Person badge QR'; image.style = 'width:220px;height:220px';
+        const image = node('img'); image.src = result.qr; image.alt = 'Person badge QR'; image.className = 'member-badge-qr';
         memberBadgeQrImage = image; memberBadgePrint = { badgeId: result.id, code: result.code, key: crypto.randomUUID() };
         memberBadgeQrOwnership = { recipientId: member.id, operatorId: identityUserId, generation: identityGeneration, instance: identityInstance };
         panel.append(image, printButton());
@@ -225,7 +225,7 @@ async function userBadges(member) {
       row.append(node('p', 'Issued '+date+' · ID '+badge.id.slice(0, 8)+' · '+(badge.revoked ? 'Revoked' : 'Active')+(badge.reprintable ? ' · Reprintable' : ' · Older QR not saved')));
       if (!badge.revoked) {
         const revoke = node('button', 'Revoke badge');
-        revoke.style = 'background:#245c89;color:white;padding:0 18px;margin:8px 10px 8px 0';
+        revoke.className = 'member-badge-revoke';
         revoke.onclick = () => revokeMemberBadge(member, badge, () => userBadges(member));
         row.append(revoke);
       }
@@ -287,7 +287,7 @@ async function userManager() {
       results.replaceChildren();
       for (const member of members.filter(row => `${row.name} ${row.email || ''} ${row.id}`.toLowerCase().includes(search.value.toLowerCase()))) {
         const button = primary('Manage profile: '+member.name+' · ID '+member.id.slice(0, 8), () => userProfile(member.id));
-        const picture = node('img'); picture.src = member.avatar || memberAvatar(member.id); picture.alt = ''; picture.width = 40; picture.height = 40; picture.style = 'vertical-align:middle;margin-right:12px;border-radius:6px'; button.prepend(picture); results.append(button);
+        const picture = node('img'); picture.src = member.avatar || memberAvatar(member.id); picture.alt = ''; picture.width = 40; picture.height = 40; picture.className = 'member-avatar-small'; button.prepend(picture); results.append(button);
         results.append(primary('Manage badges: '+member.name+' · ID '+member.id.slice(0, 8), () => userBadges(member)));
         const owned = loans?.filter(row => row.actor_id === member.id) || [];
         const details = node('details'), summary = node('summary');
@@ -299,10 +299,10 @@ async function userManager() {
           details.append(primary('Reload items', userManager));
         } else {
           for (const item of owned) {
-            const card = node('div', undefined, 'notice'); card.style = 'display:flex;gap:12px;align-items:flex-start;margin:8px 0';
+            const card = node('div', undefined, 'notice member-loan-card');
             if (item.imageId) {
               const image = node('img'); image.src = '/api/file?entity='+encodeURIComponent(item.entity_id)+'&attachment='+encodeURIComponent(item.imageId);
-              image.alt = 'Preview of '+(item.entity_name || 'unavailable item'); image.loading = 'lazy'; image.style = 'width:64px;height:64px;object-fit:contain;flex:none';
+              image.alt = 'Preview of '+(item.entity_name || 'unavailable item'); image.loading = 'lazy'; image.className = 'member-loan-image';
               image.onerror = () => { const placeholder = node('div', 'Photo unavailable', 'notice'); placeholder.setAttribute('role', 'img'); placeholder.setAttribute('aria-label', 'Photo unavailable for '+(item.entity_name || 'item')); image.replaceWith(placeholder); };
               card.append(image);
             } else {
@@ -339,7 +339,7 @@ async function userForm(isNew) {
   heading(isNew ? 'Create user' : 'Manage profile'); const revision = routeRevision, panel = node('div', undefined, 'notice'); view.append(panel);
   const { memberAvatar, prepareMemberAvatar } = await import('/member-avatar.js');
   if (revision !== routeRevision || draft !== memberDraft) return;
-  const picture = node('img'); picture.width = 80; picture.height = 80; picture.style = 'border-radius:8px';
+  const picture = node('img'); picture.width = 80; picture.height = 80; picture.className = 'member-profile-picture';
   const renderPicture = () => { picture.src = draft.avatar || memberAvatar(draft.id); picture.alt = (draft.avatar ? 'Profile picture for ' : 'Generated avatar for ')+(draft.name || 'New user'); };
   renderPicture(); panel.append(picture, node('p', draft.mode === 'badge-only' ? 'Badge-only person' : 'Existing web account'));
   const name = touchField(panel, 'Name', draft, 'name'); name.maxLength = 255;

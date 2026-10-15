@@ -54,3 +54,35 @@ class KioskTerminalAssetTests(unittest.TestCase):
             with self.subTest(source='runtime style injection'):
                 self.assertNotRegex(source, r"node\(['\"]style['\"]\)")
                 self.assertNotIn('document.head.append(', source)
+
+    def test_support_workflow_static_styles_are_defined_in_terminal_css(self):
+        css = (ROOT / 'kiosk/terminal.css').read_text(encoding='utf-8')
+        workshop = (ROOT / 'kiosk/workshop-ui.js').read_text(encoding='utf-8')
+        imports = (ROOT / 'kiosk/import-ui.js').read_text(encoding='utf-8')
+        users = (ROOT / 'kiosk/users-ui.js').read_text(encoding='utf-8')
+        labels = (ROOT / 'kiosk/label-editor.js').read_text(encoding='utf-8')
+
+        class_sources = {
+            '.workshop-button': workshop, '.workshop-native-link': workshop,
+            '.workshop-native-photo': workshop, '.task5-input': workshop,
+            '.task5-label': workshop, '.task5-location-select': workshop,
+            '.import-select': imports, '.import-file': imports,
+            '.import-row-checkbox': imports, '.import-label-preview': imports,
+            '.member-badge-qr': users, '.member-badge-revoke': users,
+            '.member-avatar-small': users, '.member-loan-card': users,
+            '.member-loan-image': users, '.member-profile-picture': users,
+            '.label-designer-frame': labels,
+            '.reviewed-paper-export-frame': labels,
+        }
+        for selector, source in class_sources.items():
+            with self.subTest(selector=selector):
+                self.assertIn(selector, css)
+                self.assertIn(selector[1:], source)
+
+        for source in (workshop, imports, users, labels):
+            with self.subTest(source='static inline presentation'):
+                static_styles = source.replace("svg.style.height=`${Math.max(170,scroll.clientHeight-8)}px`", '').replace("iframe.style.height = `${Math.max(390, Math.min(900, available))}px`", '')
+                self.assertNotRegex(static_styles, r"\.style(?:\.[\w]+)?\s*=")
+                self.assertNotRegex(source, r"node\(['\"]style['\"]\)")
+                self.assertNotIn('document.head.append(', source)
+                self.assertNotIn('cssText =', source)
