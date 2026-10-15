@@ -265,6 +265,10 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             body_portal = component.index('<Teleport to="body">')
             self.assertGreater(component.index('<section', body_portal), body_portal)
             self.assertIn('class="relative flex aspect-[4/3]', component)
+            self.assertIn('isOcrCaptureCurrent(generation, cameraGeneration', component)
+            self.assertIn('isOcrScanCurrent(generation, scanGeneration', component)
+            self.assertIn('function cancelPendingScan()', component)
+            self.assertIn('function close() { stopCamera(); cancelPendingScan();', component)
 
     def test_prepare_api_test_rewrite_is_idempotent_when_first_fixture_is_already_patched(self):
         source = '''    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;
