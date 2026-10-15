@@ -485,3 +485,51 @@ func TestSingleEntityReadsCloseCrossBaseCollisionFamilies(t *testing.T) {
 	require.ElementsMatch(t,[]string{"BIN-D-C-1-1-1","BIN-D-C-1-2","BIN-D-C-1-1-2"},[]string{first.DisplayID,second.DisplayID,natural.DisplayID})
 	for _,item:=range []EntityOut{first,second,natural} { result,err:=tRepos.Entities.QueryByGroup(ctx,gid,EntityQuery{Page:-1,PageSize:-1,Search:item.DisplayID}); require.NoError(t,err); require.Len(t,result.Items,1); require.Equal(t,item.ID,result.Items[0].ID) }
 }
+
+func TestExactDisplayIDLookupReadsOverlappingSeedFamiliesOnce(t *testing.T) {
+	ctx, gid := context.Background(), tGroup.ID
+	typeInfo, err := tRepos.EntityTypes.Create(ctx, gid, EntityTypeCreate{Name: "Lookup Test"})
+	require.NoError(t, err)
+	const base = "LOOKUP-1"
+	ids := make([]uuid.UUID, 0, 3)
+	create := func(assetID int64, displayIDBase string) uuid.UUID {
+		item, err := tClient.Entity.Create().
+			SetName("Lookup test item").SetDescription("").
+			SetGroupID(gid).SetEntityTypeID(typeInfo.ID).
+			SetAssetID(assetID).SetDisplayIDBase(displayIDBase).Save(ctx)
+		require.NoError(t, err)
+		ids = append(ids, item.ID)
+		return item.ID
+	}
+	create(1, base)
+	create(2, base)
+	exactID := create(3, base+"-1")
+	t.Cleanup(func() {
+		for _, id := range ids {
+			_ = tRepos.Entities.Delete(ctx, id)
+		}
+		_ = tRepos.EntityTypes.Delete(ctx, gid, typeInfo.ID)
+	})
+
+	queryClient, err := ent.Open("sqlite3", "file:ent?mode=memory&cache=shared&_fk=1&_time_format=sqlite")
+	require.NoError(t, err)
+	defer queryClient.Close()
+	entityQueries := 0
+	queryClient.Entity.Intercept(ent.InterceptFunc(func(next ent.Querier) ent.Querier {
+		return ent.QuerierFunc(func(ctx context.Context, query ent.Query) (ent.Value, error) {
+			if _, ok := query.(*ent.EntityQuery); ok {
+				entityQueries++
+			}
+			return next.Query(ctx, query)
+		})
+	}))
+	originalEntityClient := tClient.Entity
+	tClient.Entity = queryClient.Entity
+	defer func() { tClient.Entity = originalEntityClient }()
+
+	matchedID, found, err := tRepos.Entities.findDisplayIDSearchMatch(ctx, gid, base+"-1-2")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, exactID, matchedID)
+	require.Equal(t, 2, entityQueries, "exact lookup should read the overlapping seed families once, plus the newly discovered closure family")
+}

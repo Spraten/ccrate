@@ -99,23 +99,33 @@ func refreshDisplayIDBasesForRoots(ctx context.Context, tx *ent.Tx, gid uuid.UUI
 // populateDisplayIDs loads only indexed base families for the returned rows,
 // then follows overlapping suffix interpretations until the component closes.
 func (r *EntityRepository) populateDisplayIDs(ctx context.Context, gid uuid.UUID, items []EntitySummary) error {
+	return r.populateDisplayIDsWithSeed(ctx, gid, items, nil)
+}
+
+func (r *EntityRepository) populateDisplayIDsWithSeed(ctx context.Context, gid uuid.UUID, items []EntitySummary, queriedBases []string) error {
 	if len(items)==0 { return nil }
 	bases:=map[string]bool{}; for _,item:=range items { if item.DisplayIDBase!="" { bases[item.DisplayIDBase]=true } }
 	loaded:=map[uuid.UUID]EntitySummary{}
 	loadedBases:=map[string]bool{}
 	searched:=map[string]bool{}
+	for _,base:=range queriedBases { searched[base]=true }
+	if len(queriedBases)>0 { for _,item:=range items { loaded[item.ID]=item; loadedBases[item.DisplayIDBase]=true } }
+	assigned:=map[string]string{}
+	assignLoaded:=func() {
+		entries:=make([]displayids.Entry,0,len(loaded)); for _,summary:=range loaded { entries=append(entries,displayids.Entry{ID:summary.ID.String(),AssetID:int64(summary.AssetID),Base:summary.DisplayIDBase}) }
+		assigned=displayids.Assign(entries)
+		bases=map[string]bool{}
+		for _,id:=range assigned { for _,candidate:=range displayids.SearchBases(id) { if !loadedBases[candidate]&&!searched[candidate] { bases[candidate]=true } } }
+	}
+	if len(queriedBases)>0 { assignLoaded() }
 	for len(bases)>0 {
 		batch:=make([]string,0,len(bases)); for base:=range bases { if !searched[base] { batch=append(batch,base); searched[base]=true } }; bases=map[string]bool{}
 		if len(batch)==0 { break }
 		records,err:=r.db.Entity.Query().Where(entity.HasGroupWith(group.ID(gid)),entity.DisplayIDBaseIn(batch...)).WithParent().WithEntityType().All(ctx)
 		if err!=nil { return fmt.Errorf("load display ID collision families: %w",err) }
 		for _,record:=range records { summary:=mapEntitySummary(record); loaded[summary.ID]=summary; loadedBases[summary.DisplayIDBase]=true }
-		entries:=make([]displayids.Entry,0,len(loaded)); for _,summary:=range loaded { entries=append(entries,displayids.Entry{ID:summary.ID.String(),AssetID:int64(summary.AssetID),Base:summary.DisplayIDBase}) }
-		assigned:=displayids.Assign(entries)
-		for _,id:=range assigned { for _,candidate:=range displayids.SearchBases(id) { if !loadedBases[candidate]&&!searched[candidate] { bases[candidate]=true } } }
+		assignLoaded()
 	}
-	entries:=make([]displayids.Entry,0,len(loaded)); for _,summary:=range loaded { entries=append(entries,displayids.Entry{ID:summary.ID.String(),AssetID:int64(summary.AssetID),Base:summary.DisplayIDBase}) }
-	assigned:=displayids.Assign(entries)
 	ancestors:=map[uuid.UUID]EntitySummary{}; frontier:=map[uuid.UUID]bool{}
 	for _,item:=range items { if item.Parent!=nil { frontier[item.Parent.ID]=true } }
 	for len(frontier)>0 {
@@ -145,7 +155,7 @@ func (r *EntityRepository) findDisplayIDSearchMatch(ctx context.Context, gid uui
 	for _, record := range records {
 		items = append(items, mapEntitySummary(record))
 	}
-	if err := r.populateDisplayIDs(ctx, gid, items); err != nil {
+	if err := r.populateDisplayIDsWithSeed(ctx, gid, items, bases); err != nil {
 		return uuid.Nil, false, err
 	}
 	for _, item := range items {
