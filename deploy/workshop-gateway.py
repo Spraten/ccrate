@@ -73,7 +73,13 @@ self.addEventListener('activate', event => {event.waitUntil((async () => {
 // Deliberately no fetch handler: Homebox and Workshop load from this Pi.
 '''
 def valid_host(value):
-    return valid_native_host(value, PORT, local_hosts())
+    hosts = local_hosts()
+    if valid_native_host(value, PORT, hosts):
+        return True
+    if os.environ.get('WORKSHOP_LOCAL_TEST') != '1':
+        return False
+    public_port = os.environ.get('WORKSHOP_LOCAL_TEST_PUBLIC_PORT', '')
+    return bool(public_port and valid_native_host(value, public_port, hosts))
 
 
 def feedback_actor_matches(expected, actual):
