@@ -19,3 +19,11 @@ export function isOcrScanCurrent(scanGeneration, currentGeneration, state) {
   return scanGeneration === currentGeneration
     && state.enabled && state.open && !state.minimized && !state.disposed;
 }
+
+/** @param {{ left: number, top: number }} position @param {number} viewportWidth @param {number} viewportHeight @param {number} panelWidth */
+export function clampOcrPopoverPosition(position, viewportWidth, viewportHeight, panelWidth) {
+  return {
+    left: Math.min(Math.max(0, position.left), Math.max(0, viewportWidth - panelWidth)),
+    top: Math.min(Math.max(0, position.top), Math.max(0, viewportHeight - 72)),
+  };
+}

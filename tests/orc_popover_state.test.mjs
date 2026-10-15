@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isOcrCaptureCurrent, isOcrScanCurrent, nextOcrPopoverState } from '../homebox-ui/overlay/lib/orc-popover-state.js';
+import { clampOcrPopoverPosition, isOcrCaptureCurrent, isOcrScanCurrent, nextOcrPopoverState } from '../homebox-ui/overlay/lib/orc-popover-state.js';
 
 test('enabling OCR exposes its launcher without opening the popout', () => {
   assert.deepEqual(
@@ -61,4 +61,9 @@ test('OCR scan results are invalidated when the popout is closed, minimized, dis
   ]) {
     assert.equal(isOcrScanCurrent(7, 7, { ...active, ...changed }), false);
   }
+});
+
+test('resizing or moving the popout down keeps its drag handle visible', () => {
+  assert.deepEqual(clampOcrPopoverPosition({ left: 900, top: 880 }, 800, 900, 384), { left: 416, top: 828 });
+  assert.deepEqual(clampOcrPopoverPosition({ left: 100, top: 500 }, 400, 200, 384), { left: 16, top: 128 });
 });

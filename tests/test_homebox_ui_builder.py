@@ -469,6 +469,9 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertIn('from "~/lib/local-ocr"', component)
             self.assertIn('<Teleport defer :to="props.launcherTarget">', component)
             self.assertIn(':aria-pressed="enabled"', component)
+            self.assertIn('Enable text capture', component)
+            self.assertIn('Text capture {{ enabled ? "on" : "off" }}', component)
+            self.assertIn('Text capture <span class="text-xs font-normal text-muted-foreground"', component)
             self.assertIn('v-if="enabled && !open"', component)
             self.assertIn('@click="toggleEnabled"', component)
             self.assertIn('@click="show"', component)
@@ -479,6 +482,11 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertIn('isOcrScanCurrent(generation, scanGeneration', component)
             self.assertIn('function cancelPendingScan()', component)
             self.assertIn('function close() { stopCamera(); cancelPendingScan();', component)
+            self.assertIn('function cancelPendingCopy()', component)
+            self.assertIn('isOcrScanCurrent(generation, copyGeneration', component)
+            self.assertIn('tabindex="0"', component)
+            self.assertIn('@keydown="moveByKeyboard"', component)
+            self.assertIn('window.addEventListener("resize", clampPosition)', component)
 
     def test_prepare_api_test_rewrite_is_idempotent_when_first_fixture_is_already_patched(self):
         source = '''    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;
