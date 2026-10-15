@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
-const returns = readFileSync(new URL('../kiosk/return-ui.js', import.meta.url), 'utf8');
+const returns = readFileSync(new URL('../kiosk/return-ui.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const checkout = readFileSync(new URL('../kiosk/checkout-ui.js', import.meta.url), 'utf8');
 const section = (source, start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const returnGate = [

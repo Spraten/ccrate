@@ -15,6 +15,47 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class HomeboxPatchsetTests(unittest.TestCase):
+    def test_apply_patchset_normalizes_windows_line_endings_in_patch_files(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+            root = pathlib.Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            (source / "message.txt").write_bytes(b"before\n")
+            patch = root / "windows.patch"
+            patch.write_bytes(
+                b"diff --git a/message.txt b/message.txt\r\n"
+                b"--- a/message.txt\r\n"
+                b"+++ b/message.txt\r\n"
+                b"@@ -1 +1 @@\r\n"
+                b"-before\r\n"
+                b"+after\r\n"
+            )
+
+            apply_patchset(source, [patch])
+
+            self.assertEqual((source / "message.txt").read_text(), "after\n")
+
+    def test_apply_patchset_removes_temporary_patch_when_opening_it_fails(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+            root = pathlib.Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            patch = root / "windows.patch"
+            patch.write_bytes(
+                b"diff --git a/message.txt b/message.txt\r\n"
+                b"--- a/message.txt\r\n"
+                b"+++ b/message.txt\r\n"
+                b"@@ -1 +1 @@\r\n"
+                b"-before\r\n"
+                b"+after\r\n"
+            )
+
+            with mock.patch("deploy.homebox_patchset.os.fdopen", side_effect=OSError("injected fdopen failure")):
+                with self.assertRaisesRegex(OSError, "injected fdopen failure"):
+                    apply_patchset(source, [patch])
+
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["source", "windows.patch"])
+
     def test_create_item_actions_follow_photo_preview_and_preserve_submission(self):
         base, patches, _ = load_patchset(ROOT)
         upstream = ROOT / "upstream" / "homebox"

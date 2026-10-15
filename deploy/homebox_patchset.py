@@ -41,19 +41,40 @@ def apply_patchset(source: pathlib.Path, patches: list[pathlib.Path]) -> None:
     environment = os.environ.copy()
     environment["GIT_CEILING_DIRECTORIES"] = str(source.parent.resolve())
     for patch in patches:
-        for command in (["git", "apply", "--check", str(patch)], ["git", "apply", str(patch)]):
-            try:
-                subprocess.run(
-                    command,
-                    cwd=source,
-                    check=True,
-                    env=environment,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-            except subprocess.CalledProcessError as error:
-                detail = error.stderr.decode("utf-8", errors="replace").strip()
-                raise RuntimeError(f"Could not apply Homebox patch {patch.name}: {detail}") from error
+        patch_to_apply = patch
+        descriptor = None
+        temporary_patch = None
+        try:
+            content = patch.read_bytes()
+            if b"\r\n" in content:
+                descriptor, name = tempfile.mkstemp(suffix=".patch", dir=source.parent)
+                temporary_patch = pathlib.Path(name)
+                output = os.fdopen(descriptor, "wb")
+                descriptor = None  # The file object now owns the descriptor.
+                with output:
+                    output.write(content.replace(b"\r\n", b"\n"))
+                patch_to_apply = temporary_patch
+            for command in (["git", "apply", "--check", str(patch_to_apply)], ["git", "apply", str(patch_to_apply)]):
+                try:
+                    subprocess.run(
+                        command,
+                        cwd=source,
+                        check=True,
+                        env=environment,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                except subprocess.CalledProcessError as error:
+                    detail = error.stderr.decode("utf-8", errors="replace").strip()
+                    raise RuntimeError(f"Could not apply Homebox patch {patch.name}: {detail}") from error
+        finally:
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+            if temporary_patch is not None:
+                temporary_patch.unlink(missing_ok=True)
 
 
 def source_commit(upstream: pathlib.Path) -> str:
