@@ -209,6 +209,37 @@ test('keeps unfocused status when a delayed scan result arrives', async () => {
   }
 });
 
+test('keeps the newest scan feedback when scans finish out of order', async () => {
+  const priorDocument = global.document;
+  global.document = fakeDocument();
+  const overlay = { append(panel) { panel.isConnected = true; this.panel = panel; } };
+  const pending = new Map();
+  try {
+    const input = mountScannerCapture(overlay, code => new Promise(resolve => pending.set(code, resolve)));
+    const [, , captureInput, , status] = overlay.panel.children;
+    input.focus();
+
+    captureInput.value = 'OLD-CODE';
+    captureInput.key('Enter');
+    captureInput.value = 'NEW-CODE';
+    captureInput.key('Enter');
+
+    pending.get('NEW-CODE')('New scan matched');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(status.textContent, /New scan matched/);
+    assert.match(status.textContent, /Last scan: NEW-CODE/);
+
+    pending.get('OLD-CODE')('Old scan unmatched');
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.match(status.textContent, /New scan matched/);
+    assert.match(status.textContent, /Last scan: NEW-CODE/);
+    assert.doesNotMatch(status.textContent, /Old scan unmatched/);
+  } finally {
+    global.document = priorDocument;
+  }
+});
+
 test('scanner helper load or initialization failure leaves a clear fallback status', () => {
   for (const mount of [undefined, () => { throw new Error('init failed'); }]) {
     const overlay = { children: [], append(status) { status.isConnected = true; this.children.push(status); } };

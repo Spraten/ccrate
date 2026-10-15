@@ -100,9 +100,11 @@ class HomeboxPatchsetTests(unittest.TestCase):
     def test_camera_error_mapping_distinguishes_missing_device(self):
         patch = (ROOT / "deploy/homebox-patches/0020-Fix-item-camera-save-and-OCR-races.patch").read_text()
 
-        self.assertIn('name === "NotFoundError" || name === "DevicesNotFoundError" ? "unavailable" : "permission_error"', patch)
+        self.assertIn('if (name === "NotFoundError" || name === "DevicesNotFoundError") return "unavailable";', patch)
+        self.assertIn('name === "NotAllowedError" || name === "PermissionDeniedError" ? "permission_error" : "startup_error"', patch)
         self.assertIn('cameraErrorMessageKey(error)', patch)
-        self.assertIn('maps missing devices to unavailable and permission failures', patch)
+        self.assertIn('maps missing devices, permission failures, and camera startup errors', patch)
+        self.assertIn('"startup_error": "Camera could not start. Check whether it is already in use, then try again."', patch)
 
     def test_materialized_camera_dialog_imports_error_classifier(self):
         base, patches, _ = load_patchset(ROOT)
@@ -117,9 +119,15 @@ class HomeboxPatchsetTests(unittest.TestCase):
 
             dialog = (source / "frontend/components/Form/CameraCaptureDialog.vue").read_text()
             page = (source / "frontend/pages/item/[id]/index/edit.vue").read_text()
+            camera = (source / "frontend/components/Form/camera.ts").read_text()
+            camera_test = (source / "frontend/components/Form/camera.test.ts").read_text()
+            english = (source / "frontend/locales/en.json").read_text()
 
         self.assertIn("CameraStreamSession, cameraErrorMessageKey, canvasToPhotoFile", dialog)
         self.assertIn("cameraErrorMessageKey(error)", dialog)
+        self.assertIn('NotReadableError', camera_test)
+        self.assertIn('"startup_error"', camera)
+        self.assertIn('"startup_error": "Camera could not start.', english)
         upload_start = page.index("async function uploadAttachment")
         upload_end = page.index("const confirm = useConfirm()", upload_start)
         upload = page[upload_start:upload_end]

@@ -19,7 +19,26 @@ describe('wrapText', () => {
 
   it('greedy-wraps on spaces', () => {
     // "aa bb cc" with width 5: "aa bb" fits, "cc" wraps.
-    expect(wrapText('aa bb cc', 5, mono)).toEqual(['aa bb', 'cc'])
+    expect(wrapText('aa bb cc', 5, mono)).toEqual(['aa bb ', 'cc'])
+  })
+
+  it('preserves leading spaces like whitespace-pre-wrap', () => {
+    expect(wrapText('  ABC', 20, { measure: s => s.length })).toEqual(['  ABC'])
+  })
+
+  it('keeps leading spaces on the line where they wrap', () => {
+    expect(wrapText(' a', 1, { measure: s => s.length })).toEqual([' ', 'a'])
+  })
+
+  it('keeps a space before a wrapped word on the previous line', () => {
+    expect(wrapText('a b', 2, { measure: s => s.length })).toEqual(['a ', 'b'])
+    expect(wrapText('a  b', 3, { measure: s => s.length })).toEqual(['a  ', 'b'])
+    expect(wrapText('a  b', 1, { measure: s => s.length })).toEqual(['a  ', 'b'])
+    expect(wrapText('a   ', 1, { measure: s => s.length })).toEqual(['a   '])
+  })
+
+  it('does not turn wrapped trailing spaces into an extra empty line', () => {
+    expect(wrapText('a ', 1, { measure: s => s.length })).toEqual(['a '])
   })
 
   it('breaks a word wider than the box at character level', () => {

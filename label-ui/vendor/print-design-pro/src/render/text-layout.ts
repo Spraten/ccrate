@@ -31,24 +31,31 @@ export function wrapText(content: string, maxWidth: number, measurer: TextMeasur
       lines.push('')
       continue
     }
-    let current = ''
-    for (const word of paragraph.split(' ')) {
-      const candidate = current === '' ? word : `${current} ${word}`
-      if (measurer.measure(candidate) <= maxWidth) {
-        current = candidate
+    let current: string | undefined
+    let spaces = ''
+    for (const token of paragraph.match(/ +|[^ ]+/g) ?? []) {
+      if (token.startsWith(' ')) {
+        spaces += token
         continue
       }
-      // Word does not fit after the current line - flush what we have.
-      // (Both branches below reassign `current`.)
-      if (current !== '')
-        lines.push(current)
+      const candidate = current === undefined ? `${spaces}${token}` : `${current}${spaces}${token}`
+      if (measurer.measure(candidate) <= maxWidth) {
+        current = candidate
+        spaces = ''
+        continue
+      }
+      if (current !== undefined)
+        lines.push(`${current}${spaces}`)
+      else if (spaces !== '')
+        lines.push(spaces)
+      spaces = ''
       // break-words: a single word wider than the box splits per character.
-      if (measurer.measure(word) <= maxWidth) {
-        current = word
+      if (measurer.measure(token) <= maxWidth) {
+        current = token
       }
       else {
         let chunk = ''
-        for (const char of splitGraphemes(word)) {
+        for (const char of splitGraphemes(token)) {
           if (chunk !== '' && measurer.measure(chunk + char) > maxWidth) {
             lines.push(chunk)
             chunk = char
@@ -60,7 +67,10 @@ export function wrapText(content: string, maxWidth: number, measurer: TextMeasur
         current = chunk
       }
     }
-    lines.push(current)
+    if (current !== undefined)
+      lines.push(`${current}${spaces}`)
+    else if (spaces !== '')
+      lines.push(spaces)
   }
 
   return lines

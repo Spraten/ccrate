@@ -4,14 +4,15 @@ Date: Wed, 14 Oct 2026 06:33:36 -0400
 Subject: [PATCH 20/23] Fix item camera save and OCR races
 
 ---
- .../components/Form/CameraCaptureDialog.vue   | 44 ++++++----
- .../components/Form/PhotoUploaderPreview.vue  |  6 +-
- frontend/components/Form/camera.test.ts       | 48 +++++++++-
- frontend/components/Form/camera.ts            | 53 ++++++++++-
- .../components/Form/photo-uploader.test.ts    | 48 ++++++++++
- frontend/components/Form/photo-uploader.ts    | 30 ++++++-
- frontend/pages/item/[id]/index/edit.vue       | 88 ++++++++++++++-----
- 7 files changed, 270 insertions(+), 47 deletions(-)
+ frontend/components/Form/CameraCaptureDialog.vue   |  48 ++++++----
+ frontend/components/Form/PhotoUploaderPreview.vue |   6 +
+ frontend/components/Form/camera.test.ts           |  57 ++++++++++++
+ frontend/components/Form/camera.ts                |  59 ++++++++++++
+ frontend/locales/en.json                          |   1
+ frontend/components/Form/photo-uploader.test.ts   |  48 ++++++++++
+ frontend/components/Form/photo-uploader.ts        |  30 ++++++
+ frontend/pages/item/[id]/index/edit.vue           | 100 +++++++++++++++------
+ 8 files changed, 294 insertions(+), 55 deletions(-)
  create mode 100644 frontend/components/Form/photo-uploader.test.ts
 
 diff --git a/frontend/components/Form/CameraCaptureDialog.vue b/frontend/components/Form/CameraCaptureDialog.vue
@@ -172,21 +173,23 @@ diff --git a/frontend/components/Form/camera.test.ts b/frontend/components/Form/
 index 6057e3a8..4d4aca05 100644
 --- a/frontend/components/Form/camera.test.ts
 +++ b/frontend/components/Form/camera.test.ts
-@@ -1,5 +1,12 @@
+@@ -1,5 +1,14 @@
  import { describe, expect, test } from "vitest";
 -import { canvasToPhotoFile, recognizeNameFromFileLocally, recognizeNameLocally } from "./camera";
 +import { CameraStreamSession, cameraErrorMessageKey, canvasToPhotoFile, recognizeNameFromFileLocally, recognizeNameLocally } from "./camera";
  
  describe("local camera helpers", () => {
-+  test("maps missing devices to unavailable and permission failures to permission_error", () => {
++  test("maps missing devices, permission failures, and camera startup errors", () => {
 +    expect(cameraErrorMessageKey({ name: "NotFoundError" })).toBe("unavailable");
 +    expect(cameraErrorMessageKey({ name: "DevicesNotFoundError" })).toBe("unavailable");
 +    expect(cameraErrorMessageKey({ name: "NotAllowedError" })).toBe("permission_error");
-+    expect(cameraErrorMessageKey(new Error("preview failed"))).toBe("permission_error");
++    expect(cameraErrorMessageKey({ name: "PermissionDeniedError" })).toBe("permission_error");
++    expect(cameraErrorMessageKey({ name: "NotReadableError" })).toBe("startup_error");
++    expect(cameraErrorMessageKey(new Error("preview failed"))).toBe("startup_error");
 +  });
 +
    test("converts a captured canvas to a JPEG photo file for the existing preview flow", async () => {
-@@ -21,6 +28,35 @@ describe("local camera helpers", () => {
+@@ -21,6 +30,35 @@ describe("local camera helpers", () => {
      await expect(canvasToPhotoFile(canvas, "item-photo.jpg")).rejects.toThrow("Failed to capture camera frame");
    });
  
@@ -222,7 +225,7 @@ index 6057e3a8..4d4aca05 100644
    test("returns locally recognized text as a single editable name suggestion", async () => {
      const source = {} as HTMLCanvasElement;
      class Detector {
-@@ -33,6 +69,23 @@ describe("local camera helpers", () => {
+@@ -33,6 +71,23 @@ describe("local camera helpers", () => {
      await expect(recognizeNameLocally(source, Detector)).resolves.toBe("ACME Cordless Drill");
    });
  
@@ -257,7 +260,7 @@ index ee914632..64f5f264 100644
  }
  
  export interface LocalTextDetector {
-@@ -12,6 +13,46 @@ type TextDetectorGlobal = typeof globalThis & {
+@@ -12,6 +13,47 @@ type TextDetectorGlobal = typeof globalThis & {
    TextDetector?: LocalTextDetectorConstructor;
  };
  
@@ -296,15 +299,16 @@ index ee914632..64f5f264 100644
 +  }
 +}
 +
-+export function cameraErrorMessageKey(error: unknown): "unavailable" | "permission_error" {
++export function cameraErrorMessageKey(error: unknown): "unavailable" | "permission_error" | "startup_error" {
 +  const name = error && typeof error === "object" && "name" in error ? error.name : undefined;
-+  return name === "NotFoundError" || name === "DevicesNotFoundError" ? "unavailable" : "permission_error";
++  if (name === "NotFoundError" || name === "DevicesNotFoundError") return "unavailable";
++  return name === "NotAllowedError" || name === "PermissionDeniedError" ? "permission_error" : "startup_error";
 +}
 +
  export async function canvasToPhotoFile(canvas: HTMLCanvasElement, fileName: string): Promise<File> {
    const blob = await new Promise<Blob>((resolve, reject) => {
      canvas.toBlob(
-@@ -32,10 +73,25 @@ export async function recognizeNameLocally(
+@@ -32,10 +74,25 @@ export async function recognizeNameLocally(
  
    const detections = await new Detector().detect(source);
    const suggestion = detections
@@ -331,6 +335,14 @@ index ee914632..64f5f264 100644
      .trim();
  
    return suggestion || null;
+diff --git a/frontend/locales/en.json b/frontend/locales/en.json
+index 6231ac68..6aeab2e1 100644
+--- a/frontend/locales/en.json
++++ b/frontend/locales/en.json
+@@ -132,2 +132,3 @@
+                 "permission_error": "Camera access failed. Check browser permissions and try again.",
++                "startup_error": "Camera could not start. Check whether it is already in use, then try again.",
+                 "capture_error": "The photo could not be captured. Try again.",
 diff --git a/frontend/components/Form/photo-uploader.test.ts b/frontend/components/Form/photo-uploader.test.ts
 new file mode 100644
 index 00000000..3344f205

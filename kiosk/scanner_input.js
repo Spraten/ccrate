@@ -30,6 +30,7 @@
     input.placeholder = 'Focus here, then scan';
     let lastScan = 'none';
     let isFocused = false;
+    let scanGeneration = 0;
     input.addEventListener('focus', () => {
       isFocused = true;
       status.textContent = 'Ready to receive. Last scan: ' + lastScan;
@@ -43,17 +44,18 @@
     focusButton.textContent = 'Focus scanner input';
     focusButton.onclick = () => input.focus();
     bindScannerInput(input, async code => {
+      const generation = ++scanGeneration;
       lastScan = code;
       status.textContent = 'Checking scan… Last scan: ' + lastScan;
       try {
         const result = await onScan(code);
-        if (!panel.isConnected) return;
+        if (!panel.isConnected || generation !== scanGeneration) return;
         const unfocused = isFocused ? '' : ' · Scanner input unfocused. Click Focus scanner input to receive scans.';
         status.textContent = result === true
           ? (isFocused ? 'Ready to receive. Last scan: ' : 'Scanner input unfocused. Click Focus scanner input to receive scans. Last scan: ') + lastScan
           : String(result || 'Code not recognized') + unfocused + ' · Last scan: ' + lastScan;
       } catch (error) {
-        if (panel.isConnected) {
+        if (panel.isConnected && generation === scanGeneration) {
           status.textContent = error.message + (isFocused ? '' : ' · Scanner input unfocused. Click Focus scanner input to receive scans.') + ' · Last scan: ' + lastScan;
         }
       }

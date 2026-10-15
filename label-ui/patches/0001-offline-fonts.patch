@@ -225,7 +225,36 @@
  
  // Monospace width model: every char is 1 unit wide - makes cases exact.
  const mono: TextMeasurer = { measure: text => text.length }
-@@ -39,4 +39,9 @@
+@@ -22,6 +22,27 @@ describe('wrapText', () => {
+   it('greedy-wraps on spaces', () => {
+     // "aa bb cc" with width 5: "aa bb" fits, "cc" wraps.
+-    expect(wrapText('aa bb cc', 5, mono)).toEqual(['aa bb', 'cc'])
++    expect(wrapText('aa bb cc', 5, mono)).toEqual(['aa bb ', 'cc'])
++  })
++
++  it('preserves leading spaces like whitespace-pre-wrap', () => {
++    expect(wrapText('  ABC', 20, { measure: s => s.length })).toEqual(['  ABC'])
++  })
++
++  it('keeps leading spaces on the line where they wrap', () => {
++    expect(wrapText(' a', 1, { measure: s => s.length })).toEqual([' ', 'a'])
++  })
++
++  it('keeps a space before a wrapped word on the previous line', () => {
++    expect(wrapText('a b', 2, { measure: s => s.length })).toEqual(['a ', 'b'])
++    expect(wrapText('a  b', 3, { measure: s => s.length })).toEqual(['a  ', 'b'])
++    expect(wrapText('a  b', 1, { measure: s => s.length })).toEqual(['a  ', 'b'])
++    expect(wrapText('a   ', 1, { measure: s => s.length })).toEqual(['a   '])
++  })
++
++  it('does not turn wrapped trailing spaces into an extra empty line', () => {
++    expect(wrapText('a ', 1, { measure: s => s.length })).toEqual(['a '])
++  })
++
+   it('breaks a word wider than the box at character level', () => {
+     expect(wrapText('abcdefgh', 3, mono)).toEqual(['abc', 'def', 'gh'])
+   })
+@@ -43,4 +60,9 @@ describe('wrapText', () => {
      expect(lines.join(' ').replaceAll('  ', ' ')).toContain('chào')
      expect(lines.every(line => line.length <= 8)).toBe(true)
    })
@@ -679,13 +708,58 @@
  
  export interface TextMeasurer {
    /** Width of the string in the CURRENT ctx font, any unit (consistent). */
-@@ -48,4 +48,4 @@
+@@ -31,24 +31,31 @@ export function wrapText(content: string, maxWidth: number, measurer: TextMeasurer): string[] {
+       lines.push('')
+       continue
+     }
+-    let current = ''
+-    for (const word of paragraph.split(' ')) {
+-      const candidate = current === '' ? word : `${current} ${word}`
++    let current: string | undefined
++    let spaces = ''
++    for (const token of paragraph.match(/ +|[^ ]+/g) ?? []) {
++      if (token.startsWith(' ')) {
++        spaces += token
++        continue
++      }
++      const candidate = current === undefined ? `${spaces}${token}` : `${current}${spaces}${token}`
+       if (measurer.measure(candidate) <= maxWidth) {
+         current = candidate
++        spaces = ''
+         continue
+       }
+-      // Word does not fit after the current line - flush what we have.
+-      // (Both branches below reassign `current`.)
+-      if (current !== '')
+-        lines.push(current)
++      if (current !== undefined)
++        lines.push(`${current}${spaces}`)
++      else if (spaces !== '')
++        lines.push(spaces)
++      spaces = ''
+       // break-words: a single word wider than the box splits per character.
+-      if (measurer.measure(word) <= maxWidth) {
+-        current = word
++      if (measurer.measure(token) <= maxWidth) {
++        current = token
+       }
+       else {
+         let chunk = ''
 -        for (const char of word) {
-+        for (const char of splitGraphemes(word)) {
++        for (const char of splitGraphemes(token)) {
            if (chunk !== '' && measurer.measure(chunk + char) > maxWidth) {
              lines.push(chunk)
              chunk = char
-@@ -65,3 +65,31 @@
+@@ -60,8 +67,39 @@ export function wrapText(content: string, maxWidth: number, measurer: TextMeasurer): string[] {
+         current = chunk
+       }
+     }
+-    lines.push(current)
++    if (current !== undefined)
++      lines.push(`${current}${spaces}`)
++    else if (spaces !== '')
++      lines.push(spaces)
+   }
  
    return lines
  }

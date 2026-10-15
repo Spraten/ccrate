@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { register } from 'node:module'
 import test from 'node:test'
 import { fitElementToPage, overlapsExisting } from '../label-ui/vendor/print-design-pro/src/core/element-placement.js'
-import { fitTextToBox, TEXT_LINE_HEIGHT } from '../label-ui/vendor/print-design-pro/src/render/text-layout.ts'
+import { fitTextToBox, TEXT_LINE_HEIGHT, wrapText } from '../label-ui/vendor/print-design-pro/src/render/text-layout.ts'
 function createShortCode(place) {
   return {
     id: 'short-code',
@@ -123,6 +123,13 @@ test('keeps a flag grapheme intact when breaking an overlong word', () => {
     fitTextToBox('aa🇺🇸', 3, 10, 1, { measure: text => [...text].length }),
     { lines: ['aa', '🇺🇸'], truncated: false },
   )
+})
+
+test('preserves spaces at wrap boundaries like whitespace-pre-wrap', () => {
+  const measureLength = { measure: value => value.length }
+  assert.deepEqual(wrapText(' a', 1, measureLength), [' ', 'a'])
+  assert.deepEqual(wrapText('a  b', 1, measureLength), ['a  ', 'b'])
+  assert.deepEqual(wrapText('a   ', 1, measureLength), ['a   '])
 })
 
 test('keeps combining marks attached when truncation adds an ellipsis', () => {

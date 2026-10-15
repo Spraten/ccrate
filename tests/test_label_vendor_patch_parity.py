@@ -45,8 +45,9 @@ class LabelVendorPatchParityTests(unittest.TestCase):
                     actual_old += 1
             self.assertEqual((actual_old, actual_new), (expected_old, expected_new), f"patch hunk at line {index + 1}")
 
-    def test_cumulative_patch_reverses_and_recreates_vendor_source(self):
+    def test_vendor_patches_reverse_and_recreate_vendor_source(self):
         self.assertTrue(VENDOR.is_dir(), "vendored editor source is required")
+        self.assertTrue(OFFLINE_PATCH.is_file(), "offline fonts vendor patch is required")
         self.assertTrue(PATCH.is_file(), "cumulative vendor patch is required")
         with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
             checkout = pathlib.Path(temporary)
@@ -55,10 +56,13 @@ class LabelVendorPatchParityTests(unittest.TestCase):
             shutil.copytree(VENDOR, target)
             before = tree_hash(target)
             args = ["git", "apply", "-p4", f"--directory={PATCH_DIR}"]
-            subprocess.run(args + ["--reverse", "--check", str(PATCH)], cwd=checkout, check=True)
-            subprocess.run(args + ["--reverse", str(PATCH)], cwd=checkout, check=True)
-            subprocess.run(args + ["--check", str(PATCH)], cwd=checkout, check=True)
-            subprocess.run(args + [str(PATCH)], cwd=checkout, check=True)
+            patches = [OFFLINE_PATCH, PATCH]
+            for patch in reversed(patches):
+                subprocess.run(args + ["--reverse", "--check", str(patch)], cwd=checkout, check=True)
+                subprocess.run(args + ["--reverse", str(patch)], cwd=checkout, check=True)
+            for patch in patches:
+                subprocess.run(args + ["--check", str(patch)], cwd=checkout, check=True)
+                subprocess.run(args + [str(patch)], cwd=checkout, check=True)
             self.assertEqual(tree_hash(target), before)
 
 
