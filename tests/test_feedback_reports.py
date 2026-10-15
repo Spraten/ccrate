@@ -125,6 +125,60 @@ class FeedbackReportServiceTests(unittest.TestCase):
         self.assertEqual(replay[1]["status"], "submitted")
         self.assertEqual(calls, ["POST"])
 
+    def test_ready_recovery_waits_for_configuration_then_dispatches_once(self):
+        request_id = str(uuid4())
+        self.seed_report(request_id, "ready")
+        unconfigured = FeedbackReportService(self.db, "", github=self.github, repository="Spraten/ccrate")
+
+        unavailable = unconfigured.status("actor-a", request_id)
+        row = self.service._row("actor-a", request_id)
+
+        self.assertEqual(unavailable[0], 503)
+        self.assertEqual(unavailable[1]["status"], "pending")
+        self.assertEqual(row["status"], "ready")
+        self.assertEqual(self.calls, [])
+
+        configured = FeedbackReportService(self.db, self.token, github=self.github, repository="Spraten/ccrate")
+        delivered = configured.status("actor-a", request_id)
+
+        self.assertEqual(delivered[1]["status"], "submitted")
+        self.assertEqual(sum(call[0] == "POST" for call in self.calls), 1)
+
+    def test_definitive_github_rejection_is_not_reposted_on_recovery(self):
+        request_id = str(uuid4())
+        self.seed_report(request_id, "ready")
+        calls = []
+
+        def reject(method, url, headers, body):
+            calls.append(method)
+            return 422, {"message": "Validation failed"}
+
+        service = FeedbackReportService(self.db, self.token, github=reject, repository="Spraten/ccrate")
+
+        first = service.status("actor-a", request_id)
+        second = service.status("actor-a", request_id)
+
+        self.assertEqual(first[1]["status"], "rejected")
+        self.assertEqual(second[1]["status"], "rejected")
+        self.assertEqual(calls, ["POST"])
+
+    def test_status_reports_ready_dispatch_rejection_as_successful_terminal_lookup(self):
+        request_id = str(uuid4())
+        self.seed_report(request_id, "ready")
+
+        def reject(method, url, headers, body):
+            self.calls.append((method, url, headers, body))
+            return 422, {"message": "Validation failed"}
+
+        service = FeedbackReportService(self.db, self.token, github=reject, repository="Spraten/ccrate")
+        status_code, result = service.status("actor-a", request_id)
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(result["status"], "rejected")
+        submit_code, submit_result = service.submit("actor-a", str(uuid4()), "idea", "A separate valid report description.")
+        self.assertEqual(submit_code, 422)
+        self.assertEqual(submit_result["status"], "rejected")
+
     def test_ready_is_not_exposed_when_request_payload_conflicts(self):
         request_id = str(uuid4())
         self.seed_report(request_id, "ready")
@@ -276,4 +330,3 @@ class FeedbackReportServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
