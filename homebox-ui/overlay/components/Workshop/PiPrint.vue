@@ -3,12 +3,12 @@ import DeviceReconnect from "./DeviceReconnect.vue";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-vue-next";
 import { toast } from "@/components/ui/sonner";
-import { getPiPrintRecoveryState } from "~/lib/pi-print-state";
+import { getPiPrintContextChange, getPiPrintRecoveryState, isPiPrintOwnerCurrent } from "~/lib/pi-print-state";
 const props = defineProps<{ entityId?: string; id?: string }>();
 const workshop = useWorkshop();
 const { manager, busy } = workshop;
 const templates = ref<any[]>([]), templateId = ref(""), preview = ref<any>(null), error = ref(""), loaded = ref(false), sending = ref(false), uncertain = ref(false);
-let disposed = false, generation = 0;
+let disposed = false, generation = 0, printOperation = 0;
 const isItem = computed(() => !!props.entityId);
 const itemId = computed(() => props.entityId || props.id || "");
 const selected = computed(() => templates.value.find(row => row.id === templateId.value));
@@ -18,9 +18,28 @@ async function loadTemplates() {
   catch (cause) { if (!disposed && current === generation) error.value = (cause as Error).message; }
 }
 onMounted(loadTemplates);
-onBeforeUnmount(() => { disposed = true; generation++; });
-function contextChanged(next: unknown[], previous: unknown[]) { preview.value = null; sending.value = false; uncertain.value = false; const changed = next[2] !== previous[2] || next[3] !== previous[3]; if (changed) { generation++; templates.value = []; templateId.value = ""; loaded.value = false; if (previous[2] != null || previous[3] != null) void loadTemplates(); } else generation++; }
-watch(() => [props.entityId, props.id, workshop.context.value?.identity, workshop.context.value?.group.id], contextChanged);
+onBeforeUnmount(() => { disposed = true; generation++; printOperation++; });
+function contextChanged(next: unknown[], previous: unknown[]) {
+  const change = getPiPrintContextChange(
+    { entityId: next[0], identity: next[1], groupId: next[2] },
+    { entityId: previous[0], identity: previous[1], groupId: previous[2] },
+  );
+  if (!change.changed) return;
+  preview.value = null; sending.value = false; uncertain.value = false; generation++; printOperation++;
+  if (change.accountChanged) {
+    templates.value = []; templateId.value = ""; loaded.value = false;
+    if (previous[1] != null || previous[2] != null) void loadTemplates();
+  }
+}
+watch(() => [itemId.value, workshop.context.value?.identity, workshop.context.value?.group.id], contextChanged);
+function isCurrentPrintOwner(run: { operationId: number; entityId: string; identity?: string; groupId?: string }) {
+  return !disposed && isPiPrintOwnerCurrent(run, {
+    operationId: printOperation,
+    entityId: itemId.value,
+    identity: workshop.context.value?.identity,
+    groupId: workshop.context.value?.group.id,
+  });
+}
 async function review() {
   error.value = ""; preview.value = null;
   const recovery = getPiPrintRecoveryState(workshop.pending(), itemId.value);
@@ -44,16 +63,18 @@ async function review() {
 async function print() {
   if (sending.value) return;
   error.value = ""; sending.value = true;
-  const entityId = itemId.value;
+  const run = { generation, operationId: ++printOperation, entityId: itemId.value, identity: workshop.context.value?.identity, groupId: workshop.context.value?.group.id };
   try {
-    await workshop.write("labels/print", { entity_id: entityId, review_id: preview.value?.review_id }, "Print item label", entityId);
+    await workshop.write("labels/print", { entity_id: run.entityId, review_id: preview.value?.review_id }, "Print item label", run.entityId);
+    if (!isCurrentPrintOwner(run)) return;
     toast("Pi printer confirmed this request. Inspect the physical label."); preview.value = null;
   } catch (cause) {
+    if (!isCurrentPrintOwner(run)) return;
     error.value = (cause as Error).message;
     preview.value = null;
-    uncertain.value = getPiPrintRecoveryState(workshop.pending(), entityId).uncertain;
+    uncertain.value = getPiPrintRecoveryState(workshop.pending(), run.entityId).uncertain;
   }
-  finally { sending.value = false; }
+  finally { if (isCurrentPrintOwner(run)) sending.value = false; }
 }
 </script>
 <template>
