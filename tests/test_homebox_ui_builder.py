@@ -51,7 +51,10 @@ def isolated_builder_prepare(build_root, materializer_work_root):
 
 class HomeboxUiBuilderTests(unittest.TestCase):
     def test_typecheck_tool_failure_is_not_misclassified_as_upstream_diagnostics(self):
-        known_diagnostic = "frontend/example.ts(4,8): error TS2307: Cannot find module 'upstream-module'.\n"
+        known_diagnostic = (
+            "frontend/example.ts(4,8): error TS2307: Cannot find module 'upstream-module'.\n"
+            " ERROR  Process exited with non-zero status (2)\n"
+        )
         tool_failure = "ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command \"nuxi\" not found\n"
         baseline = {"pin": "a" * 40, "diagnostics": [["frontend/example.ts", "TS2307", "Cannot find module 'upstream-module'."]]}
 
@@ -65,6 +68,90 @@ class HomeboxUiBuilderTests(unittest.TestCase):
         self.assertTrue(BUILDER.is_only_known_upstream_typecheck_failure(known_diagnostic, baseline, "a" * 40))
         self.assertFalse(BUILDER.is_only_known_upstream_typecheck_failure(known_diagnostic + tool_failure, baseline, "a" * 40))
         self.assertFalse(BUILDER.is_only_known_upstream_typecheck_failure(known_diagnostic + "Error: ENOSPC: no space left on device\n", baseline, "a" * 40))
+        spawn_failure = " ERROR  spawn vue-tsc ENOENT\n"
+        self.assertTrue(BUILDER.has_frontend_tool_failure(known_diagnostic + spawn_failure))
+        self.assertFalse(BUILDER.is_only_known_upstream_typecheck_failure(known_diagnostic + spawn_failure, baseline, "a" * 40))
+        for exit_code in ("3", "139"):
+            nonstandard = re.sub(r"\(2\)", f"({exit_code})", known_diagnostic)
+            self.assertFalse(BUILDER.is_only_known_upstream_typecheck_failure(nonstandard, baseline, "a" * 40))
+
+    def test_pnpm_launcher_uses_cmd_fallback_only_on_windows_and_prefers_extensionless(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            toolchain = pathlib.Path(directory)
+            extensionless = toolchain / "pnpm/node_modules/.bin/pnpm"
+            windows_launcher = extensionless.with_suffix(".cmd")
+            windows_launcher.parent.mkdir(parents=True)
+            windows_launcher.write_text("@echo off")
+
+            self.assertEqual(BUILDER.resolve_pnpm_launcher(toolchain, platform="nt"), windows_launcher)
+            self.assertEqual(BUILDER.resolve_pnpm_launcher(toolchain, platform="posix"), extensionless)
+
+            extensionless.write_text("#!/bin/sh")
+            self.assertEqual(BUILDER.resolve_pnpm_launcher(toolchain, platform="nt"), extensionless)
+
+    def test_cli_typecheck_waiver_requires_expected_outer_status(self):
+        diagnostic = "frontend/example.ts(4,8): error TS2307: Cannot find module 'upstream-module'.\n"
+        wrapper = " ERROR  Process exited with non-zero status (2)\n"
+        output = diagnostic + wrapper
+        baseline = {
+            "pin": "a" * 40,
+            "diagnostics": [["frontend/example.ts", "TS2307", "Cannot find module 'upstream-module'."]],
+        }
+
+        def run_case(returncode, should_build):
+            with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+                test_root = pathlib.Path(directory)
+                toolchain_root = test_root / "toolchain"
+                (toolchain_root / "node-path.txt").parent.mkdir(parents=True)
+                (toolchain_root / "node-path.txt").write_text(str(test_root / "node"))
+                (test_root / "homebox-ui").mkdir()
+                (test_root / "homebox-ui/upstream-typecheck.json").write_text(json.dumps(baseline))
+                (test_root / "work").mkdir()
+
+                previous = {
+                    "BUILD": BUILDER.BUILD,
+                    "ROOT": BUILDER.ROOT,
+                    "TOOLCHAIN_ROOT": BUILDER.TOOLCHAIN_ROOT,
+                    "UPSTREAM_ROOT": BUILDER.UPSTREAM_ROOT,
+                    "prepare": BUILDER.prepare,
+                    "run_frontend_command": BUILDER.run_frontend_command,
+                    "source_commit": BUILDER.source_commit,
+                    "subprocess_run": BUILDER.subprocess.run,
+                    "argv": sys.argv,
+                }
+                commands = []
+                BUILDER.ROOT = test_root
+                BUILDER.BUILD = test_root / "frontend"
+                BUILDER.TOOLCHAIN_ROOT = toolchain_root
+                BUILDER.UPSTREAM_ROOT = test_root / "upstream"
+                BUILDER.prepare = lambda: None
+                BUILDER.run_frontend_command = lambda command, *, cwd, env: commands.append(command)
+                BUILDER.source_commit = lambda _path: "a" * 40
+                BUILDER.subprocess.run = lambda command, **kwargs: subprocess.CompletedProcess(
+                    command, returncode, stdout=output, stderr=""
+                )
+                sys.argv = ["build-homebox-ui.py", "--toolchain-root", str(toolchain_root)]
+                try:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        if should_build:
+                            BUILDER.build()
+                        else:
+                            with self.assertRaisesRegex(RuntimeError, "introduced errors"):
+                                BUILDER.build()
+                finally:
+                    BUILDER.BUILD = previous["BUILD"]
+                    BUILDER.ROOT = previous["ROOT"]
+                    BUILDER.TOOLCHAIN_ROOT = previous["TOOLCHAIN_ROOT"]
+                    BUILDER.UPSTREAM_ROOT = previous["UPSTREAM_ROOT"]
+                    BUILDER.prepare = previous["prepare"]
+                    BUILDER.run_frontend_command = previous["run_frontend_command"]
+                    BUILDER.source_commit = previous["source_commit"]
+                    BUILDER.subprocess.run = previous["subprocess_run"]
+                    sys.argv = previous["argv"]
+                self.assertEqual(any(command[1:] == ["run", "build"] for command in commands), should_build)
+
+        run_case(-9, should_build=False)
+        run_case(1, should_build=True)
 
     def test_cli_full_build_uses_a_fresh_disposable_root_and_scopes_typecheck_log(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
@@ -77,6 +164,11 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             default_typecheck_log.write_text("keep default build log")
             (toolchain_root / "node-path.txt").parent.mkdir(parents=True)
             (toolchain_root / "node-path.txt").write_text(str(test_root / "node"))
+            pnpm_launcher = toolchain_root / "pnpm/node_modules/.bin/pnpm"
+            pnpm_launcher.parent.mkdir(parents=True)
+            if os.name == "nt":
+                pnpm_launcher = pnpm_launcher.with_suffix(".cmd")
+            pnpm_launcher.write_text("mock pnpm launcher")
             wasi_binding = toolchain_root / "oxc-wasi/node_modules/@oxc-parser/binding-wasm32-wasi"
             wasi_binding.mkdir(parents=True)
             oxc_binding = pathlib.Path("node_modules/.pnpm/oxc-parser@0.72.3/node_modules/oxc-parser/bindings.js")
@@ -139,6 +231,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
                 [command[1:] for command in commands],
                 [["install", "--frozen-lockfile", "--ignore-scripts"], ["exec", "nuxt", "prepare"], ["run", "build"]],
             )
+            self.assertTrue(all(command[0] == str(pnpm_launcher) for command in commands))
             self.assertIn("Installing frontend dependencies in disposable workspace", stdout.getvalue())
             self.assertIn("Nuxt preparation complete", stdout.getvalue())
             self.assertTrue((build_root / "homebox-ui-typecheck.log").is_file())
@@ -551,4 +644,3 @@ class HomeboxUiBuilderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
