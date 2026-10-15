@@ -87,6 +87,8 @@ Issue #14's optional identified-to-anonymous return action now names the identit
 
 **Verification update (2026-10-15):** The approved Text Capture toggle and draggable pop-out are present in the isolated C-Crate preview. The local browser verified enable → launcher → open, drag repositioning, and disable/close. The OCR screenshot uses a synthetic camera frame; the physical camera permission remains unapproved and was not used. A new #6 regression now detects removal of the item-update return, the upload-failure return before navigation, and the uncertain-upload guard; focused unittest passes and Sol found no remaining findings. For #15, the disposable local item was added after availability checking, persisted across reload, then removed to restore the empty cart; no kiosk checkout or custody change was submitted. The Node suite passes 80/80, and the focused UI-builder OCR pop-out contract passes 1/1. The PR remains open; target camera, kiosk final-checkout, printer, scanner, Pi, and repository-token checks remain external gates.
 
+**Older local runtime smoke check (2026-10-15):** The browser at `127.0.0.1:17755` reports version `0.26.2-caci.2-shortcodes`, build `e01dd737238a3fa7e1a6454b37de6c6fc88c86e4`; it is older than the current PR head and is not counted as PR verification. On that runtime, the Appearance control switched to Dark immediately and was restored to System. The location page expanded both sibling branches independently, recursively opened a nested location, and showed its item and the empty sibling state. The Create Item selector exposed the nested tree; the unsaved form was closed without creating an item.
+
 `#1, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #18`.
 
 
