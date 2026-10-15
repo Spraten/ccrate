@@ -2042,7 +2042,9 @@ class TerminalMapBrowserTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.index = (ROOT / 'kiosk/index.html').read_text(encoding='utf-8')
+        cls.terminal_css = (ROOT / 'kiosk/terminal.css').read_text(encoding='utf-8')
         cls.scripts = {
+            '/terminal.js': (ROOT / 'kiosk/terminal.js').read_text(encoding='utf-8'),
             '/import-ui.js': (ROOT / 'kiosk/import-ui.js').read_text(encoding='utf-8'),
             '/workshop-ui.js': (ROOT / 'kiosk/workshop-ui.js').read_text(encoding='utf-8'),
             '/checkout-ui.js': (ROOT / 'kiosk/checkout-ui.js').read_text(encoding='utf-8'),
@@ -2217,6 +2219,9 @@ class TerminalMapBrowserTests(unittest.TestCase):
         path = parsed.path
         if path == '/':
             route.fulfill(status=200, content_type='text/html', body=self.index)
+            return
+        if path == '/terminal.css':
+            route.fulfill(status=200, content_type='text/css', body=self.terminal_css)
             return
         if path in self.scripts:
             route.fulfill(status=200, content_type='application/javascript', body=self.scripts[path])

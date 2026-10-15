@@ -28,12 +28,12 @@ class ItemNotesBrowserContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.workflow = (ROOT/'kiosk/workflow-ui.js').read_text()
-        cls.page = (ROOT/'kiosk/index.html').read_text()
+        cls.terminal = (ROOT/'kiosk/terminal.js').read_text()
 
     def test_dashboard_and_scan_flow_require_active_individual_equipment(self):
-        self.assertIn("['Add Notes to Item','Record an independent equipment note']", self.page)
-        self.assertIn("else if(itemNoteMode)startItemNote()", self.page)
-        self.assertIn("data.entity.archived||data.entity.quantity!==1", self.page)
+        self.assertIn("['Add Notes to Item','Record an independent equipment note']", self.terminal)
+        self.assertIn("else if(itemNoteMode)startItemNote()", self.terminal)
+        self.assertIn("data.entity.archived||data.entity.quantity!==1", self.terminal)
         self.assertIn("function startItemNote(message='')", self.workflow)
         self.assertIn('function itemNoteForm(entity,draft=', self.workflow)
 
@@ -94,9 +94,9 @@ class ItemNotesBrowserContractTests(unittest.TestCase):
         self.assertIn('identityUserId!==itemNoteDraft.actorId', self.workflow)
 
     def test_recovery_surfaces_item_note_status_and_requires_safe_action(self):
-        self.assertIn("add_note:'Item note'", self.page)
-        self.assertIn("label=note?(outcome==='complete'?'Confirm saved Item note':'Cancel unstarted Item note')", self.page)
-        self.assertIn("b.disabled=outcome==='complete'?row.status==='prepared':row.status!=='prepared'", self.page)
+        self.assertIn("add_note:'Item note'", self.terminal)
+        self.assertIn("label=note?(outcome==='complete'?'Confirm saved Item note':'Cancel unstarted Item note')", self.terminal)
+        self.assertIn("b.disabled=outcome==='complete'?row.status==='prepared':row.status!=='prepared'", self.terminal)
         tools = (ROOT/'homebox-ui/overlay/lib/workshop-tools.js').read_text()
         recovery = function_source(tools, 'recoveryPage')
         dialog = function_source(tools, 'recoveryDialog')

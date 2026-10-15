@@ -838,6 +838,10 @@ class Handler(BaseHTTPRequestHandler):
             body=(terminal_assets()/'index.html').read_bytes();mime='text/html; charset=utf-8';code=200
         elif self.path in ('/caci-create.svg','/favicon.svg','/favicon.ico'):
             body=(terminal_assets()/'branding'/self.path.lstrip('/')).read_bytes();mime='image/x-icon' if self.path.endswith('.ico') else 'image/svg+xml';code=200
+        elif self.path=='/terminal.css':
+            body=(terminal_assets()/'terminal.css').read_bytes();mime='text/css; charset=utf-8';code=200
+        elif self.path=='/terminal.js':
+            body=(terminal_assets()/'terminal.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/checkout-ui.js':
             body=(terminal_assets()/'checkout-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path=='/workshop-ui.js':

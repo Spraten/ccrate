@@ -41,7 +41,7 @@ class ReturnScanBehaviorTests(unittest.TestCase):
     def test_return_context_and_focus_callbacks_in_fake_browser(self):
         chromium=shutil.which('chromium')
         if not chromium:self.skipTest('Chromium is unavailable for the UI behavior fixture')
-        page=(ROOT/'kiosk/index.html').read_text()
+        page=(ROOT/'kiosk/terminal.js').read_text()
         workflow=(ROOT/'kiosk/workflow-ui.js').read_text()
         returns=(ROOT/'kiosk/return-ui.js').read_text()
         checkout=(ROOT/'kiosk/checkout-ui.js').read_text()
