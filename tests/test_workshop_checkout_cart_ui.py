@@ -23,6 +23,118 @@ def function(source, name):
 
 
 class WorkshopCheckoutCartUiTests(unittest.TestCase):
+    def test_desktop_cart_status_uses_authoritative_root_and_kit_component_availability(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable for the checkout UI fixture")
+        source = (ROOT / "homebox-ui/overlay/lib/workshop-tools.js").read_text(encoding="utf-8")
+        availability = function(source, "checkoutCartAvailabilityFor")
+        add_item = function(source, "addCheckoutCartItem")
+        status = function(source, "checkoutCartStatus")
+        script = r'''
+let checkoutCartAvailability=new Map(),blockedId='tool',failAvailability=false;
+const equipment=[{id:'tool',name:'Tool',quantity:1,condition:'Ready'},{id:'kit',name:'Kit',quantity:1,condition:'Ready'}];
+const held=()=>null,equipmentBlocker=()=>'',context={identity:'identity'},scope=()=> 'owner';
+const api=async path=>{if(path.startsWith('kit?id=')){const id=decodeURIComponent(path.split('=')[1]);return id==='kit'?{kit:true,entities:[{id:'kit',name:'Kit'},{id:'part',name:'Part'}]}:{kit:false,entities:[]}}if(path.startsWith('checkout-availability?ids=')){if(failAvailability)throw Error('Availability service unavailable');const ids=decodeURIComponent(path.split('ids=')[1]).split(',');return ids.map(id=>({id,name:id==='part'?'Part':id==='kit'?'Kit':'Tool',reason:id===blockedId?'Checkout operation requires recovery (pending)':null}))}throw Error('unexpected path '+path)};
+'''+availability+r'''
+'''+status+r'''
+let saved=[];const saveCheckoutCart=async(items)=>{saved=items;return {items}};
+'''+add_item+r'''
+const assert=(value,message)=>{if(!value)throw Error(message)};
+(async()=>{
+ checkoutCartAvailability=await checkoutCartAvailabilityFor(['tool']);
+ assert(checkoutCartStatus('tool').reason==='Checkout operation requires recovery (pending)','unresolved operation must block a saved cart row');
+ await addCheckoutCartItem(equipment[0],[],0).then(()=>{throw Error('blocked equipment was saved')},()=>{});
+ assert(saved.length===0,'an item with an unresolved operation must not be added');
+ blockedId='part';checkoutCartAvailability=await checkoutCartAvailabilityFor(['kit']);
+ assert(checkoutCartStatus('kit').reason==='Kit component Part: Checkout operation requires recovery (pending)','blocked kit component must block and explain its saved cart root');
+ await addCheckoutCartItem(equipment[1],[],0).then(()=>{throw Error('blocked kit was saved')},()=>{});
+ assert(saved.length===0,'a kit with a blocked component must not be added');
+ blockedId='';failAvailability=true;
+ await addCheckoutCartItem(equipment[0],[],0).then(()=>{throw Error('equipment was saved without an availability result')},()=>{});
+ assert(saved.length===0&&checkoutCartStatus('tool').reason.includes('Could not check current availability'),'availability errors must fail closed and remain visible');
+})().catch(error=>{console.error(error);process.exitCode=1});
+'''
+        result = subprocess.run([node, "-e", script], check=False, cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_saved_cart_mutations_fail_closed_and_repaint_when_availability_refresh_fails(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is unavailable for the checkout UI fixture")
+        source = (ROOT / "homebox-ui/overlay/lib/workshop-tools.js").read_text(encoding="utf-8")
+        page = function(source, "checkoutCartPage")
+        status = function(source, "checkoutCartStatus")
+        ready = function(source, "checkoutCartReady")
+        ready_items = function(source, "checkoutCartReadyItems")
+        refresh = function(source, "refreshSavedCheckoutCartAvailability")
+        update_saved = function(source, "updateSavedCheckoutCart")
+        add_item = function(source, "addCheckoutCartItem")
+        script = r'''
+let checkoutCartAvailability=new Map(),failAvailability=false,delayAvailability=false,delayOutcome='error',releaseAvailability,availabilityStarted,waitingAvailability=Promise.resolve(),serverItems=['a','b'],serverRevision=4,pendingAvailability=false;
+const tables=[],buttons=[];
+const equipment=[{id:'a',name:'A',quantity:1,condition:'Ready'},{id:'b',name:'B',quantity:1,condition:'Ready'},{id:'c',name:'C',quantity:1,condition:'Ready'}];
+const checkoutCartAvailabilityFor=async items=>{if(delayAvailability){delayAvailability=false;availabilityStarted();await new Promise(resolve=>releaseAvailability=resolve);if(delayOutcome==='error')throw Error('Availability service unavailable');return new Map(items.map(id=>[id,{reason:''}]))}if(failAvailability)throw Error('Availability service unavailable');return new Map(items.map(id=>[id,{reason:pendingAvailability?'Pending checkout operation':''}]))};
+const armDelay=outcome=>{delayAvailability=true;delayOutcome=outcome;waitingAvailability=new Promise(resolve=>availabilityStarted=resolve)};
+const loadCheckoutCart=async()=>({items:[...serverItems],revision:serverRevision});
+const saveCheckoutCart=async(items,revision)=>{if(revision!==serverRevision)throw Error('stale cart revision '+revision);serverItems=[...items];serverRevision++;return {items:[...serverItems],revision:serverRevision}};
+const inventoryData=async()=>{},held=()=>null,equipmentBlocker=()=>'';let routeVersion=1;
+const node=(tag,text)=>({tag,text,value:'',children:[],append(...children){this.children.push(...children)},replaceChildren(...children){this.children=[...children]},setAttribute(){}});
+const view=node('view'),title=()=>{},message=text=>({text}),panel=(...children)=>({children});
+const table=(headers,rows)=>{const result={headers,rows};tables.push(result);return result};
+const button=(label,fn)=>{const result={label,fn};buttons.push(result);return result};
+'''+refresh+r'''
+'''+update_saved+r'''
+'''+add_item+r'''
+'''+status+r'''
+'''+ready+r'''
+'''+ready_items+r'''
+'''+page+r'''
+const assert=(value,message)=>{if(!value)throw Error(message)};
+(async()=>{
+ await checkoutCartPage(1);
+ const removes=()=>buttons.filter(item=>item.label==='Remove');
+ const addC=buttons.find(item=>item.label==='Check availability & add');
+ armDelay('error');
+ const removal=removes().at(0).fn().then(()=>{throw Error('offline refresh succeeded')},()=>{});
+ await waitingAvailability;
+ await addC.fn().then(()=>{throw Error('overlapping add succeeded')},()=>{});
+ assert(JSON.stringify(serverItems)==='["b"]'&&serverRevision===5,'the second mutation is rejected until the first save and refresh finish');
+ releaseAvailability();
+ await removal;
+ const savedRows=()=>tables.filter(item=>item.rows.some(row=>row[3]?.label==='Remove')).at(-1).rows;
+ assert(JSON.stringify(serverItems)==='["b"]','remove is committed on the server');
+ assert(JSON.stringify(savedRows().map(row=>row[0]))==='["B"]','repaint reflects committed rows after the failed refresh: '+JSON.stringify(tables.filter(item=>item.headers[0]==='Equipment').map(item=>item.rows)));
+ assert(savedRows()[0][2]==='Could not check current availability: Availability service unavailable','the remaining row shows an availability error');
+ assert(view.children[2].children.some(item=>item.text==='Remove blocked or unavailable items before checkout at the kiosk.'),'the cart-level status does not claim all rows are ready');
+ failAvailability=false;
+ await removes().at(-1).fn();
+ assert(JSON.stringify(serverItems)==='[]','next edit uses the state after the first committed removal');
+ assert(serverRevision===6,'both mutations used sequential server revisions');
+
+ serverItems=['a','b'];serverRevision=7;view.replaceChildren();await checkoutCartPage(1);
+ const oldRemove=removes().at(-2);armDelay('ready');
+ const oldRemoval=oldRemove.fn();await waitingAvailability;
+ routeVersion=2;view.replaceChildren();pendingAvailability=true;await checkoutCartPage(2);pendingAvailability=false;
+ const currentRows=()=>tables.filter(item=>item.rows.some(row=>row[3]?.label==='Remove')).at(-1).rows;
+ assert(currentRows()[0][2]==='Pending checkout operation','new page shows its authoritative pending status before old request completes');
+ const tablesBeforeOldCompletion=tables.length;
+ releaseAvailability();await oldRemoval;
+ assert(checkoutCartAvailability.get('b').reason==='Pending checkout operation','obsolete refresh cannot clear the newer page blocker');
+ assert(currentRows()[0][2]==='Pending checkout operation','obsolete refresh cannot repaint ready status over current page');
+ assert(tables.length===tablesBeforeOldCompletion,'obsolete page completion does not repaint');
+
+ const addFromCurrentPage=buttons.filter(item=>item.label==='Check availability & add').at(-1);armDelay('ready');
+ const staleAdd=addFromCurrentPage.fn().then(()=>{throw Error('obsolete preflight saved the candidate')},()=>{});await waitingAvailability;
+ routeVersion=3;view.replaceChildren();pendingAvailability=true;await checkoutCartPage(3);pendingAvailability=false;
+ releaseAvailability();await staleAdd;
+ assert(JSON.stringify(serverItems)==='["b"]'&&serverRevision===8,'obsolete add preflight is rejected before save after navigation');
+ assert(checkoutCartAvailability.get('b').reason==='Pending checkout operation','obsolete add preflight does not change current availability');
+})().catch(error=>{console.error(error);process.exitCode=1});
+'''
+        result = subprocess.run([node, "-e", script], check=False, cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_manual_checkout_recovery_reports_receipt_asset_count_for_kits(self):
         node = shutil.which("node")
         if not node:
@@ -171,7 +283,7 @@ const assert=(value,message)=>{if(!value)throw Error(message)};
         self.assertIn('["checkout-cart", "Checkout cart"]', builder[start:end])
         cart_page = function(tools, "checkoutCartPage")
         self.assertIn("loadCheckoutCart()", cart_page)
-        self.assertIn("button('Add'", cart_page)
+        self.assertIn("button('Check availability & add'", cart_page)
         self.assertIn("button('Remove'", cart_page)
         self.assertIn("Remove unavailable or blocked items", cart_page)
         self.assertIn("view.append(search,content)", cart_page)
@@ -186,7 +298,7 @@ const assert=(value,message)=>{if(!value)throw Error(message)};
         helpers = "\n".join(function(source, name) for name in (
             "loadCheckoutCart", "saveCheckoutCart", "checkoutCartStatus", "checkoutCartReady", "checkoutCartReadyItems"))
         script = r'''
-let context={identity:'user-a',group:{id:'group-a'},user:{id:'user-a'}},equipment=[],loans=[],busy=false;
+let context={identity:'user-a',group:{id:'group-a'},user:{id:'user-a'}},equipment=[],loans=[],busy=false,checkoutCartAvailability=new Map();
 const scope=()=>context.group.id+':'+context.user.id, uuid=()=> 'request-key';
 let saved={revision:0,items:['missing','ready','held','blocked','multi']},calls=[],nativeIds=new Set(['ready','other','held','blocked','multi']);
 async function api(path,data,identity){calls.push({path,data,identity});if(data){if(data.revision!==saved.revision)throw Error('stale revision');if(data.items.some(id=>!nativeIds.has(id)))throw Error('unknown equipment');saved={revision:saved.revision+1,items:[...data.items]};return saved}return {...saved,items:[...saved.items]}}
