@@ -31,18 +31,18 @@ func TestFormatDisplayIDMarksUnassignedLocation(t *testing.T) {
 }
 
 func TestIsDisplayIDSearchTreatsTrailingLocationNumberAsPath(t *testing.T) {
-	for _, value := range []string{"BIN-D-GC-C-1", "bin-d-gc-c-1", "PART-SABC-123"} {
+	for _, value := range []string{"BIN-D-GC-C-1", "bin-d-gc-c-1", "PART-SABC-123", "BIN", "D", "PART", "123456"} {
 		if !isDisplayIDSearch(value) {
 			t.Errorf("isDisplayIDSearch(%q) = false, want true", value)
 		}
 	}
-	for _, value := range []string{"123456", "A drawer", "BIN--1", "-BIN-D-C", "BIN-D-C-", "12 34 56"} {
+	for _, value := range []string{"A drawer", "BIN--1", "-BIN-D-C", "BIN-D-C-", "12 34 56"} {
 		if isDisplayIDSearch(value) {
 			t.Errorf("isDisplayIDSearch(%q) = true, want false", value)
 		}
 	}
-	if !isDisplayIDSearch("UNKNOWN") || !isDisplayIDSearch("UNLOCATED") || isDisplayIDSearch("PART") {
-		t.Fatal("only generated one-segment sentinels should be display-ID searches")
+	if !isDisplayIDSearch("UNKNOWN") || !isDisplayIDSearch("UNLOCATED") {
+		t.Fatal("generated one-segment sentinels should be display-ID searches")
 	}
 }
 
@@ -271,6 +271,43 @@ func TestDisplayIDBaseFallbackForUnicodeOnlyNames(t *testing.T) {
 	t.Cleanup(func(){ _=tRepos.Entities.Delete(ctx,unlocated.ID) })
 	require.Equal(t,"UNLOCATED",unlocated.DisplayID)
 	search,err=tRepos.Entities.QueryByGroup(ctx,gid,EntityQuery{Page:-1,PageSize:-1,Search:"UNLOCATED"}); require.NoError(t,err); require.Len(t,search.Items,1); require.Equal(t,unlocated.ID,search.Items[0].ID)
+}
+
+func TestMixedUnicodeDisplayIDBasesRemainSearchable(t *testing.T) {
+	ctx, gid := context.Background(), tGroup.ID
+	locationType := useContainerEntityType(t)
+	unicodeLocation, err := tRepos.Entities.CreateContainer(ctx, gid, EntityCreate{Name: "部屋", EntityTypeID: locationType.ID})
+	require.NoError(t, err)
+	typeWithASCII, err := tRepos.EntityTypes.Create(ctx, gid, EntityTypeCreate{Name: "Bin"})
+	require.NoError(t, err)
+	binItem, err := tRepos.Entities.Create(ctx, gid, EntityCreate{Name: "Unicode path", ParentID: unicodeLocation.ID, EntityTypeID: typeWithASCII.ID})
+	require.NoError(t, err)
+	locationWithASCII, err := tRepos.Entities.CreateContainer(ctx, gid, EntityCreate{Name: "D", EntityTypeID: locationType.ID})
+	require.NoError(t, err)
+	typeWithUnicode, err := tRepos.EntityTypes.Create(ctx, gid, EntityTypeCreate{Name: "物品"})
+	require.NoError(t, err)
+	locationItem, err := tRepos.Entities.Create(ctx, gid, EntityCreate{Name: "Hammer", ParentID: locationWithASCII.ID, EntityTypeID: typeWithUnicode.ID})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = tRepos.Entities.Delete(ctx, binItem.ID)
+		_ = tRepos.Entities.Delete(ctx, locationItem.ID)
+		_ = tRepos.Entities.DeleteContainerByGroup(ctx, gid, unicodeLocation.ID)
+		_ = tRepos.Entities.DeleteContainerByGroup(ctx, gid, locationWithASCII.ID)
+	})
+	require.Equal(t, "BIN", binItem.DisplayID)
+	require.Equal(t, "D", locationItem.DisplayID)
+	for _, item := range []EntityOut{binItem, locationItem} {
+		result, err := tRepos.Entities.QueryByGroup(ctx, gid, EntityQuery{Page: -1, PageSize: -1, Search: item.DisplayID})
+		require.NoError(t, err)
+		found := false
+		for _, candidate := range result.Items {
+			if candidate.ID == item.ID {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "exact search for generated display ID %q should include the item", item.DisplayID)
+	}
 }
 
 func TestUnicodeOnlyCollisionIDsSearchFromSingleEntityReads(t *testing.T) {
