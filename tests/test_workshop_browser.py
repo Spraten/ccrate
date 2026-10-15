@@ -2533,13 +2533,34 @@ class TerminalMapBrowserTests(unittest.TestCase):
                 self.page.locator('.dashboard').wait_for(state='visible')
                 self.assertEqual(self.page.locator('header').evaluate(
                     "element => getComputedStyle(element).backgroundColor"), 'rgb(23, 56, 75)')
-                nav = self.page.locator('header button:visible')
-                self.assertGreater(nav.count(), 0, 'navigation controls should remain available')
+                nav_ids = ('home-nav', 'storage-nav', 'layout-nav', 'manual', 'scan',
+                           'report-problem', 'admin', 'desktop')
+                for nav_id in nav_ids:
+                    with self.subTest(navigation=nav_id):
+                        self.assertTrue(self.page.locator(f'header button#{nav_id}').is_visible())
                 dashboard_actions = self.page.locator('.dashboard-actions .action')
                 self.assertEqual(dashboard_actions.count(), 7)
                 for label in actions:
                     with self.subTest(action=label):
                         self.assertTrue(self.page.get_by_role('button', name=label).is_visible())
+                for index in range(dashboard_actions.count()):
+                    with self.subTest(action_target=index):
+                        target = dashboard_actions.nth(index)
+                        self.assertGreaterEqual(target.evaluate(
+                            'element => element.getBoundingClientRect().height'), 44)
+                        self.assertTrue(target.evaluate('''element => {
+                          const card = element.getBoundingClientRect();
+                          const style = getComputedStyle(element);
+                          const top = card.top + parseFloat(style.paddingTop) - 1;
+                          const right = card.right - parseFloat(style.paddingRight) + 1;
+                          const bottom = card.bottom - parseFloat(style.paddingBottom) + 1;
+                          const left = card.left + parseFloat(style.paddingLeft) - 1;
+                          return [...element.querySelectorAll('.action-icon, strong, span')].every(child => {
+                            const box = child.getBoundingClientRect();
+                            return box.top >= top && box.right <= right &&
+                              box.bottom <= bottom && box.left >= left;
+                          });
+                        }'''), 'action content should fit inside its card')
                 self.assertLessEqual(self.page.evaluate(
                     'document.documentElement.scrollWidth'), width,
                     'page should not overflow horizontally')

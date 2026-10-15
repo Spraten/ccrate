@@ -91,10 +91,11 @@ class KioskTerminalAssetTests(unittest.TestCase):
         css = (ROOT / 'kiosk/terminal.css').read_text(encoding='utf-8')
         for contract in (
                 '--terminal-deep-blue: #17384b',
-                '--terminal-workshop-yellow: #f3c94e',
+                '--terminal-workshop-yellow: #f2bd3d',
                 'header {',
                 'button:focus-visible',
                 '.dashboard-actions .action',
+                'height: auto;',
                 'min-height: 44px',
                 '@media (max-width: 600px)'):
             with self.subTest(contract=contract):

@@ -94,7 +94,7 @@ main.workshop-view{gap:10px}
 /* Final terminal shell presentation */
 :root {
   --terminal-deep-blue: #17384b;
-  --terminal-workshop-yellow: #f3c94e;
+  --terminal-workshop-yellow: #f2bd3d;
   --terminal-paper: #f5f8fa;
   --terminal-line: #cbd7df;
 }
@@ -123,13 +123,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 }
 .dashboard-actions { gap: 12px; align-content: start; }
 .dashboard-actions .action {
-  min-height: 44px; height: 92px; padding: 12px 14px; gap: 6px;
+  min-height: 100px; height: auto; padding: 12px 14px; gap: 6px;
   border-color: var(--terminal-line); border-radius: 10px;
 }
 .dashboard-actions .action strong { font-size: 17px; }
 .dashboard-actions .action span { font-size: 13px; line-height: 1.25; }
 .dashboard-actions .action.major {
-  height: 116px; padding: 16px 20px; gap: 14px;
+  min-height: 116px; height: auto; padding: 16px 20px; gap: 14px;
 }
 .dashboard-actions .major strong { font-size: 25px; }
 .dashboard-actions .major span { font-size: 15px; }
@@ -145,8 +145,8 @@ footer { border-color: var(--terminal-line); }
   header button { padding: 0 9px; font-size: 14px; }
   main { padding: 12px 10px; }
   .dashboard-actions { gap: 10px; }
-  .dashboard-actions .action { height: 104px; padding: 12px; }
-  .dashboard-actions .action.major { height: 124px; padding: 14px 12px; gap: 10px; }
+  .dashboard-actions .action { min-height: 112px; height: auto; padding: 12px; }
+  .dashboard-actions .action.major { min-height: 124px; height: auto; padding: 14px 12px; gap: 10px; }
   .dashboard-actions .major .action-icon { width: 28px; height: 28px; }
   .dashboard-actions .major strong { font-size: 21px; }
   .dashboard-actions .major span { font-size: 13px; }
