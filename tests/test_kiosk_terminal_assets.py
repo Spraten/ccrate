@@ -86,3 +86,16 @@ class KioskTerminalAssetTests(unittest.TestCase):
                 self.assertNotRegex(source, r"node\(['\"]style['\"]\)")
                 self.assertNotIn('document.head.append(', source)
                 self.assertNotIn('cssText =', source)
+
+    def test_terminal_visual_tokens_and_dashboard_touch_targets_are_static(self):
+        css = (ROOT / 'kiosk/terminal.css').read_text(encoding='utf-8')
+        for contract in (
+                '--terminal-deep-blue: #17384b',
+                '--terminal-workshop-yellow: #f3c94e',
+                'header {',
+                'button:focus-visible',
+                '.dashboard-actions .action',
+                'min-height: 44px',
+                '@media (max-width: 600px)'):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, css)

@@ -2524,6 +2524,36 @@ class TerminalMapBrowserTests(unittest.TestCase):
         self.page.mouse.move(points['to']['x'], points['to']['y'], steps=3)
         self.page.mouse.up()
 
+    def test_terminal_dashboard_fits_kiosk_and_narrow_viewports(self):
+        actions = ('Check Out', 'Return', 'Add Notes to Item', 'Find Item',
+                   'Browse Stock', 'Workshop', 'Add Equipment')
+        for width, height in ((800, 480), (390, 844)):
+            with self.subTest(viewport=(width, height)):
+                self.page.set_viewport_size({'width': width, 'height': height})
+                self.page.locator('.dashboard').wait_for(state='visible')
+                self.assertEqual(self.page.locator('header').evaluate(
+                    "element => getComputedStyle(element).backgroundColor"), 'rgb(23, 56, 75)')
+                nav = self.page.locator('header button:visible')
+                self.assertGreater(nav.count(), 0, 'navigation controls should remain available')
+                dashboard_actions = self.page.locator('.dashboard-actions .action')
+                self.assertEqual(dashboard_actions.count(), 7)
+                for label in actions:
+                    with self.subTest(action=label):
+                        self.assertTrue(self.page.get_by_role('button', name=label).is_visible())
+                self.assertLessEqual(self.page.evaluate(
+                    'document.documentElement.scrollWidth'), width,
+                    'page should not overflow horizontally')
+                target = dashboard_actions.first
+                target.evaluate('element => element.focus({focusVisible: true})')
+                self.assertNotEqual(target.evaluate(
+                    "element => getComputedStyle(element).outlineStyle"), 'none',
+                    'keyboard focus should show a visible outline')
+                self.assertGreaterEqual(target.evaluate(
+                    'element => element.getBoundingClientRect().height'), 44)
+        self.assertEqual(self.errors, [], 'dashboard should not produce browser errors')
+        self.assertEqual(self.failed_requests, [], 'terminal assets should load successfully')
+        self.assertEqual(self.error_responses, [], 'terminal assets should not return errors')
+
     def test_terminal_browse_rotation_and_conflict(self):
         self._open_editing_map()
         self._select_first_drawing()
