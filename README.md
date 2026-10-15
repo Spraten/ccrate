@@ -57,7 +57,9 @@ Activation must package the matching frontend, label assets, gateway and compani
 
 ## Tests and operational safeguards
 
-The Python fixture suite runs from WSL/Linux with the project dependencies available:
+For the current beta handoff, use the short [human feature check](docs/BETA_HUMAN_TEST.md). It covers the main inventory, scan/OCR, label, and workshop flows you asked to try. You do not need to run the broad edge-case suite before giving product feedback.
+
+The full Python fixture suite remains available when changing code or investigating a bug. Run it from WSL/Linux with project dependencies available:
 
 ```sh
 PYTHONPATH=ops:kiosk:work/hardware/python python3 -m unittest discover -s tests -v
