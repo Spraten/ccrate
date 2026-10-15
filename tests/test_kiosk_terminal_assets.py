@@ -87,6 +87,21 @@ class KioskTerminalAssetTests(unittest.TestCase):
                 self.assertNotIn('document.head.append(', source)
                 self.assertNotIn('cssText =', source)
 
+    def test_terminal_controller_static_presentation_is_owned_by_css(self):
+        source = (ROOT / 'kiosk/terminal.js').read_text(encoding='utf-8')
+        css = (ROOT / 'kiosk/terminal.css').read_text(encoding='utf-8')
+        # Literal style assignments are fixed presentation; calculated map SVG
+        # geometry and state-driven visibility may still be set at runtime.
+        state_visibility = re.sub(
+            r"document\.querySelector\('#end-session'\)\.style\.display='(?:none|block)'",
+            '', source)
+        self.assertNotRegex(state_visibility, r'\.style(?:\.[A-Za-z]+)?\s*=\s*[\'\"]')
+        classes = set(re.findall(r'terminal-[a-z-]+', source))
+        self.assertTrue(classes)
+        for name in classes:
+            with self.subTest(name=name):
+                self.assertIn('.' + name, css)
+
     def test_terminal_visual_tokens_and_dashboard_touch_targets_are_static(self):
         css = (ROOT / 'kiosk/terminal.css').read_text(encoding='utf-8')
         for contract in (
