@@ -12,6 +12,16 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class ChildLocationPreviewTests(unittest.TestCase):
+    def test_child_item_preview_prefers_generated_display_id_with_native_fallback(self):
+        component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
+        self.assertIn('v-if="item.displayId"', component)
+        self.assertIn('Generated ID · {{ item.displayId }}', component)
+        self.assertIn('v-else-if="item.assetId"', component)
+        self.assertIn('{{ item.assetId }}', component)
+        self.assertIn('class="min-w-0 flex-1"', component)
+        self.assertIn('break-all', component)
+        self.assertIn('×{{ item.quantity }}', component)
+
     def test_location_detail_embeds_expandable_read_only_child_contents(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             previous_build = BUILDER.BUILD
