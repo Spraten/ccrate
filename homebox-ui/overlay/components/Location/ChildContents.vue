@@ -82,11 +82,14 @@
         </div>
         <p v-else-if="stateFor(location.id).items.length === 0 && stateFor(location.id).children.length === 0" class="text-sm text-muted-foreground">This location is empty.</p>
         <ul v-else-if="stateFor(location.id).items.length" class="divide-y">
-          <li v-for="item in stateFor(location.id).items" :key="item.id" class="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-            <NuxtLink :to="`/item/${encodeURIComponent(item.id)}`" class="min-w-0 flex-1 truncate hover:underline">
-              {{ item.name }}
-            </NuxtLink>
-            <span v-if="item.assetId" class="shrink-0 text-xs text-muted-foreground">{{ item.assetId }}</span>
+          <li v-for="item in stateFor(location.id).items" :key="item.id" class="flex min-w-0 items-center gap-3 py-2 first:pt-0 last:pb-0">
+            <div class="min-w-0 flex-1">
+              <NuxtLink :to="`/item/${encodeURIComponent(item.id)}`" class="block truncate hover:underline">
+                {{ item.name }}
+              </NuxtLink>
+              <span v-if="item.displayId" class="block break-all text-xs text-muted-foreground">Generated ID · {{ item.displayId }}</span>
+              <span v-else-if="item.assetId" class="block break-all text-xs text-muted-foreground">{{ item.assetId }}</span>
+            </div>
             <span class="shrink-0 text-sm text-muted-foreground">×{{ item.quantity }}</span>
           </li>
         </ul>
