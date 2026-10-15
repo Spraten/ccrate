@@ -679,6 +679,12 @@
  
  export interface TextMeasurer {
    /** Width of the string in the CURRENT ctx font, any unit (consistent). */
+@@ -48,4 +48,4 @@
+-        for (const char of word) {
++        for (const char of splitGraphemes(word)) {
+           if (chunk !== '' && measurer.measure(chunk + char) > maxWidth) {
+             lines.push(chunk)
+             chunk = char
 @@ -65,3 +65,31 @@
  
    return lines

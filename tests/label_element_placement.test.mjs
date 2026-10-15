@@ -118,6 +118,13 @@ test('marks a grapheme wider than its text box as truncated without emitting it'
   )
 })
 
+test('keeps a flag grapheme intact when breaking an overlong word', () => {
+  assert.deepEqual(
+    fitTextToBox('aa🇺🇸', 3, 10, 1, { measure: text => [...text].length }),
+    { lines: ['aa', '🇺🇸'], truncated: false },
+  )
+})
+
 test('keeps combining marks attached when truncation adds an ellipsis', () => {
   const measure = value => value === 'e\u0301' ? 1 : value === 'W' ? 2 : value === '…' ? 0.6 : value === 'e\u0301…' ? 1.8 : 0.5
   assert.deepEqual(fitTextToBox('e\u0301W', 1.2, 10, 2, { measure }), { lines: ['…'], truncated: true })

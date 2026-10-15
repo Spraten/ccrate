@@ -48,7 +48,7 @@ export function wrapText(content: string, maxWidth: number, measurer: TextMeasur
       }
       else {
         let chunk = ''
-        for (const char of word) {
+        for (const char of splitGraphemes(word)) {
           if (chunk !== '' && measurer.measure(chunk + char) > maxWidth) {
             lines.push(chunk)
             chunk = char
