@@ -26,7 +26,7 @@
 
   function matchesItem(item: EntitySummary) {
     const term = searchTerm.value;
-    return !term || [item.name, item.displayId, item.assetId, item.manufacturer, item.model, item.serialNumber]
+    return !term || [item.name, item.displayId, item.assetId, item.manufacturer, item.modelNumber, item.serialNumber]
       .some(value => String(value || "").toLocaleLowerCase().includes(term));
   }
 
@@ -99,15 +99,30 @@
     state.loading = true;
     state.error = "";
     try {
-      const detailRequest = api.items.getLocation(locationId);
-      const itemRequest = isRoot ? Promise.resolve(null) : api.items.getAll({ parentIds: [locationId] });
-      const [detail, items] = await Promise.all([detailRequest, itemRequest]);
-      if (detail.error || !detail.data || (items && (items.error || !items.data))) throw new Error("request failed");
+      const detail = await api.items.getLocation(locationId);
+      if (detail.error || !detail.data) throw new Error("request failed");
       state.children = detail.data.children || [];
-      if (items?.data) state.items = items.data.items;
+      if (!isRoot) {
+        const collected = [] as EntitySummary[];
+        let page = 1;
+        let total = 0;
+        let received = 0;
+        do {
+          const response = await api.items.getAll({ parentIds: [locationId], page, pageSize: 100, includeArchived: true });
+          if (response.error || !response.data) throw new Error("request failed");
+          total = response.data.total;
+          received += response.data.items.length;
+          if (!response.data.items.length && received < total) throw new Error("incomplete page");
+          collected.push(...response.data.items.filter(item => item.parent?.id === locationId));
+          state.items = collected.slice();
+          page++;
+        } while (received < total);
+      }
       state.loaded = true;
     } catch {
-      state.error = "Could not load this location's details. Try again.";
+      state.error = state.items.length
+        ? "Some location contents could not be loaded. Results may be incomplete."
+        : "Could not load this location's details. Try again.";
     } finally {
       state.loading = false;
     }
