@@ -1,11 +1,14 @@
 <script setup lang="ts">
   import { Camera, Copy, Minus, ScanText, X } from "lucide-vue-next";
-  import { applyRecognizedTextWithoutOverwritingEdits, recognizeTextFromImage } from "~/lib/local-ocr";
+  import { applyRecognizedTextWithoutOverwritingEdits, recognizeStructuredTextFromImage } from "~/lib/local-ocr";
   import { clampOcrPopoverPosition, isOcrCaptureCurrent, isOcrScanCurrent, nextOcrPopoverState } from "~/lib/orc-popover-state";
 
   const props = defineProps<{ launcherTarget: string }>();
   const enabled = ref(false), open = ref(false), minimized = ref(false), cameraBusy = ref(false), cameraActive = ref(false), scanning = ref(false), copying = ref(false);
   const video = ref<HTMLVideoElement | null>(null), result = ref(""), resultRevision = ref(0), error = ref(""), imageURL = ref("");
+  const recognizedLines = ref<Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }>>([]);
+  const recognizedImageSize = ref({ width: 0, height: 0 });
+  const lineColors = ["#b91c1c", "#1d4ed8", "#047857", "#7e22ce", "#c2410c", "#0e7490"];
   const position = ref({ left: 0, top: 64 });
   let stream: MediaStream | null = null, image: Blob | null = null, drag: { x: number; y: number; left: number; top: number } | null = null;
   let cameraGeneration = 0, scanGeneration = 0, copyGeneration = 0, disposed = false;
@@ -59,7 +62,7 @@
     let requestedStream: MediaStream | null = null;
     cameraBusy.value = true;
     try {
-      requestedStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      requestedStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
       if (disposed || generation !== cameraGeneration || !open.value || minimized.value) {
         requestedStream.getTracks().forEach(track => track.stop());
         return;
@@ -102,23 +105,33 @@
     if (!photo) { error.value = "Could not capture a photo. Try again."; return; }
     scanGeneration++;
     scanning.value = false;
+    clearRecognizedLines();
     if (imageURL.value) URL.revokeObjectURL(imageURL.value);
     image = photo;
     imageURL.value = URL.createObjectURL(photo);
     error.value = "";
     stopCamera();
   }
+  function clearRecognizedLines() {
+    recognizedLines.value = [];
+    recognizedImageSize.value = { width: 0, height: 0 };
+  }
   async function scan() {
     if (!image) return;
     const generation = ++scanGeneration, scannedImage = image;
+    clearRecognizedLines();
     scanning.value = true;
     error.value = "";
+    let recognized: Awaited<ReturnType<typeof recognizeStructuredTextFromImage>> | null = null;
     try {
       const outcome = await applyRecognizedTextWithoutOverwritingEdits({
         getText: () => result.value,
         getRevision: () => resultRevision.value,
         setText: (text: string) => { result.value = text; },
-        recognize: recognizeTextFromImage,
+        recognize: async source => {
+          recognized = await recognizeStructuredTextFromImage(source);
+          return recognized;
+        },
         isCurrent: () => image === scannedImage && isOcrScanCurrent(generation, scanGeneration, {
           enabled: enabled.value,
           open: open.value,
@@ -128,7 +141,15 @@
         image: scannedImage,
       });
       if (outcome === "stale") return;
-      if (outcome === "empty") error.value = "No text was recognized. Retake the photo or adjust it and scan again.";
+      const lineResult = recognized as Awaited<ReturnType<typeof recognizeStructuredTextFromImage>> | null;
+      if (outcome === "applied" && lineResult && generation === scanGeneration && image === scannedImage) {
+        recognizedLines.value = lineResult.lines.filter(line => {
+          const { x0, y0, x1, y1 } = line.bbox;
+          return [x0, y0, x1, y1].every(Number.isFinite) && x1 > x0 && y1 > y0;
+        });
+        recognizedImageSize.value = { width: lineResult.imageWidth, height: lineResult.imageHeight };
+      }
+      else if (outcome === "empty") error.value = "No text was recognized. Retake the photo or adjust it and scan again.";
       else if (outcome === "edited-during-recognition") error.value = "Your text changed while scanning. Your edits were kept.";
     } catch (cause) {
       if (generation === scanGeneration && image === scannedImage) {
@@ -146,6 +167,7 @@
   }
   function retake() {
     cancelPendingScan();
+    clearRecognizedLines();
     error.value = "";
     if (imageURL.value) URL.revokeObjectURL(imageURL.value);
     imageURL.value = "";
@@ -246,9 +268,18 @@
         <p class="text-xs text-muted-foreground">Photos stay on this device. OCR runs in this browser. On first scan, the OCR code and English model download here.</p>
         <div class="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-muted">
           <img v-if="imageURL" :src="imageURL" alt="Captured image for OCR" class="h-full w-full object-contain" />
-          <video v-else ref="video" autoplay muted playsinline class="h-full w-full object-cover" />
+          <svg v-if="imageURL && recognizedImageSize.width && recognizedImageSize.height && recognizedLines.length" class="pointer-events-none absolute h-full w-full" :viewBox="`0 0 ${recognizedImageSize.width} ${recognizedImageSize.height}`" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <rect v-for="(line, index) in recognizedLines" :key="`box-${index}`" :x="line.bbox.x0" :y="line.bbox.y0" :width="line.bbox.x1 - line.bbox.x0" :height="line.bbox.y1 - line.bbox.y0" :stroke="lineColors[index % lineColors.length]" fill="none" stroke-width="3" />
+          </svg>
+          <video v-if="!imageURL" ref="video" autoplay muted playsinline class="h-full w-full object-cover" />
           <span v-if="!imageURL && !cameraActive" class="absolute text-sm text-muted-foreground">Camera is off</span>
         </div>
+        <ol v-if="recognizedLines.length" aria-label="Recognized lines with matching image box colors" class="space-y-1 text-sm">
+          <li v-for="(line, index) in recognizedLines" :key="`line-${index}`" class="flex items-start gap-2">
+            <span class="mt-1 size-3 shrink-0 rounded-sm" :style="{ backgroundColor: lineColors[index % lineColors.length] }" aria-hidden="true" />
+            <span :style="{ color: lineColors[index % lineColors.length] }"><span class="sr-only">Line {{ index + 1 }}: </span>{{ line.text }}</span>
+          </li>
+        </ol>
         <div class="flex flex-wrap gap-2">
           <button type="button" class="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50" :disabled="cameraBusy || !!imageURL" @click="startCamera">
             <Camera class="mr-1 inline size-4" /> {{ cameraBusy ? "Starting…" : "Start camera" }}

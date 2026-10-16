@@ -36,3 +36,5 @@ dist/
 .vite/
 coverage/
 *.log
+
+.worktrees/

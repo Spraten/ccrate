@@ -132,18 +132,91 @@ export async function applyRecognizedTextWithoutOverwritingEdits({ getText, getR
   const initialRevision = getRevision();
   const recognized = await recognize(image);
   if (!isCurrent()) return 'stale';
-  if (!recognized?.trim()) return 'empty';
+  const text = typeof recognized === 'string' ? recognized : recognized?.text;
+  if (!text?.trim()) return 'empty';
   if (getText() !== initialText || getRevision() !== initialRevision) return 'edited-during-recognition';
-  setText(recognized);
+  setText(text);
   return 'applied';
 }
 /**
  * Recognize all text in a user-selected image entirely in this browser.
  * @param {Blob} image
  * @param {() => Promise<TesseractEngine>} [loadEngine]
+ * @returns {Promise<{ text: string, lines: Array<{ text: string, bbox: OCRBox, confidence: number }>, imageWidth: number, imageHeight: number, confidence: number }>}
+ */
+export async function recognizeStructuredTextFromImage(image, loadEngine = loadTesseract) {
+  const bitmap = await createImageBitmap(image);
+  let worker;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Browser OCR image processing is unavailable.');
+    context.drawImage(bitmap, 0, 0);
+    const source = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    for (let i = 0; i < source.data.length; i += 4) {
+      for (let channel = 0; channel < 3; channel++) {
+        source.data[i + channel] = Math.max(0, Math.min(255, (source.data[i + channel] - 128) * 1.25 + 128));
+      }
+    }
+    context.putImageData(source, 0, 0);
+    const enhanced = await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not prepare the image for browser OCR.'))));
+    const engine = await loadEngine();
+    worker = await engine.createWorker('eng');
+    const passes = [
+      { image, psm: 6 },
+      { image, psm: 11 },
+      { image: enhanced, psm: 6 },
+      { image: enhanced, psm: 11 },
+    ];
+    let best;
+    for (const pass of passes) {
+      const result = await worker.recognize(pass.image, { tessedit_pageseg_mode: pass.psm }, { text: true, blocks: true });
+      const data = result.data || {};
+      const confidence = Number.isFinite(data.confidence) ? data.confidence : -Infinity;
+      if (!best || confidence > best.confidence) best = { data, confidence };
+    }
+    const data = best?.data || {};
+    const lines = (data.blocks || []).flatMap(block =>
+      (block.paragraphs || []).flatMap(paragraph => paragraph.lines || []))
+      .filter(line => {
+        const box = line.bbox;
+        return normalizeText(line.text) && box
+          && [box.x0, box.y0, box.x1, box.y1].every(Number.isFinite)
+          && box.x0 >= 0 && box.y0 >= 0
+          && box.x1 <= bitmap.width && box.y1 <= bitmap.height
+          && box.x1 > box.x0 && box.y1 > box.y0;
+      })
+      .map(line => ({ text: normalizeText(line.text), bbox: line.bbox, confidence: Number.isFinite(line.confidence) ? line.confidence : 0 }));
+    return {
+      text: normalizeText(data.text),
+      lines,
+      imageWidth: bitmap.width,
+      imageHeight: bitmap.height,
+      confidence: Number.isFinite(best?.confidence) ? best.confidence : 0,
+    };
+  } finally {
+    try {
+      if (worker) await worker.terminate();
+    } finally {
+      bitmap.close();
+    }
+  }
+}
+
+/**
+ * Recognize text in an image. Browser callers use the richer local OCR flow;
+ * non-browser callers retain the original plain-text worker path.
+ * @param {Blob} image
+ * @param {() => Promise<TesseractEngine>} [loadEngine]
  * @returns {Promise<string>}
  */
 export async function recognizeTextFromImage(image, loadEngine = loadTesseract) {
+  if (typeof document !== 'undefined' && typeof createImageBitmap === 'function') {
+    const result = await recognizeStructuredTextFromImage(image, loadEngine);
+    return result.text;
+  }
   const engine = await loadEngine();
   const worker = await engine.createWorker('eng');
   try {
