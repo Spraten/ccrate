@@ -24,6 +24,19 @@ class ChildLocationPreviewTests(unittest.TestCase):
         self.assertIn('Search covers loaded cabinet contents only', component)
         self.assertIn('{{ locationPath(location.name) }}</NuxtLink>', component)
         self.assertIn('function matchesItem(item: EntitySummary)', component)
+        self.assertIn('function matchesLocationName(location: LocationNode)', component)
+        self.assertIn('function filteredLocations()', component)
+        self.assertIn('if (!searchTerm.value) return props.locations', component)
+        self.assertIn('v-for="location in filteredLocations()"', component)
+        self.assertIn('Bin name match', component)
+        self.assertIn('No loaded locations match this filter.', component)
+
+    def test_root_loads_location_hierarchy_without_item_requests_and_expand_retries_details(self):
+        component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
+        self.assertIn('for (const location of props.locations) void loadDetail(location.id)', component)
+        self.assertIn('if (expanded && !state.loaded) void loadDetail(location.id)', component)
+        self.assertIn('const itemRequest = isRoot ? Promise.resolve(null)', component)
+        self.assertIn('onMounted(() => {\n    if (!isRoot) return;', component)
 
     def test_nested_contents_stay_lazy_and_failures_keep_retryable_rows(self):
         component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
@@ -79,8 +92,8 @@ class ChildLocationPreviewTests(unittest.TestCase):
             self.assertIn('item.parent.id', component)
             self.assertIn('let received = 0', component)
             self.assertIn('if (!response.data.items.length && received < total) throw new Error(\"incomplete page\")', component)
-            self.assertIn('onMounted(() => {\n    if (!isRoot) return;\n    for (const location of props.locations) directItems.set(location.id, []);\n    void loadItems();\n  });', component)
-            self.assertNotIn('for (const location of props.locations) void loadDetail(location.id)', component)
+            self.assertIn('onMounted(() => {\n    if (!isRoot) return;\n    for (const location of props.locations) directItems.set(location.id, []);\n    void loadItems();\n    for (const location of props.locations) void loadDetail(location.id);\n  });', component)
+            self.assertIn('for (const location of props.locations) void loadDetail(location.id)', component)
             self.assertIn('if (state.expanded && !isRoot) void loadDetail(locationId)', component)
             self.assertIn('props.locations.map(location => location.id)', component)
             self.assertIn('const isRoot = props.depth === 0', component)

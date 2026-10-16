@@ -37,6 +37,15 @@
     return items.filter(matchesItem);
   }
 
+  function matchesLocationName(location: LocationNode) {
+    return Boolean(searchTerm.value) && location.name.toLocaleLowerCase().includes(searchTerm.value);
+  }
+
+  function filteredLocations() {
+    if (!searchTerm.value) return props.locations;
+    return props.locations.filter(location => matchesLocationName(location) || visibleItems(location).length > 0);
+  }
+
   function locationPath(name: string) {
     return [props.parentPath, name].filter(Boolean).join(" / ");
   }
@@ -119,9 +128,8 @@
     allExpanded.value = expanded;
     for (const location of props.locations) {
       const state = stateFor(location.id);
-      const wasCollapsed = !state.expanded;
       state.expanded = expanded;
-      if (expanded && wasCollapsed) void loadDetail(location.id);
+      if (expanded && !state.loaded) void loadDetail(location.id);
     }
   }
 
@@ -140,6 +148,7 @@
     if (!isRoot) return;
     for (const location of props.locations) directItems.set(location.id, []);
     void loadItems();
+    for (const location of props.locations) void loadDetail(location.id);
   });
 </script>
 
@@ -161,7 +170,8 @@
       <span>{{ error }}</span>
       <button type="button" class="underline" @click="retryBatch">Retry</button>
     </div>
-    <article v-for="location in props.locations" :key="location.id" class="overflow-hidden rounded-lg border bg-card">
+    <p v-if="searchTerm && filteredLocations().length === 0" role="status" class="text-sm text-muted-foreground">No loaded locations match this filter.</p>
+    <article v-for="location in filteredLocations()" :key="location.id" class="overflow-hidden rounded-lg border bg-card">
       <header class="flex flex-wrap items-center gap-2 p-3">
         <button
           type="button"
@@ -175,6 +185,7 @@
         <NuxtLink :to="`/location/${encodeURIComponent(location.id)}`" class="min-w-0 flex-1 font-medium hover:underline">
           {{ location.name }}
         </NuxtLink>
+        <span v-if="matchesLocationName(location)" class="rounded bg-accent px-2 py-0.5 text-xs text-muted-foreground">Bin name match</span>
         <span v-if="location.itemCount > 0" class="text-sm text-muted-foreground">{{ location.itemCount }} items</span>
       </header>
 

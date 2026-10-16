@@ -19,3 +19,13 @@ Changed only `homebox-ui/overlay/components/Location/ChildContents.vue`, `tests/
 ## Commit
 
 `Filter loaded cabinet contents`.
+
+## Review Fix Round 1
+
+Updated filtering so an empty query shows every bin, while a nonempty query keeps bins whose names or loaded items match and displays a `Bin name match` marker for name matches. A no-results status appears when no loaded locations match. Added contract coverage for these states.
+
+Immediate bins now load their location details on root mount, alongside the existing batched item request. Root detail requests still skip per-bin item-list calls; nested child details and their items remain lazy until those children are expanded. `Expand bins` requests details for any expanded row whose details have not loaded, including after a previous failure. The loaded-only disclosure remains.
+
+Verification: new contracts failed before implementation (missing bin filtering and root detail loading); `python3 -m unittest tests.test_location_child_preview -v` passes (5 tests); `git diff --check` passes.
+
+Self-review confirmed the changes are limited to component rendering/loading, focused contract assertions, and this report. Existing batching and partial-load error/retry behavior are unchanged.
