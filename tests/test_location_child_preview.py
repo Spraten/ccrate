@@ -34,7 +34,9 @@ class ChildLocationPreviewTests(unittest.TestCase):
     def test_bin_name_match_keeps_header_without_bypassing_item_filter(self):
         component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
         self.assertIn('function matchesLocationName(location: LocationNode)', component)
-        self.assertIn('return props.locations.filter(location => matchesLocationName(location) || visibleItems(location).length > 0)', component)
+        self.assertIn('if (matchesLocationName(location) || itemsFor(location, nested).some(matchesItem)) return true', component)
+        self.assertIn('return state.loaded && state.children.some(child => hasLoadedMatch(child, true))', component)
+        self.assertIn('return props.locations.filter(location => hasLoadedMatch(location))', component)
         self.assertIn('return itemsFor(location).filter(matchesItem)', component)
         self.assertNotIn('if (location.name.toLocaleLowerCase().includes(searchTerm.value)) return items', component)
         self.assertIn('v-if="matchesLocationName(location)"', component)
@@ -114,7 +116,8 @@ class ChildLocationPreviewTests(unittest.TestCase):
             self.assertIn('expanded: isRoot', component)
             self.assertIn('api.items.getLocation(locationId)', component)
             self.assertIn('v-if="location.itemCount > 0"', component)
-            self.assertIn(':aria-expanded="stateFor(location.id).expanded"', component)
+            self.assertIn(':aria-expanded="isExpandedForDisplay(location)"', component)
+            self.assertIn(':disabled="isForcedOpenByFilter(location)"', component)
             self.assertIn('Collapse all bins', component)
             self.assertIn('Expand bins', component)
             self.assertIn(':aria-expanded="allExpanded"', component)
@@ -123,7 +126,7 @@ class ChildLocationPreviewTests(unittest.TestCase):
             self.assertIn('v-if="stateFor(location.id).loading"', component)
             self.assertIn('v-if="stateFor(location.id).error"', component)
             self.assertIn('itemsFor(location).length === 0', component)
-            self.assertIn('<ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" :filter="searchTerm" :parent-path="locationPath(location.name)" />', component)
+            self.assertIn('<ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" :filter="searchTerm" :parent-path="locationPath(location.name)" :loaded-states="states" />', component)
 
 
 if __name__ == "__main__":
