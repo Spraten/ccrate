@@ -175,4 +175,6 @@
 .workshop-native .equipment-member-facts{display:grid;gap:.2rem;font-size:.85rem}
 .workshop-native .equipment-member-actions{display:flex;align-items:center;justify-content:flex-end;gap:.4rem;flex-wrap:wrap}
 .workshop-native .equipment-member-actions button{white-space:normal;text-align:center}
+.workshop-native .equipment-member-select{display:inline-flex;align-items:center;justify-content:center;gap:.3rem;min-width:2.75rem;min-height:2.75rem;padding:.3rem .45rem;cursor:pointer}
+.workshop-native .equipment-member-select input{margin:0;min-width:1.1rem;min-height:1.1rem}
 @media(max-width:850px){.workshop-native .equipment-group-summary{align-items:flex-start;flex-direction:column}.workshop-native .equipment-member{grid-template-columns:minmax(0,1fr)}.workshop-native .equipment-member-actions{justify-content:flex-start}}

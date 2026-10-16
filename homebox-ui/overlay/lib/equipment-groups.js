@@ -1,4 +1,8 @@
 const GROUP_PREFIX = 'C-Crate Product group: ';
+
+export function equipmentRecordLabel(item) {
+  return `${item.name || 'Unnamed equipment'} · ${item.assetId || 'No asset code'} · ${item.id}`;
+}
 const fold = value => String(value ?? '').trim().replace(/\s+/gu, ' ').toLowerCase().replace(/[ßẞ]/gu, 'ss').replace(/ς/gu, 'σ');
 
 function customGroup(item) {

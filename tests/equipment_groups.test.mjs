@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { projectEquipmentGroups } from '../homebox-ui/overlay/lib/equipment-groups.js';
+import { projectEquipmentGroups, equipmentRecordLabel } from '../homebox-ui/overlay/lib/equipment-groups.js';
 
 const item = (id, extra = {}) => ({ id, name: `Unit ${id}`, assetId: `AS-${id}`, manufacturer: 'Acme', modelNumber: 'MX-1', serialNumber: `SN-${id}`, quantity: 1, condition: 'Ready', tags: [], ...extra });
 const project = (items, options = {}) => projectEquipmentGroups(items, { loans: [], storagePath: () => '', ...options });
@@ -42,3 +42,11 @@ test('groupCountsPhysicalRecordsBySnapshotStatus', () => {
   assert.equal(groups[0].count, 5);
   assert.deepEqual(project(rows, { loans: [{ entity_id: 'b' }], filter: 'blocked' })[0].items.map(row => row.id), ['c', 'e']);
  });
+
+test('equipment controls identify records with repeated names and codes', () => {
+  const first = item('first', { name: 'Camera', assetId: 'CAM-1' });
+  const second = item('second', { name: 'Camera', assetId: 'CAM-1' });
+  assert.equal(equipmentRecordLabel(first), 'Camera · CAM-1 · first');
+  assert.equal(equipmentRecordLabel(second), 'Camera · CAM-1 · second');
+  assert.notEqual(equipmentRecordLabel(first), equipmentRecordLabel(second));
+});
