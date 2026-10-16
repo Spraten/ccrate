@@ -55,6 +55,17 @@ class LabelGeneratorContractTests(unittest.TestCase):
         self.assertIn('request_key:requestKey', print_action)
         self.assertIn("write('labels/print'", print_action)
 
+    def test_equipment_stays_visible_during_design_and_supplies_live_sample(self):
+        component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text(encoding='utf-8')
+        controls_position = component.index('<div class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,.9fr)]">')
+        designer_position = component.index('<section v-if="designerOpen"')
+        self.assertLess(controls_position, designer_position, 'equipment controls appear before the editor')
+        self.assertNotIn('<div v-if="!designerOpen" class="grid gap-4 xl:grid-cols-', component, 'equipment and generation controls remain mounted in designer mode')
+        self.assertIn(':selected-item="selectedEquipment"', component)
+        self.assertIn('const selectedEquipment = computed(() => {', component)
+        designer = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelDesigner.vue').read_text(encoding='utf-8')
+        self.assertIn('watch(() => props.selectedItem', designer, 'designer refreshes its sample context when equipment selection changes')
+
     def test_generated_asset_id_is_searchable_and_visible_in_label_selection(self):
         component = (ROOT / 'homebox-ui/overlay/components/Workshop/LabelGenerator.vue').read_text(encoding='utf-8')
         self.assertIn('displayId?: string', component)

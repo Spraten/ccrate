@@ -116,12 +116,7 @@ function designerClosed() {
         <p>{{ workspace.printError }}</p>
         <Button v-if="workspace.printUncertain" variant="outline" class="mt-2" @click="workspace.actions.recovery()">Open Recovery</Button>
       </div>
-      <section v-if="designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
-        <p class="mb-3 text-sm text-muted-foreground">Edit a reusable design for this collection. Draft previews do not start a print.</p>
-        <LabelDesigner ref="designerRef" :selected-item="selectedEquipment" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @saved="workspace.actions.designerSaved" @busy="workspace.actions.designerBusy" />
-      </section>
-
-      <div v-if="!designerOpen" class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,.9fr)]">
+      <div class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,.9fr)]">
         <section class="rounded-lg border bg-card p-4 text-card-foreground">
           <div class="mb-3 flex items-center justify-between gap-3">
             <div><h2 class="text-lg font-semibold">Equipment</h2><p class="text-sm text-muted-foreground">{{ workspace.selectedIds.length }} selected in this collection</p></div>
@@ -165,6 +160,11 @@ function designerClosed() {
           <Button class="mt-4 w-full" :disabled="!canReview" @click="workspace.actions.review()">Preview selected labels</Button>
         </section>
       </div>
+
+      <section v-if="designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
+        <p class="mb-3 text-sm text-muted-foreground">Edit a reusable design for this collection. Draft previews do not start a print.</p>
+        <LabelDesigner ref="designerRef" :selected-item="selectedEquipment" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @saved="workspace.actions.designerSaved" @busy="workspace.actions.designerBusy" />
+      </section>
 
       <section v-if="!designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
         <h2 class="text-lg font-semibold">Preview and print</h2>
