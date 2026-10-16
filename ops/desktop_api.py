@@ -519,7 +519,11 @@ def handle(handler, deps):
             else:
                 with lock:
                     ctx = authenticate(handler, deps); binding(handler, ctx)
-                    result = post_action(route, data, ctx, deps, address)
+                    if route in ('equipment/groups/assign', 'equipment/groups/remove'):
+                        require_manager(ctx)
+                        result = custom_group_change(ctx['client'], route, data)
+                    else:
+                        result = post_action(route, data, ctx, deps, address)
                     if route in {'condition', 'return', 'imports/create', 'workshop/move', 'locations/create', 'recovery/resolve'}:
                         native_op('stock', 'invalidate')
         handler.reply_json(200, result)
