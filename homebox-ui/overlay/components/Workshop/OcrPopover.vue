@@ -1,17 +1,84 @@
 <script setup lang="ts">
   import { Camera, Copy, Minus, ScanText, X } from "lucide-vue-next";
+  import { applyCameraControl, describeCameraControls, digitalZoomDrawArgs } from "~/lib/ocr-camera-controls";
   import { applyRecognizedTextWithoutOverwritingEdits, recognizeStructuredTextFromImage } from "~/lib/local-ocr";
   import { clampOcrPopoverPosition, isOcrCaptureCurrent, isOcrScanCurrent, nextOcrPopoverState } from "~/lib/orc-popover-state";
 
   const props = defineProps<{ launcherTarget: string }>();
   const enabled = ref(false), open = ref(false), minimized = ref(false), cameraBusy = ref(false), cameraActive = ref(false), scanning = ref(false), copying = ref(false);
-  const video = ref<HTMLVideoElement | null>(null), result = ref(""), resultRevision = ref(0), error = ref(""), imageURL = ref("");
+  const video = ref<HTMLVideoElement | null>(null), preview = ref<HTMLCanvasElement | null>(null), result = ref(""), resultRevision = ref(0), error = ref(""), imageURL = ref("");
+  const controls = ref<ReturnType<typeof describeCameraControls> | null>(null);
+  const digitalZoom = ref(1), hardwareZoom = ref(1), focusMode = ref(""), focusDistance = ref(0);
+  const controlsBusy = ref(false), controlStatus = ref(""), controlError = ref("");
   const recognizedLines = ref<Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }>>([]);
   const recognizedImageSize = ref({ width: 0, height: 0 });
   const lineColors = ["#b91c1c", "#1d4ed8", "#047857", "#7e22ce", "#c2410c", "#0e7490"];
   const position = ref({ left: 0, top: 64 });
   let stream: MediaStream | null = null, image: Blob | null = null, drag: { x: number; y: number; left: number; top: number } | null = null;
   let cameraGeneration = 0, scanGeneration = 0, copyGeneration = 0, disposed = false;
+  let activeTrack: MediaStreamTrack | null = null, previewFrame = 0;
+  let defaultZoom: number | undefined, defaultFocusMode: string | undefined, defaultFocusDistance: number | undefined;
+
+  function currentTrack(track: MediaStreamTrack, generation: number) {
+    return !disposed && generation === cameraGeneration && stream?.getVideoTracks()[0] === track && track.readyState !== "ended";
+  }
+  function settings(track: MediaStreamTrack) {
+    try { return track.getSettings() as MediaTrackSettings & { focusMode?: string; zoom?: number; focusDistance?: number }; }
+    catch { return {}; }
+  }
+  function readControls(track: MediaStreamTrack) {
+    const reported = settings(track);
+    if (Number.isFinite(reported.zoom)) hardwareZoom.value = reported.zoom!;
+    if (typeof reported.focusMode === "string") focusMode.value = reported.focusMode;
+    if (Number.isFinite(reported.focusDistance)) focusDistance.value = reported.focusDistance!;
+    return reported;
+  }
+  function drawDigitalFrame(context: CanvasRenderingContext2D, source: HTMLVideoElement, width: number, height: number) {
+    const [x, y, cropWidth, cropHeight, dx, dy, destWidth, destHeight] = digitalZoomDrawArgs(width, height, digitalZoom.value);
+    context.drawImage(source, x, y, cropWidth, cropHeight, dx, dy, destWidth, destHeight);
+  }
+  function drawPreview(track: MediaStreamTrack, generation: number) {
+    if (!currentTrack(track, generation)) return;
+    const source = video.value, canvas = preview.value;
+    if (source?.videoWidth && source.videoHeight && canvas) {
+      if (canvas.width !== source.videoWidth) canvas.width = source.videoWidth;
+      if (canvas.height !== source.videoHeight) canvas.height = source.videoHeight;
+      const context = canvas.getContext("2d");
+      if (context) drawDigitalFrame(context, source, canvas.width, canvas.height);
+    }
+    previewFrame = requestAnimationFrame(() => drawPreview(track, generation));
+  }
+  async function changeControl(name: "zoom" | "focusMode" | "focusDistance", value: number | string) {
+    const track = activeTrack, generation = cameraGeneration;
+    if (!track || !currentTrack(track, generation) || controlsBusy.value) return;
+    controlsBusy.value = true;
+    controlError.value = "";
+    try {
+      await applyCameraControl(track, name, value);
+      if (!currentTrack(track, generation)) return;
+      const reported = readControls(track);
+      if (name === "focusMode" && reported.focusMode !== value) {
+        controlStatus.value = "The camera did not confirm the requested focus mode.";
+      } else if (reported[name] === undefined) {
+        controlStatus.value = "The camera did not report the updated setting.";
+      } else {
+        controlStatus.value = `${name === "focusMode" ? "Focus mode" : name === "focusDistance" ? "Focus distance" : "Zoom"} set to ${reported[name]}.`;
+      }
+    } catch (cause) {
+      if (currentTrack(track, generation)) {
+        readControls(track);
+        controlError.value = `Camera control could not be changed: ${(cause as Error)?.message || "unknown error"}`;
+      }
+    } finally {
+      if (currentTrack(track, generation)) controlsBusy.value = false;
+    }
+  }
+  function requestControl(event: Event, name: "zoom" | "focusMode" | "focusDistance") {
+    const target = event.target as HTMLInputElement | HTMLSelectElement;
+    const requested = name === "focusMode" ? target.value : Number(target.value);
+    target.value = String(name === "zoom" ? hardwareZoom.value : name === "focusDistance" ? focusDistance.value : focusMode.value);
+    void changeControl(name, requested);
+  }
 
   function transitionVisibility(action: "toggle-enabled" | "open" | "close") {
     const next = nextOcrPopoverState({ enabled: enabled.value, open: open.value }, action);
@@ -33,8 +100,18 @@
 
   function stopCamera() {
     cameraGeneration++;
+    cancelAnimationFrame(previewFrame);
     stream?.getTracks().forEach(track => track.stop());
     stream = null;
+    activeTrack = null;
+    controls.value = null;
+    defaultZoom = undefined;
+    defaultFocusMode = undefined;
+    defaultFocusDistance = undefined;
+    controlsBusy.value = false;
+    controlError.value = "";
+    controlStatus.value = "";
+    digitalZoom.value = 1;
     cameraActive.value = false;
     if (video.value) video.value.srcObject = null;
     cameraBusy.value = false;
@@ -68,10 +145,27 @@
         return;
       }
       stream = requestedStream;
-      cameraActive.value = true;
       if (video.value) {
         video.value.srcObject = stream;
         await video.value.play();
+      }
+      if (disposed || generation !== cameraGeneration || stream !== requestedStream || !open.value || minimized.value) {
+        requestedStream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      cameraActive.value = true;
+      const track = requestedStream.getVideoTracks()[0];
+      if (track) {
+        activeTrack = track;
+        controls.value = describeCameraControls(track);
+        const reported = readControls(track);
+        if (controls.value.zoom && reported.zoom === undefined) hardwareZoom.value = controls.value.zoom.min;
+        if (controls.value.focusDistance && reported.focusDistance === undefined) focusDistance.value = controls.value.focusDistance.min;
+        defaultZoom = reported.zoom;
+        defaultFocusMode = reported.focusMode;
+        defaultFocusDistance = reported.focusDistance;
+        controlStatus.value = controls.value.zoom ? "Camera zoom is available." : "Digital zoom crops and enlarges the image without adding detail.";
+        drawPreview(track, generation);
       }
     } catch (cause) {
       requestedStream?.getTracks().forEach(track => track.stop());
@@ -93,7 +187,9 @@
     const canvas = document.createElement("canvas");
     canvas.width = source.videoWidth;
     canvas.height = source.videoHeight;
-    canvas.getContext("2d")?.drawImage(source, 0, 0);
+    const context = canvas.getContext("2d");
+    if (!context) { error.value = "Could not prepare the camera photo. Try again."; return; }
+    drawDigitalFrame(context, source, canvas.width, canvas.height);
     const photo = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", 0.9));
     if (!isOcrCaptureCurrent(generation, cameraGeneration, {
       enabled: enabled.value,
@@ -271,8 +367,49 @@
           <svg v-if="imageURL && recognizedImageSize.width && recognizedImageSize.height && recognizedLines.length" class="pointer-events-none absolute h-full w-full" :viewBox="`0 0 ${recognizedImageSize.width} ${recognizedImageSize.height}`" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
             <rect v-for="(line, index) in recognizedLines" :key="`box-${index}`" :x="line.bbox.x0" :y="line.bbox.y0" :width="line.bbox.x1 - line.bbox.x0" :height="line.bbox.y1 - line.bbox.y0" :stroke="lineColors[index % lineColors.length]" fill="none" stroke-width="3" />
           </svg>
-          <video v-if="!imageURL" ref="video" autoplay muted playsinline class="h-full w-full object-cover" />
+          <video v-if="!imageURL" ref="video" autoplay muted playsinline class="hidden" />
+          <canvas v-if="!imageURL" ref="preview" class="h-full w-full object-contain" aria-label="Live camera preview" />
           <span v-if="!imageURL && !cameraActive" class="absolute text-sm text-muted-foreground">Camera is off</span>
+        </div>
+        <div v-if="cameraActive && controls" class="space-y-2 rounded-md border border-border p-2 text-sm">
+          <div v-if="controls.zoom" class="space-y-1">
+            <label for="ocr-hardware-zoom" class="block font-medium">Camera zoom <span class="font-normal">{{ hardwareZoom }}×</span></label>
+            <div class="flex items-center gap-2">
+              <input id="ocr-hardware-zoom" type="range" class="min-w-0 flex-1" :min="controls.zoom.min" :max="controls.zoom.max" :step="controls.zoom.step || 'any'" :value="hardwareZoom" :disabled="controlsBusy" @change="requestControl($event, 'zoom')" />
+              <button type="button" class="rounded border border-border px-2 py-1 disabled:opacity-50" :disabled="controlsBusy || defaultZoom === undefined" @click="changeControl('zoom', defaultZoom!)">Reset zoom</button>
+            </div>
+          </div>
+          <div v-else class="space-y-1">
+            <label for="ocr-digital-zoom" class="block font-medium">Digital zoom <span class="font-normal">{{ digitalZoom }}×</span></label>
+            <div class="flex items-center gap-2">
+              <input id="ocr-digital-zoom" v-model.number="digitalZoom" type="range" class="min-w-0 flex-1" min="1" max="4" step="0.1" />
+              <button type="button" class="rounded border border-border px-2 py-1" @click="digitalZoom = 1">Reset zoom</button>
+            </div>
+            <p class="text-xs text-muted-foreground">Digital zoom crops and enlarges the image without adding detail.</p>
+          </div>
+          <div v-if="controls.focusModes.length" class="space-y-1">
+            <label for="ocr-focus-mode" class="block font-medium">Focus mode</label>
+            <div class="flex items-center gap-2">
+              <select id="ocr-focus-mode" class="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1" :value="focusMode" :disabled="controlsBusy" @change="requestControl($event, 'focusMode')">
+                <option v-if="!controls.focusModes.includes(focusMode)" value="" disabled>Current mode unknown</option>
+                <option v-for="mode in controls.focusModes" :key="mode" :value="mode">{{ mode }}</option>
+              </select>
+              <button type="button" class="rounded border border-border px-2 py-1 disabled:opacity-50" :disabled="controlsBusy || !defaultFocusMode || !controls.focusModes.includes(defaultFocusMode)" @click="changeControl('focusMode', defaultFocusMode!)">Reset focus</button>
+            </div>
+            <p v-if="focusMode === 'continuous' || focusMode === 'single-shot'" class="text-xs text-muted-foreground">Focus is automatic.</p>
+            <p v-else-if="focusMode === 'none'" class="text-xs text-muted-foreground">This camera does not offer adjustable focus.</p>
+          </div>
+          <p v-else class="text-xs text-muted-foreground">Focus adjustment is unavailable on this camera.</p>
+          <div v-if="controls.focusDistance" class="space-y-1">
+            <label for="ocr-focus-distance" class="block font-medium">Manual focus distance <span class="font-normal">{{ focusDistance }}</span></label>
+            <div class="flex items-center gap-2">
+              <input id="ocr-focus-distance" type="range" class="min-w-0 flex-1" :min="controls.focusDistance.min" :max="controls.focusDistance.max" :step="controls.focusDistance.step || 'any'" :value="focusDistance" :disabled="controlsBusy || focusMode !== 'manual'" @change="requestControl($event, 'focusDistance')" />
+              <button type="button" class="rounded border border-border px-2 py-1 disabled:opacity-50" :disabled="controlsBusy || focusMode !== 'manual' || defaultFocusDistance === undefined" @click="changeControl('focusDistance', defaultFocusDistance!)">Reset distance</button>
+            </div>
+            <p v-if="focusMode !== 'manual'" class="text-xs text-muted-foreground">Select manual focus mode to adjust distance.</p>
+          </div>
+          <p v-if="controlStatus" role="status" class="text-xs text-muted-foreground">{{ controlStatus }}</p>
+          <p v-if="controlError" role="alert" class="text-xs text-destructive">{{ controlError }}</p>
         </div>
         <ol v-if="recognizedLines.length" aria-label="Recognized lines with matching image box colors" class="space-y-1 text-sm">
           <li v-for="(line, index) in recognizedLines" :key="`line-${index}`" class="flex items-start gap-2">

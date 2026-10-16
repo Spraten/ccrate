@@ -6,6 +6,15 @@ export class CameraControlError extends Error {
   }
 }
 
+/** Centered, integer-safe source crop and full-frame destination for drawImage. */
+export function digitalZoomDrawArgs(width, height, zoom) {
+  const scale = Number.isFinite(zoom) ? Math.min(4, Math.max(1, zoom)) : 1;
+  const cropWidth = Math.max(1, Math.floor(width / scale));
+  const cropHeight = Math.max(1, Math.floor(height / scale));
+  return [Math.floor((width - cropWidth) / 2), Math.floor((height - cropHeight) / 2),
+    cropWidth, cropHeight, 0, 0, width, height];
+}
+
 function ranges(track) {
   try { return track?.getCapabilities?.() || {}; } catch { return {}; }
 }

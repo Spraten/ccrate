@@ -1,6 +1,31 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyCameraControl, describeCameraControls, CameraControlError } from '../homebox-ui/overlay/lib/ocr-camera-controls.js';
+import { applyCameraControl, describeCameraControls, digitalZoomDrawArgs, CameraControlError } from '../homebox-ui/overlay/lib/ocr-camera-controls.js';
+
+test('digital zoom keeps the full source at 1× and a centered quarter at 4×', () => {
+  assert.deepEqual(digitalZoomDrawArgs(1920, 1080, 1), [0, 0, 1920, 1080, 0, 0, 1920, 1080]);
+  assert.deepEqual(digitalZoomDrawArgs(1920, 1080, 4), [720, 405, 480, 270, 0, 0, 1920, 1080]);
+  assert.deepEqual(digitalZoomDrawArgs(1920, 1080, 0), [0, 0, 1920, 1080, 0, 0, 1920, 1080]);
+  assert.deepEqual(digitalZoomDrawArgs(1920, 1080, 8), [720, 405, 480, 270, 0, 0, 1920, 1080]);
+});
+
+test('digital zoom gives integer source rectangles inside odd frame dimensions', () => {
+  for (const [width, height, zoom] of [[1919, 1079, 2.3], [1079, 1919, 3.7], [1, 1, 4]]) {
+    const [x, y, cropWidth, cropHeight] = digitalZoomDrawArgs(width, height, zoom);
+    assert.ok([x, y, cropWidth, cropHeight].every(Number.isInteger));
+    assert.ok(x >= 0 && y >= 0 && cropWidth >= 1 && cropHeight >= 1);
+    assert.ok(x + cropWidth <= width && y + cropHeight <= height);
+  }
+});
+
+test('preview and capture use the same crop mapping for wide and tall frames', () => {
+  for (const [width, height, expected] of [
+    [1600, 900, [400, 225, 800, 450, 0, 0, 1600, 900]],
+    [900, 1600, [225, 400, 450, 800, 0, 0, 900, 1600]],
+  ]) {
+    assert.deepEqual(digitalZoomDrawArgs(width, height, 2), expected);
+  }
+});
 
 function track(capabilities, settings = {}, constraints = {}) {
   const calls = [];
