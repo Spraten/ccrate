@@ -42,6 +42,38 @@ export function describeCameraControls(track) {
   return result;
 }
 
+/** Fresh values for a new camera session, or neutral values after stopping it. */
+export function cameraControlSessionState(track) {
+  if (!track) return { controls: null, hardwareZoom: 1, focusMode: '', focusDistance: 0,
+    defaultZoom: undefined, defaultFocusMode: undefined, defaultFocusDistance: undefined };
+  const controls = describeCameraControls(track);
+  const reported = settings(track);
+  return {
+    controls,
+    hardwareZoom: Number.isFinite(reported.zoom) ? reported.zoom : controls.zoom?.min ?? 1,
+    focusMode: typeof reported.focusMode === 'string' ? reported.focusMode : '',
+    focusDistance: Number.isFinite(reported.focusDistance) ? reported.focusDistance : controls.focusDistance?.min ?? 0,
+    defaultZoom: reported.zoom,
+    defaultFocusMode: reported.focusMode,
+    defaultFocusDistance: reported.focusDistance,
+  };
+}
+
+export function isCameraControlRequestCurrent(requestTrack, requestGeneration, activeTrack, activeGeneration) {
+  return requestTrack === activeTrack && requestGeneration === activeGeneration && requestTrack?.readyState !== 'ended';
+}
+
+/** Capture the same centered digital crop used by the live preview. */
+export async function captureCameraFrame(source, zoom, createCanvas = () => document.createElement('canvas')) {
+  const canvas = createCanvas();
+  canvas.width = source.videoWidth;
+  canvas.height = source.videoHeight;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.drawImage(source, ...digitalZoomDrawArgs(canvas.width, canvas.height, zoom));
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+}
+
 function fail(code, message) { throw new CameraControlError(code, message); }
 
 function requestedCameraControlValue(capabilities, name, value) {

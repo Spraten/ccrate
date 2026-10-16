@@ -1,6 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { applyRecognizedTextWithoutOverwritingEdits, recognizeNameFromImage, recognizeTextFromImage, suggestNameWithoutOverwritingEdits } from '../homebox-ui/overlay/lib/local-ocr.js';
+import { captureCameraFrame } from '../homebox-ui/overlay/lib/ocr-camera-controls.js';
+
+test('OCR receives the JPEG Blob produced from the cropped camera frame', async () => {
+  const photo = new Blob(['center crop'], { type: 'image/jpeg' });
+  const source = { videoWidth: 800, videoHeight: 600 };
+  const draws = [];
+  const captured = await captureCameraFrame(source, 2, () => ({
+    getContext: () => ({ drawImage: (...args) => draws.push(args) }),
+    toBlob: callback => callback(photo),
+  }));
+  let received;
+  await recognizeTextFromImage(captured, async () => ({ createWorker: async () => ({
+    recognize: async image => { received = image; return { data: { text: 'label' } }; },
+    terminate: async () => {},
+  }) }));
+  assert.deepEqual(draws[0], [source, 200, 150, 400, 300, 0, 0, 800, 600]);
+  assert.equal(received, photo);
+});
 
 test('full-text OCR receives the image locally, normalizes whitespace, and terminates its worker', async () => {
   const image = new Blob(['private photo']);

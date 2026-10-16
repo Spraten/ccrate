@@ -1,6 +1,53 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyCameraControl, cameraControlReadback, describeCameraControls, digitalZoomDrawArgs, watchCameraTrackEnd, CameraControlError } from '../homebox-ui/overlay/lib/ocr-camera-controls.js';
+import * as cameraControls from '../homebox-ui/overlay/lib/ocr-camera-controls.js';
+const { applyCameraControl, cameraControlReadback, cameraControlSessionState, captureCameraFrame, describeCameraControls, digitalZoomDrawArgs, isCameraControlRequestCurrent, watchCameraTrackEnd, CameraControlError } = cameraControls;
+
+test('stopping and restarting a camera clears control values from the previous track', () => {
+  const first = cameraControlSessionState(track({ zoom: { min: 1, max: 5 }, focusMode: ['manual'], focusDistance: { min: 0, max: 10 } }, { zoom: 4, focusMode: 'manual', focusDistance: 7 }));
+  assert.equal(first.hardwareZoom, 4);
+  assert.equal(first.focusDistance, 7);
+  assert.deepEqual(cameraControlSessionState(null), { controls: null, hardwareZoom: 1, focusMode: '', focusDistance: 0, defaultZoom: undefined, defaultFocusMode: undefined, defaultFocusDistance: undefined });
+  const second = cameraControlSessionState(track({ zoom: { min: 2, max: 3 }, focusMode: ['continuous'] }, {}));
+  assert.equal(second.hardwareZoom, 2);
+  assert.equal(second.focusMode, '');
+  assert.equal(second.focusDistance, 0);
+});
+
+test('control result from a previous track cannot update a restarted camera', () => {
+  const oldTrack = { readyState: 'live' }, newTrack = { readyState: 'live' };
+  assert.equal(isCameraControlRequestCurrent(oldTrack, 2, newTrack, 3), false);
+  assert.equal(isCameraControlRequestCurrent(newTrack, 3, newTrack, 3), true);
+  newTrack.readyState = 'ended';
+  assert.equal(isCameraControlRequestCurrent(newTrack, 3, newTrack, 3), false);
+});
+
+test('a rejected camera control leaves the track available for capture', async () => {
+  const camera = track({ zoom: { min: 1, max: 2 } });
+  camera.applyConstraints = async () => { throw new Error('driver rejected'); };
+  await assert.rejects(applyCameraControl(camera, 'zoom', 1.5), /driver rejected/);
+  camera.readyState = 'live';
+  const photo = new Blob(['captured photo'], { type: 'image/jpeg' });
+  const source = { videoWidth: 800, videoHeight: 600 };
+  const captured = await captureCameraFrame(source, 2, () => ({
+    getContext: () => ({ drawImage: () => {} }),
+    toBlob: callback => callback(photo),
+  }));
+  assert.equal(captured, photo);
+  assert.equal(camera.readyState, 'live');
+});
+
+test('capture draws the current digital crop before producing a JPEG Blob', async () => {
+  const calls = [];
+  const photo = new Blob(['cropped frame'], { type: 'image/jpeg' });
+  const canvas = { getContext: () => ({ drawImage: (...args) => calls.push(args) }), toBlob: (callback, type, quality) => { calls.push([type, quality]); callback(photo); } };
+  const source = { videoWidth: 1600, videoHeight: 900 };
+  assert.equal(await captureCameraFrame(source, 2, () => canvas), photo);
+  assert.equal(canvas.width, 1600);
+  assert.equal(canvas.height, 900);
+  assert.deepEqual(calls[0], [source, 400, 225, 800, 450, 0, 0, 1600, 900]);
+  assert.deepEqual(calls[1], ['image/jpeg', 0.9]);
+});
 
 test('readback distinguishes a driver that kept an old focus distance from a confirmed request', () => {
   const camera = track({ focusDistance: { min: 0, max: 10, step: 1 } });
