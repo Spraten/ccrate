@@ -36,3 +36,17 @@ export function projectEquipmentGroups(items, { loans = [], storagePath = () => 
   }
   return [...groups.values()];
 }
+
+export function groupHistoryMembers(members) {
+  return [...members].sort((a, b) => a.id.localeCompare(b.id)).slice(0, 100);
+}
+
+export function groupNotesPresentation(members, rows, error = null) {
+  const byId = new Map(members.map(item => [item.id, item]));
+  const notes = error ? [] : (Array.isArray(rows) ? rows : [])
+    .filter(row => byId.has(row.entity_id))
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .slice(0, 5)
+    .map(row => ({ ...row, source: byId.get(row.entity_id) }));
+  return { members, notes, message: error ? 'Could not load return notes for this group.' : notes.length ? '' : 'No return notes recorded for this group.' };
+}

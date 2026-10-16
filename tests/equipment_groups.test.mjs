@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { projectEquipmentGroups, equipmentRecordLabel } from '../homebox-ui/overlay/lib/equipment-groups.js';
+import { projectEquipmentGroups, equipmentRecordLabel, groupHistoryMembers, groupNotesPresentation } from '../homebox-ui/overlay/lib/equipment-groups.js';
 
 const item = (id, extra = {}) => ({ id, name: `Unit ${id}`, assetId: `AS-${id}`, manufacturer: 'Acme', modelNumber: 'MX-1', serialNumber: `SN-${id}`, quantity: 1, condition: 'Ready', tags: [], ...extra });
 const project = (items, options = {}) => projectEquipmentGroups(items, { loans: [], storagePath: () => '', ...options });
@@ -49,4 +49,25 @@ test('equipment controls identify records with repeated names and codes', () => 
   assert.equal(equipmentRecordLabel(first), 'Camera · CAM-1 · first');
   assert.equal(equipmentRecordLabel(second), 'Camera · CAM-1 · second');
   assert.notEqual(equipmentRecordLabel(first), equipmentRecordLabel(second));
+});
+
+
+test('groupNotesAreOrderedAndCappedAtFive', () => {
+  const members = [item('b'), item('a')];
+  const rows = Array.from({ length: 7 }, (_, index) => ({ entity_id: index % 2 ? 'a' : 'b', text: `Note ${index}`, author: 'Staff', created_at: `2026-10-16T0${index}:00:00Z` }));
+  const view = groupNotesPresentation(members, rows);
+  assert.deepEqual(view.notes.map(row => row.text), ['Note 6', 'Note 5', 'Note 4', 'Note 3', 'Note 2']);
+  assert.deepEqual(view.notes.map(row => row.source.id), ['b', 'a', 'b', 'a', 'b']);
+  assert.equal(view.notes[0].source.serialNumber, 'SN-b');
+  assert.equal(groupNotesPresentation(members, []).message, 'No return notes recorded for this group.');
+  assert.deepEqual(groupHistoryMembers([item('z'), item('b'), item('a')]).map(row => row.id), ['a', 'b', 'z']);
+  assert.equal(groupHistoryMembers(Array.from({length: 101}, (_, index) => item(String(index).padStart(3, '0')))).length, 100);
+});
+
+test('groupNotesFailureKeepsMembers', () => {
+  const members = [item('a'), item('b')];
+  const view = groupNotesPresentation(members, null, new Error('History unavailable'));
+  assert.deepEqual(view.members.map(row => row.id), ['a', 'b']);
+  assert.deepEqual(view.notes, []);
+  assert.match(view.message, /could not load/i);
 });

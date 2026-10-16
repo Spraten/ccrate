@@ -182,6 +182,27 @@ class DesktopTests(unittest.TestCase):
         operation = self.ledger.begin(self.group, self.borrower, 'check_out', [self.asset], ident())
         self.ledger.complete(operation['id']); return operation
 
+    def test_group_history_validates_collection_entities(self):
+        for ids in ([], [self.asset, self.asset], ['not-a-uuid'], [self.asset, ident()], [self.shelf]):
+            with self.subTest(ids=ids):
+                response = self.request('history/group', {'entity_ids': ids})
+                self.assertEqual(response.status, 400 if ids in ([], [self.asset, self.asset], ['not-a-uuid'], [self.shelf]) else 403)
+        self.assertEqual(self.request('history/group', {'entity_ids': [self.asset] * 101}).status, 400)
+        self.assertEqual(self.request('history/group', {'entity_ids': 'not-a-list'}).status, 400)
+
+    def test_group_history_returns_latest_entity_linked_notes(self):
+        for entity_id, note in ((self.asset, 'Older drill note'), (self.other_asset, 'Newer lamp note')):
+            checkout = self.ledger.begin(self.group, self.borrower, 'check_out', [entity_id], ident())
+            self.ledger.complete(checkout['id'])
+            returned = self.ledger.begin(self.group, self.manager, 'return', [entity_id], ident(),
+                                         context={'note_author': 'Workshop Admin', 'return_notes': [{'entity_id': entity_id, 'text': note}]})
+            self.ledger.complete(returned['id'])
+        response = self.request('history/group', {'entity_ids': [self.asset, self.other_asset]})
+        self.assertEqual(response.status, 200)
+        self.assertEqual([(row['entity_id'], row['text']) for row in response.result],
+                         [(self.other_asset, 'Newer lamp note'), (self.asset, 'Older drill note')])
+        self.assertTrue(all(row['author'] == 'Workshop Admin' and row['created_at'] for row in response.result))
+
     def test_custom_group_assign_preserves_native_tags(self):
         ordinary = {'id': ident(), 'name': 'Fragile', 'description': 'Native label', 'color': '#123456'}
         self.tags.append(ordinary)

@@ -31,7 +31,7 @@ from native_fields import update_payload
 
 PREFIX = '/workshop-api/'
 PRODUCT_GROUP_TAG_PREFIX = 'C-Crate Product group: '
-READ_POSTS = {'labels/preview', 'labels/paper', 'labels/templates/result', 'imports/get', 'operation/status', 'workshop/checks/resolve', 'workshop/checks/request'}
+READ_POSTS = {'labels/preview', 'labels/paper', 'labels/templates/result', 'imports/get', 'operation/status', 'history/group', 'workshop/checks/resolve', 'workshop/checks/request'}
 MANAGER_READS = {'people', 'badges', 'recovery', 'system', 'hardware/status', 'imports', 'invitations', 'users/administration', 'users/profile', 'labels/templates', 'workshop/checks/list', 'workshop/checks/get'}
 SHELF_CHECK_POSTS = {'workshop/checks/resolve', 'workshop/checks/request'}
 SHELF_CHECK_WRITES = {'workshop/checks/start', 'workshop/checks/observe', 'workshop/checks/notes', 'workshop/checks/refresh', 'workshop/checks/finish', 'workshop/checks/cancel'}
@@ -274,6 +274,35 @@ def history(ctx, deps, entity_id=None):
         elif row['action'] == 'add_note' and entity_id:
             project_note_history(row, client, dependency(deps, 'native_jobs'), group, entity_id)
     return sorted(rows, key=lambda row: row['created_at'], reverse=True)[:100]
+
+
+def group_history(ctx, deps, data):
+    values = data.get('entity_ids')
+    if not isinstance(values, list) or not 1 <= len(values) <= 100:
+        raise ValueError('Choose 1 to 100 distinct equipment records.')
+    if not all(isinstance(value, str) for value in values):
+        raise ValueError('Choose valid equipment record IDs.')
+    ids = [uuid(value) for value in values]
+    if len(ids) != len(set(ids)):
+        raise ValueError('Choose distinct equipment records.')
+    client = ctx['client']
+    for entity_id in ids:
+        entity = public_entity(client, entity_id)
+        if entity.get('id') != entity_id or entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
+            raise ValueError('Choose equipment in this collection.')
+    notes, seen = [], set()
+    ledger = dependency(deps, 'ledger')
+    for entity_id in ids:
+        for row in ledger.history(ctx['group'], entity_id):
+            for note in row.get('return_notes', []):
+                if note.get('entity_id') != entity_id:
+                    continue
+                key = (row['id'], entity_id, note.get('created_at'), note.get('text'))
+                if key in seen:
+                    continue
+                seen.add(key)
+                notes.append(dict(note, entity_id=entity_id))
+    return sorted(notes, key=lambda note: note.get('created_at') or '', reverse=True)[:100]
 
 
 def journal_schema(ledger):
@@ -519,7 +548,9 @@ def handle(handler, deps):
             else:
                 with lock:
                     ctx = authenticate(handler, deps); binding(handler, ctx)
-                    if route in ('equipment/groups/assign', 'equipment/groups/remove'):
+                    if route == 'history/group':
+                        result = group_history(ctx, deps, data)
+                    elif route in ('equipment/groups/assign', 'equipment/groups/remove'):
                         require_manager(ctx)
                         result = custom_group_change(ctx['client'], route, data)
                     else:
