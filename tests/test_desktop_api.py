@@ -186,7 +186,7 @@ class DesktopTests(unittest.TestCase):
         for ids in ([], [self.asset, self.asset], ['not-a-uuid'], [self.asset, ident()], [self.shelf]):
             with self.subTest(ids=ids):
                 response = self.request('history/group', {'entity_ids': ids})
-                self.assertEqual(response.status, 400 if ids in ([], [self.asset, self.asset], ['not-a-uuid'], [self.shelf]) else 403)
+                self.assertEqual(response.status, 400 if ids in ([], [self.asset, self.asset], ['not-a-uuid']) else 403)
         self.assertEqual(self.request('history/group', {'entity_ids': [self.asset] * 101}).status, 400)
         self.assertEqual(self.request('history/group', {'entity_ids': 'not-a-list'}).status, 400)
 
@@ -202,6 +202,27 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual([(row['entity_id'], row['text']) for row in response.result],
                          [(self.other_asset, 'Newer lamp note'), (self.asset, 'Older drill note')])
         self.assertTrue(all(row['author'] == 'Workshop Admin' and row['created_at'] for row in response.result))
+
+    def test_group_history_validates_through_collection_equipment_list(self):
+        with patch.object(Native, 'entity', side_effect=AssertionError('Avoid per-item native reads')):
+            response = self.request('history/group', {'entity_ids': [self.asset, self.other_asset]})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.result, [])
+
+    def test_group_history_finds_return_note_beyond_later_operations(self):
+        checkout = self.ledger.begin(self.group, self.borrower, 'check_out', [self.asset], ident())
+        self.ledger.complete(checkout['id'])
+        noted = self.ledger.begin(self.group, self.manager, 'return', [self.asset], ident(),
+                                  context={'note_author': 'Workshop Admin', 'return_notes': [{'entity_id': self.asset, 'text': 'Keep this note'}]})
+        self.ledger.complete(noted['id'])
+        for _ in range(51):
+            checkout = self.ledger.begin(self.group, self.borrower, 'check_out', [self.asset], ident())
+            self.ledger.complete(checkout['id'])
+            returned = self.ledger.begin(self.group, self.manager, 'return', [self.asset], ident())
+            self.ledger.complete(returned['id'])
+        response = self.request('history/group', {'entity_ids': [self.asset]})
+        self.assertEqual(response.status, 200)
+        self.assertEqual([note['text'] for note in response.result], ['Keep this note'])
 
     def test_custom_group_assign_preserves_native_tags(self):
         ordinary = {'id': ident(), 'name': 'Fragile', 'description': 'Native label', 'color': '#123456'}

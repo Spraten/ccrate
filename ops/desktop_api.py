@@ -285,24 +285,10 @@ def group_history(ctx, deps, data):
     ids = [uuid(value) for value in values]
     if len(ids) != len(set(ids)):
         raise ValueError('Choose distinct equipment records.')
-    client = ctx['client']
-    for entity_id in ids:
-        entity = public_entity(client, entity_id)
-        if entity.get('id') != entity_id or entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
-            raise ValueError('Choose equipment in this collection.')
-    notes, seen = [], set()
-    ledger = dependency(deps, 'ledger')
-    for entity_id in ids:
-        for row in ledger.history(ctx['group'], entity_id):
-            for note in row.get('return_notes', []):
-                if note.get('entity_id') != entity_id:
-                    continue
-                key = (row['id'], entity_id, note.get('created_at'), note.get('text'))
-                if key in seen:
-                    continue
-                seen.add(key)
-                notes.append(dict(note, entity_id=entity_id))
-    return sorted(notes, key=lambda note: note.get('created_at') or '', reverse=True)[:100]
+    available = {uuid(entity['id']) for entity in ctx['client'].entities(False)}
+    if any(entity_id not in available for entity_id in ids):
+        raise ApiError(403, 'C-Crate denied access to this collection or record.', 'collection_forbidden')
+    return dependency(deps, 'ledger').group_return_notes(ctx['group'], ids, limit=100)
 
 
 def journal_schema(ledger):
