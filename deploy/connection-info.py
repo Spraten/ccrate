@@ -17,12 +17,12 @@ def addresses():
             if address.get('family')=='inet':found.append((name,address['local']))
     return found
 
-def healthy(port):
+def healthy(port, path='/'):
     try:
-        with urllib.request.urlopen(f'http://127.0.0.1:{port}/',timeout=3) as response:return response.status==200
+        with urllib.request.urlopen(f'http://127.0.0.1:{port}{path}',timeout=3) as response:return response.status==200
     except (OSError,ValueError):return False
 
-def ensure(name,port):
+def ensure(name,port,path='/'):
     active=run('systemctl','--user','is-active',name).stdout.strip()=='active'
     if not active:
         print('Starting '+name+'…',flush=True)
@@ -31,7 +31,7 @@ def ensure(name,port):
             print('Could not start '+name+'. Check Admin system status or ask the maintainer.')
             return False
     for _ in range(4):
-        if healthy(port):return True
+        if healthy(port,path):return True
         time.sleep(.5)
     return False
 
@@ -46,12 +46,12 @@ def show():
             print(f'  {label}: {address} ({interface})')
     else:print('No usable network address. Join Wi-Fi using the Pi network menu, then press Enter here.')
     print('\nChecking applications…',flush=True)
-    native=ensure('homebox-native.service',17747)
+    native=ensure('homebox-native.service',17747,'/api/v1/status')
     gateway=ensure('homebox-workshop-gateway.service',17745)
     native=native and gateway
-    companion=ensure('homebox-companion.service',17749)
+    companion=ensure('homebox-companion.service',17749,'/api/session')
     print('C-Crate: '+('READY' if native else 'NOT RESPONDING'))
-    print('Equipment Terminal: '+('READY' if companion else 'NOT RESPONDING'))
+    print('Companion API: '+('READY' if companion else 'NOT RESPONDING'))
     if native:
         print('\nOn this Pi, you can connect via:\n  http://127.0.0.1:17745\n  Sign in with your C-Crate email and password.')
     if native and network:
@@ -65,7 +65,6 @@ def show():
         print('\nIf the page does not load, check that both devices are on the same')
         print('network. Guest Wi-Fi may block device-to-device connections.')
         print('\nIn C-Crate, use Collection → Members for badges or the Workshop sidebar for tools.')
-        print('Equipment Terminal is also available on the same address at port 17749.')
     if not native or not companion:
         print('\nA service is not ready. Refresh once; if it still fails, ask the')
         print('maintainer to inspect the service. Do not repeat uncertain transactions.')

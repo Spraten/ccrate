@@ -42,9 +42,7 @@
       try { frame.contentWindow.dispatchEvent(new Event('focus')); } catch {}
     }
   }
-  const terminal = new URL(location.href);
-  terminal.port = '17749'; terminal.pathname = '/'; terminal.search = '?mode=editor'; terminal.hash = '';
-  for (const [name, source] of [['People & badges', '/workshop/#people'], ['Workshop tools', '/workshop/'], ['Equipment Terminal', terminal.href]]) {
+  for (const [name, source] of [['People & badges', '/workshop/#people'], ['Workshop tools', '/workshop/']]) {
     const button = document.createElement('button');
     button.type = 'button'; button.textContent = name;
     button.onclick = () => open(name, source);

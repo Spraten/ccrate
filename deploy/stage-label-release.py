@@ -125,7 +125,7 @@ def stage_release(source_root, public_root, output, *, expected_native_pin='e01d
     copy_file(source_root,output,'work/homebox-backend-build/homebox','native/homebox')
     copy_file(source_root,output,'work/homebox-backend-build/build-receipt.json','native/homebox-build-receipt.json')
     copy_file(public_root,output,'work/supvan-cups/target/release/examples/kiosk-label','native/kiosk-label')
-    for name in ('deploy/kiosk-server.py','deploy/workshop-gateway.py','deploy/run-homebox.py','deploy/backup-deployment.py','deploy/build-homebox-ui.py','deploy/build-homebox-backend.py','deploy/homebox_patchset.py','deploy/homebox_display_id_overlay.py','deploy/homebox-patchset.json','deploy/build-label-ui.py','deploy/install-shared-tools.py','deploy/runtime-manifest.py','deploy/stage-label-release.py','deploy/verify-label-layouts.py','deploy/homebox-native.service','deploy/homebox-companion.service','deploy/homebox-workshop-gateway.service','deploy/Equipment Terminal.desktop','deploy/Open-Workshop.ps1'):
+    for name in ('deploy/kiosk-server.py','deploy/workshop-gateway.py','deploy/run-homebox.py','deploy/backup-deployment.py','deploy/build-homebox-ui.py','deploy/build-homebox-backend.py','deploy/homebox_patchset.py','deploy/homebox_display_id_overlay.py','deploy/homebox-patchset.json','deploy/build-label-ui.py','deploy/install-shared-tools.py','deploy/runtime-manifest.py','deploy/stage-label-release.py','deploy/verify-label-layouts.py','deploy/homebox-native.service','deploy/homebox-companion.service','deploy/homebox-workshop-gateway.service','deploy/Open-Workshop.ps1'):
         copy_file(source_root,output,name)
     copy_tree(source_root,output,'deploy/homebox-patches')
     for tree in ('src','vendor','public','patches'):

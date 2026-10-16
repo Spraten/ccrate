@@ -14,7 +14,9 @@ import urllib.error
 import urllib.request
 import uuid
 
-DATA_ROOT = pathlib.Path('/data')
+CODE_ROOT = pathlib.Path(os.environ.get('WORKSHOP_CODE_ROOT', '/app')).resolve()
+DATA_ROOT = pathlib.Path(os.environ.get('WORKSHOP_ROOT', '/data')).resolve()
+NATIVE_BINARY = pathlib.Path(os.environ.get('WORKSHOP_NATIVE_BINARY', '/app/native/homebox')).resolve()
 NATIVE_BASE = 'http://127.0.0.1:17747'
 REGISTRATION = '/api/v1/users/register'
 LOGIN = '/api/v1/users/login'
@@ -39,10 +41,10 @@ def validate_data_root(root, *, expected_root=DATA_ROOT, mount_check=os.path.ism
     root = pathlib.Path(root)
     expected = pathlib.Path(expected_root)
     if not root.is_absolute() or root != expected or root.is_symlink():
-        raise BootstrapError('Local test data must use the dedicated /data mount')
+        raise BootstrapError('Local test data must use its dedicated data directory')
     try:
         if root.resolve(strict=True) != root or not root.is_dir() or not mount_check(root):
-            raise BootstrapError('Local test data path is not a mounted volume')
+            raise BootstrapError('Local test data path is unavailable or not isolated')
     except OSError as error:
         raise BootstrapError('Local test data path is unavailable') from error
     return root
@@ -398,7 +400,7 @@ def _wait_http(url, child, timeout=60):
 
 
 def _healthcheck():
-    for url in ('http://127.0.0.1:17745/api/v1/status', 'http://127.0.0.1:17749/'):
+    for url in ('http://127.0.0.1:17745/api/v1/status', 'http://127.0.0.1:17749/api/session'):
         with urllib.request.urlopen(url, timeout=3) as response:
             if response.status != 200:
                 return False
@@ -407,8 +409,16 @@ def _healthcheck():
 
 def run():
     if os.environ.get('WORKSHOP_LOCAL_TEST') != '1':
-        raise BootstrapError('This supervisor is only for the local-test container')
-    store = BootstrapStore()
+        raise BootstrapError('This supervisor only runs an isolated local-test instance')
+    native_mode = os.environ.get('WORKSHOP_LOCAL_TEST_NATIVE') == '1'
+    if native_mode:
+        expected = pathlib.Path.home() / '.local' / 'share' / 'ccrate-local-test' / 'data'
+        if DATA_ROOT != expected or DATA_ROOT.is_symlink():
+            raise BootstrapError('Native local-test data must use ~/.local/share/ccrate-local-test/data')
+        DATA_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(DATA_ROOT, 0o700)
+    store = BootstrapStore(DATA_ROOT, expected_root=DATA_ROOT,
+                           mount_check=(lambda _path: True) if native_mode else os.path.ismount)
     store.prepare_volume()
     state = store.validate_bootstrap_files()
     if state is None:
@@ -428,7 +438,7 @@ def run():
     signal.signal(signal.SIGINT, stop)
     env = dict(os.environ, WORKSHOP_NATIVE_PORT='17747', WORKSHOP_COMPANION_PORT='17749', WORKSHOP_PORT='17745')
     try:
-        native = subprocess.Popen(['/app/native/homebox'], cwd=DATA_ROOT / 'work' / 'baseline',
+        native = subprocess.Popen([str(NATIVE_BINARY)], cwd=DATA_ROOT / 'work' / 'baseline',
                                   env=_native_environment(allow_registration))
         processes.append(native)
         _wait_native(native)
@@ -436,20 +446,20 @@ def run():
         if allow_registration:
             stop_children([native])
             processes.remove(native)
-            native = subprocess.Popen(['/app/native/homebox'], cwd=DATA_ROOT / 'work' / 'baseline',
+            native = subprocess.Popen([str(NATIVE_BINARY)], cwd=DATA_ROOT / 'work' / 'baseline',
                                       env=_native_environment(False))
             processes.append(native)
             _wait_native(native)
             identity = store.ensure_account(register_account, authenticate_account)
         ensure_manager_config(store, identity)
-        companion = subprocess.Popen([sys.executable, '/app/deploy/kiosk-server.py'], cwd='/app', env=env)
+        companion = subprocess.Popen([sys.executable, str(CODE_ROOT / 'deploy' / 'kiosk-server.py')], cwd=CODE_ROOT, env=env)
         processes.append(companion)
-        _wait_http('http://127.0.0.1:17749/', companion)
-        gateway = subprocess.Popen([sys.executable, '/app/deploy/workshop-gateway.py'], cwd='/app', env=env)
+        _wait_http('http://127.0.0.1:17749/api/session', companion)
+        gateway = subprocess.Popen([sys.executable, str(CODE_ROOT / 'deploy' / 'workshop-gateway.py')], cwd=CODE_ROOT, env=env)
         processes.append(gateway)
         _wait_http('http://127.0.0.1:17745/api/v1/status', gateway)
-        _wait_http('http://127.0.0.1:17749/', companion)
-        print('C-Crate local test is ready at http://localhost:17745; Equipment Terminal: http://localhost:17749', flush=True)
+        _wait_http('http://127.0.0.1:17749/api/session', companion)
+        print('C-Crate local test is ready at http://localhost:17745', flush=True)
         while not stopping:
             for process in processes:
                 code = process.poll()

@@ -70,7 +70,7 @@ def install(root=ROOT, *, directory=None, run=subprocess.run, open_url=urllib.re
         run(['systemctl','--user','restart','homebox-native.service'], check=True)
         healthy('http://127.0.0.1:17747/api/v1/status', open_url=open_url)
         run(['systemctl','--user','restart','homebox-companion.service'], check=True)
-        healthy('http://127.0.0.1:17749/', open_url=open_url)
+        healthy('http://127.0.0.1:17749/api/session', open_url=open_url)
         run(['systemctl','--user','enable','--now','homebox-workshop-gateway.service'], check=True)
         healthy('http://127.0.0.1:17745/workshop/', open_url=open_url)
         healthy('http://127.0.0.1:17745/', open_url=open_url)
@@ -82,7 +82,7 @@ def install(root=ROOT, *, directory=None, run=subprocess.run, open_url=urllib.re
         run(['systemctl','--user','daemon-reload'], check=True)
         run(['systemctl','--user','restart','homebox-native.service','homebox-companion.service'], check=True)
         raise
-    print('Shared Homebox tools are ready at port 17745; Equipment Terminal remains at port 17749.')
+    print('Shared Homebox tools are ready at port 17745.')
 
 
 if __name__ == '__main__': install()

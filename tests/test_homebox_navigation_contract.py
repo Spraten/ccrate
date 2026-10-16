@@ -55,7 +55,8 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn('...nav.value.filter(v => v.name.value !== "More").map', self.output)
         self.assertNotIn('name: computed(() => "More"), to: "/home"', self.output)
         self.assertIn('...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members")', self.output)
-        self.assertIn('to: terminalURL.value', self.output)
+        self.assertNotIn('terminalURL', self.output)
+        self.assertNotIn('17749', self.output)
         self.assertIn('action: openScanner', self.output)
         self.assertNotIn('<!-- makes scanner accessible easily if using legacy header -->', self.output)
 
@@ -80,9 +81,8 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn('bg-card px-3 py-2', self.output)
         self.assertIn(':aria-label="$t(\'global.search\')"', self.output)
         self.assertIn(':aria-label="$t(\'menu.scanner\')"', self.output)
-        self.assertIn('<DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader"', self.output)
-        self.assertIn('<DeviceStatus v-if="preferences.displayLegacyHeader && terminalHeader"', self.output)
-        self.assertIn('matchMedia("(min-width: 1024px)")', self.output)
+        self.assertIn('<DeviceStatus :enabled="true" class="shrink-0" />', self.output)
+        self.assertNotIn('terminalHeader', self.output)
         self.assertIn('<AppHeaderText class="h-6" />', self.output)
 
     def test_polish_palette_is_scoped_to_the_homebox_default_theme(self):

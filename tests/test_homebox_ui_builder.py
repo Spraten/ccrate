@@ -291,133 +291,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
     def test_create_action_move_fails_clearly_when_photo_preview_markup_shifts(self):
         source = '''      <div class="mt-4 flex flex-row-reverse">
         <ButtonGroup>
-          <Button type="submit">Create</Button>
-          <Button @click="create(false)">Create & Add</Button>
-        </ButtonGroup>
-      </div>
-
-      <PhotoUploaderPreview
-        :photos="form.photos"
-      >
-'''
-        with self.assertRaisesRegex(RuntimeError, "photo preview"):
-            BUILDER.move_create_actions_after_photo_preview(source)
-
-    def test_create_action_move_rejects_paired_photo_preview_markup(self):
-        source = '''      <div class="mt-4 flex flex-row-reverse">
-        <ButtonGroup>
-          <Button type="submit">Create</Button>
-          <Button @click="create(false)">Create & Add</Button>
-        </ButtonGroup>
-      </div>
-
-      <PhotoUploaderPreview
-        :photos="form.photos"
-      >
-        <div>Preview content</div>
-      </PhotoUploaderPreview>
-
-      <LaterComponent
-      />
-'''
-        with self.assertRaisesRegex(RuntimeError, "self-closing photo preview"):
-            BUILDER.move_create_actions_after_photo_preview(source)
-
-    def test_create_action_buttons_must_belong_to_the_same_actions_block(self):
-        source = '''      <PhotoUploader />
-      <div class="mt-4 flex flex-row-reverse">
-        <ButtonGroup>
-          <Button :disabled="loading" type="button" class="group">{{ $t("global.create") }}</Button>
-        </ButtonGroup>
-      </div>
-
-      <PhotoUploaderPreview
-        :photos="form.photos"
-      />
-      <Button type="submit">{{ $t("global.create") }}</Button>
-      <Button type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
-'''
-        with self.assertRaisesRegex(RuntimeError, "both existing create actions"):
-            BUILDER.move_create_actions_after_photo_preview(source)
-
-    def test_create_action_wrapper_cannot_borrow_buttons_from_a_later_block(self):
-        source = '''      <PhotoUploader />
-      <div class="mt-4 flex flex-row-reverse">
-      </div>
-      <div class="other-actions">
-        <ButtonGroup>
-          <Button type="submit">{{ $t("global.create") }}</Button>
-          <Button type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
-        </ButtonGroup>
-      </div>
-
-      <PhotoUploaderPreview
-        :photos="form.photos"
-      />
-'''
-        with self.assertRaises(RuntimeError):
-            BUILDER.move_create_actions_after_photo_preview(source)
-
-    def test_camera_ocr_build_injection_uses_local_engine_and_edit_revision(self):
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-            previous_build = BUILDER.BUILD
-            BUILDER.BUILD = pathlib.Path(directory)
-            page = BUILDER.BUILD / "pages/item/[id]/index/edit.vue"
-            modal = BUILDER.BUILD / "components/Entity/CreateModal.vue"
-            page.parent.mkdir(parents=True)
-            modal.parent.mkdir(parents=True)
-            page.write_text('''  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
-  const nameOcrMessage = ref("");
-  async function suggestItemNameFromPhoto(file: File) {
-    try {
-      const suggestion = await recognizeNameFromFileLocally(file);
-      if (!suggestion) {
-        nameOcrMessage.value = t("components.form.camera.name_not_found");
-        return;
-      }
-      item.value.name = suggestion;
-      nameOcrMessage.value = t("components.form.camera.name_suggested");
-    } catch {
-      nameOcrMessage.value = t("components.form.camera.name_unavailable");
-    }
-  }
-                  <FormTextField
-                    v-model="item[field.ref]"
-                    class="min-w-0 flex-1"
-                  />
-                  <Button type="button" variant="outline">
-                    {{ $t("components.form.camera.suggest_name") }}
-                  </Button>
-                </div>
-                <FormTextField
-                  v-else-if="field.type === 'text'"
-''')
-            modal.write_text('''  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
-  const { openDialog, closeDialog, registerOpenDialogCallback } = useDialog();
-  const nameOcrMessage = ref("");
-  async function suggestNameFromPhoto(file: File) {
-    try {
-      const suggestion = await recognizeNameFromFileLocally(file);
-      if (!suggestion) {
-        nameOcrMessage.value = t("components.form.camera.name_not_found");
-        return;
-      }
-      form.name = suggestion;
-      nameOcrMessage.value = t("components.form.camera.name_suggested");
-    } catch {
-      nameOcrMessage.value = t("components.form.camera.name_unavailable");
-    }
-  }
-          <FormTextField
-          v-model="form.name"
-          class="min-w-0 flex-1"
-          />
-          {{ $t("components.form.camera.suggest_name") }}
-      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>
-    form.name = "";
-''')
-            locale = BUILDER.BUILD / "locales/en.json"
-            locale.parent.mkdir(parents=True)
+          <Buëm-¢G§²ÚîÆ­yÔs=True)
             locale.write_text(json.dumps({"components": {"form": {"camera": {}}}}))
             try:
                 BUILDER.camera_ocr_frontend()
@@ -450,7 +324,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             BUILDER.BUILD = pathlib.Path(directory)
             layout = BUILDER.BUILD / "layouts/default.vue"
             layout.parent.mkdir(parents=True)
-            layout.write_text('''<template>\n  <Sidebar />\n  <SidebarInset class="min-h-dvh max-w-full overflow-hidden bg-background-accent">\n    <div v-if="preferences.displayLegacyHeader">\n      <AppHeaderDecor />\n      <SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />\n      <DeviceStatus v-if="preferences.displayLegacyHeader && terminalHeader" :enabled="preferences.displayLegacyHeader && terminalHeader" class="absolute right-6 top-3 z-30 hidden lg:flex" />\n    </div>\n    <div class="flex min-w-0 grow items-center justify-end gap-2">\n      <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="shrink-0" />\n      <button>Header action</button>\n    </div>\n    <NuxtPage />\n      </SidebarInset>\n</template>\n<script lang="ts" setup>\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";\n  const search = ref("");\n</script>\n''')
+            layout.write_text('''<template>\n  <Sidebar />\n  <SidebarInset class="min-h-dvh max-w-full overflow-hidden bg-background-accent">\n    <div v-if="preferences.displayLegacyHeader">\n      <AppHeaderDecor />\n      <SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />\n      </div>\n    <div class="flex min-w-0 grow items-center justify-end gap-2">\n      <DeviceStatus :enabled="true" class="shrink-0" />\n      <button>Header action</button>\n    </div>\n    <NuxtPage />\n      </SidebarInset>\n</template>\n<script lang="ts" setup>\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";\n  const search = ref("");\n</script>\n''')
             try:
                 BUILDER.ocr_popover_frontend()
             finally:
@@ -458,14 +332,12 @@ class HomeboxUiBuilderTests(unittest.TestCase):
 
             generated = layout.read_text()
             self.assertEqual(generated.count("<OcrPopover"), 1)
-            device_status = generated.index('<DeviceStatus v-if="!preferences.displayLegacyHeader')
+            device_status = generated.index('<DeviceStatus :enabled="true"')
             regular_target = generated.index('<div id="orc-launcher-toolbar"')
             self.assertGreater(regular_target, device_status)
-            sidebar_trigger = generated.index('<SidebarTrigger class="absolute left-2 top-2 hidden lg:flex"')
-            legacy_target = generated.index('<div id="orc-launcher-legacy"')
-            self.assertGreater(legacy_target, sidebar_trigger)
+            self.assertNotIn('orc-launcher-legacy', generated)
             self.assertEqual(generated.count('<OcrPopover :launcher-target="orcLauncherTarget" />'), 1)
-            self.assertIn('preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar"', generated)
+            self.assertIn('const orcLauncherTarget = computed(() => "#orc-launcher-toolbar")', generated)
             self.assertIn('import OcrPopover from "~/components/Workshop/OcrPopover.vue";', generated)
             component = (ROOT / "homebox-ui/overlay/components/Workshop/OcrPopover.vue").read_text()
             self.assertIn('from "~/lib/local-ocr"', component)
