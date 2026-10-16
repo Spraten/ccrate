@@ -54,8 +54,13 @@ export async function applyCameraControl(track, name, value) {
     fail('unsupported', `Unknown camera control: ${String(name)}`);
   }
 
-  let existing = {};
-  try { existing = track.getConstraints?.() || {}; } catch { /* constraints are optional */ }
+  if (typeof track.applyConstraints !== 'function') fail('apply-unavailable', 'Camera track cannot apply constraints');
+  let existing;
+  try {
+    existing = track.getConstraints?.() || {};
+  } catch {
+    fail('constraints-unavailable', 'Existing camera constraints could not be read');
+  }
   await track.applyConstraints({ ...existing, [name]: requested });
   return settings(track);
 }

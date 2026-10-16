@@ -50,3 +50,17 @@ test('rejects stale and failed tracks without stopping the camera', async () => 
   await assert.rejects(applyCameraControl(failed, 'zoom', 1.5), /driver rejected/);
   assert.notEqual(failed.readyState, 'ended');
 });
+
+test('does not apply a control if existing constraints cannot be read', async () => {
+  const camera = track({ zoom: { min: 1, max: 2 } });
+  camera.getConstraints = () => { throw new Error('constraints unavailable'); };
+  await assert.rejects(applyCameraControl(camera, 'zoom', 1.5), error => error instanceof CameraControlError && error.code === 'constraints-unavailable');
+  assert.equal(camera.calls.length, 0);
+});
+
+test('rejects tracks without applyConstraints using a typed failure', async () => {
+  const camera = track({ zoom: { min: 1, max: 2 } });
+  delete camera.applyConstraints;
+  await assert.rejects(applyCameraControl(camera, 'zoom', 1.5), error => error instanceof CameraControlError && error.code === 'apply-unavailable');
+  assert.notEqual(camera.readyState, 'ended');
+});

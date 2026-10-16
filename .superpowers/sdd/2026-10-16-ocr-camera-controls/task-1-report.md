@@ -11,3 +11,11 @@ The helper reports only capabilities provided by the track, including reported f
 - `git diff --check` passed.
 
 Commit: `361e249 Add safe OCR camera control helpers`.
+
+## Review follow-up
+
+Added tests that first failed when `getConstraints()` threw and when `applyConstraints` was absent. The helper now throws `CameraControlError` with `constraints-unavailable` before applying anything if existing constraints cannot be read, and with `apply-unavailable` if the track has no callable `applyConstraints`. No stop operation is used.
+
+- RED: focused suite had 2 failures for the two review cases.
+- GREEN: `node --test tests/ocr_camera_controls.test.mjs` passed all 6 tests.
+- `git diff --check` passed.
