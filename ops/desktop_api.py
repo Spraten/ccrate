@@ -27,8 +27,10 @@ from workshop import submit_shelf_order
 from workshop_views import build_view, resolve_workshop_code
 from shelf_checks import CheckAccessDenied, shelf_check_action
 from network_access import trusted_native_origins
+from native_fields import update_payload
 
 PREFIX = '/workshop-api/'
+PRODUCT_GROUP_TAG_PREFIX = 'C-Crate Product group: '
 READ_POSTS = {'labels/preview', 'labels/paper', 'labels/templates/result', 'imports/get', 'operation/status', 'workshop/checks/resolve', 'workshop/checks/request'}
 MANAGER_READS = {'people', 'badges', 'recovery', 'system', 'hardware/status', 'imports', 'invitations', 'users/administration', 'users/profile', 'labels/templates', 'workshop/checks/list', 'workshop/checks/get'}
 SHELF_CHECK_POSTS = {'workshop/checks/resolve', 'workshop/checks/request'}
@@ -187,6 +189,72 @@ def entities(client, locations=False):
 
 def public_entity(client, value):
     return client.entity(uuid(value))
+
+
+def custom_group_change(client, route, data):
+    name = data.get('group_name')
+    if not isinstance(name, str):
+        raise ValueError('Enter a product group name.')
+    name = name.strip()
+    if not name or len(PRODUCT_GROUP_TAG_PREFIX + name) > 255:
+        raise ValueError('Product group name must fit in a native tag.')
+    full_name = PRODUCT_GROUP_TAG_PREFIX + name
+    entity = public_entity(client, data.get('entity_id'))
+    if (entity.get('entityType') or {}).get('isLocation'):
+        raise ValueError('Choose equipment, not a storage location.')
+
+    native_tags = client.call('/api/v1/tags')
+    ids = [tag['id'] for tag in native_tags]
+    if len(ids) != len(set(ids)):
+        raise Conflict('Duplicate native tags need review in C-Crate.')
+    candidates = [tag for tag in native_tags
+                  if tag['name'].casefold().startswith(PRODUCT_GROUP_TAG_PREFIX.casefold())
+                  and tag['name'][len(PRODUCT_GROUP_TAG_PREFIX):].strip().casefold() == name.casefold()]
+    if len(candidates) > 1 or (candidates and (candidates[0]['name'] != full_name or
+                                                        candidates[0].get('parentId') not in (None, '', '00000000-0000-0000-0000-000000000000'))):
+        raise Conflict('Product group tag name collides with a native tag; review it in C-Crate.')
+    group_tags = [tag for tag in entity.get('tags', [])
+                  if tag['name'].strip().casefold().startswith(PRODUCT_GROUP_TAG_PREFIX.casefold())]
+    if len(group_tags) > 1 or len({tag['id'] for tag in entity.get('tags', [])}) != len(entity.get('tags', [])):
+        raise Conflict('Duplicate product group tags need review in C-Crate.')
+    existing = group_tags[0] if group_tags else None
+    if existing and existing['name'] != full_name:
+        raise Conflict('Remove the current product group before assigning another.')
+    if existing and (not candidates or candidates[0]['id'] != existing['id']):
+        raise Conflict('Product group membership needs review in C-Crate.')
+
+    if route == 'equipment/groups/remove':
+        if not existing:
+            raise Conflict('This equipment is not in that product group.')
+        desired_ids = [tag['id'] for tag in entity.get('tags', []) if tag['id'] != existing['id']]
+    else:
+        if existing:
+            return {'id': entity['id'], 'tags': entity.get('tags', [])}
+        tag = candidates[0] if candidates else None
+        if tag is None:
+            try:
+                tag = client.call('/api/v1/tags', 'POST',
+                                  {'name': full_name, 'description': 'C-Crate product group', 'color': '#64748b'})
+            except urllib.error.HTTPError:
+                raise
+            except (OSError, TimeoutError):
+                reread = [item for item in client.call('/api/v1/tags') if item['name'] == full_name]
+                if len(reread) != 1:
+                    raise Conflict('Product group tag creation needs review in C-Crate.') from None
+                tag = reread[0]
+        desired_ids = [item['id'] for item in entity.get('tags', [])] + [tag['id']]
+
+    payload = update_payload(entity)
+    payload['tagIds'] = desired_ids
+    client.call('/api/v1/entities/' + entity['id'], 'PUT', payload)
+    updated = client.entity(entity['id'])
+    if updated['id'] != entity['id'] or {tag['id'] for tag in updated.get('tags', [])} != set(desired_ids):
+        raise Conflict('C-Crate did not confirm the product group change.')
+    for key in entity:
+        if key not in ('tags', 'updatedAt', 'updatedBy') and updated.get(key) != entity[key]:
+            raise Conflict('Native equipment metadata changed during the product group update; review it in C-Crate.')
+    return {'id': updated['id'], 'tags': updated.get('tags', [])}
+
 
 
 def history(ctx, deps, entity_id=None):
