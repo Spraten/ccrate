@@ -37,17 +37,20 @@
     let page = 1;
     try {
       let total = 0;
+      let received = 0;
       do {
         const response = await api.items.getAll({ parentIds: immediateChildIds, page, pageSize: 100, includeArchived: true });
         if (response.error || !response.data) throw new Error("request failed");
         total = response.data.total;
+        received += response.data.items.length;
+        if (!response.data.items.length && received < total) throw new Error("incomplete page");
         for (const item of response.data.items) {
           const parentId = item.parent.id;
           collected.get(parentId)?.push(item);
         }
         if (!response.data.items.length) break;
         page++;
-      } while ([...collected.values()].reduce((count, items) => count + items.length, 0) < total);
+      } while (received < total);
       for (const [id, items] of collected) directItems.set(id, items);
       batchLoaded.value = true;
     } catch {
@@ -85,14 +88,17 @@
     const state = stateFor(locationId);
     state.expanded = !state.expanded;
     allExpanded.value = props.locations.every(location => stateFor(location.id).expanded);
-    if (state.expanded) void loadDetail(locationId);
+    if (state.expanded && !isRoot) void loadDetail(locationId);
+    else if (state.expanded && state.loaded === false) void loadDetail(locationId);
   }
 
   function setAllExpanded(expanded: boolean) {
     allExpanded.value = expanded;
     for (const location of props.locations) {
-      stateFor(location.id).expanded = expanded;
-      if (expanded) void loadDetail(location.id);
+      const state = stateFor(location.id);
+      const wasCollapsed = !state.expanded;
+      state.expanded = expanded;
+      if (expanded && wasCollapsed) void loadDetail(location.id);
     }
   }
 
@@ -108,11 +114,9 @@
   }
 
   onMounted(() => {
+    if (!isRoot) return;
     for (const location of props.locations) directItems.set(location.id, []);
     void loadItems();
-    if (isRoot) {
-      for (const location of props.locations) void loadDetail(location.id);
-    }
   });
 </script>
 
@@ -151,7 +155,7 @@
           <span>{{ stateFor(location.id).error }}</span>
           <button type="button" class="underline" @click="retryDetail(location.id)">Retry</button>
         </div>
-        <p v-if="!stateFor(location.id).error && !stateFor(location.id).loading && (isRoot ? directItems.get(location.id)?.length || 0 : stateFor(location.id).items.length) === 0 && stateFor(location.id).children.length === 0 && batchLoaded" class="text-sm text-muted-foreground">This location is empty.</p>
+        <p v-if="!stateFor(location.id).error && !stateFor(location.id).loading && (isRoot ? directItems.get(location.id)?.length || 0 : stateFor(location.id).items.length) === 0 && stateFor(location.id).children.length === 0 && (isRoot ? batchLoaded : stateFor(location.id).loaded)" class="text-sm text-muted-foreground">This location is empty.</p>
         <ul v-if="(isRoot ? directItems.get(location.id)?.length : stateFor(location.id).items.length)" class="divide-y">
           <li v-for="item in (isRoot ? directItems.get(location.id) : stateFor(location.id).items)" :key="item.id" class="flex min-w-0 items-center gap-3 py-2 first:pt-0 last:pb-0">
             <div class="min-w-0 flex-1">
