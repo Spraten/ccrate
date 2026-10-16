@@ -291,7 +291,133 @@ class HomeboxUiBuilderTests(unittest.TestCase):
     def test_create_action_move_fails_clearly_when_photo_preview_markup_shifts(self):
         source = '''      <div class="mt-4 flex flex-row-reverse">
         <ButtonGroup>
-          <Buëm-¢G§²ÚîÆ­yÔs=True)
+          <Button type="submit">Create</Button>
+          <Button @click="create(false)">Create & Add</Button>
+        </ButtonGroup>
+      </div>
+
+      <PhotoUploaderPreview
+        :photos="form.photos"
+      >
+'''
+        with self.assertRaisesRegex(RuntimeError, "photo preview"):
+            BUILDER.move_create_actions_after_photo_preview(source)
+
+    def test_create_action_move_rejects_paired_photo_preview_markup(self):
+        source = '''      <div class="mt-4 flex flex-row-reverse">
+        <ButtonGroup>
+          <Button type="submit">Create</Button>
+          <Button @click="create(false)">Create & Add</Button>
+        </ButtonGroup>
+      </div>
+
+      <PhotoUploaderPreview
+        :photos="form.photos"
+      >
+        <div>Preview content</div>
+      </PhotoUploaderPreview>
+
+      <LaterComponent
+      />
+'''
+        with self.assertRaisesRegex(RuntimeError, "self-closing photo preview"):
+            BUILDER.move_create_actions_after_photo_preview(source)
+
+    def test_create_action_buttons_must_belong_to_the_same_actions_block(self):
+        source = '''      <PhotoUploader />
+      <div class="mt-4 flex flex-row-reverse">
+        <ButtonGroup>
+          <Button :disabled="loading" type="button" class="group">{{ $t("global.create") }}</Button>
+        </ButtonGroup>
+      </div>
+
+      <PhotoUploaderPreview
+        :photos="form.photos"
+      />
+      <Button type="submit">{{ $t("global.create") }}</Button>
+      <Button type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
+'''
+        with self.assertRaisesRegex(RuntimeError, "both existing create actions"):
+            BUILDER.move_create_actions_after_photo_preview(source)
+
+    def test_create_action_wrapper_cannot_borrow_buttons_from_a_later_block(self):
+        source = '''      <PhotoUploader />
+      <div class="mt-4 flex flex-row-reverse">
+      </div>
+      <div class="other-actions">
+        <ButtonGroup>
+          <Button type="submit">{{ $t("global.create") }}</Button>
+          <Button type="button" @click="create(false)">{{ $t("global.create_and_add") }}</Button>
+        </ButtonGroup>
+      </div>
+
+      <PhotoUploaderPreview
+        :photos="form.photos"
+      />
+'''
+        with self.assertRaises(RuntimeError):
+            BUILDER.move_create_actions_after_photo_preview(source)
+
+    def test_camera_ocr_build_injection_uses_local_engine_and_edit_revision(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            previous_build = BUILDER.BUILD
+            BUILDER.BUILD = pathlib.Path(directory)
+            page = BUILDER.BUILD / "pages/item/[id]/index/edit.vue"
+            modal = BUILDER.BUILD / "components/Entity/CreateModal.vue"
+            page.parent.mkdir(parents=True)
+            modal.parent.mkdir(parents=True)
+            page.write_text('''  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
+  const nameOcrMessage = ref("");
+  async function suggestItemNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      item.value.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }
+                  <FormTextField
+                    v-model="item[field.ref]"
+                    class="min-w-0 flex-1"
+                  />
+                  <Button type="button" variant="outline">
+                    {{ $t("components.form.camera.suggest_name") }}
+                  </Button>
+                </div>
+                <FormTextField
+                  v-else-if="field.type === 'text'"
+''')
+            modal.write_text('''  import { recognizeNameFromFileLocally } from "~/components/Form/camera";
+  const { openDialog, closeDialog, registerOpenDialogCallback } = useDialog();
+  const nameOcrMessage = ref("");
+  async function suggestNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      form.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }
+          <FormTextField
+          v-model="form.name"
+          class="min-w-0 flex-1"
+          />
+          {{ $t("components.form.camera.suggest_name") }}
+      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>
+    form.name = "";
+''')
+            locale = BUILDER.BUILD / "locales/en.json"
+            locale.parent.mkdir(parents=True)
             locale.write_text(json.dumps({"components": {"form": {"camera": {}}}}))
             try:
                 BUILDER.camera_ocr_frontend()

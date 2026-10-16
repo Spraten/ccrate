@@ -278,4 +278,854 @@ def stage_bundle(destination, *, binary, public, source, provenance, fallback_po
     deploy_files = (LAUNCHER_DEPLOY_FILES if all((source / "deploy" / name).is_file()
                                                   for name in LAUNCHER_FILES)
                     else DEPLOY_FILES)
-    source_files =5ÓÎ÷¶‰žËkºwµçeÍ”	Õ¹‘±•ÉÉ½È¡˜‰Í•±•Ñ¥½¸™…¥±•èíÁÉ¥µ…Éå}•ÉÉ½ÉôìÁÉ•Ù¥½ÕÌÉ•½Ù•Éä™…¥±•èíÉ•½Ù•Éå}•ÉÉ½Éôì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹ÐÁ½¥¹ÑÌÑ¼íÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥Ðõ…±Í”¥õíÉ•½É‘¥¹}‘•Ñ…¥±ôˆ¤™É½´ÁÉ¥µ…Éå}•ÉÉ½È(€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰Í•±•Ñ¥½¸™…¥±•èíÁÉ¥µ…Éå}•ÉÉ½ÉôìÁÉ•Ù¥½ÕÌ‰Õ¹‘±”É•ÍÑ½É•…¹Ù•É¥™¥•…ÐíÁÉ•Ù¥½ÕÍôˆ¤™É½´ÁÉ¥µ…Éå}•ÉÉ½È((€€€‘•˜™¥¹¥Í¡}™…±±‰…¬¡ÁÉ¥µ…Éå}•ÉÉ½È¤è(€€€€€€€ÑÉäè(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡…¹‘¥‘…Ñ”¤(€€€€€€€€€€€ÉÕ¹}Í•ÉÙ¥•Ì¡±¥ÍÐ¡ÍÑ½À¤¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡…¹‘¥‘…Ñ”¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Õ¹¡…¹• È¤(€€€€€€€€€€€É•Á±…”¡™…±±‰…¬¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡™…±±‰…¬¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Õ¹¡…¹• È¤(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰™…±±‰…­}Í•±•Ñ•ˆ¤(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰™…±±‰…­}ÍÑ…ÉÑ•ˆ¤(€€€€€€€€€€€ÉÕ¹}Í•ÉÙ¥•Ì¡±¥ÍÐ¡ÍÑ…ÉÐ¤¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡™…±±‰…¬¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Õ¹¡…¹• È¤(€€€€€€€€€€€Ù•É¥™ä¡™…±±‰…¬¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡™…±±‰…¬¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Õ¹¡…¹• È¤(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰™…±±‰…­}Ù•É¥™¥•ˆ¤(€€€€€€€•á•ÁÐá•ÁÑ¥½¸…ÌÉ•½Ù•Éå}•ÉÉ½Èè(€€€€€€€€€€€¥˜¥Í¥¹ÍÑ…¹”¡É•½Ù•Éå}•ÉÉ½È°)½ÕÉ¹…±ÁÁ•¹‘I½±±‰…­ÉÉ½È¤è(€€€€€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰Í•±•Ñ¥½¸™…¥±•èíÁÉ¥µ…Éå}•ÉÉ½Éôì½µÁ…Ñ¥‰±”É•½Ù•ÉäÍÑ½ÁÁ•‰•…ÕÍ”€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰©½ÕÉ¹…°±•…¹ÕÀ™…¥±•ì¹¼™ÕÉÑ¡•È©½ÕÉ¹…°½ÈÍ•ÉÙ¥”…±±‰…­ÌÉ…¸ì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹ÐÁ½¥¹ÑÌÑ¼íÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥Ðõ…±Í”¥ôì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰É•½¹¥±¥…Ñ¥½¸É•ÅÕ¥É•èíÉ•½Ù•Éå}•ÉÉ½Éôˆ¤™É½´ÁÉ¥µ…Éå}•ÉÉ½È(€€€€€€€€€€€©½ÕÉ¹…±}É•½É‘¥¹}•ÉÉ½È€ô9½¹”(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰É•½Ù•Éå}™…¥±•ˆ¤(€€€€€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€€€€€©½ÕÉ¹…±}É•½É‘¥¹}•ÉÉ½È€ô•áŒ(€€€€€€€€€€€É•½É‘¥¹}‘•Ñ…¥°€ô€¡˜ˆìÉ•½Ù•Éå}™…¥±•©½ÕÉ¹…°É•½É‘¥¹œ…±Í¼™…¥±•èí©½ÕÉ¹…±}É•½É‘¥¹}•ÉÉ½Éôì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰ÑÉ…¹Í…Ñ¥½¸É•µ…¥¹ÌÕ¹É•Í½±Ù•…¹É•ÅÕ¥É•ÌÉ•½¹¥±¥…Ñ¥½¸ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜©½ÕÉ¹…±}É•½É‘¥¹}•ÉÉ½È•±Í”€ˆˆ¤(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰Í•±•Ñ¥½¸™…¥±•èíÁÉ¥µ…Éå}•ÉÉ½Éôì½µÁ…Ñ¥‰±”É•½Ù•Éä™…¥±•èíÉ•½Ù•Éå}•ÉÉ½Éôì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹ÐÁ½¥¹ÑÌÑ¼íÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥Ðõ…±Í”¥õíÉ•½É‘¥¹}‘•Ñ…¥±ôˆ¤™É½´ÁÉ¥µ…Éå}•ÉÉ½È(€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰Í•±•Ñ¥½¸™…¥±•èíÁÉ¥µ…Éå}•ÉÉ½Éôì½µÁ…Ñ¥‰±”Í•±•Ñ•…¹Ù•É¥™¥•…Ðí™…±±‰…­ôˆ¤™É½´ÁÉ¥µ…Éå}•ÉÉ½È((€€€‘•˜É•½É‘}ÁÉ•}•áÁ½ÍÕÉ•}™…¥±ÕÉ”¡ÁÉ¥µ…Éå}•ÉÉ½È¤è(€€€€€€€ÑÉäè(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰ÁÉ•}•áÁ½ÍÕÉ•}™…¥±ÕÉ”ˆ¤(€€€€€€€•á•ÁÐ)½ÕÉ¹…±ÁÁ•¹‘I½±±‰…­ÉÉ½È…Ì©½ÕÉ¹…±}•ÉÉ½Èè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰ÁÉ”µ•áÁ½ÍÕÉ”½Á•É…Ñ¥½¸™…¥±•èíÁÉ¥µ…Éå}•ÉÉ½ÉôìÉ•½É‘¥¹œ€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰ÁÉ•}•áÁ½ÍÕÉ•}™…¥±ÕÉ”…±Í¼™…¥±•…¹©½ÕÉ¹…°±•…¹ÕÀ½Õ±¹½Ð‰”ÁÉ½Ù•¸è€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰í©½ÕÉ¹…±}•ÉÉ½Éôì…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹ÐÁ½¥¹ÑÌÑ¼€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰íÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥Ðõ…±Í”¥ôìÍ•ÉÙ¥•Ì…É”ÍÑ½ÁÁ•ì¹¼É•½Ù•Éä…±±‰…­Ì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰É…¸ìÉ•½¹¥±¥…Ñ¥½¸É•ÅÕ¥É•ˆ¤™É½´ÁÉ¥µ…Éå}•ÉÉ½È(€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì©½ÕÉ¹…±}•ÉÉ½Èè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰ÁÉ”µ•áÁ½ÍÕÉ”½Á•É…Ñ¥½¸™…¥±•èíÁÉ¥µ…Éå}•ÉÉ½ÉôìÉ•½É‘¥¹œ€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰ÁÉ•}•áÁ½ÍÕÉ•}™…¥±ÕÉ”…±Í¼™…¥±•èí©½ÕÉ¹…±}•ÉÉ½Éôì…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹ÐÁ½¥¹ÑÌ€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰Ñ¼íÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥Ðõ…±Í”¥ôìÍ•ÉÙ¥•Ì…É”ÍÑ½ÁÁ•ì¹¼É•½Ù•Éä€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰…±±‰…­ÌÉ…¸ìÁÉ¥½È©½ÕÉ¹…°É•µ…¥¹Ì¥¹Ñ…Ð…¹É•½Ù•Éä…¸É•ÍÕµ”ˆ¤™É½´ÁÉ¥µ…Éå}•ÉÉ½È((€€€Ý¥Ñ }ÑÉ…¹Í…Ñ¥½¹}±½¬¡ÉÕ¹Ñ¥µ”¤è(€€€€€€€¥˜©½ÕÉ¹…°¹•á¥ÍÑÌ ¤è(€€€€€€€€€€€•Ù•¹ÑÌ€ô}É•…‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹ÑÌ¡©½ÕÉ¹…°°ÉÕ¹Ñ¥µ”¤(€€€€€€€€€€€¥˜•Ù•¹ÑÍl´Åul‰Á¡…Í”‰t¹½Ð¥¸QI5%91}A!MLè(€€€€€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰…¸Õ¹É•Í½±Ù•É•±•…Í”ÑÉ…¹Í…Ñ¥½¸É•ÅÕ¥É•ÌÉ•½Ù•Éä‰•™½É”Í•±•Ñ¥½¸ˆ¤(€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰ÑÉ…¹Í…Ñ¥½¹}ÁÉ•Á…É•ˆ¤(€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰ÍÑ½Á}É•ÅÕ•ÍÑ•ˆ¤(€€€€€€€ÑÉäè(€€€€€€€€€€€ÉÕ¹}Í•ÉÙ¥•Ì¡±¥ÍÐ¡ÍÑ½À¤¤(€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€©½ÕÉ¹…±}É•½É‘¥¹}•ÉÉ½È€ô9½¹”(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰ÍÑ½Á}™…¥±•ˆ¤(€€€€€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì©½ÕÉ¹…±}•ÉÉ½Èè(€€€€€€€€€€€€€€€©½ÕÉ¹…±}É•½É‘¥¹}•ÉÉ½È€ô©½ÕÉ¹…±}•ÉÉ½È(€€€€€€€€€€€É•½É‘¥¹}‘•Ñ…¥°€ô€¡˜ˆìÍÑ½Á}™…¥±•©½ÕÉ¹…°É•½É‘¥¹œ…±Í¼™…¥±•èí©½ÕÉ¹…±}É•½É‘¥¹}•ÉÉ½Éôì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰ÑÉ…¹Í…Ñ¥½¸É•µ…¥¹ÌÕ¹É•Í½±Ù•…¹É•ÅÕ¥É•ÌÉ•½¹¥±¥…Ñ¥½¸ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜©½ÕÉ¹…±}É•½É‘¥¹}•ÉÉ½È•±Í”€ˆˆ¤(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰¥¹¥Ñ¥…°ÍÑ½À™…¥±•ìÍ•±•Ñ½ÈÕ¹¡…¹•…¹¹¼É•½Ù•Éä…ÑÑ•µÁÑ•èí•áôˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰íÉ•½É‘¥¹}‘•Ñ…¥±ôˆ¤™É½´•áŒ(€€€€€€€ÑÉäè(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡ÁÉ•Ù¥½ÕÌ¤(€€€€€€€€€€€™½È¥¹‘•à¥¸É…¹” Ì¤è(€€€€€€€€€€€€€€€…ÍÍ•ÉÑ}Õ¹¡…¹•¡¥¹‘•à¤(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰Á½ÍÑ}ÍÑ½Á}ÁÉ•™±¥¡Ñ}Á…ÍÍ•ˆ¤(€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€¥˜¥Í¥¹ÍÑ…¹”¡•áŒ°)½ÕÉ¹…±ÁÁ•¹‘I½±±‰…­ÉÉ½È¤è(€€€€€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰ÁÉ”µ•áÁ½ÍÕÉ”©½ÕÉ¹…°±•…¹ÕÀ™…¥±•ìÍ•±•Ñ½ÈÁÉ•Í•ÉÙ•…Ð€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰íÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥Ðõ…±Í”¥ôì¹¼É•½Ù•Éä…±±‰…­ÌÉ…¸ì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰É•½¹¥±¥…Ñ¥½¸É•ÅÕ¥É•èí•áôˆ¤™É½´•áŒ(€€€€€€€€€€€É•½É‘}ÁÉ•}•áÁ½ÍÕÉ•}™…¥±ÕÉ”¡•áŒ¤(€€€€€€€€€€€™¥¹¥Í¡}ÁÉ•Ù¥½ÕÌ¡•áŒ¤(€€€€€€€ÑÉäè(€€€€€€€€€€€É•Á±…”¡…¹‘¥‘…Ñ”¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡…¹‘¥‘…Ñ”¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Õ¹¡…¹• Ä¤(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰…¹‘¥‘…Ñ•}Í•±•Ñ•ˆ¤(€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€¥˜¥Í¥¹ÍÑ…¹”¡•áŒ°)½ÕÉ¹…±ÁÁ•¹‘I½±±‰…­ÉÉ½È¤è(€€€€€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰…¹‘¥‘…Ñ”Í•±•Ñ¥½¸©½ÕÉ¹…°±•…¹ÕÀ™…¥±•ìÍ•±•Ñ½ÈÁÉ•Í•ÉÙ•…Ð€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰íÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥Ðõ…±Í”¥ôì¹¼É•½Ù•Éä…±±‰…­ÌÉ…¸ì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰É•½¹¥±¥…Ñ¥½¸É•ÅÕ¥É•èí•áôˆ¤™É½´•áŒ(€€€€€€€€€€€É•½É‘}ÁÉ•}•áÁ½ÍÕÉ•}™…¥±ÕÉ”¡•áŒ¤(€€€€€€€€€€€™¥¹¥Í¡}ÁÉ•Ù¥½ÕÌ¡•áŒ¤(€€€€€€€€ŒQ¡¥ÌÉ•½É¥Ì™¥±”´…¹‘¥É•Ñ½Éäµ™Íå¹•‰•™½É”…¹äÍÑ…ÉÐ…±±‰…¬¸(€€€€€€€€Œ%˜¥Ð…¹¹½Ð‰”‘ÕÉ…‰±äÉ•½É‘•°±•…Ù”Ñ¡”Í•ÉÙ¥•ÌÍÑ½ÁÁ•…¹(€€€€€€€€ŒÉ•ÅÕ¥É”•áÁ±¥¥Ð©½ÕÉ¹…°É•½¹¥±¥…Ñ¥½¸ì‘¼¹½Ð¥¹™•È<¥ÌÍ…™”¸(€€€€€€€ÑÉäè(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰…¹‘¥‘…Ñ•}•áÁ½ÍÕÉ•}Á½ÍÍ¥‰±”ˆ¤(€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È (€€€€€€€€€€€€€€€€‰…¹‘¥‘…Ñ”¥ÌÍ•±•Ñ•‰ÕÐ•áÁ½ÍÕÉ”µ…É­•È½Õ±¹½Ð‰”‘ÕÉ…‰±äÉ•½É‘•ì€ˆ(€€€€€€€€€€€€€€€˜‰Í•±•Ñ½ÈÁÉ•Í•ÉÙ•…¹ÑÉ…¹Í…Ñ¥½¸É•ÅÕ¥É•ÌÉ•½¹¥±¥…Ñ¥½¸èí•áôˆ¤™É½´•áŒ(€€€€€€€…¹‘¥‘…Ñ•}ÍÑ…ÉÑ}…ÑÑ•µÁÑ•€ô…±Í”(€€€€€€€ÑÉäè(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰…¹‘¥‘…Ñ•}ÍÑ…ÉÑ•ˆ¤(€€€€€€€€€€€…¹‘¥‘…Ñ•}ÍÑ…ÉÑ}…ÑÑ•µÁÑ•€ôQÉÕ”(€€€€€€€€€€€ÉÕ¹}Í•ÉÙ¥•Ì¡±¥ÍÐ¡ÍÑ…ÉÐ¤¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡…¹‘¥‘…Ñ”¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Õ¹¡…¹• Ä¤(€€€€€€€€€€€Ù•É¥™ä¡…¹‘¥‘…Ñ”¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Í•±•Ñ•¡…¹‘¥‘…Ñ”¤(€€€€€€€€€€€…ÍÍ•ÉÑ}Õ¹¡…¹• Ä¤(€€€€€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°•¹Ù•±½Á”°€‰…¹‘¥‘…Ñ•}Ù•É¥™¥•ˆ¤(€€€€€€€€€€€É•ÑÕÉ¸(€€€€€€€•á•ÁÐ)½ÕÉ¹…±ÁÁ•¹‘I½±±‰…­ÉÉ½È…Ì•áŒè(€€€€€€€€€€€ÍÑ…ÉÑ}‘•Ñ…¥°€ô€ ‰…¹‘¥‘…Ñ”ÍÑ…ÉÑÕÀ…±±‰…¬µ…ä¡…Ù”ÉÕ¸ˆ¥˜…¹‘¥‘…Ñ•}ÍÑ…ÉÑ}…ÑÑ•µÁÑ•(€€€€€€€€€€€€€€€€€€€€€€€€€€€•±Í”€‰…¹‘¥‘…Ñ”ÍÑ…ÉÑÕÀ…±±‰…¬Ý…Ì¹½Ð¥¹Ù½­•ˆ¤(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰©½ÕÉ¹…°±•…¹ÕÀ™…¥±•ìíÍÑ…ÉÑ}‘•Ñ…¥±ôìÍ•±•Ñ½ÈÁÉ•Í•ÉÙ•…Ð€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰íÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥Ðõ…±Í”¥ôì¹¼™ÕÉÑ¡•ÈÉ•½Ù•Éä…±±‰…­ÌÉ…¸ì€ˆ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜‰É•½¹¥±¥…Ñ¥½¸É•ÅÕ¥É•èí•áôˆ¤™É½´•áŒ(€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€™¥¹¥Í¡}™…±±‰…¬¡•áŒ¤(()‘•˜Í•±•Ñ}‰Õ¹‘±”¡É½½Ð°É•±•…Í”°€¨°ÉÕ¹}Í•ÉÙ¥•Ì°Ù•É¥™ä°™…±±‰…¬õ9½¹”°™…±±‰…­}É••¥ÁÐõ9½¹”°(€€€€€€€€€€€€€€€€€‰…­ÕÁ}É••¥ÁÑ}Í¡„ÈÔØõ9½¹”¤è(€€€€ˆˆ‰M•±•Ð½¹”µ…Ñ¡•‰Õ¹‘±”ìÁÉ½‘ÕÑ¥½¸ÑÉ…¹Í¥Ñ¥½¹ÌÉ•ÅÕ¥É”©½ÕÉ¹…°µ‰½Õ¹<½½ÁÉ½½˜¸ˆˆˆ(€€€¥˜™…±±‰…¬¥Ì9½¹”è(€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰Í•±•Ñ¥½¸É•ÅÕ¥É•Ì„‰½Õ¹<½½ÑÉ…¹Í…Ñ¥½¸…¹½µÁ…Ñ¥‰±”‰Õ¹‘±”ˆ¤(€€€¥˜™…±±‰…­}É••¥ÁÐ¥Ì9½¹”è(€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰™…±±‰…¬½µÁ…Ñ¥‰¥±¥ÑäÉ••¥ÁÐ¥ÌÉ•ÅÕ¥É•ˆ¤(€€€É•ÑÕÉ¸}Í•±•Ñ}‰Õ¹‘±•}‘ÕÉ…‰±”¡É½½Ð°É•±•…Í”°™…±±‰…¬õ™…±±‰…¬°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€™…±±‰…­}É••¥ÁÐõ™…±±‰…­}É••¥ÁÐ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€‰…­ÕÁ}É••¥ÁÑ}Í¡„ÈÔØõ‰…­ÕÁ}É••¥ÁÑ}Í¡„ÈÔØ°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÉÕ¹}Í•ÉÙ¥•ÌõÉÕ¹}Í•ÉÙ¥•Ì°Ù•É¥™äõÙ•É¥™ä¤(()‘•˜É•½Ù•É}¥¹Ñ•ÉÉÕÁÑ•¡É½½Ð°€¨°ÉÕ¹}Í•ÉÙ¥•Ì°Ù•É¥™ä¤è(€€€€ˆˆ‰I•½Ù•È…¸¥¹½µÁ±•Ñ”<½½ÑÉ…¹Í…Ñ¥½¸™É½´¥ÑÌÑÉ…¹Í…Ñ¥½¸µ‰½Õ¹©½ÕÉ¹…°¸ˆˆˆ(€€€ÉÕ¹Ñ¥µ”€ôA…Ñ ¡É½½Ð¤¹É•Í½±Ù”¡ÍÑÉ¥ÐõQÉÕ”¤(€€€Í•±•Ñ½È€ôÉÕ¹Ñ¥µ”€¼€‰Ý½É¬ˆ€¼€‰…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹Ðˆ(€€€©½ÕÉ¹…°€ôÍ•±•Ñ½È¹Á…É•¹Ð€¼)=UI91}95(€€€Ý¥Ñ }ÑÉ…¹Í…Ñ¥½¹}±½¬¡ÉÕ¹Ñ¥µ”¤è(€€€€€€€•Ù•¹ÑÌ€ô}É•…‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹ÑÌ¡©½ÕÉ¹…°°ÉÕ¹Ñ¥µ”¤(€€€€€€€±…Ñ•ÍÑ}¥€ô•Ù•¹ÑÍl´Åul‰ÑÉ…¹Í…Ñ¥½¹}¥‰t(€€€€€€€ÑÉ…¹Í…Ñ¥½¸€ômÉ½Ü™½ÈÉ½Ü¥¸•Ù•¹ÑÌ¥˜É½Ýl‰ÑÉ…¹Í…Ñ¥½¹}¥‰t€ôô±…Ñ•ÍÑ}¥‘t(€€€€€€€¥˜ÑÉ…¹Í…Ñ¥½¹l´Åul‰Á¡…Í”‰t¥¸QI5%91}A!MLè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰¹¼¥¹Ñ•ÉÉÕÁÑ•É•±•…Í”ÑÉ…¹Í…Ñ¥½¸É•ÅÕ¥É•ÌÉ•½Ù•Éäˆ¤(€€€€€€€±…Ñ•ÍÐ€ôÑÉ…¹Í…Ñ¥½¹l´Åt(€€€€€€€Ý½É­}ÍÑ…Ð€ôÍ•±•Ñ½È¹Á…É•¹Ð¹±ÍÑ…Ð ¤(€€€€€€€¥˜€¡¹½ÐÍÑ…Ð¹M}%M%H¡Ý½É­}ÍÑ…Ð¹ÍÑ}µ½‘”¤½ÈÍÑ…Ð¹M}%M19,¡Ý½É­}ÍÑ…Ð¹ÍÑ}µ½‘”¤(€€€€€€€€€€€€€€€½È€¡Ý½É­}ÍÑ…Ð¹ÍÑ}‘•Ø°Ý½É­}ÍÑ…Ð¹ÍÑ}¥¹¼¤€„ô€¡±…Ñ•ÍÑl‰Ý½É­}‘•Ø‰t°±…Ñ•ÍÑl‰Ý½É­}¥¹¼‰t¤¤è(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰É•±•…Í”Ý½É¬‘¥É•Ñ½Éä¡…¹•Í¥¹”ÑÉ…¹Í…Ñ¥½¸Ý…ÌÉ•½É‘•ˆ¤(€€€€€€€Ý½É­}¥‘•¹Ñ¥Ñä€ô€¡Ý½É­}ÍÑ…Ð¹ÍÑ}‘•Ø°Ý½É­}ÍÑ…Ð¹ÍÑ}¥¹¼¤((€€€€€€€‘•˜…ÍÍ•ÉÑ}Ý½É¬ ¤è(€€€€€€€€€€€ÕÉÉ•¹Ñ}Ý½É¬€ôÍ•±•Ñ½È¹Á…É•¹Ð¹±ÍÑ…Ð ¤(€€€€€€€€€€€¥˜€¡¹½ÐÍÑ…Ð¹M}%M%H¡ÕÉÉ•¹Ñ}Ý½É¬¹ÍÑ}µ½‘”¤½ÈÍÑ…Ð¹M}%M19,¡ÕÉÉ•¹Ñ}Ý½É¬¹ÍÑ}µ½‘”¤(€€€€€€€€€€€€€€€€€€€½È€¡ÕÉÉ•¹Ñ}Ý½É¬¹ÍÑ}‘•Ø°ÕÉÉ•¹Ñ}Ý½É¬¹ÍÑ}¥¹¼¤€„ôÝ½É­}¥‘•¹Ñ¥Ñä¤è(€€€€€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰É•±•…Í”Ý½É¬‘¥É•Ñ½Éä¡…¹•‘ÕÉ¥¹œÉ•½Ù•Éäˆ¤((€€€€€€€Á½¥¹Ñ•É}ÍÑ…Ð€ôÍ•±•Ñ½È¹±ÍÑ…Ð ¤(€€€€€€€¥˜¹½ÐÍÑ…Ð¹M}%M19,¡Á½¥¹Ñ•É}ÍÑ…Ð¹ÍÑ}µ½‘”¤è(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹Ð¡…¹•Ñ¼„¹½¸µÍåµ±¥¹¬‘ÕÉ¥¹œÉ•½Ù•Éäˆ¤(€€€€€€€Á…Ñ¡Ì€ôí­•äèA…Ñ ¡±…Ñ•ÍÑm­•åt¤¹É•Í½±Ù”¡ÍÑÉ¥ÐõQÉÕ”¤™½È­•ä¥¸€ ‰ÁÉ•Ù¥½ÕÌˆ°€‰…¹‘¥‘…Ñ”ˆ°€‰™…±±‰…¬ˆ¥ô(€€€€€€€ÕÉÉ•¹Ð€ôÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥ÐõQÉÕ”¤(€€€€€€€•áÁ½ÍÕÉ”€ô…¹ä¡É½Ýl‰Á¡…Í”‰t€ôô€‰…¹‘¥‘…Ñ•}•áÁ½ÍÕÉ•}Á½ÍÍ¥‰±”ˆ™½ÈÉ½Ü¥¸ÑÉ…¹Í…Ñ¥½¸¤(€€€€€€€…±±½Ý•‘}ÕÉÉ•¹Ð€ô€¡Á…Ñ¡Íl‰…¹‘¥‘…Ñ”‰t°Á…Ñ¡Íl‰™…±±‰…¬‰t¤¥˜•áÁ½ÍÕÉ”•±Í”€¡Á…Ñ¡Íl‰ÁÉ•Ù¥½ÕÌ‰t°Á…Ñ¡Íl‰…¹‘¥‘…Ñ”‰t¤(€€€€€€€¥˜ÕÉÉ•¹Ð¹½Ð¥¸…±±½Ý•‘}ÕÉÉ•¹Ðè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰™½É•¥¸Í•±•Ñ½ÈÁÉ•Í•ÉÙ•…ÐíÕÉÉ•¹ÑôìÉ•½Ù•ÉäÉ•ÅÕ¥É•Ì½½É‘¥¹…Ñ½ÈÉ•Ù¥•Üˆ¤(€€€€€€€µ…¹¥™•ÍÑÌ€ôí­•äèÙ…±¥‘…Ñ•}‰Õ¹‘±”¡Á…Ñ ¤™½È­•ä°Á…Ñ ¥¸Á…Ñ¡Ì¹¥Ñ•µÌ ¥ô(€€€€€€€¥˜…¹ä¡µ…¹¥™•ÍÐ¹•Ð ‰™½Éµ…Ðˆ¤€„ô€È™½Èµ…¹¥™•ÍÐ¥¸µ…¹¥™•ÍÑÌ¹Ù…±Õ•Ì ¤¤è(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰¥¹Ñ•ÉÉÕÁÑ•<½½‰Õ¹‘±•Ì…É”¹½Ð±…Õ¹¡•Èµ…Á…‰±”ˆ¤(€€€€€€€‘¥•ÍÑÌ€ôí­•äè}µ…¹¥™•ÍÑ}‘¥•ÍÐ¡Á…Ñ ¤™½È­•ä°Á…Ñ ¥¸Á…Ñ¡Ì¹¥Ñ•µÌ ¥ô(€€€€€€€¥˜…¹ä¡‘¥•ÍÑÍm­•åt€„ô±…Ñ•ÍÑm˜‰í­•åõ}µ…¹¥™•ÍÑ}Í¡„ÈÔØ‰t(€€€€€€€€€€€€€€™½È­•ä¥¸€ ‰ÁÉ•Ù¥½ÕÌˆ°€‰…¹‘¥‘…Ñ”ˆ°€‰™…±±‰…¬ˆ¤¤è(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰¥¹Ñ•ÉÉÕÁÑ•<½½‰Õ¹‘±”µ…¹¥™•ÍÐ¡…¹•ˆ¤((€€€€€€€‘•˜…ÍÍ•ÉÑ}‰Õ¹‘±•}Õ¹¡…¹•¡¹…µ”¤è(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€ÕÉÉ•¹Ñ}µ…¹¥™•ÍÐ€ôÙ…±¥‘…Ñ•}‰Õ¹‘±”¡Á…Ñ¡Ím¹…µ•t¤(€€€€€€€€€€€€€€€ÕÉÉ•¹Ñ}‘¥•ÍÐ€ô}µ…¹¥™•ÍÑ}‘¥•ÍÐ¡Á…Ñ¡Ím¹…µ•t¤(€€€€€€€€€€€•á•ÁÐá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰í¹…µ•ô‰Õ¹‘±”¡…¹•‘ÕÉ¥¹œÉ•½Ù•Éäèí•áôˆ¤™É½´•áŒ(€€€€€€€€€€€¥˜ÕÉÉ•¹Ñ}µ…¹¥™•ÍÐ€„ôµ…¹¥™•ÍÑÍm¹…µ•t½ÈÕÉÉ•¹Ñ}‘¥•ÍÐ€„ô‘¥•ÍÑÍm¹…µ•tè(€€€€€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰í¹…µ•ô‰Õ¹‘±”¡…¹•‘ÕÉ¥¹œÉ•½Ù•Éäˆ¤((€€€€€€€ÁÉ½½˜€ô±…Ñ•ÍÑl‰™…±±‰…­}É••¥ÁÐ‰t(€€€€€€€ÁÉ½½™}¡…Í €ô¡…Í¡±¥ˆ¹Í¡„ÈÔØ¡©Í½¸¹‘ÕµÁÌ¡ÁÉ½½˜°Í½ÉÑ}­•åÌõQÉÕ”°Í•Á…É…Ñ½ÉÌô ˆ°ˆ°€ˆèˆ¤¤¹•¹½‘” ¤¤¹¡•á‘¥•ÍÐ ¤(€€€€€€€¥˜ÁÉ½½™}¡…Í €„ô±…Ñ•ÍÑl‰™…±±‰…­}É••¥ÁÑ}Í¡„ÈÔØ‰tè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰¥¹Ñ•ÉÉÕÁÑ•™…±±‰…¬ÁÉ½½˜¡…¹•ˆ¤(€€€€€€€}Ù…±¥‘…Ñ•}™…±±‰…­}É••¥ÁÐ¡ÁÉ½½˜°Á…Ñ¡Íl‰ÁÉ•Ù¥½ÕÌ‰t°Á…Ñ¡Íl‰…¹‘¥‘…Ñ”‰t°Á…Ñ¡Íl‰™…±±‰…¬‰t¤(€€€€€€€¥˜•áÁ½ÍÕÉ”è(€€€€€€€€€€€Ñ…É•Ð°Í•±•Ñ•‘}Á¡…Í”°ÍÑ…ÉÑ•‘}Á¡…Í”°Ù•É¥™¥•‘}Á¡…Í”°É•ÍÕ±Ð€ô€ (€€€€€€€€€€€€€€€Á…Ñ¡Íl‰™…±±‰…¬‰t°€‰™…±±‰…­}Í•±•Ñ•ˆ°€‰™…±±‰…­}ÍÑ…ÉÑ•ˆ°€‰™…±±‰…­}Ù•É¥™¥•ˆ°€‰™…±±‰…­}Ù•É¥™¥•ˆ¤(€€€€€€€•±Í”è(€€€€€€€€€€€Ñ…É•Ð°Í•±•Ñ•‘}Á¡…Í”°ÍÑ…ÉÑ•‘}Á¡…Í”°Ù•É¥™¥•‘}Á¡…Í”°É•ÍÕ±Ð€ô€ (€€€€€€€€€€€€€€€Á…Ñ¡Íl‰ÁÉ•Ù¥½ÕÌ‰t°€‰ÁÉ•Ù¥½ÕÍ}Í•±•Ñ•ˆ°€‰ÁÉ•Ù¥½ÕÍ}ÍÑ…ÉÑ•ˆ°€‰ÁÉ•Ù¥½ÕÍ}Ù•É¥™¥•ˆ°€‰ÁÉ•Ù¥½ÕÍ}Ù•É¥™¥•ˆ¤(€€€€€€€‰•™½É•}ÍÑ½À€ôÕÉÉ•¹Ð(€€€€€€€É•½Ù•Éå}•¹Ù•±½Á”€ôí¬è±…Ñ•ÍÑm­t™½È¬¥¸±…Ñ•ÍÐ¥˜¬¹½Ð¥¸€ ‰Á¡…Í”ˆ°€‰É•½É‘•‘}…Ðˆ¥ô(€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°É•½Ù•Éå}•¹Ù•±½Á”°€‰É•½Ù•Éå}…ÑÑ•µÁÑ•ˆ¤(€€€€€€€ÉÕ¹}Í•ÉÙ¥•Ì¡l‰ÍÑ½Àˆ°€‰¡½µ•‰½àµÝ½É­Í¡½Àµ…Ñ•Ý…äˆ°€‰¡½µ•‰½àµ½µÁ…¹¥½¸ˆ°€‰¡½µ•‰½àµ¹…Ñ¥Ù”‰t¤(€€€€€€€…ÍÍ•ÉÑ}Ý½É¬ ¤(€€€€€€€™½È¹…µ”¥¸Á…Ñ¡Ìè(€€€€€€€€€€€…ÍÍ•ÉÑ}‰Õ¹‘±•}Õ¹¡…¹•¡¹…µ”¤(€€€€€€€ÕÉÉ•¹Ð€ôÍ•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥ÐõQÉÕ”¤(€€€€€€€¥˜ÕÉÉ•¹Ð€„ô‰•™½É•}ÍÑ½Àè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È¡˜‰Í•±•Ñ½È¡…¹•‘ÕÉ¥¹œÉ•½Ù•ÉäÍÑ½Àì™½É•¥¸Í•±•Ñ½ÈÁÉ•Í•ÉÙ•…ÐíÕÉÉ•¹Ñôˆ¤(€€€€€€€¥˜ÕÉÉ•¹Ð€„ôÑ…É•Ðè(€€€€€€€€€€€Ñ•µÁ½É…Éä€ôÍ•±•Ñ½È¹Ý¥Ñ¡}¹…µ”¡˜ˆ¹…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹Ð¹íÕÕ¥¹ÕÕ¥Ð ¤¹¡•áô¹¹•áÐˆ¤(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€½Ì¹Íåµ±¥¹¬¡½Ì¹Á…Ñ ¹É•±Á…Ñ ¡Ñ…É•Ð°Í•±•Ñ½È¹Á…É•¹Ð¤°Ñ•µÁ½É…Éä°Ñ…É•Ñ}¥Í}‘¥É•Ñ½ÉäõQÉÕ”¤(€€€€€€€€€€€€€€€…ÍÍ•ÉÑ}Ý½É¬ ¤(€€€€€€€€€€€€€€€¥˜Í•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥ÐõQÉÕ”¤€„ô‰•™½É•}ÍÑ½Àè(€€€€€€€€€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰Í•±•Ñ½È‘É¥™Ð‘•Ñ•Ñ•‰•™½É”É•½Ù•ÉäÉ•Á±…”ˆ¤(€€€€€€€€€€€€€€€½Ì¹É•Á±…”¡Ñ•µÁ½É…Éä°Í•±•Ñ½È¤(€€€€€€€€€€€€€€€}‘¥É•Ñ½Éå}™Íå¹Œ¡Í•±•Ñ½È¹Á…É•¹Ð¤(€€€€€€€€€€€™¥¹…±±äè(€€€€€€€€€€€€€€€Ý¥Ñ ½¹Ñ•áÑ±¥ˆ¹ÍÕÁÁÉ•ÍÌ¡¥±•9½Ñ½Õ¹‘ÉÉ½È¤è(€€€€€€€€€€€€€€€€€€€Ñ•µÁ½É…Éä¹Õ¹±¥¹¬ ¤(€€€€€€€¥˜Í•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥ÐõQÉÕ”¤€„ôÑ…É•Ðè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰É•½Ù•ÉäÍ•±•Ñ½È‘¥¹½ÐÉ•Í½±Ù”Ñ¼Ñ¡”Í•±•Ñ•‰Õ¹‘±”ˆ¤(€€€€€€€…ÍÍ•ÉÑ}‰Õ¹‘±•}Õ¹¡…¹• ‰™…±±‰…¬ˆ¥˜•áÁ½ÍÕÉ”•±Í”€‰ÁÉ•Ù¥½ÕÌˆ¤(€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°É•½Ù•Éå}•¹Ù•±½Á”°Í•±•Ñ•‘}Á¡…Í”¤(€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°É•½Ù•Éå}•¹Ù•±½Á”°ÍÑ…ÉÑ•‘}Á¡…Í”¤(€€€€€€€ÉÕ¹}Í•ÉÙ¥•Ì¡l‰ÍÑ…ÉÐˆ°€‰¡½µ•‰½àµ¹…Ñ¥Ù”ˆ°€‰¡½µ•‰½àµ½µÁ…¹¥½¸ˆ°€‰¡½µ•‰½àµÝ½É­Í¡½Àµ…Ñ•Ý…ä‰t¤(€€€€€€€…ÍÍ•ÉÑ}Ý½É¬ ¤(€€€€€€€¥˜Í•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥ÐõQÉÕ”¤€„ôÑ…É•Ðè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰Í•±•Ñ½È¡…¹•Ý¡¥±”É•½Ù•ÉäÍ•ÉÙ¥•ÌÍÑ…ÉÑ•ˆ¤(€€€€€€€…ÍÍ•ÉÑ}‰Õ¹‘±•}Õ¹¡…¹• ‰™…±±‰…¬ˆ¥˜•áÁ½ÍÕÉ”•±Í”€‰ÁÉ•Ù¥½ÕÌˆ¤(€€€€€€€Ù•É¥™ä¡Ñ…É•Ð¤(€€€€€€€…ÍÍ•ÉÑ}Ý½É¬ ¤(€€€€€€€¥˜Í•±•Ñ½È¹É•Í½±Ù”¡ÍÑÉ¥ÐõQÉÕ”¤€„ôÑ…É•Ðè(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰Í•±•Ñ½È¡…¹•‘ÕÉ¥¹œÉ•½Ù•ÉäÙ•É¥™¥…Ñ¥½¸ˆ¤(€€€€€€€¥˜…¹ä¡}µ…¹¥™•ÍÑ}‘¥•ÍÐ¡Á…Ñ¡Ím¹…µ•t¤€„ô‘¥•ÍÑÍm¹…µ•t™½È¹…µ”¥¸Á…Ñ¡Ì¤è(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ‰Í•±•Ñ•‰Õ¹‘±”¡…¹•‘ÕÉ¥¹œÉ•½Ù•ÉäÙ•É¥™¥…Ñ¥½¸ˆ¤(€€€€€€€…ÍÍ•ÉÑ}‰Õ¹‘±•}Õ¹¡…¹• ‰™…±±‰…¬ˆ¥˜•áÁ½ÍÕÉ”•±Í”€‰ÁÉ•Ù¥½ÕÌˆ¤(€€€€€€€}…ÁÁ•¹‘}ÑÉ…¹Í…Ñ¥½¹}•Ù•¹Ð¡©½ÕÉ¹…°°É•½Ù•Éå}•¹Ù•±½Á”°Ù•É¥™¥•‘}Á¡…Í”¤(€€€€€€€É•ÑÕÉ¸É•ÍÕ±Ð(
+    source_files = _runtime_files(source, deploy_files)
+    _assert_source_members(source_files, provenance)
+    public_files = _inventory(public, provenance.get("public_files"))
+    label_root = source / "work" / "label-ui-build"
+    label_files = _inventory(label_root, provenance.get("label_files"))
+    label_source = source / "label-ui" / "src" / "starter-documents.json"
+    label_source_sha256 = None
+    if deploy_files == LAUNCHER_DEPLOY_FILES:
+        if not label_source.is_file() or label_source.is_symlink():
+            raise BundleError("launcher bundle lacks label starter documents")
+        label_source_sha256 = _hash(label_source)
+    native_sha = _hash(binary)
+    matched = _provenance(provenance, binary_sha=native_sha, source_files=source_files,
+                          public_files=public_files, label_files=label_files,
+                          check_receipt_bytes=True, label_source_sha256=label_source_sha256)
+    destination.mkdir(parents=True)
+    try:
+        native = destination / "native" / "homebox"
+        native.parent.mkdir()
+        shutil.copyfile(binary, native)
+        os.chmod(native, (binary.stat().st_mode & 0o555) | 0o444)
+        for path, rel in _walk(public, lambda r, p: True):
+            target = destination / "public" / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, target)
+            os.chmod(target, (path.stat().st_mode & 0o555) | 0o444)
+        for path, rel in source_files:
+            target = destination / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, target)
+            os.chmod(target, (path.stat().st_mode & 0o555) | 0o444)
+        # Label editor files are runtime assets; preserve this finite sealed tree.
+        label_assets = source / "work" / "label-ui-build"
+        for path, rel in _walk(label_assets, lambda r, p: True):
+            target = destination / "label-ui" / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, target)
+            os.chmod(target, (path.stat().st_mode & 0o555) | 0o444)
+        if label_source_sha256 is not None:
+            target = destination / "label-ui" / "src" / "starter-documents.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(label_source, target)
+            os.chmod(target, 0o444)
+        files = {}
+        for path in sorted(destination.rglob("*")):
+            if path.is_file():
+                files[path.relative_to(destination).as_posix()] = {
+                    "sha256": _hash(path), "mode": path.stat().st_mode & 0o777}
+        manifest = {"format": 2 if deploy_files == LAUNCHER_DEPLOY_FILES else 1,
+                    "files": files, "provenance": matched}
+        if fallback_policy is not None:
+            manifest["fallback_policy"] = _validate_fallback_policy(fallback_policy)
+        manifest_path = destination / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+        os.chmod(manifest_path, 0o444)
+        for directory in sorted((p for p in destination.rglob("*") if p.is_dir()), reverse=True):
+            os.chmod(directory, 0o555)
+        os.chmod(destination, 0o555)
+        return manifest
+    except Exception:
+        shutil.rmtree(destination)
+        raise
+
+
+def _bundle_layout(release):
+    try:
+        root_stat = release.lstat()
+    except OSError as exc:
+        raise BundleError("release directory is missing") from exc
+    if not stat.S_ISDIR(root_stat.st_mode):
+        raise BundleError("release path must be a real directory")
+    files, directories = {}, {".": root_stat}
+    try:
+        paths = sorted(release.rglob("*"))
+        for path in paths:
+            entry = path.lstat()
+            rel = path.relative_to(release).as_posix()
+            if stat.S_ISLNK(entry.st_mode):
+                raise BundleError(f"links are not allowed in a release: {rel}")
+            if stat.S_ISDIR(entry.st_mode):
+                directories[rel] = entry
+            elif stat.S_ISREG(entry.st_mode) and entry.st_nlink == 1:
+                files[rel] = entry
+            else:
+                raise BundleError(f"release entry is not an owned regular file or directory: {rel}")
+    except OSError as exc:
+        raise BundleError("release layout could not be inspected safely") from exc
+    if "manifest.json" not in files:
+        raise BundleError("release manifest must be a regular file")
+    if any(stat.S_IMODE(entry.st_mode) != 0o555 for entry in directories.values()):
+        raise BundleError("release directory mode differs from sealed mode")
+    if any(stat.S_IMODE(entry.st_mode) not in (0o444, 0o555) for entry in files.values()):
+        raise BundleError("release file mode differs from sealed mode")
+    if stat.S_IMODE(files["manifest.json"].st_mode) != 0o444:
+        raise BundleError("release manifest mode differs from sealed mode")
+    return files, directories
+
+
+def _open_checked(path, expected_stat):
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+        actual = os.fstat(fd)
+        if (not stat.S_ISREG(actual.st_mode) or actual.st_nlink != 1
+                or (actual.st_dev, actual.st_ino) != (expected_stat.st_dev, expected_stat.st_ino)
+                or stat.S_IMODE(actual.st_mode) != stat.S_IMODE(expected_stat.st_mode)):
+            raise BundleError(f"release file changed during validation: {path}")
+        return fd
+    except OSError as exc:
+        if "fd" in locals():
+            os.close(fd)
+        raise BundleError(f"release file could not be opened safely: {path}") from exc
+    except Exception:
+        if "fd" in locals():
+            os.close(fd)
+        raise
+
+
+def _read_checked(path, expected_stat):
+    fd = _open_checked(path, expected_stat)
+    with os.fdopen(fd, "rb") as stream:
+        return stream.read()
+
+
+def _hash_checked(path, expected_stat):
+    value = hashlib.sha256()
+    fd = _open_checked(path, expected_stat)
+    with os.fdopen(fd, "rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
+
+
+def validate_bundle(release):
+    """Validate path types and exact membership before opening bundle contents."""
+    release = Path(release)
+    files, _ = _bundle_layout(release)
+    manifest_path = release / "manifest.json"
+    try:
+        manifest = json.loads(_read_checked(manifest_path, files["manifest.json"]).decode("utf-8"))
+    except (UnicodeError, ValueError) as exc:
+        raise BundleError("release has no valid manifest") from exc
+    except OSError as exc:
+        raise BundleError("release manifest could not be read safely") from exc
+    if not isinstance(manifest, dict) or manifest.get("format") not in (1, 2) or not isinstance(manifest.get("files"), dict):
+        raise BundleError("unsupported release manifest")
+    allowed_manifest_keys = {"format", "files", "provenance", "fallback_policy"}
+    if not set(manifest) <= allowed_manifest_keys:
+        raise BundleError("release manifest contains unrecognized fields")
+    if "fallback_policy" in manifest:
+        _validate_fallback_policy(manifest["fallback_policy"])
+    expected_names = set(manifest["files"])
+    actual_names = set(files) - {"manifest.json"}
+    if actual_names != expected_names:
+        raise BundleError("release membership differs from manifest")
+    actual = {}
+    for name in sorted(expected_names):
+        entry = files[name]
+        actual[name] = {"sha256": _hash_checked(release / name, entry),
+                        "mode": stat.S_IMODE(entry.st_mode)}
+    if actual != manifest["files"]:
+        raise BundleError("release file hashes or modes differ from manifest")
+    if not actual.get("native/homebox", {}).get("mode", 0) & 0o111:
+        raise BundleError("native executable is not executable")
+    required = {"native/homebox", "public/index.html", "kiosk/scan_codes.py", "kiosk/decode_codes.py",
+                "ops/desktop_api.py", "ops/item_notes.py", "ops/label_layouts.py", "ops/label_render.py",
+                *(f"deploy/{name}" for name in DEPLOY_FILES)}
+    if manifest["format"] == 2:
+        required.update(f"deploy/{name}" for name in LAUNCHER_FILES)
+        required.add("label-ui/src/starter-documents.json")
+    if not required <= actual.keys():
+        raise BundleError("release is incomplete")
+    source_files = [(release / name, name) for name in sorted(actual)
+                    if name.startswith(("ops/", "kiosk/", "deploy/"))]
+    provenance = manifest.get("provenance")
+    source_map = provenance.get("runtime_files") if isinstance(provenance, dict) else None
+    actual_source = {name: record["sha256"] for name, record in actual.items()
+                     if name.startswith(("ops/", "kiosk/", "deploy/"))}
+    if source_map != actual_source:
+        raise BundleError("release runtime membership differs from source receipt")
+    actual_public = {name.removeprefix("public/"): {"sha256": rec["sha256"], "size": files[name].st_size}
+                     for name, rec in actual.items() if name.startswith("public/")}
+    actual_labels = {name.removeprefix("label-ui/"): {"sha256": rec["sha256"], "size": files[name].st_size}
+                     for name, rec in actual.items()
+                     if name.startswith("label-ui/") and name != "label-ui/src/starter-documents.json"}
+    source_modes = {name: record["mode"] for name, record in actual.items()
+                    if name.startswith(("ops/", "kiosk/", "deploy/"))}
+    matched = _provenance(provenance, binary_sha=actual["native/homebox"]["sha256"],
+                          source_files=source_files, public_files=actual_public,
+                          label_files=actual_labels, check_source_modes=False,
+                          source_hashes=actual_source, source_modes=source_modes,
+                          label_source_sha256=actual.get("label-ui/src/starter-documents.json", {}).get("sha256")
+                          if manifest["format"] == 2 else None)
+    if matched != provenance:
+        raise BundleError("release provenance does not match its manifest")
+    return manifest
+
+
+def release_command(root, component, *, release=None):
+    """Resolve and validate one immutable release, then describe its entrypoint."""
+    entries = {"native": "run-homebox.py", "companion": "kiosk-server.py",
+               "gateway": "workshop-gateway.py"}
+    if component not in entries:
+        raise BundleError("unknown release component")
+    runtime_root = Path(root).resolve()
+    selected = Path(release) if release is not None else runtime_root / "work/application-current"
+    try:
+        selected = selected.resolve(strict=True)
+    except OSError as exc:
+        raise BundleError("selected release is missing") from exc
+    manifest = validate_bundle(selected)
+    if manifest.get("format") != 2:
+        raise BundleError("selected release has no packaged launcher")
+    env = {"WORKSHOP_ROOT": str(runtime_root), "WORKSHOP_CODE_ROOT": str(selected),
+           "HOMEBOX_UI_ROOT": str(selected / "public")}
+    return [sys.executable, str(selected / "deploy" / entries[component])], env
+
+
+JOURNAL_NAME = "application-release-journal.jsonl"
+LOCK_NAME = ".application-release.lock"
+JOURNAL_PHASES = frozenset({
+    "transaction_prepared", "stop_requested", "stop_failed",
+    "post_stop_preflight_passed", "candidate_selected",
+    "candidate_exposure_possible", "candidate_started", "candidate_verified",
+    "pre_exposure_failure", "recovery_attempted", "fallback_selected", "fallback_started",
+    "fallback_verified", "previous_selected", "previous_started",
+    "previous_verified", "recovery_failed",
+})
+TERMINAL_PHASES = frozenset({"stop_failed", "candidate_verified", "fallback_verified", "previous_verified"})
+RECOVERY_RESTART_PHASES = JOURNAL_PHASES - TERMINAL_PHASES
+PREVIOUS_PHASES = frozenset({"previous_selected", "previous_started", "previous_verified"})
+FALLBACK_PHASES = frozenset({"fallback_selected", "fallback_started", "fallback_verified"})
+FALLBACK_CHECKS = frozenset({
+    "fallback_candidate_compatible_handlers",
+    "fallback_reads_rooms_v1_v2_writes_v2_or_disables_mutation",
+    "fallback_preserves_member_profile_loan_state",
+    "same_runtime_stores_no_restore_or_physical_replay",
+})
+
+
+def _manifest_digest(release):
+    return hashlib.sha256((Path(release) / "manifest.json").read_bytes()).hexdigest()
+
+
+def _directory_fsync(path):
+    path = Path(path)
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        raise BundleError("release transaction directory changed")
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        opened = os.fstat(fd)
+        if (not stat.S_ISDIR(opened.st_mode)
+                or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino)):
+            raise BundleError("release transaction directory changed during fsync")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+@contextmanager
+def _transaction_lock(root):
+    work = Path(root) / "work"
+    info = work.lstat()
+    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        raise BundleError("release work directory is not a real directory")
+    lock = work / LOCK_NAME
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():
+            raise BundleError("release transaction lock is not an owned regular file")
+        if st.st_mode & 0o077:
+            raise BundleError("release transaction lock permissions are too broad")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise BundleError("another release transaction is active") from exc
+        current = work.lstat()
+        if (not stat.S_ISDIR(current.st_mode) or stat.S_ISLNK(current.st_mode)
+                or (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino)):
+            raise BundleError("release work directory changed while acquiring lock")
+        yield
+    finally:
+        os.close(fd)
+
+
+def _append_transaction_event(path, envelope, phase):
+    if phase not in JOURNAL_PHASES:
+        raise BundleError("invalid release transaction phase")
+    path = Path(path)
+    existed = path.exists()
+    fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():
+            raise BundleError("release transaction journal is not an owned regular file")
+        if st.st_mode & 0o077:
+            raise BundleError("release transaction journal permissions are too broad")
+        original_size = st.st_size
+        row = {**envelope, "phase": phase, "recorded_at": time.time()}
+        data = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        offset = 0
+        try:
+            while offset < len(data):
+                written = os.write(fd, data[offset:])
+                if written <= 0:
+                    raise OSError("release transaction journal write made no progress")
+                offset += written
+            os.fsync(fd)
+        except Exception as append_error:
+            try:
+                os.ftruncate(fd, original_size)
+                os.fsync(fd)
+            except Exception as cleanup_error:
+                raise JournalAppendRollbackError(
+                    f"journal append could not restore and fsync prior length {original_size}; "
+                    f"transaction requires reconciliation: {cleanup_error}") from append_error
+            raise
+    finally:
+        os.close(fd)
+    if not existed:
+        _directory_fsync(path.parent)
+
+
+def _read_transaction_events(path, root):
+    path = Path(path)
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        raise BundleError("release transaction journal is missing or unsafe") from exc
+    try:
+        st = os.fstat(fd)
+        if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid()
+                or st.st_mode & 0o077):
+            raise BundleError("release transaction journal is not safely owned")
+        with os.fdopen(fd, "r", encoding="utf-8") as stream:
+            fd = -1
+            lines = stream.readlines()
+    except (OSError, UnicodeError) as exc:
+        raise BundleError("release transaction journal could not be read") from exc
+    finally:
+        if fd >= 0:
+            os.close(fd)
+    if not lines:
+        raise BundleError("release transaction journal is empty")
+    required = {
+        "schema", "transaction_id", "root", "previous", "candidate", "fallback",
+        "work_dev", "work_ino",
+        "previous_manifest_sha256", "candidate_manifest_sha256", "fallback_manifest_sha256",
+        "fallback_receipt", "fallback_receipt_sha256", "backup_receipt_sha256",
+        "phase", "recorded_at",
+    }
+    events, bindings = [], {}
+    next_phases = {
+        "transaction_prepared": {"stop_requested"},
+        "stop_requested": {"stop_failed", "post_stop_preflight_passed", "pre_exposure_failure"},
+        "post_stop_preflight_passed": {"candidate_selected", "pre_exposure_failure"},
+        "candidate_selected": {"candidate_exposure_possible", "pre_exposure_failure"},
+        # Exposure is already committed at this point. If recording the
+        # start edge fails, selection must still recover to F and journal
+        # that decision directly from the exposure marker.
+        "candidate_exposure_possible": {"candidate_started", "fallback_selected", "recovery_failed"},
+        "candidate_started": {"candidate_verified", "fallback_selected", "recovery_failed"},
+        "pre_exposure_failure": {"previous_selected", "recovery_failed"},
+        "fallback_selected": {"fallback_started", "recovery_failed"},
+        "fallback_started": {"fallback_verified", "recovery_failed"},
+        "previous_selected": {"previous_started", "recovery_failed"},
+        "previous_started": {"previous_verified", "recovery_failed"},
+        "stop_failed": set(), "candidate_verified": set(),
+        "fallback_verified": set(), "previous_verified": set(),
+        "recovery_failed": set(),
+    }
+    next_phases["recovery_attempted"] = {
+        "recovery_attempted", "previous_selected", "fallback_selected",
+    }
+    for phase in RECOVERY_RESTART_PHASES:
+        next_phases.setdefault(phase, set()).add("recovery_attempted")
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except (ValueError, TypeError) as exc:
+            raise BundleError("release transaction journal is malformed") from exc
+        if not isinstance(row, dict) or set(row) != required or row.get("schema") != 1:
+            raise BundleError("release transaction journal has ambiguous fields")
+        if row.get("root") != str(Path(root).resolve()):
+            raise BundleError("release transaction journal is bound to another root")
+        try:
+            uuid.UUID(row.get("transaction_id"))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise BundleError("release transaction journal id is invalid") from exc
+        if (row.get("phase") not in JOURNAL_PHASES
+                or not isinstance(row.get("recorded_at"), (int, float))
+                or not math.isfinite(row["recorded_at"])):
+            raise BundleError("release transaction journal phase is invalid")
+        if any(not isinstance(row.get(key), str) or len(row[key]) != 64
+               for key in ("previous_manifest_sha256", "candidate_manifest_sha256", "fallback_manifest_sha256",
+                           "fallback_receipt_sha256")):
+            raise BundleError("release transaction journal hashes are invalid")
+        if any(not isinstance(row.get(key), int) or row[key] < 1 for key in ("work_dev", "work_ino")):
+            raise BundleError("release transaction journal work identity is invalid")
+        if not isinstance(row.get("fallback_receipt"), dict):
+            raise BundleError("release transaction journal fallback receipt is invalid")
+        backup_digest = row.get("backup_receipt_sha256")
+        if backup_digest is not None and (not isinstance(backup_digest, str) or len(backup_digest) != 64):
+            raise BundleError("release transaction journal backup receipt hash is invalid")
+        if not isinstance(row.get("recorded_at"), (int, float)):
+            raise BundleError("release transaction journal timestamp is invalid")
+        binding = {key: row[key] for key in required - {"phase", "recorded_at"}}
+        prior = bindings.setdefault(row["transaction_id"], binding)
+        if prior != binding:
+            raise BundleError("release transaction journal binding changed")
+        if events:
+            prior = events[-1]
+            if row["transaction_id"] == prior["transaction_id"]:
+                if row["phase"] not in next_phases[prior["phase"]]:
+                    raise BundleError("release transaction journal has impossible phase progression")
+            elif prior["phase"] not in TERMINAL_PHASES:
+                raise BundleError("release transaction journal starts a new transaction before the prior one is terminal")
+            elif row["phase"] != "transaction_prepared":
+                raise BundleError("release transaction journal has an invalid transaction boundary")
+        elif row["phase"] != "transaction_prepared":
+            raise BundleError("release transaction journal does not start at transaction_prepared")
+        prior_phases = {event["phase"] for event in events
+                        if event["transaction_id"] == row["transaction_id"]}
+        transaction_phases = prior_phases | {row["phase"]}
+        if (transaction_phases & PREVIOUS_PHASES
+                and "candidate_exposure_possible" in transaction_phases):
+            raise BundleError("release transaction journal selects O after possible candidate exposure")
+        if (transaction_phases & FALLBACK_PHASES
+                and "candidate_exposure_possible" not in transaction_phases):
+            raise BundleError("release transaction journal selects F without positive exposure evidence")
+        events.append(row)
+    return events
+
+
+def _validate_fallback_receipt(receipt, previous, candidate, fallback):
+    expected_keys = {"execution_scope", "checks", "fallback_policy_sha256"}
+    for label in ("previous", "candidate", "fallback"):
+        expected_keys.update({f"{label}_bundle_manifest_sha256", f"{label}_native_sha256"})
+    if (not isinstance(receipt, dict) or set(receipt) != expected_keys
+            or receipt.get("execution_scope") not in ("fixture-only", "production-matched")):
+        raise BundleError("fallback receipt schema is invalid or missing")
+    expected = {}
+    for name, path in (("previous", previous), ("candidate", candidate), ("fallback", fallback)):
+        manifest = validate_bundle(path)
+        if name == "fallback":
+            capability = _require_workshop_compatibility(manifest, role="fallback")
+            policy = _validate_fallback_policy(manifest.get("fallback_policy"))
+            if (policy["roomsv2_read_versions"] != capability["read_versions"]
+                    or policy["workshop_mutation_mode"] != capability["write_mode"]):
+                raise BundleError("fallback policy does not match its artifact-bound Workshop capability")
+        expected[f"{name}_bundle_manifest_sha256"] = _manifest_digest(path)
+        expected[f"{name}_native_sha256"] = manifest["provenance"]["native_sha256"]
+    fallback_manifest = validate_bundle(fallback)
+    candidate_digest = _manifest_digest(candidate)
+    policy = _validate_fallback_policy(fallback_manifest.get("fallback_policy"))
+    if (policy["candidate_manifest_sha256"] != candidate_digest
+            or policy["evidence_scope"] != receipt.get("execution_scope")
+            or receipt.get("fallback_policy_sha256") != _json_hash(policy)):
+        raise BundleError("fallback policy is not bound to this candidate and receipt")
+    _validate_fallback_code_pair(previous, candidate, fallback)
+    if any(receipt.get(key) != value for key, value in expected.items()):
+        raise BundleError("fallback receipt does not bind the exact O/C/F bundle set")
+    checks = receipt.get("checks")
+    if (not isinstance(checks, dict) or set(checks) != FALLBACK_CHECKS
+            or any(checks.get(name) is not True for name in FALLBACK_CHECKS)):
+        raise BundleError("fallback receipt lacks compatible recovery checks")
+    return hashlib.sha256(json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _validate_fallback_code_pair(previous, candidate, fallback):
+    previous_files = validate_bundle(previous)["files"]
+    candidate_files = validate_bundle(candidate)["files"]
+    fallback_files = validate_bundle(fallback)["files"]
+    code_names = {name for name in candidate_files
+                  if name == "native/homebox" or name.startswith("ops/")
+                  or name.startswith("deploy/") or (name.startswith("kiosk/") and name.endswith(".py"))}
+    code_names.update(name for name in candidate_files if name.startswith("label-ui/"))
+    if (not code_names or not code_names <= fallback_files.keys()
+            or any(candidate_files[name]["sha256"] != fallback_files[name]["sha256"] for name in code_names)):
+        raise BundleError("fallback does not retain candidate-compatible code and native capability")
+    old_static = {name: row["sha256"] for name, row in previous_files.items()
+                  if name.startswith("public/") or (name.startswith("kiosk/") and not name.endswith(".py"))}
+    fallback_static = {name: row["sha256"] for name, row in fallback_files.items()
+                       if name.startswith("public/") or (name.startswith("kiosk/") and not name.endswith(".py"))}
+    if old_static != fallback_static:
+        raise BundleError("fallback does not retain the captured previous public and Terminal tree")
+
+
+def _select_bundle_durable(root, release, *, fallback, fallback_receipt,
+                           backup_receipt_sha256, run_services, verify):
+    runtime = Path(root).resolve(strict=True)
+    selector = runtime / "work" / "application-current"
+    work_stat = selector.parent.lstat()
+    if not stat.S_ISDIR(work_stat.st_mode) or stat.S_ISLNK(work_stat.st_mode):
+        raise BundleError("release work directory must be a real directory")
+    try:
+        pointer_stat = selector.lstat()
+        previous = selector.resolve(strict=True)
+        candidate = Path(release).resolve(strict=True)
+        fallback = Path(fallback).resolve(strict=True)
+    except OSError as exc:
+        raise BundleError("O, C and F releases must all exist before service stop") from exc
+    if not stat.S_ISLNK(pointer_stat.st_mode):
+        raise BundleError("application-current must be one real symlink")
+    paths = (previous, candidate, fallback)
+    if len(set(paths)) != 3:
+        raise BundleError("O, C and F must be separate release bundles")
+    manifests = tuple(validate_bundle(path) for path in paths)
+    if any(manifest.get("format") != 2 for manifest in manifests):
+        raise BundleError("O, C and F must all be launcher-capable format-2 bundles")
+    _require_workshop_compatibility(manifests[0], role="previous")
+    _require_workshop_compatibility(manifests[1], role="candidate", require_writer=True)
+    _require_workshop_compatibility(manifests[2], role="fallback")
+    receipt_digest = _validate_fallback_receipt(fallback_receipt, *paths)
+    if (fallback_receipt["execution_scope"] == "production-matched"
+            and (not isinstance(backup_receipt_sha256, str) or len(backup_receipt_sha256) != 64)):
+        raise BundleError("production selection requires a bound whole-store cold-backup receipt")
+    if backup_receipt_sha256 is not None and (not isinstance(backup_receipt_sha256, str)
+                                               or len(backup_receipt_sha256) != 64):
+        raise BundleError("cold-backup receipt hash is invalid")
+    snapshots = tuple(_manifest_digest(path) for path in paths)
+    transaction_id = str(uuid.uuid4())
+    envelope = {
+        "schema": 1, "transaction_id": transaction_id, "root": str(runtime),
+        "previous": str(previous), "candidate": str(candidate), "fallback": str(fallback),
+        "work_dev": work_stat.st_dev, "work_ino": work_stat.st_ino,
+        "previous_manifest_sha256": snapshots[0], "candidate_manifest_sha256": snapshots[1],
+        "fallback_manifest_sha256": snapshots[2], "fallback_receipt": fallback_receipt,
+        "fallback_receipt_sha256": receipt_digest,
+        "backup_receipt_sha256": backup_receipt_sha256,
+    }
+    journal = selector.parent / JOURNAL_NAME
+    stop = ["stop", "homebox-workshop-gateway", "homebox-companion", "homebox-native"]
+    start = ["start", "homebox-native", "homebox-companion", "homebox-workshop-gateway"]
+
+    def assert_work():
+        current = selector.parent.lstat()
+        if (not stat.S_ISDIR(current.st_mode) or stat.S_ISLNK(current.st_mode)
+                or (current.st_dev, current.st_ino) != (work_stat.st_dev, work_stat.st_ino)):
+            raise BundleError("release work directory changed")
+
+    def assert_selected(expected):
+        assert_work()
+        try:
+            pointer = selector.lstat()
+            selected = selector.resolve(strict=True)
+        except OSError as exc:
+            raise BundleError("application-current selector changed") from exc
+        if not stat.S_ISLNK(pointer.st_mode) or selected != expected:
+            raise BundleError(f"application-current selector changed (expected {expected}, found {selected})")
+
+    def assert_unchanged(index):
+        path, expected, digest = paths[index], manifests[index], snapshots[index]
+        actual = validate_bundle(path)
+        if actual != expected or _manifest_digest(path) != digest:
+            raise BundleError(f"{('previous','candidate','fallback')[index]} bundle changed after preflight")
+
+    def replace(target):
+        assert_work()
+        temporary = selector.with_name(f".application-current.{uuid.uuid4().hex}.next")
+        try:
+            os.symlink(os.path.relpath(target, selector.parent), temporary, target_is_directory=True)
+            assert_work()
+            os.replace(temporary, selector)
+            _directory_fsync(selector.parent)
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+    def finish_previous(primary_error):
+        try:
+            selected = selector.resolve(strict=True)
+            if selected not in (previous, candidate):
+                raise BundleError(f"foreign selector preserved at {selected}")
+            if selected == candidate:
+                assert_unchanged(0)
+                replace(previous)
+            assert_selected(previous)
+            assert_unchanged(0)
+            _append_transaction_event(journal, envelope, "previous_selected")
+            _append_transaction_event(journal, envelope, "previous_started")
+            run_services(list(start))
+            assert_selected(previous)
+            assert_unchanged(0)
+            verify(previous)
+            assert_selected(previous)
+            assert_unchanged(0)
+            _append_transaction_event(journal, envelope, "previous_verified")
+        except Exception as recovery_error:
+            if isinstance(recovery_error, JournalAppendRollbackError):
+                raise BundleError(f"selection failed: {primary_error}; previous recovery stopped because "
+                                  f"journal cleanup failed; no further journal or service callbacks ran; "
+                                  f"application-current points to {selector.resolve(strict=False)}; "
+                                  f"reconciliation required: {recovery_error}") from primary_error
+            journal_recording_error = None
+            try:
+                _append_transaction_event(journal, envelope, "recovery_failed")
+            except Exception as exc:
+                journal_recording_error = exc
+            recording_detail = (f"; recovery_failed journal recording also failed: {journal_recording_error}; "
+                                f"transaction remains unresolved and requires reconciliation"
+                                if journal_recording_error else "")
+            raise BundleError(f"selection failed: {primary_error}; previous recovery failed: {recovery_error}; "
+                              f"application-current points to {selector.resolve(strict=False)}{recording_detail}") from primary_error
+        raise BundleError(f"selection failed: {primary_error}; previous bundle restored and verified at {previous}") from primary_error
+
+    def finish_fallback(primary_error):
+        try:
+            assert_selected(candidate)
+            run_services(list(stop))
+            assert_selected(candidate)
+            assert_unchanged(2)
+            replace(fallback)
+            assert_selected(fallback)
+            assert_unchanged(2)
+            _append_transaction_event(journal, envelope, "fallback_selected")
+            _append_transaction_event(journal, envelope, "fallback_started")
+            run_services(list(start))
+            assert_selected(fallback)
+            assert_unchanged(2)
+            verify(fallback)
+            assert_selected(fallback)
+            assert_unchanged(2)
+            _append_transaction_event(journal, envelope, "fallback_verified")
+        except Exception as recovery_error:
+            if isinstance(recovery_error, JournalAppendRollbackError):
+                raise BundleError(f"selection failed: {primary_error}; compatible F recovery stopped because "
+                                  f"journal cleanup failed; no further journal or service callbacks ran; "
+                                  f"application-current points to {selector.resolve(strict=False)}; "
+                                  f"reconciliation required: {recovery_error}") from primary_error
+            journal_recording_error = None
+            try:
+                _append_transaction_event(journal, envelope, "recovery_failed")
+            except Exception as exc:
+                journal_recording_error = exc
+            recording_detail = (f"; recovery_failed journal recording also failed: {journal_recording_error}; "
+                                f"transaction remains unresolved and requires reconciliation"
+                                if journal_recording_error else "")
+            raise BundleError(f"selection failed: {primary_error}; compatible F recovery failed: {recovery_error}; "
+                              f"application-current points to {selector.resolve(strict=False)}{recording_detail}") from primary_error
+        raise BundleError(f"selection failed: {primary_error}; compatible F selected and verified at {fallback}") from primary_error
+
+    def record_pre_exposure_failure(primary_error):
+        try:
+            _append_transaction_event(journal, envelope, "pre_exposure_failure")
+        except JournalAppendRollbackError as journal_error:
+            raise BundleError(f"pre-exposure operation failed: {primary_error}; recording "
+                              f"pre_exposure_failure also failed and journal cleanup could not be proven: "
+                              f"{journal_error}; application-current points to "
+                              f"{selector.resolve(strict=False)}; services are stopped; no recovery callbacks "
+                              f"ran; reconciliation required") from primary_error
+        except Exception as journal_error:
+            raise BundleError(f"pre-exposure operation failed: {primary_error}; recording "
+                              f"pre_exposure_failure also failed: {journal_error}; application-current points "
+                              f"to {selector.resolve(strict=False)}; services are stopped; no recovery "
+                              f"callbacks ran; prior journal remains intact and recovery can resume") from primary_error
+
+    with _transaction_lock(runtime):
+        if journal.exists():
+            events = _read_transaction_events(journal, runtime)
+            if events[-1]["phase"] not in TERMINAL_PHASES:
+                raise BundleError("an unresolved release transaction requires recovery before selection")
+        _append_transaction_event(journal, envelope, "transaction_prepared")
+        _append_transaction_event(journal, envelope, "stop_requested")
+        try:
+            run_services(list(stop))
+        except Exception as exc:
+            journal_recording_error = None
+            try:
+                _append_transaction_event(journal, envelope, "stop_failed")
+            except Exception as journal_error:
+                journal_recording_error = journal_error
+            recording_detail = (f"; stop_failed journal recording also failed: {journal_recording_error}; "
+                                f"transaction remains unresolved and requires reconciliation"
+                                if journal_recording_error else "")
+            raise BundleError(f"initial stop failed; selector unchanged and no recovery attempted: {exc}"
+                              f"{recording_detail}") from exc
+        try:
+            assert_selected(previous)
+            for index in range(3):
+                assert_unchanged(index)
+            _append_transaction_event(journal, envelope, "post_stop_preflight_passed")
+        except Exception as exc:
+            if isinstance(exc, JournalAppendRollbackError):
+                raise BundleError(f"pre-exposure journal cleanup failed; selector preserved at "
+                                  f"{selector.resolve(strict=False)}; no recovery callbacks ran; "
+                                  f"reconciliation required: {exc}") from exc
+            record_pre_exposure_failure(exc)
+            finish_previous(exc)
+        try:
+            replace(candidate)
+            assert_selected(candidate)
+            assert_unchanged(1)
+            _append_transaction_event(journal, envelope, "candidate_selected")
+        except Exception as exc:
+            if isinstance(exc, JournalAppendRollbackError):
+                raise BundleError(f"candidate selection journal cleanup failed; selector preserved at "
+                                  f"{selector.resolve(strict=False)}; no recovery callbacks ran; "
+                                  f"reconciliation required: {exc}") from exc
+            record_pre_exposure_failure(exc)
+            finish_previous(exc)
+        # This record is file- and directory-fsynced before any start callback.
+        # If it cannot be durably recorded, leave the services stopped and
+        # require explicit journal reconciliation; do not infer O is safe.
+        try:
+            _append_transaction_event(journal, envelope, "candidate_exposure_possible")
+        except Exception as exc:
+            raise BundleError(
+                "candidate is selected but exposure marker could not be durably recorded; "
+                f"selector preserved and transaction requires reconciliation: {exc}") from exc
+        candidate_start_attempted = False
+        try:
+            _append_transaction_event(journal, envelope, "candidate_started")
+            candidate_start_attempted = True
+            run_services(list(start))
+            assert_selected(candidate)
+            assert_unchanged(1)
+            verify(candidate)
+            assert_selected(candidate)
+            assert_unchanged(1)
+            _append_transaction_event(journal, envelope, "candidate_verified")
+            return
+        except JournalAppendRollbackError as exc:
+            start_detail = ("candidate startup callback may have run" if candidate_start_attempted
+                            else "candidate startup callback was not invoked")
+            raise BundleError(f"journal cleanup failed; {start_detail}; selector preserved at "
+                              f"{selector.resolve(strict=False)}; no further recovery callbacks ran; "
+                              f"reconciliation required: {exc}") from exc
+        except Exception as exc:
+            finish_fallback(exc)
+
+
+def select_bundle(root, release, *, run_services, verify, fallback=None, fallback_receipt=None,
+                  backup_receipt_sha256=None):
+    """Select one matched bundle; production transitions require journal-bound O/C/F proof."""
+    if fallback is None:
+        raise BundleError("selection requires a bound O/C/F transaction and compatible F bundle")
+    if fallback_receipt is None:
+        raise BundleError("fallback compatibility receipt is required")
+    return _select_bundle_durable(root, release, fallback=fallback,
+                                  fallback_receipt=fallback_receipt,
+                                  backup_receipt_sha256=backup_receipt_sha256,
+                                  run_services=run_services, verify=verify)
+
+
+def recover_interrupted(root, *, run_services, verify):
+    """Recover an incomplete O/C/F transaction from its transaction-bound journal."""
+    runtime = Path(root).resolve(strict=True)
+    selector = runtime / "work" / "application-current"
+    journal = selector.parent / JOURNAL_NAME
+    with _transaction_lock(runtime):
+        events = _read_transaction_events(journal, runtime)
+        latest_id = events[-1]["transaction_id"]
+        transaction = [row for row in events if row["transaction_id"] == latest_id]
+        if transaction[-1]["phase"] in TERMINAL_PHASES:
+            raise BundleError("no interrupted release transaction requires recovery")
+        latest = transaction[-1]
+        work_stat = selector.parent.lstat()
+        if (not stat.S_ISDIR(work_stat.st_mode) or stat.S_ISLNK(work_stat.st_mode)
+                or (work_stat.st_dev, work_stat.st_ino) != (latest["work_dev"], latest["work_ino"])):
+            raise BundleError("release work directory changed since transaction was recorded")
+        work_identity = (work_stat.st_dev, work_stat.st_ino)
+
+        def assert_work():
+            current_work = selector.parent.lstat()
+            if (not stat.S_ISDIR(current_work.st_mode) or stat.S_ISLNK(current_work.st_mode)
+                    or (current_work.st_dev, current_work.st_ino) != work_identity):
+                raise BundleError("release work directory changed during recovery")
+
+        pointer_stat = selector.lstat()
+        if not stat.S_ISLNK(pointer_stat.st_mode):
+            raise BundleError("application-current changed to a non-symlink during recovery")
+        paths = {key: Path(latest[key]).resolve(strict=True) for key in ("previous", "candidate", "fallback")}
+        current = selector.resolve(strict=True)
+        exposure = any(row["phase"] == "candidate_exposure_possible" for row in transaction)
+        allowed_current = (paths["candidate"], paths["fallback"]) if exposure else (paths["previous"], paths["candidate"])
+        if current not in allowed_current:
+            raise BundleError(f"foreign selector preserved at {current}; recovery requires coordinator review")
+        manifests = {key: validate_bundle(path) for key, path in paths.items()}
+        if any(manifest.get("format") != 2 for manifest in manifests.values()):
+            raise BundleError("interrupted O/C/F bundles are not launcher-capable")
+        digests = {key: _manifest_digest(path) for key, path in paths.items()}
+        if any(digests[key] != latest[f"{key}_manifest_sha256"]
+               for key in ("previous", "candidate", "fallback")):
+            raise BundleError("interrupted O/C/F bundle manifest changed")
+
+        def assert_bundle_unchanged(name):
+            try:
+                current_manifest = validate_bundle(paths[name])
+                current_digest = _manifest_digest(paths[name])
+            except Exception as exc:
+                raise BundleError(f"{name} bundle changed during recovery: {exc}") from exc
+            if current_manifest != manifests[name] or current_digest != digests[name]:
+                raise BundleError(f"{name} bundle changed during recovery")
+
+        proof = latest["fallback_receipt"]
+        proof_hash = hashlib.sha256(json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if proof_hash != latest["fallback_receipt_sha256"]:
+            raise BundleError("interrupted fallback proof changed")
+        _validate_fallback_receipt(proof, paths["previous"], paths["candidate"], paths["fallback"])
+        if exposure:
+            target, selected_phase, started_phase, verified_phase, result = (
+                paths["fallback"], "fallback_selected", "fallback_started", "fallback_verified", "fallback_verified")
+        else:
+            target, selected_phase, started_phase, verified_phase, result = (
+                paths["previous"], "previous_selected", "previous_started", "previous_verified", "previous_verified")
+        before_stop = current
+        recovery_envelope = {k: latest[k] for k in latest if k not in ("phase", "recorded_at")}
+        _append_transaction_event(journal, recovery_envelope, "recovery_attempted")
+        run_services(["stop", "homebox-workshop-gateway", "homebox-companion", "homebox-native"])
+        assert_work()
+        for name in paths:
+            assert_bundle_unchanged(name)
+        current = selector.resolve(strict=True)
+        if current != before_stop:
+            raise BundleError(f"selector changed during recovery stop; foreign selector preserved at {current}")
+        if current != target:
+            temporary = selector.with_name(f".application-current.{uuid.uuid4().hex}.next")
+            try:
+                os.symlink(os.path.relpath(target, selector.parent), temporary, target_is_directory=True)
+                assert_work()
+                if selector.resolve(strict=True) != before_stop:
+                    raise BundleError("selector drift detected before recovery replace")
+                os.replace(temporary, selector)
+                _directory_fsync(selector.parent)
+            finally:
+                with contextlib.suppress(FileNotFoundError):
+                    temporary.unlink()
+        if selector.resolve(strict=True) != target:
+            raise BundleError("recovery selector did not resolve to the selected bundle")
+        assert_bundle_unchanged("fallback" if exposure else "previous")
+        _append_transaction_event(journal, recovery_envelope, selected_phase)
+        _append_transaction_event(journal, recovery_envelope, started_phase)
+        run_services(["start", "homebox-native", "homebox-companion", "homebox-workshop-gateway"])
+        assert_work()
+        if selector.resolve(strict=True) != target:
+            raise BundleError("selector changed while recovery services started")
+        assert_bundle_unchanged("fallback" if exposure else "previous")
+        verify(target)
+        assert_work()
+        if selector.resolve(strict=True) != target:
+            raise BundleError("selector changed during recovery verification")
+        if any(_manifest_digest(paths[name]) != digests[name] for name in paths):
+            raise BundleError("selected bundle changed during recovery verification")
+        assert_bundle_unchanged("fallback" if exposure else "previous")
+        _append_transaction_event(journal, recovery_envelope, verified_phase)
+        return result
