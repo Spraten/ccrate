@@ -31,6 +31,15 @@ class ChildLocationPreviewTests(unittest.TestCase):
         self.assertIn('Bin name match', component)
         self.assertIn('No loaded locations match this filter.', component)
 
+    def test_bin_name_match_keeps_header_without_bypassing_item_filter(self):
+        component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
+        self.assertIn('function matchesLocationName(location: LocationNode)', component)
+        self.assertIn('return props.locations.filter(location => matchesLocationName(location) || visibleItems(location).length > 0)', component)
+        self.assertIn('return itemsFor(location).filter(matchesItem)', component)
+        self.assertNotIn('if (location.name.toLocaleLowerCase().includes(searchTerm.value)) return items', component)
+        self.assertIn('v-if="matchesLocationName(location)"', component)
+        self.assertIn('@click="filterText = \'\'"', component)
+
     def test_root_loads_location_hierarchy_without_item_requests_and_expand_retries_details(self):
         component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
         self.assertIn('for (const location of props.locations) void loadDetail(location.id)', component)

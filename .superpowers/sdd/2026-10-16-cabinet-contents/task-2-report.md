@@ -29,3 +29,11 @@ Immediate bins now load their location details on root mount, alongside the exis
 Verification: new contracts failed before implementation (missing bin filtering and root detail loading); `python3 -m unittest tests.test_location_child_preview -v` passes (5 tests); `git diff --check` passes.
 
 Self-review confirmed the changes are limited to component rendering/loading, focused contract assertions, and this report. Existing batching and partial-load error/retry behavior are unchanged.
+
+## Review Fix Round 2
+
+Separated bin matching from item matching: a bin name match retains the bin row and its match marker, while its item rows still pass the item-field filter. Clearing the query restores all item rows. Added a contract for a matching bin containing a nonmatching item.
+
+Verification: the new contract failed before the change because a bin-name match returned every item; `python3 -m unittest tests.test_location_child_preview -v` passes (6 tests); `git diff --check` passes.
+
+Self-review: only the item visibility helper, its focused contract test, and this report changed in this round. Header filtering and clear-filter behavior remain intact.

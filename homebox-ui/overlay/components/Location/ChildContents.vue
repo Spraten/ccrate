@@ -31,10 +31,7 @@
   }
 
   function visibleItems(location: LocationNode) {
-    const items = itemsFor(location);
-    if (!searchTerm.value) return items;
-    if (location.name.toLocaleLowerCase().includes(searchTerm.value)) return items;
-    return items.filter(matchesItem);
+    return itemsFor(location).filter(matchesItem);
   }
 
   function matchesLocationName(location: LocationNode) {
