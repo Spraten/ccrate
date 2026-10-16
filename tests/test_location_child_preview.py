@@ -70,6 +70,11 @@ class ChildLocationPreviewTests(unittest.TestCase):
         self.assertIn('break-all', component)
         self.assertIn('×{{ item.quantity }}', component)
 
+    def test_archived_item_has_visible_status(self):
+        component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
+        self.assertIn('v-if="item.archived"', component)
+        self.assertIn('>Archived</span>', component)
+
     def test_location_detail_embeds_expandable_read_only_child_contents(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             previous_build = BUILDER.BUILD

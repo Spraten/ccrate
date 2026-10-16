@@ -199,6 +199,7 @@
               <NuxtLink :to="`/item/${encodeURIComponent(item.id)}`" class="block truncate hover:underline">
                 {{ item.name }}
               </NuxtLink>
+              <span v-if="item.archived" class="block text-xs text-muted-foreground">Archived</span>
               <span v-if="item.displayId" class="block break-all text-xs text-muted-foreground">Generated ID · {{ item.displayId }}</span>
               <span v-else-if="item.assetId" class="block break-all text-xs text-muted-foreground">{{ item.assetId }}</span>
               <NuxtLink :to="`/location/${encodeURIComponent(location.id)}`" class="block text-xs text-muted-foreground hover:underline">{{ locationPath(location.name) }}</NuxtLink>
