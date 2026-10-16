@@ -276,25 +276,25 @@ def once(ctx, deps, kind, data, perform, redact=lambda value: value):
             if prior['digest'] != digest:
                 raise Conflict('This confirmation key belongs to a different action.')
             if kind == 'workshop/save':
-                |çŞ-¢G§²ÚîÆ­yÙsoformat()})
+                }Ó}m¢G§²ÚîÆ­yÑpi/v1/groups/members')
+        def replace_badge():
+            result = badges.replace(group, badge_id, [member['id'] for member in members])
+            sessions = optional(deps, 'sessions')
+            if sessions is not None:
+                sessions.revoke_user(result['user_id'])
+            return dict(result, qr=badge_qr(result['code']), status='completed')
+        return once(ctx, deps, route, data, replace_badge, lambda value: {'id': value['id'], 'user_id': value['user_id'], 'code': None})
+    if route == 'invitation/create':
+        uses = data.get('uses', 1)
+        if type(uses) is not int or not 1 <= uses <= 20:
+            raise ValueError('Choose 1 to 20 invitation uses.')
+        def invite():
+            result = client.call('/api/v1/groups/invitations', 'POST', {'uses': uses, 'expiresAt': (datetime.now(timezone.utc)+timedelta(days=7)).isoformat()})
             return dict(result, join_url=address+'/?token='+quote(result['token']), status='completed')
         return once(ctx, deps, route, data, invite, lambda value: {key: value for key, value in value.items() if key not in ('token', 'join_url')})
     if route == 'condition':
         public_entity(client, data.get('entity_id'))
         return native_op('reviews', 'submit_review', client, jobs, group, actor, data.get('request_key'), data)
-    if route == 'checkout':
-        assets = data.get('assets')
-        if not isinstance(assets, list):
-            raise ValueError('Choose a list of equipment to check out.')
-        cart_context = None
-        if 'cart_revision' in data or 'cart_items' in data:
-            cart_context = {'revision': data.get('cart_revision'), 'items': data.get('cart_items'),
-                            'original_items': data.get('original_items', data.get('cart_items'))}
-        result = confirm_checkout(client, ledger, group, actor, assets, data.get('request_key'),
-                                  lambda: True, data.get('verified'), data.get('kit_versions'), cart_context)
-        if cart_context is not None and result.get('status') == 'completed':
-            checkout_cart_service(deps).consume_completed_receipt(group, actor, result['id'])
-        return result
     if route == 'return':
         targets = data.get('targets')
         if not isinstance(targets, list) or not all(isinstance(target, dict) for target in targets):

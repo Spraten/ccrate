@@ -172,6 +172,31 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.request('checkout-cart').result, {'revision': 2, 'items': []})
         self.assertEqual(len(self.ledger.custody(self.group)), 1)
 
+    def test_regular_member_can_checkout_for_themselves(self):
+        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}
+        member = self.request('context', headers=headers).result
+        headers['X-Workshop-Identity'] = member['identity']
+        saved = self.request('checkout-cart', {'items': [self.asset], 'revision': 0, 'request_key': ident()}, headers)
+        key = ident()
+        result = self.request('checkout', {'request_key': key, 'assets': [self.asset], 'verified': [self.asset],
+                                           'kit_versions': {}, 'cart_revision': saved.result['revision'],
+                                           'cart_items': [self.asset]}, headers)
+        self.assertEqual(result.status, 200)
+        self.assertEqual(self.ledger.detail(self.group, result.result['id'])['actor_id'], self.borrower)
+        self.assertEqual(self.ledger.custody(self.group)[0]['actor_id'], self.borrower)
+
+    def test_stale_saved_cart_rejects_new_checkout_before_creating_operation(self):
+        saved = self.request('checkout-cart', {'items': [self.asset], 'revision': 0, 'request_key': ident()})
+        edited = self.request('checkout-cart', {'items': [], 'revision': saved.result['revision'], 'request_key': ident()})
+        self.assertEqual(edited.status, 200)
+        key = ident()
+        stale = self.request('checkout', {'request_key': key, 'assets': [self.asset], 'verified': [self.asset],
+                                          'kit_versions': {}, 'cart_revision': saved.result['revision'],
+                                          'cart_items': [self.asset]})
+        self.assertEqual(stale.status, 409)
+        self.assertIsNone(self.ledger.request(self.group, key))
+        self.assertEqual(self.ledger.custody(self.group), [])
+
     def test_hardware_reconnect_is_bound_to_a_current_manager_and_cannot_print(self):
         with patch('hardware.reconnect', return_value={'connected': True, 'steps': []}) as reconnect:
             self.assertEqual(self.request('hardware/reconnect', {'device': 'printer'}).status, 200)
@@ -222,33 +247,7 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual(self.request('equipment', headers={'Cookie': cookie}).status, 401)
 
     def test_member_with_admin_display_name_cannot_write_or_view_badges(self):
-        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}
-        context = self.request('context', headers=headers).result
-        self.assertFalse(context['manager'])
-        headers['X-Workshop-Identity'] = context['identity']
-        self.assertEqual(self.request('equipment', headers=headers).status, 200)
-        self.assertEqual(self.request('badges', headers=headers).status, 403)
-        self.assertEqual(self.request('badges/issue', {'user_id': self.borrower, 'request_key': ident()}, headers).status, 403)
-        self.assertEqual(self.badges.list(self.group), [])
-
-    def test_checkout_cart_uses_signed_in_actor_and_rejects_stale_or_changed_replays(self):
-        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}
-        context = self.request('context', headers=headers).result
-        headers['X-Workshop-Identity'] = context['identity']
-        key = ident()
-        payload = {'actor_id': self.manager, 'items': [self.asset], 'revision': 0, 'request_key': key}
-
-        first = self.request('checkout-cart', payload, headers)
-
-        self.assertEqual(first.status, 200)
-        self.assertEqual(first.result, {'revision': 1, 'items': [self.asset]})
-        self.assertEqual(self.request('checkout-cart', headers=headers).result, first.result)
-        self.assertEqual(self.request('checkout-cart').result, {'revision': 0, 'items': []})
-        self.assertEqual(self.request('checkout-cart', payload, headers).result, first.result)
-        changed = self.request('checkout-cart', dict(payload, items=[self.other_asset]), headers)
-        stale = self.request('checkout-cart', {'items': [self.other_asset], 'revision': 0, 'request_key': ident()}, headers)
-        self.assertEqual(changed.status, 409)
-        self.assertEqual(stale.sta|ã¾í¢G§²ÚîÆ­yŞasset, duplicate})
+ =Ó½í¢G§²ÚîÆ­yŞasset, duplicate})
                     self.assertEqual(len({json.dumps(row['path'], sort_keys=True) for row in response.result['candidates']}), 2)
         self.assertEqual(response.status, 200)
         self.assertFalse(context['manager'])
