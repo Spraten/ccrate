@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { Camera, Copy, Minus, ScanText, X } from "lucide-vue-next";
-  import { applyCameraControl, describeCameraControls, digitalZoomDrawArgs } from "~/lib/ocr-camera-controls";
+  import { applyCameraControl, cameraControlReadback, describeCameraControls, digitalZoomDrawArgs, watchCameraTrackEnd } from "~/lib/ocr-camera-controls";
   import { applyRecognizedTextWithoutOverwritingEdits, recognizeStructuredTextFromImage } from "~/lib/local-ocr";
   import { clampOcrPopoverPosition, isOcrCaptureCurrent, isOcrScanCurrent, nextOcrPopoverState } from "~/lib/orc-popover-state";
 
@@ -17,6 +17,7 @@
   let stream: MediaStream | null = null, image: Blob | null = null, drag: { x: number; y: number; left: number; top: number } | null = null;
   let cameraGeneration = 0, scanGeneration = 0, copyGeneration = 0, disposed = false;
   let activeTrack: MediaStreamTrack | null = null, previewFrame = 0;
+  let unwatchActiveTrack: (() => void) | null = null;
   let defaultZoom: number | undefined, defaultFocusMode: string | undefined, defaultFocusDistance: number | undefined;
 
   function currentTrack(track: MediaStreamTrack, generation: number) {
@@ -57,12 +58,13 @@
       await applyCameraControl(track, name, value);
       if (!currentTrack(track, generation)) return;
       const reported = readControls(track);
-      if (name === "focusMode" && reported.focusMode !== value) {
-        controlStatus.value = "The camera did not confirm the requested focus mode.";
-      } else if (reported[name] === undefined) {
+      const readback = cameraControlReadback(track, name, value, reported);
+      if (readback.state === "unreported") {
         controlStatus.value = "The camera did not report the updated setting.";
+      } else if (readback.state === "mismatch") {
+        controlStatus.value = `The camera reports ${name === "focusMode" ? "focus mode" : name === "focusDistance" ? "focus distance" : "zoom"} ${readback.actual}; the requested change was not confirmed.`;
       } else {
-        controlStatus.value = `${name === "focusMode" ? "Focus mode" : name === "focusDistance" ? "Focus distance" : "Zoom"} set to ${reported[name]}.`;
+        controlStatus.value = `${name === "focusMode" ? "Focus mode" : name === "focusDistance" ? "Focus distance" : "Zoom"} set to ${readback.actual}.`;
       }
     } catch (cause) {
       if (currentTrack(track, generation)) {
@@ -101,6 +103,8 @@
   function stopCamera() {
     cameraGeneration++;
     cancelAnimationFrame(previewFrame);
+    unwatchActiveTrack?.();
+    unwatchActiveTrack = null;
     stream?.getTracks().forEach(track => track.stop());
     stream = null;
     activeTrack = null;
@@ -153,20 +157,29 @@
         requestedStream.getTracks().forEach(track => track.stop());
         return;
       }
-      cameraActive.value = true;
       const track = requestedStream.getVideoTracks()[0];
-      if (track) {
-        activeTrack = track;
-        controls.value = describeCameraControls(track);
-        const reported = readControls(track);
-        if (controls.value.zoom && reported.zoom === undefined) hardwareZoom.value = controls.value.zoom.min;
-        if (controls.value.focusDistance && reported.focusDistance === undefined) focusDistance.value = controls.value.focusDistance.min;
-        defaultZoom = reported.zoom;
-        defaultFocusMode = reported.focusMode;
-        defaultFocusDistance = reported.focusDistance;
-        controlStatus.value = controls.value.zoom ? "Camera zoom is available." : "Digital zoom crops and enlarges the image without adding detail.";
-        drawPreview(track, generation);
+      if (!track || track.readyState === "ended") {
+        stopCamera();
+        error.value = "The camera connection ended. Start the camera again.";
+        return;
       }
+      cameraActive.value = true;
+      activeTrack = track;
+      unwatchActiveTrack = watchCameraTrackEnd(track,
+        () => !disposed && generation === cameraGeneration && activeTrack === track && stream?.getVideoTracks()[0] === track,
+        () => {
+          stopCamera();
+          error.value = "The camera connection ended. Start the camera again.";
+        });
+      controls.value = describeCameraControls(track);
+      const reported = readControls(track);
+      if (controls.value.zoom && reported.zoom === undefined) hardwareZoom.value = controls.value.zoom.min;
+      if (controls.value.focusDistance && reported.focusDistance === undefined) focusDistance.value = controls.value.focusDistance.min;
+      defaultZoom = reported.zoom;
+      defaultFocusMode = reported.focusMode;
+      defaultFocusDistance = reported.focusDistance;
+      controlStatus.value = controls.value.zoom ? "Camera zoom is available." : "Digital zoom crops and enlarges the image without adding detail.";
+      drawPreview(track, generation);
     } catch (cause) {
       requestedStream?.getTracks().forEach(track => track.stop());
       if (!disposed && generation === cameraGeneration) {

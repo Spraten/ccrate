@@ -1,6 +1,41 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyCameraControl, describeCameraControls, digitalZoomDrawArgs, CameraControlError } from '../homebox-ui/overlay/lib/ocr-camera-controls.js';
+import { applyCameraControl, cameraControlReadback, describeCameraControls, digitalZoomDrawArgs, watchCameraTrackEnd, CameraControlError } from '../homebox-ui/overlay/lib/ocr-camera-controls.js';
+
+test('readback distinguishes a driver that kept an old focus distance from a confirmed request', () => {
+  const camera = track({ focusDistance: { min: 0, max: 10, step: 1 } });
+  assert.deepEqual(cameraControlReadback(camera, 'focusDistance', 7, { focusDistance: 3 }), { state: 'mismatch', actual: 3 });
+  assert.deepEqual(cameraControlReadback(camera, 'focusDistance', 7, { focusDistance: 7 }), { state: 'confirmed', actual: 7 });
+  assert.deepEqual(cameraControlReadback(camera, 'focusDistance', 7, {}), { state: 'unreported' });
+});
+
+test('readback compares zoom with the effective clamped and stepped request', () => {
+  const camera = track({ zoom: { min: 1, max: 5, step: 0.5 } });
+  assert.deepEqual(cameraControlReadback(camera, 'zoom', 1.26, { zoom: 1.5 }), { state: 'confirmed', actual: 1.5 });
+  assert.deepEqual(cameraControlReadback(camera, 'zoom', 9, { zoom: 2 }), { state: 'mismatch', actual: 2 });
+});
+
+test('only the accepted track ended event interrupts the camera', () => {
+  const oldTrack = new EventTarget();
+  const newTrack = new EventTarget();
+  let active = oldTrack, generation = 1, interruptions = 0;
+  const watch = (camera, acceptedGeneration) => watchCameraTrackEnd(camera,
+    () => active === camera && generation === acceptedGeneration,
+    () => { interruptions++; });
+  const unwatchOld = watch(oldTrack, 1);
+  active = newTrack;
+  generation = 2;
+  const unwatchNew = watch(newTrack, 2);
+  oldTrack.dispatchEvent(new Event('ended'));
+  assert.equal(interruptions, 0);
+  newTrack.readyState = 'ended';
+  newTrack.dispatchEvent(new Event('ended'));
+  assert.equal(interruptions, 1);
+  unwatchOld();
+  unwatchNew();
+  newTrack.dispatchEvent(new Event('ended'));
+  assert.equal(interruptions, 1);
+});
 
 test('digital zoom keeps the full source at 1× and a centered quarter at 4×', () => {
   assert.deepEqual(digitalZoomDrawArgs(1920, 1080, 1), [0, 0, 1920, 1080, 0, 0, 1920, 1080]);

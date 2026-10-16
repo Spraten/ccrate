@@ -44,24 +44,46 @@ export function describeCameraControls(track) {
 
 function fail(code, message) { throw new CameraControlError(code, message); }
 
-export async function applyCameraControl(track, name, value) {
-  if (!track || track.readyState === 'ended') fail('stale-track', 'Camera track is no longer active');
-  const capabilities = ranges(track);
-  let requested;
+function requestedCameraControlValue(capabilities, name, value) {
   if (name === 'focusMode') {
     if (!Array.isArray(capabilities.focusMode) || !capabilities.focusMode.length) fail('unsupported', 'Focus mode is not supported');
     if (typeof value !== 'string' || !capabilities.focusMode.includes(value)) fail('invalid-value', 'Focus mode is not supported by this camera');
-    requested = value;
+    return value;
   } else if (name === 'zoom' || name === 'focusDistance') {
     const capability = capabilities[name];
     if (!capability || !Number.isFinite(capability.min) || !Number.isFinite(capability.max)) fail('unsupported', `${name} is not supported`);
     if (typeof value !== 'number' || !Number.isFinite(value)) fail('invalid-value', `${name} must be a finite number`);
     const clamped = Math.min(capability.max, Math.max(capability.min, value));
     const step = Number.isFinite(capability.step) && capability.step > 0 ? capability.step : 0;
-    requested = step ? Math.min(capability.max, Math.max(capability.min, capability.min + Math.round((clamped - capability.min) / step) * step)) : clamped;
+    return step ? Math.min(capability.max, Math.max(capability.min, capability.min + Math.round((clamped - capability.min) / step) * step)) : clamped;
   } else {
     fail('unsupported', `Unknown camera control: ${String(name)}`);
   }
+}
+
+/** Classify the actual settings readback after a constraint is applied. */
+export function cameraControlReadback(track, name, value, reported) {
+  const requested = requestedCameraControlValue(ranges(track), name, value);
+  const actual = reported?.[name];
+  if (typeof requested === 'number') {
+    if (typeof actual !== 'number' || !Number.isFinite(actual)) return { state: 'unreported' };
+    const tolerance = 1e-6 * Math.max(1, Math.abs(requested));
+    return { state: Math.abs(actual - requested) <= tolerance ? 'confirmed' : 'mismatch', actual };
+  }
+  if (typeof actual !== 'string') return { state: 'unreported' };
+  return { state: actual === requested ? 'confirmed' : 'mismatch', actual };
+}
+
+/** Subscribe to a track ending; the caller supplies the accepted-track guard. */
+export function watchCameraTrackEnd(track, isCurrent, onEnded) {
+  const handleEnded = () => { if (isCurrent()) onEnded(); };
+  track.addEventListener('ended', handleEnded);
+  return () => track.removeEventListener('ended', handleEnded);
+}
+
+export async function applyCameraControl(track, name, value) {
+  if (!track || track.readyState === 'ended') fail('stale-track', 'Camera track is no longer active');
+  const requested = requestedCameraControlValue(ranges(track), name, value);
 
   if (typeof track.applyConstraints !== 'function') fail('apply-unavailable', 'Camera track cannot apply constraints');
   let existing;
