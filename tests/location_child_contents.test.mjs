@@ -63,3 +63,35 @@ test('nested page failure preserves returned rows and permits retry', async () =
   assert.equal(fixture.state.error, '');
   assert.equal(fixture.state.loaded, true);
 });
+
+
+test('filter retains loaded ancestor paths and reveals collapsed matching descendants', () => {
+  const states = new Map([
+    ['cabinet', { expanded: false, loaded: true, items: [], children: [{ id: 'bin', name: 'Upper bin' }] }],
+    ['bin', { expanded: false, loaded: true, items: [], children: [{ id: 'tray', name: 'Inner tray' }] }],
+    ['tray', { expanded: false, loaded: true, items: [{ name: 'Hidden torque wrench' }], children: [] }],
+  ]);
+  const stateFor = id => states.get(id) || { expanded: false, loaded: false, items: [], children: [] };
+  const searchTerm = { value: 'torque' };
+  const matchesItem = item => item.name.toLowerCase().includes(searchTerm.value);
+  const matchesLocationName = location => location.name.toLowerCase().includes(searchTerm.value);
+  const directItems = new Map([['cabinet', []]]);
+  const itemsFor = componentFunction('  function itemsFor(location: LocationNode, nested = false): EntitySummary[] {', '  function matchesItem(',
+    'function itemsFor(location, nested = false) {', ['isRoot', 'directItems', 'stateFor'], [true, directItems, stateFor]);
+  const hasLoadedMatch = componentFunction('  function hasLoadedMatch(location: LocationNode, nested = false) {', '  function filteredLocations(',
+    'function hasLoadedMatch(location, nested = false) {', ['matchesLocationName', 'itemsFor', 'matchesItem', 'stateFor'],
+    [matchesLocationName, itemsFor, matchesItem, stateFor]);
+  const filteredLocations = componentFunction('  function filteredLocations() {', '  function isExpandedForDisplay(',
+    'function filteredLocations() {', ['searchTerm', 'props', 'hasLoadedMatch'],
+    [searchTerm, { locations: [{ id: 'cabinet', name: 'Cabinet' }] }, hasLoadedMatch]);
+  const isExpandedForDisplay = componentFunction('  function isExpandedForDisplay(location: LocationNode) {', '  function locationPath(',
+    'function isExpandedForDisplay(location) {', ['stateFor', 'searchTerm', 'hasLoadedMatch'],
+    [stateFor, searchTerm, hasLoadedMatch]);
+  assert.deepEqual(filteredLocations().map(location => location.id), ['cabinet']);
+  assert.equal(isExpandedForDisplay({ id: 'cabinet', name: 'Cabinet' }), true);
+  assert.equal(isExpandedForDisplay({ id: 'bin', name: 'Upper bin' }), true);
+  searchTerm.value = '';
+  assert.equal(stateFor('cabinet').expanded, false);
+  assert.equal(stateFor('tray').loaded, true);
+  assert.equal(isExpandedForDisplay({ id: 'cabinet', name: 'Cabinet' }), false);
+});

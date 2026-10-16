@@ -308,6 +308,55 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(denied.status, 409)
         self.assertEqual(self.entities[self.other_asset]['tags'], [])
 
+    def test_custom_group_normalizes_internal_whitespace_before_creating_tag(self):
+        result = self.request('equipment/groups/assign',
+                              {'entity_id': self.asset, 'group_name': '  Field  \tkit  '})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'][0]['name'], 'C-Crate Product group: Field kit')
+
+    def test_custom_group_reuses_single_equivalent_native_tag(self):
+        equivalent = {'id': ident(), 'name': 'C-Crate Product group: Field  kit'}
+        self.tags.append(equivalent)
+        result = self.request('equipment/groups/assign',
+                              {'entity_id': self.asset, 'group_name': 'Field kit'})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'], [equivalent])
+        self.assertFalse([call for call in self.native_calls if call[2] == '/api/v1/tags' and call[3] == 'POST'])
+
+    def test_custom_group_rejects_normalized_native_tag_collision(self):
+        self.tags.extend([{'id': ident(), 'name': 'C-Crate Product group: Field kit'},
+                          {'id': ident(), 'name': 'C-Crate Product group: Field  kit'}])
+        result = self.request('equipment/groups/assign',
+                              {'entity_id': self.asset, 'group_name': 'Field   kit'})
+        self.assertEqual(result.status, 409)
+        self.assertEqual(self.entities[self.asset]['tags'], [])
+        self.assertFalse([call for call in self.native_calls if call[3] in ('POST', 'PUT')])
+
+    def test_custom_group_removes_equivalent_whitespace_membership_only(self):
+        ordinary = {'id': ident(), 'name': 'Fragile'}
+        grouped = {'id': ident(), 'name': 'C-Crate Product group: Field  kit'}
+        self.tags.extend([ordinary, grouped])
+        self.entities[self.asset]['tags'] = [copy.deepcopy(ordinary), copy.deepcopy(grouped)]
+        result = self.request('equipment/groups/remove',
+                              {'entity_id': self.asset, 'group_name': 'Field kit'})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'], [ordinary])
+        self.assertEqual([tag['name'] for tag in self.tags], ['Fragile', 'C-Crate Product group: Field  kit'])
+
+    def test_custom_group_removes_its_membership_during_global_name_collision(self):
+        ordinary = {'id': ident(), 'name': 'Fragile'}
+        grouped = {'id': ident(), 'name': 'C-Crate Product group: Field  kit'}
+        other_group = {'id': ident(), 'name': 'C-Crate Product group: Field kit'}
+        self.tags.extend([ordinary, grouped, other_group])
+        self.entities[self.asset]['tags'] = [copy.deepcopy(ordinary), copy.deepcopy(grouped)]
+        self.entities[self.other_asset]['tags'] = [copy.deepcopy(other_group)]
+        result = self.request('equipment/groups/remove',
+                              {'entity_id': self.asset, 'group_name': 'Field kit'})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'], [ordinary])
+        self.assertEqual(self.entities[self.other_asset]['tags'], [other_group])
+        self.assertEqual(self.tags, [ordinary, grouped, other_group])
+
     def test_custom_group_rejects_duplicate_tags_and_invalid_names(self):
         for name in ('  ', 'x' * 233):
             self.assertEqual(self.request('equipment/groups/assign',

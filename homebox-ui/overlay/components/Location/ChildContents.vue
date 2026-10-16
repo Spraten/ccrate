@@ -6,11 +6,11 @@
   };
 
   defineOptions({ name: "ChildContents" });
-  const props = withDefaults(defineProps<{ locations: LocationNode[]; depth?: number; filter?: string; parentPath?: string }>(), { depth: 0, filter: "", parentPath: "" });
+  type PreviewState = { expanded: boolean; loading: boolean; loaded: boolean; items: EntitySummary[]; children: LocationNode[]; error: string };
+  const props = withDefaults(defineProps<{ locations: LocationNode[]; depth?: number; filter?: string; parentPath?: string; loadedStates?: Map<string, PreviewState> }>(), { depth: 0, filter: "", parentPath: "" });
   const isRoot = props.depth === 0;
   const api = useUserApi();
-  type PreviewState = { expanded: boolean; loading: boolean; loaded: boolean; items: EntitySummary[]; children: LocationNode[]; error: string };
-  const states = reactive(new Map<string, PreviewState>());
+  const states = props.loadedStates ?? reactive(new Map<string, PreviewState>());
   const directItems = reactive(new Map<string, EntitySummary[]>());
   const loading = ref(false);
   const error = ref("");
@@ -20,8 +20,8 @@
   const filterText = ref("");
   const searchTerm = computed(() => (isRoot ? filterText.value : props.filter).trim().toLocaleLowerCase());
 
-  function itemsFor(location: LocationNode): EntitySummary[] {
-    return isRoot ? (directItems.get(location.id) || []) : stateFor(location.id).items;
+  function itemsFor(location: LocationNode, nested = false): EntitySummary[] {
+    return isRoot && !nested ? (directItems.get(location.id) || []) : stateFor(location.id).items;
   }
 
   function matchesItem(item: EntitySummary) {
@@ -38,9 +38,19 @@
     return Boolean(searchTerm.value) && location.name.toLocaleLowerCase().includes(searchTerm.value);
   }
 
+  function hasLoadedMatch(location: LocationNode, nested = false) {
+    if (matchesLocationName(location) || itemsFor(location, nested).some(matchesItem)) return true;
+    const state = stateFor(location.id);
+    return state.loaded && state.children.some(child => hasLoadedMatch(child, true));
+  }
+
   function filteredLocations() {
     if (!searchTerm.value) return props.locations;
-    return props.locations.filter(location => matchesLocationName(location) || visibleItems(location).length > 0);
+    return props.locations.filter(location => hasLoadedMatch(location));
+  }
+
+  function isExpandedForDisplay(location: LocationNode) {
+    return stateFor(location.id).expanded || Boolean(searchTerm.value && hasLoadedMatch(location));
   }
 
   function locationPath(name: string) {
@@ -188,11 +198,11 @@
         <button
           type="button"
           class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          :aria-expanded="stateFor(location.id).expanded"
-          :aria-label="`${stateFor(location.id).expanded ? 'Collapse' : 'Expand'} contents of ${location.name}`"
+          :aria-expanded="isExpandedForDisplay(location)"
+          :aria-label="`${isExpandedForDisplay(location) ? 'Collapse' : 'Expand'} contents of ${location.name}`"
           @click="toggle(location.id)"
         >
-          <span aria-hidden="true">{{ stateFor(location.id).expanded ? "▾" : "▸" }}</span>
+          <span aria-hidden="true">{{ isExpandedForDisplay(location) ? "▾" : "▸" }}</span>
         </button>
         <NuxtLink :to="`/location/${encodeURIComponent(location.id)}`" class="min-w-0 flex-1 font-medium hover:underline">
           {{ location.name }}
@@ -201,7 +211,7 @@
         <span v-if="location.itemCount > 0" class="text-sm text-muted-foreground">{{ location.itemCount }} items</span>
       </header>
 
-      <div v-if="stateFor(location.id).expanded" class="border-t bg-muted/20 p-3 pl-10">
+      <div v-if="isExpandedForDisplay(location)" class="border-t bg-muted/20 p-3 pl-10">
         <p v-if="stateFor(location.id).loading" role="status" aria-live="polite" class="text-sm text-muted-foreground">Loading location details…</p>
         <div v-if="stateFor(location.id).error" role="alert" class="flex flex-wrap items-center gap-2 text-sm">
           <span>{{ stateFor(location.id).error }}</span>
@@ -223,7 +233,7 @@
           </li>
         </ul>
 
-        <ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" :filter="searchTerm" :parent-path="locationPath(location.name)" />
+        <ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" :filter="searchTerm" :parent-path="locationPath(location.name)" :loaded-states="states" />
       </div>
     </article>
   </section>

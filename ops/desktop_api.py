@@ -195,7 +195,7 @@ def custom_group_change(client, route, data):
     name = data.get('group_name')
     if not isinstance(name, str):
         raise ValueError('Enter a product group name.')
-    name = name.strip()
+    name = ' '.join(name.split())
     if not name or len(PRODUCT_GROUP_TAG_PREFIX + name) > 255:
         raise ValueError('Product group name must fit in a native tag.')
     full_name = PRODUCT_GROUP_TAG_PREFIX + name
@@ -209,18 +209,18 @@ def custom_group_change(client, route, data):
         raise Conflict('Duplicate native tags need review in C-Crate.')
     candidates = [tag for tag in native_tags
                   if tag['name'].casefold().startswith(PRODUCT_GROUP_TAG_PREFIX.casefold())
-                  and tag['name'][len(PRODUCT_GROUP_TAG_PREFIX):].strip().casefold() == name.casefold()]
-    if len(candidates) > 1 or (candidates and (candidates[0]['name'] != full_name or
-                                                        candidates[0].get('parentId') not in (None, '', '00000000-0000-0000-0000-000000000000'))):
+                  and ' '.join(tag['name'][len(PRODUCT_GROUP_TAG_PREFIX):].split()).casefold() == name.casefold()]
+    if route != 'equipment/groups/remove' and (len(candidates) > 1 or (candidates and
+        candidates[0].get('parentId') not in (None, '', '00000000-0000-0000-0000-000000000000'))):
         raise Conflict('Product group tag name collides with a native tag; review it in C-Crate.')
     group_tags = [tag for tag in entity.get('tags', [])
                   if tag['name'].strip().casefold().startswith(PRODUCT_GROUP_TAG_PREFIX.casefold())]
     if len(group_tags) > 1 or len({tag['id'] for tag in entity.get('tags', [])}) != len(entity.get('tags', [])):
         raise Conflict('Duplicate product group tags need review in C-Crate.')
     existing = group_tags[0] if group_tags else None
-    if existing and existing['name'] != full_name:
+    if existing and ' '.join(existing['name'][len(PRODUCT_GROUP_TAG_PREFIX):].split()).casefold() != name.casefold():
         raise Conflict('Remove the current product group before assigning another.')
-    if existing and (not candidates or candidates[0]['id'] != existing['id']):
+    if existing and existing['id'] not in {tag['id'] for tag in candidates}:
         raise Conflict('Product group membership needs review in C-Crate.')
 
     if route == 'equipment/groups/remove':
