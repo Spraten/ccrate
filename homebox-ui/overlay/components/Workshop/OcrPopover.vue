@@ -372,6 +372,7 @@
           <button type="button" class="rounded p-1 hover:bg-accent" aria-label="Close text capture" @click="close"><X class="size-4" /></button>
         </div>
       </header>
+      <p role="status" aria-atomic="true" :class="controlStatus ? 'px-3 pt-2 text-xs text-muted-foreground' : 'sr-only'">{{ controlStatus }}</p>
       <div v-if="!minimized" class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         <p class="text-xs text-muted-foreground">Photos stay on this device. OCR runs in this browser. On first scan, the OCR code and English model download here.</p>
         <div class="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-muted">
@@ -420,7 +421,6 @@
             </div>
             <p v-if="focusMode !== 'manual'" class="text-xs text-muted-foreground">Select manual focus mode to adjust distance.</p>
           </div>
-          <p v-if="controlStatus" role="status" class="text-xs text-muted-foreground">{{ controlStatus }}</p>
           <p v-if="controlError" role="alert" class="text-xs text-destructive">{{ controlError }}</p>
         </div>
         <ol v-if="recognizedLines.length" aria-label="Recognized lines with matching image box colors" class="space-y-1 text-sm">
