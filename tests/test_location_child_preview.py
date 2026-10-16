@@ -12,6 +12,32 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class ChildLocationPreviewTests(unittest.TestCase):
+    def test_cabinet_filter_searches_loaded_fields_and_keeps_bin_context(self):
+        component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
+        self.assertIn('aria-label="Filter loaded cabinet contents"', component)
+        self.assertIn('v-model="filterText"', component)
+        self.assertIn('Clear filter', component)
+        self.assertIn('item.manufacturer', component)
+        self.assertIn('item.model', component)
+        self.assertIn('item.serialNumber', component)
+        self.assertIn('location.name', component)
+        self.assertIn('Search covers loaded cabinet contents only', component)
+        self.assertIn('{{ locationPath(location.name) }}</NuxtLink>', component)
+        self.assertIn('function matchesItem(item: EntitySummary)', component)
+
+    def test_nested_contents_stay_lazy_and_failures_keep_retryable_rows(self):
+        component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
+        self.assertIn('if (state.expanded && !isRoot) void loadDetail(locationId)', component)
+        self.assertIn('api.items.getLocation(locationId)', component)
+        self.assertIn('state.items = items.data.items', component)
+        self.assertIn('Some location contents could not be loaded. Results may be incomplete.', component)
+        self.assertIn('function retryBatch()', component)
+        self.assertIn('function retryDetail(locationId: string)', component)
+        self.assertIn('This location is empty.', component)
+        self.assertIn('Could not load this location\'s details. Try again.', component)
+        self.assertIn('`/location/${encodeURIComponent(location.id)}`', component)
+        self.assertIn('`/item/${encodeURIComponent(item.id)}`', component)
+
     def test_child_item_preview_prefers_generated_display_id_with_native_fallback(self):
         component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
         self.assertIn('v-if="item.displayId"', component)
@@ -69,8 +95,8 @@ class ChildLocationPreviewTests(unittest.TestCase):
             self.assertIn('`/item/${encodeURIComponent(item.id)}`', component)
             self.assertIn('v-if="stateFor(location.id).loading"', component)
             self.assertIn('v-if="stateFor(location.id).error"', component)
-            self.assertIn('directItems.get(location.id)?.length || 0', component)
-            self.assertIn('<ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" />', component)
+            self.assertIn('itemsFor(location).length === 0', component)
+            self.assertIn('<ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" :filter="searchTerm" :parent-path="locationPath(location.name)" />', component)
 
 
 if __name__ == "__main__":

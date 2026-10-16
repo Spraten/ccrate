@@ -6,7 +6,7 @@
   };
 
   defineOptions({ name: "ChildContents" });
-  const props = withDefaults(defineProps<{ locations: LocationNode[]; depth?: number }>(), { depth: 0 });
+  const props = withDefaults(defineProps<{ locations: LocationNode[]; depth?: number; filter?: string; parentPath?: string }>(), { depth: 0, filter: "", parentPath: "" });
   const isRoot = props.depth === 0;
   const api = useUserApi();
   type PreviewState = { expanded: boolean; loading: boolean; loaded: boolean; items: EntitySummary[]; children: LocationNode[]; error: string };
@@ -17,6 +17,29 @@
   const partial = ref(false);
   const batchLoaded = ref(false);
   const allExpanded = ref(isRoot);
+  const filterText = ref("");
+  const searchTerm = computed(() => (isRoot ? filterText.value : props.filter).trim().toLocaleLowerCase());
+
+  function itemsFor(location: LocationNode): EntitySummary[] {
+    return isRoot ? (directItems.get(location.id) || []) : stateFor(location.id).items;
+  }
+
+  function matchesItem(item: EntitySummary) {
+    const term = searchTerm.value;
+    return !term || [item.name, item.displayId, item.assetId, item.manufacturer, item.model, item.serialNumber]
+      .some(value => String(value || "").toLocaleLowerCase().includes(term));
+  }
+
+  function visibleItems(location: LocationNode) {
+    const items = itemsFor(location);
+    if (!searchTerm.value) return items;
+    if (location.name.toLocaleLowerCase().includes(searchTerm.value)) return items;
+    return items.filter(matchesItem);
+  }
+
+  function locationPath(name: string) {
+    return [props.parentPath, name].filter(Boolean).join(" / ");
+  }
 
   function stateFor(locationId: string) {
     let state = states.get(locationId);
@@ -123,6 +146,12 @@
 <template>
   <section v-if="props.locations.length" class="mt-6 space-y-3" aria-label="Child location contents">
     <h2 class="text-lg font-semibold">Child locations</h2>
+    <div v-if="isRoot" class="flex flex-wrap items-center gap-2">
+      <label class="sr-only" for="cabinet-contents-filter">Filter loaded cabinet contents</label>
+      <input id="cabinet-contents-filter" v-model="filterText" type="search" aria-label="Filter loaded cabinet contents" placeholder="Filter loaded contents" class="min-w-0 flex-1 rounded border bg-background px-3 py-2 text-sm" />
+      <button v-if="filterText" type="button" class="text-sm underline" @click="filterText = ''">Clear filter</button>
+      <p class="basis-full text-xs text-muted-foreground">Search covers loaded cabinet contents only; expand bins to load deeper locations.</p>
+    </div>
     <div class="flex flex-wrap gap-3">
       <button type="button" class="text-sm underline" :aria-expanded="allExpanded" @click="setAllExpanded(false)">Collapse all bins</button>
       <button type="button" class="text-sm underline" :aria-expanded="allExpanded" @click="setAllExpanded(true)">Expand bins</button>
@@ -155,21 +184,22 @@
           <span>{{ stateFor(location.id).error }}</span>
           <button type="button" class="underline" @click="retryDetail(location.id)">Retry</button>
         </div>
-        <p v-if="!stateFor(location.id).error && !stateFor(location.id).loading && (isRoot ? directItems.get(location.id)?.length || 0 : stateFor(location.id).items.length) === 0 && stateFor(location.id).children.length === 0 && (isRoot ? batchLoaded : stateFor(location.id).loaded)" class="text-sm text-muted-foreground">This location is empty.</p>
-        <ul v-if="(isRoot ? directItems.get(location.id)?.length : stateFor(location.id).items.length)" class="divide-y">
-          <li v-for="item in (isRoot ? directItems.get(location.id) : stateFor(location.id).items)" :key="item.id" class="flex min-w-0 items-center gap-3 py-2 first:pt-0 last:pb-0">
+        <p v-if="!stateFor(location.id).error && !stateFor(location.id).loading && itemsFor(location).length === 0 && stateFor(location.id).children.length === 0 && (isRoot ? batchLoaded : stateFor(location.id).loaded)" class="text-sm text-muted-foreground">This location is empty.</p>
+        <ul v-if="visibleItems(location).length" class="divide-y">
+          <li v-for="item in visibleItems(location)" :key="item.id" class="flex min-w-0 items-center gap-3 py-2 first:pt-0 last:pb-0">
             <div class="min-w-0 flex-1">
               <NuxtLink :to="`/item/${encodeURIComponent(item.id)}`" class="block truncate hover:underline">
                 {{ item.name }}
               </NuxtLink>
               <span v-if="item.displayId" class="block break-all text-xs text-muted-foreground">Generated ID · {{ item.displayId }}</span>
               <span v-else-if="item.assetId" class="block break-all text-xs text-muted-foreground">{{ item.assetId }}</span>
+              <NuxtLink :to="`/location/${encodeURIComponent(location.id)}`" class="block text-xs text-muted-foreground hover:underline">{{ locationPath(location.name) }}</NuxtLink>
             </div>
             <span class="shrink-0 text-sm text-muted-foreground">×{{ item.quantity }}</span>
           </li>
         </ul>
 
-        <ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" />
+        <ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" :filter="searchTerm" :parent-path="locationPath(location.name)" />
       </div>
     </article>
   </section>
