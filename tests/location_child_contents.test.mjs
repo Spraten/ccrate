@@ -84,7 +84,7 @@ test('filter retains loaded ancestor paths and reveals collapsed matching descen
   const filteredLocations = componentFunction('  function filteredLocations() {', '  function isExpandedForDisplay(',
     'function filteredLocations() {', ['searchTerm', 'props', 'hasLoadedMatch'],
     [searchTerm, { locations: [{ id: 'cabinet', name: 'Cabinet' }] }, hasLoadedMatch]);
-  const isExpandedForDisplay = componentFunction('  function isExpandedForDisplay(location: LocationNode) {', '  function locationPath(',
+  const isExpandedForDisplay = componentFunction('  function isExpandedForDisplay(location: LocationNode) {', '  function isForcedOpenByFilter(',
     'function isExpandedForDisplay(location) {', ['stateFor', 'searchTerm', 'hasLoadedMatch'],
     [stateFor, searchTerm, hasLoadedMatch]);
   assert.deepEqual(filteredLocations().map(location => location.id), ['cabinet']);
@@ -94,4 +94,44 @@ test('filter retains loaded ancestor paths and reveals collapsed matching descen
   assert.equal(stateFor('cabinet').expanded, false);
   assert.equal(stateFor('tray').loaded, true);
   assert.equal(isExpandedForDisplay({ id: 'cabinet', name: 'Cabinet' }), false);
+});
+
+test('matching unloaded bin cannot be toggled or collapsed until filter clears', () => {
+  const location = { id: 'unloaded', name: 'Torque bin' };
+  const state = { expanded: false, loaded: false, items: [], children: [] };
+  const stateFor = () => state;
+  const searchTerm = { value: 'torque' };
+  const isForcedOpenByFilter = componentFunction('  function isForcedOpenByFilter(location: LocationNode) {', '  function locationPath(',
+    'function isForcedOpenByFilter(location) {', ['searchTerm', 'hasLoadedMatch'],
+    [searchTerm, row => row.name.toLowerCase().includes(searchTerm.value)]);
+  const canCollapseAll = componentFunction('  function canCollapseAll() {', '  function locationPath(',
+    'function canCollapseAll() {', ['searchTerm', 'filteredLocations'],
+    [searchTerm, () => searchTerm.value ? [location] : []]);
+  let loads = 0;
+  const loadDetail = () => { loads++; };
+  const props = { locations: [location] };
+  const allExpanded = { value: false };
+  const toggle = componentFunction('  function toggle(location: LocationNode) {', '  function setAllExpanded(',
+    'function toggle(location) {', ['isForcedOpenByFilter', 'stateFor', 'allExpanded', 'props', 'isRoot', 'loadDetail'],
+    [isForcedOpenByFilter, stateFor, allExpanded, props, false, loadDetail]);
+  const setAllExpanded = componentFunction('  function setAllExpanded(expanded: boolean) {', '  function retryBatch(',
+    'function setAllExpanded(expanded) {', ['canCollapseAll', 'allExpanded', 'props', 'stateFor', 'loadDetail'],
+    [canCollapseAll, allExpanded, props, stateFor, loadDetail]);
+  assert.equal(isForcedOpenByFilter(location), true);
+  assert.equal(canCollapseAll(), false);
+  toggle(location);
+  assert.equal(state.expanded, false);
+  assert.equal(loads, 0);
+  state.expanded = true;
+  setAllExpanded(false);
+  assert.equal(state.expanded, true);
+  assert.equal(loads, 0);
+  searchTerm.value = '';
+  assert.equal(isForcedOpenByFilter(location), false);
+  assert.equal(canCollapseAll(), true);
+  setAllExpanded(false);
+  assert.equal(state.expanded, false);
+  toggle(location);
+  assert.equal(state.expanded, true);
+  assert.equal(loads, 1);
 });

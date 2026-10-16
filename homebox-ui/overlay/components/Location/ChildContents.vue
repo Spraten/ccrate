@@ -53,6 +53,14 @@
     return stateFor(location.id).expanded || Boolean(searchTerm.value && hasLoadedMatch(location));
   }
 
+  function isForcedOpenByFilter(location: LocationNode) {
+    return Boolean(searchTerm.value && hasLoadedMatch(location));
+  }
+
+  function canCollapseAll() {
+    return !(searchTerm.value && filteredLocations().length > 0);
+  }
+
   function locationPath(name: string) {
     return [props.parentPath, name].filter(Boolean).join(" / ");
   }
@@ -138,7 +146,9 @@
     }
   }
 
-  function toggle(locationId: string) {
+  function toggle(location: LocationNode) {
+    if (isForcedOpenByFilter(location)) return;
+    const locationId = location.id;
     const state = stateFor(locationId);
     state.expanded = !state.expanded;
     allExpanded.value = props.locations.every(location => stateFor(location.id).expanded);
@@ -147,6 +157,7 @@
   }
 
   function setAllExpanded(expanded: boolean) {
+    if (!expanded && !canCollapseAll()) return;
     allExpanded.value = expanded;
     for (const location of props.locations) {
       const state = stateFor(location.id);
@@ -184,9 +195,10 @@
       <p class="basis-full text-xs text-muted-foreground">Search covers loaded cabinet contents only; expand bins to load deeper locations.</p>
     </div>
     <div class="flex flex-wrap gap-3">
-      <button type="button" class="text-sm underline" :aria-expanded="allExpanded" @click="setAllExpanded(false)">Collapse all bins</button>
+      <button type="button" class="text-sm underline disabled:cursor-not-allowed disabled:opacity-50" :aria-expanded="allExpanded" :disabled="!canCollapseAll()" :aria-label="canCollapseAll() ? 'Collapse all bins' : 'Clear the filter to enable collapsing matching bins'" @click="setAllExpanded(false)">Collapse all bins</button>
       <button type="button" class="text-sm underline" :aria-expanded="allExpanded" @click="setAllExpanded(true)">Expand bins</button>
     </div>
+    <p v-if="isRoot && !canCollapseAll()" role="status" class="text-xs text-muted-foreground">Clear the filter to enable collapsing matching bins.</p>
     <p v-if="loading" role="status" aria-live="polite" class="text-sm text-muted-foreground">Loading bin contents…</p>
     <div v-if="error" role="alert" class="flex flex-wrap items-center gap-2 text-sm">
       <span>{{ error }}</span>
@@ -197,10 +209,11 @@
       <header class="flex flex-wrap items-center gap-2 p-3">
         <button
           type="button"
-          class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          class="rounded px-2 py-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           :aria-expanded="isExpandedForDisplay(location)"
-          :aria-label="`${isExpandedForDisplay(location) ? 'Collapse' : 'Expand'} contents of ${location.name}`"
-          @click="toggle(location.id)"
+          :disabled="isForcedOpenByFilter(location)"
+          :aria-label="isForcedOpenByFilter(location) ? `Expanded for filter match in ${location.name}; clear the filter to enable collapse` : `${isExpandedForDisplay(location) ? 'Collapse' : 'Expand'} contents of ${location.name}`"
+          @click="toggle(location)"
         >
           <span aria-hidden="true">{{ isExpandedForDisplay(location) ? "▾" : "▸" }}</span>
         </button>
