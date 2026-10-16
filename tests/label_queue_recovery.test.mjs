@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 
-const html = readFileSync(new URL('../kiosk/index.html', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../kiosk/terminal.js', import.meta.url), 'utf8');
 const from = html.indexOf('function labelPrintStatus(');
 const to = html.indexOf('\nfunction dashboardIcon(', from);
 assert.notEqual(from, -1, 'label recovery state helpers must be present');

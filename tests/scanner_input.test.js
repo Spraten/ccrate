@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { bindScannerInput, mountScannerCapture } = require('../kiosk/scanner_input.js');
 
 function scannerSetupFromPage(mount) {
-  const page = fs.readFileSync(path.join(__dirname, '../kiosk/index.html'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '../kiosk/terminal.js'), 'utf8');
   const start = page.indexOf('function setupScannerInput(overlay,onScan){');
   const end = page.indexOf('\nfunction focusScannerInput', start);
   assert.notEqual(start, -1);
@@ -57,7 +57,7 @@ function fakeDocument() {
 }
 
 function routeScanFromPage(sandbox) {
-  const page = fs.readFileSync(path.join(__dirname, '../kiosk/index.html'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '../kiosk/terminal.js'), 'utf8');
   const start = page.indexOf('async function routeScan(code,expectedOverlay=null){');
   const end = page.indexOf("\ndocument.querySelector('#scan').onclick=async()=>", start);
   assert.notEqual(start, -1);
@@ -252,7 +252,7 @@ test('scanner helper load or initialization failure leaves a clear fallback stat
 });
 
 test('scanner setup is caught before the overlay starts its webcam and manual paths', () => {
-  const page = fs.readFileSync(path.join(__dirname, '../kiosk/index.html'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '../kiosk/terminal.js'), 'utf8');
   const start = page.indexOf("document.querySelector('#scan').onclick=async()=>");
   const end = page.indexOf("window.addEventListener('pagehide',stopScan)", start);
   const scanner = page.slice(start, end);
@@ -265,7 +265,7 @@ test('scanner setup is caught before the overlay starts its webcam and manual pa
 });
 
 test('scan handler keeps camera and manual controls usable when scanner setup or focus fails', async () => {
-  const page = fs.readFileSync(path.join(__dirname, '../kiosk/index.html'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '../kiosk/terminal.js'), 'utf8');
   const start = page.indexOf("document.querySelector('#scan').onclick=async()=>{");
   const end = page.indexOf("\nwindow.addEventListener('pagehide',stopScan)", start);
   assert.notEqual(start, -1);
@@ -282,6 +282,7 @@ test('scan handler keeps camera and manual controls usable when scanner setup or
       createElement(tag) {
         return {
           tag, children: [], style: {}, disabled: false, readyState: 0,
+          classList: { add() {}, remove() {} },
           append(...children) { this.children.push(...children); },
           setAttribute() {}, getContext() { return { clearRect() {}, strokeRect() {}, beginPath() {}, lineTo() {}, moveTo() {}, closePath() {}, stroke() {}, setLineDash() {} }; },
           focus() { if (failure === 'focus') throw Error('focus failed'); },
@@ -292,7 +293,7 @@ test('scan handler keeps camera and manual controls usable when scanner setup or
       querySelector() { return { disabled: false, click() {} }; },
     };
     const overlay = { children: [], style: {}, append(...children) { this.children.push(...children); }, remove() {} };
-    const makeNode = (tag, text) => ({ tag, textContent: text, style: {}, children: [], disabled: false, append(...children) { this.children.push(...children); }, setAttribute() {}, remove() {} });
+    const makeNode = (tag, text) => ({ tag, textContent: text, style: {}, classList: { add() {}, remove() {} }, children: [], disabled: false, append(...children) { this.children.push(...children); }, setAttribute() {}, remove() {} });
     const mount = failure === 'missing' ? undefined : failure === 'initialization' ? () => { throw Error('init failed'); } : () => ({ focus() { throw Error('focus failed'); } });
     const startCamera = async () => {
       cameraStarts++;
