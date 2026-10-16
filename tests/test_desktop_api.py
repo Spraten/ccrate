@@ -117,8 +117,15 @@ class Native:
                 if self.owner.fail_patch:
                     raise OSError('Injected lost response after native write')
             if method == 'PUT':
-                self.owner.entities[key] = dict(copy.deepcopy(data), parent=copy.deepcopy(entity['parent']),
-                    entityType=copy.deepcopy(entity['entityType']),
+                parent_id = data.get('parentId')
+                parent = (copy.deepcopy(entity['parent']) if (entity.get('parent') or {}).get('id') == parent_id
+                          else {'id': parent_id, 'name': self.owner.entities[parent_id]['name']}
+                          if parent_id in self.owner.entities else None)
+                type_id = data.get('entityTypeId')
+                entity_type = (copy.deepcopy(entity['entityType']) if entity['entityType']['id'] == type_id
+                               else {'id': type_id, 'isLocation': False})
+                self.owner.entities[key] = dict(copy.deepcopy(data), parent=parent, entityType=entity_type,
+                    fields=copy.deepcopy(data.get('fields', [])),
                     tags=[copy.deepcopy(tag) for tag in self.owner.tags if tag['id'] in data['tagIds']])
             return self.entity(key)
         raise AssertionError('Unexpected native request: '+path)
@@ -129,6 +136,7 @@ class DesktopTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(); self.root = pathlib.Path(self.temp.name)
         self.group, self.other_group, self.manager, self.borrower, self.asset, self.shelf, self.other_shelf, self.kind = [ident() for _ in range(8)]
         self.other_asset = ident()
+        self.field_id = ident()
         self.users = {
             'alpha': {'id': self.manager, 'name': 'Workshop Admin', 'email': 'fixture@example.invalid', 'defaultGroupId': self.group, 'groupIds': [self.group, self.other_group]},
             'member': {'id': self.borrower, 'name': 'Workshop Admin', 'email': 'member@example.invalid', 'defaultGroupId': self.group, 'groupIds': [self.group]},
@@ -136,7 +144,7 @@ class DesktopTests(unittest.TestCase):
         self.entities = {
             self.asset: {'id': self.asset, 'name': 'Fixture drill', 'assetId': '001-001', 'quantity': 1, 'archived': False,
                          'entityType': {'id': self.kind, 'isLocation': False}, 'parent': {'id': self.shelf, 'name': 'Shelf'},
-                         'fields': [{'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}], 'tags': []},
+                         'fields': [{'id': self.field_id, 'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}], 'tags': []},
             self.other_asset: {'id': self.other_asset, 'name': 'Fixture lamp', 'assetId': '001-002', 'quantity': 1, 'archived': False,
                                'entityType': {'id': self.kind, 'isLocation': False}, 'parent': {'id': self.shelf, 'name': 'Shelf'},
                                'fields': [{'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}], 'tags': []},
@@ -191,9 +199,29 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual(self.entities[self.asset][key], before[key], key)
         writes = [call for call in self.native_calls if call[3] == 'PUT']
         self.assertEqual(len(writes), 1)
-        self.assertEqual(writes[0][4]['tagIds'], [ordinary['id'], result.result['tags'][1]['id']])
+        payload = writes[0][4]
+        self.assertEqual(payload['tagIds'], [ordinary['id'], result.result['tags'][1]['id']])
+        self.assertEqual(payload['parentId'], self.shelf)
+        self.assertEqual(payload['entityTypeId'], self.kind)
+        self.assertEqual(payload['fields'], before['fields'])
+        self.assertEqual(payload['fields'][0]['id'], self.field_id)
         self.assertEqual({tag['name'] for tag in self.request('equipment').result[0]['tags']},
                          {'Fragile', 'C-Crate Product group: Drill set'})
+
+    def test_custom_group_readback_detects_missing_native_relationship_ids(self):
+        native_payload = api.update_payload
+        before = copy.deepcopy(self.entities[self.asset])
+        for missing in ('parentId', 'entityTypeId'):
+            with self.subTest(missing=missing):
+                self.entities[self.asset] = copy.deepcopy(before)
+                def incomplete(entity):
+                    payload = native_payload(entity)
+                    payload.pop(missing)
+                    return payload
+                with patch('desktop_api.update_payload', side_effect=incomplete):
+                    result = self.request('equipment/groups/assign',
+                                          {'entity_id': self.asset, 'group_name': 'Drill set'})
+                self.assertEqual(result.status, 409)
 
     def test_custom_group_remove_preserves_other_tags(self):
         ordinary = {'id': ident(), 'name': 'Fragile'}
