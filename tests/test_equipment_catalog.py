@@ -135,6 +135,41 @@ class EquipmentCatalogTests(unittest.TestCase):
         self.assertEqual(assigned['display_id'], self.catalog.resolve_id(self.group, assigned['display_id']) and assigned['display_id'])
 
 
+
+    def test_incomplete_product_metadata_does_not_merge_distinct_names(self):
+        tripod = self.catalog.save_template(self.group, self.actor, uid(),
+            self.payload(name='Tripod', manufacturer='', model_number='', model_code='TP'), type_prefix='ACCESSORY')
+        stand = self.catalog.save_template(self.group, self.actor, uid(),
+            self.payload(name='Light stand', manufacturer='', model_number='', model_code='LS'), type_prefix='ACCESSORY')
+        self.assertNotEqual(tripod['product_id'], stand['product_id'])
+        with self.assertRaises(Conflict):
+            self.catalog.save_template(self.group, self.actor, uid(),
+                self.payload(name='Unknown stand', manufacturer='', model_number='', model_code='TP'), type_prefix='ACCESSORY')
+
+    def test_template_edit_cannot_duplicate_another_product_identity(self):
+        first = self.catalog.save_template(self.group, self.actor, uid(),
+            self.payload(name='Camera A', manufacturer='Acme', model_number='Camera A', model_code='CA'), type_prefix='CAMERA')
+        self.catalog.save_template(self.group, self.actor, uid(),
+            self.payload(name='Camera B', manufacturer='Acme', model_number='Camera B', model_code='CB'), type_prefix='CAMERA')
+        with self.assertRaises(Conflict):
+            self.catalog.save_template(self.group, self.actor, uid(),
+                self.payload(name='Camera B', manufacturer='Acme', model_number='Camera B', model_code='CA2'),
+                type_prefix='CAMERA', template_id=first['id'], expected_updated_at=first['updated_at'])
+
+    def test_native_type_code_and_display_base_reservations_survive_prefix_changes(self):
+        first = self.catalog.save_template(self.group, self.actor, uid(),
+            self.payload(name='Sensor A', manufacturer='Acme', model_number='Sensor A', model_code='S'), type_prefix='DRONE-2')
+        changed = self.catalog.save_template(self.group, self.actor, uid(),
+            self.payload(name='Sensor A', manufacturer='Acme', model_number='Sensor A', model_code='SA2'),
+            type_prefix='AIRCRAFT', template_id=first['id'], expected_updated_at=first['updated_at'])
+        with self.assertRaises(Conflict):
+            self.catalog.save_template(self.group, self.actor, uid(),
+                self.payload(name='Other Sensor', manufacturer='Other', model_number='Other', model_code='S'), type_prefix='OTHER')
+        self.assertEqual(first['product_id'], changed['product_id'])
+        with self.assertRaises(Conflict):
+            self.catalog.register_product(self.group, self.actor, uid(),
+                {'entity_type_id': uid(), 'type_prefix': 'DRONE', 'manufacturer': 'Other', 'model_number': 'Other', 'model_code': '2-S'}, [])
+
     def test_concurrent_same_template_request_returns_one_saved_result(self):
         request = uid()
         def save(_):

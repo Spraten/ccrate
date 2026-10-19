@@ -47,6 +47,15 @@ class EquipmentCatalog:
               product_id TEXT NOT NULL, created_at TEXT NOT NULL,
               PRIMARY KEY(group_id,type_prefix,model_code),
               FOREIGN KEY(group_id,product_id) REFERENCES equipment_products(group_id,id));
+            CREATE TABLE IF NOT EXISTS equipment_product_model_codes(
+              group_id TEXT NOT NULL, entity_type_id TEXT NOT NULL, model_code TEXT NOT NULL,
+              product_id TEXT NOT NULL, created_at TEXT NOT NULL,
+              PRIMARY KEY(group_id,entity_type_id,model_code),
+              FOREIGN KEY(group_id,product_id) REFERENCES equipment_products(group_id,id));
+            CREATE TABLE IF NOT EXISTS equipment_product_display_bases(
+              group_id TEXT NOT NULL, display_base TEXT NOT NULL, product_id TEXT NOT NULL,
+              created_at TEXT NOT NULL, PRIMARY KEY(group_id,display_base),
+              FOREIGN KEY(group_id,product_id) REFERENCES equipment_products(group_id,id));
             CREATE TABLE IF NOT EXISTS equipment_product_members(
               group_id TEXT NOT NULL, product_id TEXT NOT NULL, entity_id TEXT NOT NULL,
               PRIMARY KEY(group_id,product_id,entity_id),
@@ -85,12 +94,17 @@ class EquipmentCatalog:
                 db.execute('UPDATE equipment_products SET identity_key=? WHERE group_id=? AND id=?',
                            (self._identity(row['entity_type_id'], row['manufacturer'], row['model_number']), row['group_id'], row['id']))
                 self._reserve_code(db, row['group_id'], row['type_prefix'], row['model_code'], row['id'])
+            for row in db.execute('SELECT * FROM equipment_product_codes').fetchall():
+                self._reserve_code(db, row['group_id'], row['type_prefix'], row['model_code'], row['product_id'])
             assignment_columns = {row['name'] for row in db.execute('PRAGMA table_info(equipment_assignments)')}
             if 'deleted' not in assignment_columns:
                 db.execute('ALTER TABLE equipment_assignments ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
 
     @staticmethod
     def _identity(type_id, manufacturer, model):
+        # Partial/blank product metadata is not enough evidence to merge records.
+        if not manufacturer.strip() or not model.strip():
+            return ''
         return _digest([type_id, manufacturer.casefold(), model.casefold()])
 
     @staticmethod
@@ -108,10 +122,19 @@ class EquipmentCatalog:
                    (group, key, action, digest, result_id, json.dumps(result, sort_keys=True), timestamp()))
 
     def _reserve_code(self, db, group, prefix, code, product_id):
+        product = db.execute('SELECT entity_type_id FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone()
+        if not product:
+            raise ValueError('Unknown product')
         reserved = db.execute('SELECT product_id FROM equipment_product_codes WHERE group_id=? AND type_prefix=? AND model_code=?', (group, prefix, code)).fetchone()
-        if reserved and reserved['product_id'] != product_id:
-            raise Conflict('type_prefix and model_code are already reserved for another product')
-        db.execute('INSERT OR IGNORE INTO equipment_product_codes VALUES(?,?,?,?,?)', (group, prefix, code, product_id, timestamp()))
+        model_owner = db.execute('SELECT product_id FROM equipment_product_model_codes WHERE group_id=? AND entity_type_id=? AND model_code=?', (group, product['entity_type_id'], code)).fetchone()
+        display_base = f'{prefix}-{code}'
+        display_owner = db.execute('SELECT product_id FROM equipment_product_display_bases WHERE group_id=? AND display_base=?', (group, display_base)).fetchone()
+        if any(row and row['product_id'] != product_id for row in (reserved, model_owner, display_owner)):
+            raise Conflict('type/model code or generated display base is already reserved for another product')
+        now = timestamp()
+        db.execute('INSERT OR IGNORE INTO equipment_product_codes VALUES(?,?,?,?,?)', (group, prefix, code, product_id, now))
+        db.execute('INSERT OR IGNORE INTO equipment_product_model_codes VALUES(?,?,?,?,?)', (group, product['entity_type_id'], code, product_id, now))
+        db.execute('INSERT OR IGNORE INTO equipment_product_display_bases VALUES(?,?,?,?)', (group, display_base, product_id, now))
 
     def _get_or_create_product(self, db, group, data, prefix, ids):
         type_id = data['entity_type_id']
@@ -119,7 +142,7 @@ class EquipmentCatalog:
         model = data['model_number'].strip()
         code = _code(data['model_code'])
         identity = self._identity(type_id, manufacturer, model)
-        row = db.execute('SELECT * FROM equipment_products WHERE group_id=? AND identity_key=?', (group, identity)).fetchone()
+        row = db.execute('SELECT * FROM equipment_products WHERE group_id=? AND identity_key=?', (group, identity)).fetchone() if identity else None
         if row:
             product_id = row['id']
             # A stable product can adopt edited defaults and codes without changing its UUID/counter.
@@ -130,6 +153,8 @@ class EquipmentCatalog:
             reserved = db.execute('SELECT product_id FROM equipment_product_codes WHERE group_id=? AND type_prefix=? AND model_code=?', (group, prefix, code)).fetchone()
             if reserved:
                 product_id = reserved['product_id']
+                if not identity:
+                    raise Conflict('Incomplete product metadata cannot identify an existing product')
                 product = db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone()
                 if product['entity_type_id'] != type_id:
                     raise Conflict('type_prefix and model_code are already reserved for another native type')
@@ -226,9 +251,13 @@ class EquipmentCatalog:
                 product = db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone()
                 if product['entity_type_id'] != data['entity_type_id']:
                     raise Conflict('Template item type cannot change product identity')
+                identity = self._identity(data['entity_type_id'], data['manufacturer'], data['model_number'])
+                duplicate = db.execute('SELECT id FROM equipment_products WHERE group_id=? AND identity_key=? AND id<>?', (group, identity, product_id)).fetchone() if identity else None
+                if duplicate:
+                    raise Conflict('Template metadata already identifies a different product')
                 self._reserve_code(db, group, prefix, data['model_code'], product_id)
                 db.execute('UPDATE equipment_products SET type_prefix=?,manufacturer=?,model_number=?,model_code=?,identity_key=?,updated_at=? WHERE group_id=? AND id=?',
-                           (prefix, data['manufacturer'], data['model_number'], data['model_code'], self._identity(data['entity_type_id'], data['manufacturer'], data['model_number']), timestamp(), group, product_id))
+                           (prefix, data['manufacturer'], data['model_number'], data['model_code'], identity, timestamp(), group, product_id))
                 for entity_id in ids:
                     linked = db.execute('SELECT product_id FROM equipment_product_members WHERE group_id=? AND entity_id=?', (group, entity_id)).fetchone()
                     if linked and linked['product_id'] != product_id:
