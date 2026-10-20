@@ -85,6 +85,15 @@ class EquipmentCatalog:
               group_id TEXT NOT NULL, request_key TEXT NOT NULL, request_hash TEXT NOT NULL,
               entity_id TEXT NOT NULL, product_id TEXT NOT NULL, result_json TEXT NOT NULL,
               created_at TEXT NOT NULL, PRIMARY KEY(group_id,request_key));
+            CREATE TABLE IF NOT EXISTS equipment_product_model_code_history(
+              sequence INTEGER PRIMARY KEY, group_id TEXT NOT NULL, product_id TEXT NOT NULL,
+              actor_id TEXT NOT NULL, old_model_code TEXT NOT NULL, new_model_code TEXT NOT NULL,
+              request_key TEXT NOT NULL, created_at TEXT NOT NULL,
+              UNIQUE(group_id,request_key));
+            CREATE TRIGGER IF NOT EXISTS no_product_model_code_history_update BEFORE UPDATE ON equipment_product_model_code_history
+              BEGIN SELECT RAISE(ABORT,'product model code history is append-only'); END;
+            CREATE TRIGGER IF NOT EXISTS no_product_model_code_history_delete BEFORE DELETE ON equipment_product_model_code_history
+              BEGIN SELECT RAISE(ABORT,'product model code history is append-only'); END;
             ''')
             columns = {row['name'] for row in db.execute('PRAGMA table_info(equipment_products)')}
             if 'identity_key' not in columns:
@@ -159,7 +168,8 @@ class EquipmentCatalog:
         row = db.execute('SELECT * FROM equipment_products WHERE group_id=? AND identity_key=?', (group, identity)).fetchone() if identity else None
         if row:
             product_id = row['id']
-            # A stable product can adopt edited defaults and codes without changing its UUID/counter.
+            if row['model_code'] != code:
+                raise Conflict('Registered product model code cannot be changed through registration')
             self._reserve_code(db, group, prefix, code, product_id)
             db.execute('UPDATE equipment_products SET type_prefix=?,manufacturer=?,model_number=?,model_code=?,product_group=?,identity_key=?,updated_at=? WHERE group_id=? AND id=?',
                        (prefix, manufacturer, model, code, product_group, identity, timestamp(), group, product_id))
@@ -230,6 +240,60 @@ class EquipmentCatalog:
             result = self._get_or_create_product(db, group, data, prefix, ids)
             self._save_request(db, group, key, 'product', digest, result['id'], result)
             return result
+
+    def list_products(self, group_id: str, active_entity_ids: set[str]) -> list[dict]:
+        group = uuid(group_id)
+        active_ids = {uuid(value) for value in active_entity_ids}
+        with self.ledger.connection() as db:
+            products = db.execute('SELECT * FROM equipment_products WHERE group_id=? ORDER BY type_prefix,model_code,id', (group,)).fetchall()
+            results = []
+            for product in products:
+                members = {row['entity_id'] for row in db.execute(
+                    'SELECT entity_id FROM equipment_product_members WHERE group_id=? AND product_id=?',
+                    (group, product['id'])) if row['entity_id'] in active_ids}
+                assignments = [dict(row) for row in db.execute(
+                    'SELECT entity_id,display_id,number FROM equipment_assignments '
+                    'WHERE group_id=? AND product_id=? AND deleted=0 ORDER BY number,entity_id',
+                    (group, product['id'])) if row['entity_id'] in members]
+                results.append({
+                    'id': product['id'], 'entity_type_id': product['entity_type_id'],
+                    'type_prefix': product['type_prefix'], 'manufacturer': product['manufacturer'],
+                    'model_number': product['model_number'], 'model_code': product['model_code'],
+                    'active_item_count': len(members), 'active_assigned_count': len(assignments),
+                    'next_number': product['high_water'] + 1, 'assignments': assignments,
+                })
+            return results
+
+    def update_product_model_code(self, group_id: str, actor_id: str, product_id: str,
+                                  model_code: str, expected_updated_at: str, request_key: str) -> dict:
+        group, actor, product_id, key = map(uuid, (group_id, actor_id, product_id, request_key))
+        code = _code(model_code)
+        digest = _digest({'product_id': product_id, 'model_code': code, 'expected_updated_at': expected_updated_at})
+        with self.ledger.transaction() as db:
+            prior = self._request(db, group, key, 'product_model_code', digest)
+            if prior is not None:
+                return prior
+            product = db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone()
+            if not product:
+                raise ValueError('Unknown product')
+            if expected_updated_at is None or product['updated_at'] != expected_updated_at:
+                raise Conflict('Product changed since it was read')
+            old_code = product['model_code']
+            self._reserve_code(db, group, product['type_prefix'], code, product_id)
+            now = timestamp()
+            db.execute('UPDATE equipment_products SET model_code=?,updated_at=? WHERE group_id=? AND id=?',
+                       (code, now, group, product_id))
+            db.execute('INSERT INTO equipment_product_model_code_history(group_id,product_id,actor_id,old_model_code,new_model_code,request_key,created_at) VALUES(?,?,?,?,?,?,?)',
+                       (group, product_id, actor, old_code, code, key, now))
+            result = dict(db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone())
+            self._save_request(db, group, key, 'product_model_code', digest, product_id, result)
+            return result
+
+    def current_product_model_code(self, group_id: str, product_id: str) -> str | None:
+        with self.ledger.connection() as db:
+            row = db.execute('SELECT model_code FROM equipment_products WHERE group_id=? AND id=?',
+                             (uuid(group_id), uuid(product_id))).fetchone()
+            return row['model_code'] if row else None
 
     @staticmethod
     def _normalize_template(payload):

@@ -278,6 +278,67 @@ class EquipmentCatalogTests(unittest.TestCase):
         self.assertTrue(all(item == results[0] for item in results))
         self.assertEqual(1, len(self.catalog.list_templates(self.group)))
 
+    def test_list_products_counts_only_active_members_and_assignments_and_reports_next_number(self):
+        member_a, member_b, member_c = uid(), uid(), uid()
+        product = self.catalog.register_product(self.group, self.actor, uid(), self.product,
+                                                [member_a, member_b, member_c])
+        assigned = self.catalog.assign_item(self.group, self.actor, member_a, product['id'], uid())
+        deleted = self.catalog.assign_item(self.group, self.actor, member_b, product['id'], uid())
+        self.catalog.delete_assignment(self.group, member_b)
+        result, = self.catalog.list_products(self.group, {member_a, member_b, uid()})
+        self.assertEqual(product['id'], result['id'])
+        self.assertEqual(2, result['active_item_count'])
+        self.assertEqual(1, result['active_assigned_count'])
+        self.assertEqual(6, result['next_number'])
+        self.assertEqual([{'entity_id': member_a, 'display_id': assigned['display_id'], 'number': assigned['number']}], result['assignments'])
+
+    def test_model_code_edit_preserves_existing_ids_and_high_water(self):
+        product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
+        first = self.catalog.assign_item(self.group, self.actor, uid(), product['id'], uid())
+        with self.catalog.ledger.connection() as db:
+            current = db.execute('SELECT updated_at FROM equipment_products WHERE group_id=? AND id=?',
+                                  (self.group, product['id'])).fetchone()['updated_at']
+        result = self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M4P',
+                                                         current, uid())
+        self.assertEqual('M4P', result['model_code'])
+        self.assertEqual(first, self.catalog.assignment(self.group, first['entity_id']))
+        second = self.catalog.assign_item(self.group, self.actor, uid(), product['id'], uid())
+        self.assertEqual('DRONE-M4P-2', second['display_id'])
+
+    def test_model_code_collision_leaves_product_and_audit_unchanged(self):
+        first = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
+        other = self.catalog.register_product(self.group, self.actor, uid(),
+            {**self.product, 'manufacturer': 'Canon', 'model_number': 'R5',
+             'model_code': 'R5', 'type_prefix': 'CAMERA'}, [])
+        with self.assertRaises(Conflict):
+            self.catalog.update_product_model_code(self.group, self.actor, first['id'], 'R5', first['updated_at'], uid())
+        self.assertEqual('2S', self.catalog.current_product_model_code(self.group, first['id']))
+        with self.catalog.ledger.connection() as db:
+            self.assertEqual(0, db.execute('SELECT COUNT(*) FROM equipment_product_model_code_history').fetchone()[0])
+
+    def test_model_code_update_rejects_stale_version(self):
+        product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
+        self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M4P', product['updated_at'], uid())
+        with self.assertRaises(Conflict):
+            self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M3P', product['updated_at'], uid())
+
+    def test_model_code_update_same_key_replays_original_result_and_one_audit(self):
+        product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
+        key = uid()
+        original = self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M4P', product['updated_at'], key)
+        replay = self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M4P', product['updated_at'], key)
+        self.assertEqual(original, replay)
+        with self.catalog.ledger.connection() as db:
+            rows = db.execute('SELECT actor_id,old_model_code,new_model_code,request_key FROM equipment_product_model_code_history').fetchall()
+        self.assertEqual(1, len(rows))
+        self.assertEqual((self.actor, '2S', 'M4P', key), tuple(rows[0]))
+
+    def test_register_product_refuses_to_change_code_for_existing_identity(self):
+        product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
+        with self.assertRaises(Conflict):
+            self.catalog.register_product(self.group, self.actor, uid(), {**self.product, 'model_code': 'M4P'}, [])
+        self.assertEqual('2S', self.catalog.current_product_model_code(self.group, product['id']))
+
     def test_concurrent_first_assignment_is_unique_and_monotonic(self):
         product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
         entities = [uid() for _ in range(12)]
