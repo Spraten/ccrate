@@ -30,7 +30,8 @@ export function validateCustomRows(rows) {
     const key = fold(row.name);
     if (seen.has(key)) throw new Error(`Duplicate custom field: ${row.name}`);
     seen.add(key);
-    if (row.name.length > 255 || row.value.length > 8000 || row.note.length > 2000) throw new Error('A custom field is too long.');
+    if (row.name.length > 120) throw new Error('Custom field names must be 120 characters or fewer.');
+    if (row.value.length > 8000 || row.note.length > 2000) throw new Error('A custom field is too long.');
     return row;
   });
 }
@@ -66,7 +67,25 @@ export function nativeMetadataMatches(item, draft) {
   try {
     if (String(item.serialNumber || '') !== String(draft.serialNumber || '')) return false;
     const fields = fieldMap(item.fields || []);
-    if (draft.packaging && String(fields.get('device packaging')?.textValue || '') !== draft.packaging) return false;
-    return validateCustomRows(draft.rows).every(row => String(fields.get(fold(row.name))?.textValue || '') === row.value);
+    if (draft.packaging) { const packaging = fields.get('device packaging'); if (!packaging || packaging.type !== 'text' || String(packaging.textValue || '') !== draft.packaging) return false; }
+    return validateCustomRows(draft.rows).every(row => { const field = fields.get(fold(row.name)); return field?.type === 'text' && String(field.textValue || '') === row.value; });
   } catch { return false; }
+}
+
+export function sameFieldNotes(saved, read) {
+  if (!saved || !read || typeof saved !== 'object' || typeof read !== 'object') return false;
+  const ordered = value => Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(ordered(saved)) === JSON.stringify(ordered(read));
+}
+
+/** Replay uses the persisted request key; the API supplies canonical field keys. */
+export async function persistFieldNotes(workshop, intent, step) {
+  const saved = await workshop.request('item-metadata/field-notes', {
+    request_key: step.request_key,
+    entity_id: intent.entity_id,
+    fields: step.fields,
+  }, intent.identity);
+  const read = await workshop.request(`item-metadata?entity_id=${encodeURIComponent(intent.entity_id)}`);
+  if (!sameFieldNotes(saved?.fieldNotes, read?.fieldNotes)) throw new Error('Custom field notes were not confirmed.');
+  return read.fieldNotes;
 }

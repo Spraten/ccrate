@@ -830,7 +830,7 @@ def ocr_popover_frontend():
     legacy = '<SidebarTrigger class="ccrate-header-sidebar-trigger absolute left-2 top-2 hidden lg:flex" variant="default" />'
     replace('layouts/default.vue', legacy, legacy + '\n            <div id="orc-launcher-legacy" class="absolute left-14 top-2 z-30 hidden lg:flex"></div>')
     replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" />\n      </SidebarInset>')
-    replace('layouts/default.vue', '  const search = ref("");', '  const { activeDialog: orcActiveDialog } = useDialog();\n  const orcLauncherTarget = computed(() => orcActiveDialog.value === DialogID.CreateEntity ? "#orc-launcher-create" : preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
+    replace('layouts/default.vue', '  const search = ref("");', '  const { activeDialog: orcActiveDialog } = useDialog();\n  const orcLauncherTarget = ref("#orc-launcher-toolbar");\n  watch([orcActiveDialog, () => preferences.value.displayLegacyHeader, terminalHeader], async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)); orcLauncherTarget.value = orcActiveDialog.value === DialogID.CreateEntity ? "#orc-launcher-create" : preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar"; }, { immediate: true, flush: "post" });\n  const search = ref("");')
     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import OcrPopover from "~/components/Workshop/OcrPopover.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
 
 
@@ -1018,7 +1018,7 @@ def smart_create_form_text(text):
     text, count = re.subn(r'    } else if \(templateData.value\) \{.*?\n    } else \{\n      // Normal item creation without template', '    } else {\n      // Normal item creation without template', text, count=1, flags=re.S)
     if count != 1: raise RuntimeError('Native template create branch changed')
     once('  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import EquipmentTemplatePanel from "~/components/Workshop/EquipmentTemplatePanel.vue";',
-         '  import { assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches } from "~/lib/item-create-fields";')
+         '  import { assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes } from "~/lib/item-create-fields";')
     once('  import TemplateSelector from "~/components/Template/Selector.vue";\n', '')
     once('    EntityTemplateOut,\n    EntityTemplateSummary,\n', '')
     once('  import MdiFileDocumentOutline from "~icons/mdi/file-document-outline";\n  import MdiChevronDown from "~icons/mdi/chevron-down";\n  import MdiClose from "~icons/mdi/close";\n', '')
@@ -1068,7 +1068,6 @@ def smart_create_form_text(text):
     end=text.index('  // Entity type selection',start)
     text=text[:start]+text[end:]
     start=text.index('  async function suggestNameFromPhoto(')
-    end=text.index('  const ',start) if False else -1
     # OCR helper appears later; remove its exact function by balanced braces.
     depth=0; close=None
     for index in range(start,len(text)):
@@ -1130,9 +1129,7 @@ def smart_create_form_text(text):
             return {};
           }
           if (step.key === 'field-notes') {
-            await equipmentWorkshop.request('item-metadata/field-notes', { request_key: step.request_key, entity_id: intent.entity_id, fields: step.fields }, intent.identity);
-            const notes = await equipmentWorkshop.request(`item-metadata?entity_id=${encodeURIComponent(intent.entity_id)}`);
-            if (!step.fields.every((field: any) => (notes.fieldNotes?.[field.name.trim().replace(/\\s+/g, ' ').toLocaleLowerCase()] || '') === field.note)) return { error: new Error('Custom field notes were not confirmed.') };
+            await persistFieldNotes(equipmentWorkshop, intent, step);
             return {};
           }
           const photo = form.photos.find(''')
@@ -1305,8 +1302,8 @@ def equipment_catalog_create_frontend():
         if (result.error || !result.data) throw result.error || new Error('Could not read item fields.');
         confirmed = nativeMetadataMatches(result.data, step.draft);
       } else if (step.key === 'field-notes') {
-        const notes = await equipmentWorkshop.request(`item-metadata?entity_id=${encodeURIComponent(intent.entity_id)}`);
-        confirmed = step.fields.every((field: any) => (notes.fieldNotes?.[field.name.trim().replace(/\\s+/g, ' ').toLocaleLowerCase()] || '') === field.note);
+        await persistFieldNotes(equipmentWorkshop, intent, step);
+        confirmed = true;
       }
       equipmentIntent.value = flow.reconcilePostCreateStep(step.key, confirmed);
     } catch (error) { toast.error((error as Error).message || 'Could not check the saved value.'); }
