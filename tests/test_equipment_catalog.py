@@ -287,6 +287,10 @@ class EquipmentCatalogTests(unittest.TestCase):
         self.catalog.delete_assignment(self.group, member_b)
         result, = self.catalog.list_products(self.group, {member_a, member_b, uid()})
         self.assertEqual(product['id'], result['id'])
+        with self.catalog.ledger.connection() as db:
+            current_updated_at = db.execute('SELECT updated_at FROM equipment_products WHERE id=?',
+                                            (product['id'],)).fetchone()['updated_at']
+        self.assertEqual(current_updated_at, result['updated_at'])
         self.assertEqual(2, result['active_item_count'])
         self.assertEqual(1, result['active_assigned_count'])
         self.assertEqual(6, result['next_number'])

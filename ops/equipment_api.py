@@ -153,7 +153,11 @@ def _active_product_entity_ids(client):
         try:
             entity_id = uuid(summary.get('id'))
             entity = client.entity(entity_id)
-        except (ValueError, TypeError, urllib.error.HTTPError):
+        except urllib.error.HTTPError as error:
+            if error.code in (403, 404):
+                continue
+            raise
+        except (ValueError, TypeError):
             continue
         if entity.get('archived') or entity.get('isArchived'):
             continue
@@ -165,12 +169,7 @@ def _active_product_entity_ids(client):
 
 def _product_summaries(catalog, group, client):
     products = catalog.list_products(group, _active_product_entity_ids(client))
-    with catalog.ledger.connection() as db:
-        timestamps = {row['id']: row['updated_at'] for row in db.execute(
-            'SELECT id,updated_at FROM equipment_products WHERE group_id=?', (uuid(group),))}
     products = [product for product in products if product['active_item_count']]
-    for product in products:
-        product['updated_at'] = timestamps.get(product['id'])
     return products
 
 

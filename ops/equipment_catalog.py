@@ -259,6 +259,7 @@ class EquipmentCatalog:
                     'id': product['id'], 'entity_type_id': product['entity_type_id'],
                     'type_prefix': product['type_prefix'], 'manufacturer': product['manufacturer'],
                     'model_number': product['model_number'], 'model_code': product['model_code'],
+                    'updated_at': product['updated_at'],
                     'active_item_count': len(members), 'active_assigned_count': len(assignments),
                     'next_number': product['high_water'] + 1, 'assignments': assignments,
                 })

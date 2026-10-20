@@ -49,6 +49,9 @@ class CatalogNative:
 
     def entity(self, entity_id):
         self.owner.native_calls.append((self.token, self.tenant, '/api/v1/entities/' + entity_id, 'GET', None))
+        if entity_id in self.owner.entity_errors:
+            code = self.owner.entity_errors[entity_id]
+            raise urllib.error.HTTPError('native', code, 'failed', {}, None)
         if self.tenant != self.owner.group or entity_id not in self.owner.entities or self.owner.entity_collections.get(entity_id, self.owner.group) != self.tenant:
             raise urllib.error.HTTPError('native', 404, 'missing', {}, None)
         return copy.deepcopy(self.owner.entities[entity_id])
@@ -57,7 +60,8 @@ class CatalogNative:
         if self.tenant != self.owner.group:
             return []
         return [copy.deepcopy(item) for item in self.owner.entities.values()
-                if bool(item.get('entityType', {}).get('isLocation')) == locations]
+                if bool(item.get('entityType', {}).get('isLocation')) == locations
+                and self.owner.entity_collections.get(item.get('id'), self.owner.group) == self.tenant]
 
     def call(self, path, method='GET', data=None):
         self.owner.native_calls.append((self.token, self.tenant, path, method, copy.deepcopy(data)))
@@ -95,6 +99,7 @@ class EquipmentCatalogApiTests(unittest.TestCase):
                             'archived': False, 'quantity': 0, 'tags': [], 'attachments': []},
         }
         self.entity_collections = {}
+        self.entity_errors = {}
         self.users['stale'] = {'id': ident(), 'name': 'Stale', 'defaultGroupId': self.group, 'groupIds': [self.group]}
         self.manager = self.actor
         self.members = [{'id': self.actor, 'name': 'Admin'}, {'id': self.member, 'name': 'Member'}]
@@ -486,6 +491,46 @@ class EquipmentCatalogApiTests(unittest.TestCase):
         self.assertEqual(401, unauth.status)
         foreign = self.request('equipment/products', headers={'X-Workshop-Group': ident()})
         self.assertEqual(403, foreign.status)
+
+    def test_product_code_edit_rejects_unauthenticated_and_foreign_collection(self):
+        product = self.catalog.register_product(self.group, self.actor, ident(), {
+            'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker',
+            'model_number': 'Mini 4 Pro', 'model_code': 'OLD',
+        }, [self.item])
+        payload = {'product_id': product['id'], 'model_code': 'NEW',
+                   'expected_updated_at': product['updated_at'], 'request_key': ident()}
+        unauthenticated = self.request('equipment/products/code', payload, headers={'Cookie': ''})
+        self.assertEqual(401, unauthenticated.status)
+        foreign = self.request('equipment/products/code', payload, headers={'X-Workshop-Group': ident()})
+        self.assertEqual(403, foreign.status)
+
+    def test_product_listing_excludes_hidden_assigned_entities(self):
+        hidden = ident()
+        self.entities[hidden] = {**copy.deepcopy(self.entities[self.item]), 'id': hidden, 'name': 'Hidden drone'}
+        self.entity_collections[hidden] = ident()
+        product = self.catalog.register_product(self.group, self.actor, ident(), {
+            'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker',
+            'model_number': 'Mini 4 Pro', 'model_code': 'OLD',
+        }, [self.item, hidden])
+        visible_assignment = self.catalog.assign_item(self.group, self.actor, self.item, product['id'], ident())
+        self.catalog.assign_item(self.group, self.actor, hidden, product['id'], ident())
+        listed = self.request('equipment/products')
+        self.assertEqual(200, listed.status)
+        summary, = listed.result
+        self.assertEqual(1, summary['active_item_count'])
+        self.assertEqual(1, summary['active_assigned_count'])
+        self.assertEqual([{'entity_id': self.item, 'display_id': visible_assignment['display_id'],
+                           'number': visible_assignment['number']}], summary['assignments'])
+
+    def test_product_listing_propagates_native_service_failure(self):
+        product = self.catalog.register_product(self.group, self.actor, ident(), {
+            'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker',
+            'model_number': 'Mini 4 Pro', 'model_code': 'OLD',
+        }, [self.item])
+        self.entity_errors[self.item] = 503
+        listed = self.request('equipment/products')
+        self.assertEqual(503, listed.status)
+        self.assertNotIn(product['id'], [item.get('id') for item in (listed.result if isinstance(listed.result, list) else [])])
 
     def test_product_code_edit_returns_duplicate_and_stale_conflicts(self):
         product = self.catalog.register_product(self.group, self.actor, ident(), {
