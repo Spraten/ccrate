@@ -22,6 +22,15 @@ test('renaming a detail custom field preserves its native field ID', async () =>
   assert.deepEqual(stored.fields.map(field => [field.id, field.name]), [['field-id', 'Hue']]);
 });
 
+test('cleared first row does not transfer its native ID to the second row', async () => {
+  const current = { id: 'a', parent: { id: 'loc' }, entityType: { id: 'type' }, tags: [], serialNumber: '', fields: [{ id: 'first', name: 'Color', type: 'text', textValue: 'red' }, { id: 'second', name: 'Size', type: 'text', textValue: 'large' }] };
+  let stored = current;
+  const api = { items: { get: async () => ({ data: stored }), update: async (_id, update) => { stored = { ...current, ...update }; return { data: stored }; } } };
+  const workshop = { request: async () => ({ fieldNotes: {} }) };
+  await saveDetailMetadata({ api, workshop, item: current, draft: { serialNumber: '', packaging: '', rows: [{ id: 'first', name: '', value: '', note: '' }, { id: 'second', name: 'Size', value: 'large', note: '' }] }, identity: 'session', requestKey: 'key' });
+  assert.deepEqual(stored.fields.map(field => [field.id, field.name]), [['second', 'Size']]);
+});
+
 test('detail save keeps field IDs and unrelated fields, then saves Notes with confirmed readback', async () => {
   const calls = [];
   const item = { id: 'one', name: 'Camera', parent: { id: 'loc' }, entityType: { id: 'type' }, tags: [], serialNumber: 'old', fields: [{ id: 'p', name: 'Device Packaging', type: 'text', textValue: 'Bag' }, { id: 'f', name: 'Color', type: 'text', textValue: 'red' }, { id: 'u', name: 'Weight', type: 'number', numberValue: 4 }] };
@@ -324,10 +333,10 @@ import { PACKAGING_OPTIONS, buildNativeMetadataUpdate, nativeMetadataMatches, pe
 import { changeRelatedItem, detailMetadataDraft, saveDetailMetadata, searchRelatedItems } from './lib/item-metadata.js';
 Object.assign(window,{ref,watch,onMounted,computed,PACKAGING_OPTIONS,buildNativeMetadataUpdate,nativeMetadataMatches,persistFieldNotes,validateCustomRows,changeRelatedItem,detailMetadataDraft,saveDetailMetadata,searchRelatedItems});
 window.__items={a:{id:'a',name:'Camera',parent:{id:'loc'},entityType:{id:'type'},tags:[],serialNumber:'SN',fields:[{id:'p',name:'Device Packaging',type:'text',textValue:'Bag'},{id:'f',name:'Color',type:'text',textValue:'red'},{id:'u',name:'Weight',type:'number',numberValue:4}]},b:{id:'b',name:'Battery',parent:{id:'loc2'},entityType:{id:'type'},tags:[],serialNumber:'',fields:[]},c:{id:'c',name:'Lens',parent:{id:'loc3'},entityType:{id:'type'},tags:[],serialNumber:'',fields:[]}};
-window.__links=new Set();window.__notes={a:{color:'shade'},b:{}};window.__calls=[];window.__failNotes=false;
+window.__links=new Set();window.__notes={a:{color:'shade'},b:{}};window.__calls=[];window.__failNotes=false;window.__failLoad=true;
 window.__id=ref('a');window.__item=ref(window.__items.a);window.__switch=id=>{window.__id.value=id;window.__item.value=window.__items[id];};
 window.useUserApi=()=>({items:{get:async id=>({data:structuredClone(window.__items[id])}),update:async(id,payload)=>{window.__calls.push(['native',id,payload]);window.__items[id]={...window.__items[id],...payload};return{data:window.__items[id]};},getAll:async({q})=>({data:{items:Object.values(window.__items).filter(item=>item.name.toLowerCase().includes(q.toLowerCase()))}})}});
-window.useWorkshop=()=>({refresh:async()=>({group:{id:'group'},user:{id:'user'},identity:'session'}),request:async(path,body)=>{window.__calls.push(['metadata',path,body]);if(path.startsWith('item-metadata?')){const id=new URLSearchParams(path.split('?')[1]).get('entity_id');return{fieldNotes:window.__notes[id],relatedItems:[...window.__links].filter(pair=>pair.includes(id)).map(pair=>{const other=pair.find(value=>value!==id);return other==='stale'?{unavailable:true}:{id:other,name:window.__items[other].name,unavailable:false};})};}if(path==='item-metadata/field-notes'){if(window.__failNotes){window.__failNotes=false;throw Error('Notes unavailable');}window.__notes[body.entity_id]=Object.fromEntries(body.fields.map(field=>[field.name.toLowerCase(),field.note]));return{fieldNotes:window.__notes[body.entity_id]};}if(path.endsWith('/add'))window.__links.add([body.entity_id,body.related_entity_id].sort());if(path.endsWith('/remove')){for(const pair of window.__links)if(pair.includes(body.entity_id)&&pair.includes(body.related_entity_id))window.__links.delete(pair);}return{relatedItems:[...window.__links].filter(pair=>pair.includes(body.entity_id)).map(pair=>({id:pair.find(value=>value!==body.entity_id)}))};}});
+window.useWorkshop=()=>({refresh:async()=>({group:{id:'group'},user:{id:'user'},identity:'session'}),request:async(path,body)=>{window.__calls.push(['metadata',path,body]);if(path.startsWith('item-metadata?')){if(window.__failLoad){window.__failLoad=false;throw Error('Metadata load unavailable');}const id=new URLSearchParams(path.split('?')[1]).get('entity_id');return{fieldNotes:window.__notes[id],relatedItems:[...window.__links].filter(pair=>pair.includes(id)).map(pair=>{const other=pair.find(value=>value!==id);return other==='stale'?{unavailable:true}:{id:other,name:window.__items[other].name,unavailable:false};})};}if(path==='item-metadata/field-notes'){window.__notes[body.entity_id]=Object.fromEntries(body.fields.map(field=>[field.name.toLowerCase(),field.note]));if(window.__failNotes){window.__failNotes=false;throw Error('Notes response lost');}return{fieldNotes:window.__notes[body.entity_id]};}if(path.endsWith('/add'))window.__links.add([body.entity_id,body.related_entity_id].sort());if(path.endsWith('/remove')){for(const pair of window.__links)if(pair.includes(body.entity_id)&&pair.includes(body.related_entity_id))window.__links.delete(pair);}return{relatedItems:[...window.__links].filter(pair=>pair.includes(body.entity_id)).map(pair=>{const other=pair.find(value=>value!==body.entity_id);return other==='stale'?{unavailable:true}:{id:other,name:window.__items[other].name,unavailable:false};})};}});
 window.useCollections=()=>({selectedId:ref('group')});window.useAuthContext=()=>({user:{id:'user'}});
 const Link=defineComponent({props:['to'],setup(props,{slots}){return()=>h('a',{href:props.to},slots.default?.());}});
 const app=createApp({components:{Panel},setup(){return{item:window.__item};},template:'<Panel :item="item" />'});app.config.globalProperties.PACKAGING_OPTIONS=PACKAGING_OPTIONS;app.component('NuxtLink',Link).mount('#app');await nextTick();
@@ -342,17 +351,41 @@ const app=createApp({components:{Panel},setup(){return{item:window.__item};},tem
     const page = await browser.newPage();page.setDefaultTimeout(5000);
     page.on('pageerror',error=>console.error('Detail browser error:',error.stack));
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/index.html`);
+    await page.getByRole('alert').filter({hasText:'Metadata load unavailable'}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Save fields'}).isDisabled(),true);
+    assert.equal(await page.getByLabel('Find an existing item').isDisabled(),true);
+    assert.equal(await page.evaluate(()=>window.__calls.filter(call=>call[0]==='native').length),0);
+    await page.getByRole('button',{name:'Retry metadata load'}).click();
     await page.getByLabel('Device Packaging').selectOption('HardCase');
     assert.equal(await page.getByLabel('Custom field note').inputValue(),'shade');
     await page.getByLabel('Custom field value').fill('blue');
     await page.getByLabel('Custom field note').fill('deep');
     await page.evaluate(()=>window.__failNotes=true);
     await page.getByRole('button',{name:'Save fields'}).click();
-    await page.getByRole('alert',{name:''}).filter({hasText:'Notes unavailable'}).waitFor();
+    await page.getByRole('alert',{name:''}).filter({hasText:'Notes response lost'}).waitFor();
+    assert.equal(await page.getByLabel('Custom field note').isDisabled(),true);
     await page.getByRole('button',{name:'Retry metadata save'}).click();
     await page.getByRole('status').filter({hasText:'Packaging and custom fields saved.'}).waitFor();
     assert.equal(await page.evaluate(()=>window.__calls.filter(call=>call[0]==='native').length),1);
+    const notesRequests = await page.evaluate(()=>window.__calls.filter(call=>call[1]==='item-metadata/field-notes').map(call=>call[2]));
+    assert.equal(notesRequests.length,2);
+    assert.deepEqual(notesRequests[1],notesRequests[0]);
     assert.deepEqual(await page.evaluate(()=>window.__items.a.fields.map(field=>field.id)),['p','f','u']);
+    await page.getByLabel('Device Packaging').selectOption('Misc');
+    await page.getByLabel('Custom field value').fill('green');
+    await page.getByLabel('Custom field note').fill('unsaved note');
+    await page.getByLabel('Find an existing item').fill('Bat');
+    await page.getByLabel('Search results').selectOption('b');
+    await page.getByRole('button',{name:'Link existing item'}).click();
+    await page.getByRole('link',{name:'Battery'}).waitFor();
+    assert.equal(await page.getByLabel('Device Packaging').inputValue(),'Misc');
+    assert.equal(await page.getByLabel('Custom field value').inputValue(),'green');
+    assert.equal(await page.getByLabel('Custom field note').inputValue(),'unsaved note');
+    await page.getByRole('button',{name:'Remove link'}).click();
+    await page.getByText('No related items.').waitFor();
+    assert.equal(await page.getByLabel('Device Packaging').inputValue(),'Misc');
+    assert.equal(await page.getByLabel('Custom field value').inputValue(),'green');
+    assert.equal(await page.getByLabel('Custom field note').inputValue(),'unsaved note');
     await page.getByLabel('Find an existing item').fill('Bat');
     await page.getByLabel('Search results').selectOption('b');
     await page.getByRole('button',{name:'Link existing item'}).click();

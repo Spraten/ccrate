@@ -26,7 +26,8 @@ function detailNativeMatches(item, draft) {
 
 /** Native Homebox owns the field records; Notes is committed only after native readback. */
 export async function saveDetailMetadata({ api, workshop, item, draft, identity, requestKey }) {
-  const rows = validateCustomRows(draft.rows);
+  const presentRows = (draft.rows || []).filter(row => String(row.name || '').trim() || String(row.value || '') || String(row.note || ''));
+  const rows = validateCustomRows(presentRows);
   if (!requestKey) throw new Error('A stable save request key is required.');
   if (draft.packaging && !PACKAGING_OPTIONS.includes(draft.packaging)) throw new Error('Choose a listed packaging value.');
   const currentResponse = await api.items.get(item.id);
@@ -37,7 +38,7 @@ export async function saveDetailMetadata({ api, workshop, item, draft, identity,
     const selected = new Set();
     const additions = [];
     rows.forEach((row, index) => {
-      const id = draft.rows[index]?.id;
+      const id = presentRows[index]?.id;
       const field = id ? update.fields.find(candidate => candidate.id === id) : update.fields.find(candidate => fieldKey(candidate.name) === fieldKey(row.name));
       if (id && !field) throw new Error(`Custom field ${row.name} changed. Reload before saving.`);
       if (field && (field.type !== 'text' || fieldKey(field.name) === 'device packaging' || selected.has(field))) throw new Error(`Custom field ${row.name} needs review.`);
