@@ -9,10 +9,10 @@ from ledger import Conflict, timestamp, uuid
 def _field(value):
     if not isinstance(value, str):
         raise ValueError('Field names must be text.')
-    value = re.sub(r'\s+', ' ', value.strip()).casefold()
+    value = re.sub(r'\s+', ' ', value.strip())
     if not value or len(value) > 120:
         raise ValueError('Enter a valid field name.')
-    return value
+    return value.casefold()
 
 
 class ItemMetadata:

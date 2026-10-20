@@ -38,6 +38,18 @@ class ItemMetadataApiTests(unittest.TestCase):
             response=self.request('item-metadata/field-notes', {'request_key':ident(),'entity_id':entity,'fields':[]})
             self.assertEqual(400,response.status)
 
+    def test_expanding_field_name_round_trips_through_notes_api(self):
+        name = 'ß' * 120
+        body = {'request_key':ident(),'entity_id':self.item,'fields':[{'name':name,'note':'label'}]}
+        saved = self.request('item-metadata/field-notes', body)
+        self.assertEqual(200, saved.status)
+        self.assertEqual({'ss' * 120:'label'}, saved.result['fieldNotes'])
+        self.assertEqual(saved.result['fieldNotes'], self.request('item-metadata?entity_id='+self.item).result['fieldNotes'])
+        self.assertEqual(saved.result, self.request('item-metadata/field-notes', body).result)
+        rejected = self.request('item-metadata/field-notes', {'request_key':ident(),'entity_id':self.item,'fields':[{'name':'ß' * 121,'note':'other'}]})
+        self.assertEqual(400, rejected.status)
+        self.assertEqual(saved.result['fieldNotes'], self.request('item-metadata?entity_id='+self.item).result['fieldNotes'])
+
     def test_foreign_collection_item_rejected_for_get_and_both_write_endpoints(self):
         foreign, other_group = ident(), ident()
         self.entities[foreign] = {'id':foreign,'name':'Foreign equipment','entityType':{'isLocation':False}}

@@ -58,6 +58,8 @@ test('readback requires a native text field even for an empty custom value with 
 test('custom field names exceeding Notes API 120 characters fail before native create', () => {
   assert.throws(() => validateCustomRows([{ name: 'x'.repeat(121), value: 'value', note: '' }]), /120/);
   assert.doesNotThrow(() => validateCustomRows([{ name: 'x'.repeat(120), value: 'value', note: '' }]));
+  assert.doesNotThrow(() => validateCustomRows([{ name: 'ß'.repeat(120), value: 'value', note: 'label' }]));
+  assert.throws(() => validateCustomRows([{ name: 'ß'.repeat(121), value: 'value', note: '' }]), /120/);
 });
 
 test('lost Notes response replays same key and confirms canonical Straße key', async () => {
@@ -80,6 +82,24 @@ test('lost Notes response replays same key and confirms canonical Straße key', 
   await assert.doesNotReject(() => persistFieldNotes(workshop, intent, step));
   assert.deepEqual(calls.filter(call => call.path === 'item-metadata/field-notes').map(call => call.body.request_key), ['same-key', 'same-key']);
   assert.equal(sameFieldNotes({ strasse: 'German label' }, { strasse: 'German label' }), true);
+});
+
+test('expanding name Notes persist and reconcile use canonical API keys', async () => {
+  const canonical = 'ss'.repeat(120);
+  let stored = {};
+  const workshop = { request: async (path, body) => {
+    if (path === 'item-metadata/field-notes') {
+      assert.equal(body.fields[0].name, 'ß'.repeat(120));
+      stored = { [canonical]: body.fields[0].note };
+      return { fieldNotes: stored };
+    }
+    if (path.startsWith('item-metadata?')) return { fieldNotes: stored };
+    throw new Error(`Unexpected path ${path}`);
+  } };
+  const intent = { entity_id: 'item-1', identity: 'session' };
+  const step = { request_key: 'same-key', fields: [{ name: 'ß'.repeat(120), note: 'label' }] };
+  assert.deepEqual(await persistFieldNotes(workshop, intent, step), { [canonical]: 'label' });
+  assert.deepEqual(await persistFieldNotes(workshop, intent, step), { [canonical]: 'label' });
 });
 
 test('mounted generated create form supports keyboard selection, field rows, and OCR launcher', async () => {

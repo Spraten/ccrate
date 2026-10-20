@@ -23,6 +23,14 @@ class ItemMetadataTests(unittest.TestCase):
         self.store.save_field_notes(self.group, self.actor, self.a, fields, key)
         with self.assertRaises(ValueError): self.store.save_field_notes(self.group,self.actor,self.a,[{'name':'x','note':'1'},{'name':' X ','note':'2'}],ident())
         with self.assertRaises(ValueError): self.store.save_field_notes(self.group,self.actor,self.a,[{'name':'x','note':''},{'name':' X ','note':'2'}],ident())
+    def test_field_name_limit_uses_visible_normalized_length_before_casefold(self):
+        name = 'ß' * 120
+        saved = self.store.save_field_notes(self.group, self.actor, self.a, [{'name':name, 'note':'label'}], ident())
+        self.assertEqual({'ss' * 120:'label'}, saved)
+        self.assertEqual(saved, self.store.field_notes(self.group, self.a))
+        with self.assertRaises(ValueError):
+            self.store.save_field_notes(self.group, self.actor, self.a, [{'name':'ß' * 121, 'note':'label'}], ident())
+        self.assertEqual(saved, self.store.field_notes(self.group, self.a))
     def test_relations_are_symmetric_idempotent_and_removable(self):
         key=ident(); self.store.add_related(self.group,self.actor,self.a,self.b,key)
         self.store.add_related(self.group,self.actor,self.b,self.a,key)
