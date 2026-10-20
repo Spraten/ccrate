@@ -23,4 +23,4 @@ Custom-field matching only examines native fields on the existing `projected` se
 
 ## Commit
 
-`8dcd53b` (`Add custom field inventory search`).
+`7a162a3` (`Add custom field inventory search`; report SHA verified against Git history).
