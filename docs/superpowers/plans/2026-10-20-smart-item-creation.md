@@ -66,11 +66,11 @@
 **Interfaces:** Implements `ItemMetadata` methods above. API handlers validate native entities through `public_entity(client, id)`, use `ctx['group']` and `ctx['actor']`, and return the declared read models.
 
 - [ ] Write SQLite fixture tests for field-note save/read/replay, normalized field-name uniqueness, symmetric relation lookup/removal, duplicate-add replay, and collection isolation.
-- [ ] Run `python -m unittest discover -s tests -p 'test_item_metadata.py' -v`; confirm the new behavior fails before implementation.
+- [ ] Run `PYTHONPATH=ops:kiosk python -m unittest discover -s tests -p 'test_item_metadata.py' -v`; confirm the new behavior fails before implementation.
 - [ ] Implement `ItemMetadata` with additive SQLite tables keyed by collection and native entity UUID; make pair writes/removals transactional and idempotent by request key.
 - [ ] Add authenticated GET/POST dispatch in `ops/desktop_api.py`; reject missing, location, inaccessible, or cross-collection entities before any mutation.
 - [ ] Add API fixture tests for member access, inaccessible item, wrong collection, duplicate request key, and symmetric removal.
-- [ ] Run `python -m unittest discover -s tests -p 'test_desktop_api_item_metadata.py' -v`; expected: all API cases pass.
+- [ ] Run `PYTHONPATH=ops:kiosk python -m unittest discover -s tests -p 'test_desktop_api_item_metadata.py' -v`; expected: all API cases pass.
 
 ### Task 2: Active model suggestion endpoint and client matcher
 
@@ -84,7 +84,7 @@
 **Interfaces:** `GET equipment/suggestions` returns the declared shape, obtains `modelCode` from the item’s persisted assignment when present, and returns no archived items. Client `rankItemSuggestions(query, items)` ranks normalized prefix/substring matches without changing the create form.
 
 - [ ] Add API tests for selected type, active filtering, empty query, result limit, collection scope, and model-code lookup.
-- [ ] Run `python -m unittest discover -s tests -p 'test_desktop_api_equipment_catalog.py' -v` and `node --test tests/item_suggestions.test.mjs`; confirm the new cases fail before implementation.
+- [ ] Run `PYTHONPATH=ops:kiosk python -m unittest discover -s tests -p 'test_desktop_api_equipment_catalog.py' -v` and `node --test tests/item_suggestions.test.mjs`; confirm the new cases fail before implementation.
 - [ ] Implement the endpoint using the authenticated Homebox client and existing assignment catalog; avoid leaking native errors for inaccessible records.
 - [ ] Implement deterministic client ranking and tests for case, whitespace, partial words, stable tie ordering, and empty input.
 - [ ] Run the focused API and Node tests; expected: all pass.
