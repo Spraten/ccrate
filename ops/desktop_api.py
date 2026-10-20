@@ -557,7 +557,7 @@ def get_action(route, query, ctx, deps):
         values = query.get('entity_id', [])
         if len(values) != 1 or not values[0]: raise ValueError('Choose one item.')
         return item_metadata_read(ctx, deps, values[0])
-    if route in {'equipment/templates', 'equipment/ids'}:
+    if route in {'equipment/templates', 'equipment/ids', 'equipment/suggestions'}:
         return equipment_catalog_get(route, query, ctx, deps, ApiError)
     if route == 'item-actions/status':
         if set(query) != {'ids'}:

@@ -399,6 +399,29 @@ class EquipmentCatalogApiTests(unittest.TestCase):
         self.assertEqual(404, self.request('equipment/ids/resolve', {'display_id': assignment['display_id']}).status)
         self.entities[self.item] = {'id': self.item, 'name': 'Drone', 'entityType': {'id': self.kind, 'name': 'Drone', 'isLocation': False}, 'manufacturer': 'Maker', 'modelNumber': 'Mini 4 Pro', 'tags': [], 'attachments': []}
 
+    def test_active_suggestions_are_type_collection_and_query_scoped_with_assigned_model_code(self):
+        other = ident()
+        archived = ident()
+        assigned = ident()
+        self.entities[other] = {**copy.deepcopy(self.entities[self.item]), 'id': other, 'name': 'Drone Case'}
+        self.entities[archived] = {**copy.deepcopy(self.entities[self.item]), 'id': archived, 'name': 'Drone Archived', 'archived': True}
+        self.entities[assigned] = {**copy.deepcopy(self.entities[self.item]), 'id': assigned, 'name': 'Camera', 'entityType': {'id': ident(), 'name': 'Camera', 'isLocation': False}}
+        self.entity_collections[other] = ident()
+        product = self.catalog.register_product(self.group, self.actor, ident(), {'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker', 'model_number': 'M4', 'model_code': 'CODE'}, [self.item])
+        self.catalog.assign_item(self.group, self.actor, self.item, product['id'], ident())
+        response = self.request('equipment/suggestions?type_id=' + self.kind + '&q=drone')
+        self.assertEqual(200, response.status)
+        self.assertEqual(1, len(response.result))
+        self.assertEqual({'id': self.item, 'name': 'Drone', 'manufacturer': 'Maker', 'model_number': 'Mini 4 Pro', 'tag_ids': [], 'model_code': 'CODE'}, response.result[0])
+        self.assertEqual([], self.request('equipment/suggestions?type_id=' + self.kind + '&q=missing').result)
+        empty = self.request('equipment/suggestions?type_id=' + self.kind + '&q=')
+        self.assertEqual(200, empty.status)
+        self.assertEqual({self.item}, {row['id'] for row in empty.result})
+        limited = self.request('equipment/suggestions?type_id=' + self.kind + '&q=&limit=1')
+        self.assertEqual(1, len(limited.result))
+        self.assertEqual(self.item, limited.result[0]['id'])
+        self.assertEqual(400, self.request('equipment/suggestions?type_id=bad').status)
+
 
 if __name__ == '__main__':
     unittest.main()
