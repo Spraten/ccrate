@@ -8,8 +8,8 @@ test('normalizes case and whitespace and ranks prefixes before substrings stably
 });
 
 test('matches partial words in shared model text and preserves ties', () => {
-  const a = { name: 'Camera', manufacturer: 'Acme Imaging' }, b = { name: 'Camera', manufacturer: 'Acme' };
-  assert.deepEqual(rankItemSuggestions(' imag ', [a, b]), [a]);
+  const a = { name: 'Camera', manufacturer: 'Acme Imaging' }, b = { name: 'Camera', modelNumber: 'Acme Imaging' };
+  assert.deepEqual(rankItemSuggestions(' imag ', [a, b]), [a, b]);
 });
 
 test('empty query and empty list return no suggestions', () => {

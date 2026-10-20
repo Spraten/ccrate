@@ -321,13 +321,16 @@ def equipment_catalog_get(route, query, ctx, deps, ApiError):
         if len(values) != 1 or not isinstance(values[0], str):
             raise ValueError('Enter one search query.')
         term = _normalized(values[0])
-        limits = query.get('limit', ['20'])
+        if not term:
+            return []
+        limits = query.get('limit', ['8'])
         if len(limits) != 1:
             raise ValueError('Choose a valid result limit.')
         try: limit = int(limits[0])
         except (ValueError, TypeError): raise ValueError('Choose a valid result limit.') from None
-        if not 1 <= limit <= 50:
-            raise ValueError('Choose a result limit from 1 to 50.')
+        if limit < 1:
+            raise ValueError('Choose a positive result limit.')
+        limit = min(limit, 8)
         catalog = equipment_catalog_service(deps)
         results = []
         for summary in client.entities():
@@ -344,14 +347,19 @@ def equipment_catalog_get(route, query, ctx, deps, ApiError):
                 continue
             if entity.get('archived') or entity.get('isArchived') or (entity.get('entityType') or {}).get('isLocation') or entity.get('isLocation'):
                 continue
+            try:
+                if uuid((entity.get('entityType') or {}).get('id')) != type_id:
+                    continue
+            except (ValueError, TypeError):
+                continue
             name = str(entity.get('name') or '')
             if term and term not in _normalized(' '.join((name, entity.get('manufacturer', ''), entity.get('modelNumber', '')))):
                 continue
             assignment = catalog.assignment(group, entity_id)
             results.append({'id': entity_id, 'name': name, 'manufacturer': entity.get('manufacturer', ''),
-                            'model_number': entity.get('modelNumber', ''),
-                            'tag_ids': [tag['id'] for tag in entity.get('tags', []) if tag.get('id')],
-                            'model_code': assignment['model_code'] if assignment and not assignment.get('deleted') else ''})
+                            'modelNumber': entity.get('modelNumber', ''),
+                            'tagIds': [tag['id'] for tag in entity.get('tags', []) if tag.get('id')],
+                            'modelCode': assignment['model_code'] if assignment and not assignment.get('deleted') else ''})
         results.sort(key=lambda item: (_normalized(item['name']), item['id']))
         return results[:limit]
     raise ApiError(404, 'Unknown equipment catalog route.')

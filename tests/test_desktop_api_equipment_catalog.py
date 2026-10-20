@@ -412,14 +412,20 @@ class EquipmentCatalogApiTests(unittest.TestCase):
         response = self.request('equipment/suggestions?type_id=' + self.kind + '&q=drone')
         self.assertEqual(200, response.status)
         self.assertEqual(1, len(response.result))
-        self.assertEqual({'id': self.item, 'name': 'Drone', 'manufacturer': 'Maker', 'model_number': 'Mini 4 Pro', 'tag_ids': [], 'model_code': 'CODE'}, response.result[0])
+        self.assertEqual({'id': self.item, 'name': 'Drone', 'manufacturer': 'Maker', 'modelNumber': 'Mini 4 Pro', 'tagIds': [], 'modelCode': 'CODE'}, response.result[0])
         self.assertEqual([], self.request('equipment/suggestions?type_id=' + self.kind + '&q=missing').result)
         empty = self.request('equipment/suggestions?type_id=' + self.kind + '&q=')
         self.assertEqual(200, empty.status)
-        self.assertEqual({self.item}, {row['id'] for row in empty.result})
-        limited = self.request('equipment/suggestions?type_id=' + self.kind + '&q=&limit=1')
-        self.assertEqual(1, len(limited.result))
-        self.assertEqual(self.item, limited.result[0]['id'])
+        self.assertEqual([], empty.result)
+        self.assertEqual([], self.request('equipment/suggestions?type_id=' + self.kind + '&q=%20%20').result)
+        self.assertEqual([], self.request('equipment/suggestions?type_id=' + self.kind).result)
+        for index in range(10):
+            extra = ident()
+            self.entities[extra] = {**copy.deepcopy(self.entities[self.item]), 'id': extra, 'name': f'Drone {index:02d}'}
+        limited = self.request('equipment/suggestions?type_id=' + self.kind + '&q=drone&limit=100')
+        self.assertEqual(200, limited.status)
+        self.assertEqual(8, len(limited.result))
+        self.assertEqual(8, len(self.request('equipment/suggestions?type_id=' + self.kind + '&q=drone').result))
         self.assertEqual(400, self.request('equipment/suggestions?type_id=bad').status)
 
 
