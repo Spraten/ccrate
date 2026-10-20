@@ -150,12 +150,14 @@ class NativeJobs:
     def unresolved(self,group):
         with self.ledger.connection() as db:
             return [self.decode(r) for r in db.execute("SELECT * FROM native_jobs WHERE group_id=? AND status IN ('prepared','sent','review') ORDER BY created_at",(uuid(group),))]
-    def history(self,group,entity=None):
+    def history(self,group,entity=None,limit=100,offset=0):
+        limit=max(int(limit),1);offset=int(offset)
+        if offset<0:raise ValueError('History offset must be nonnegative')
         with self.ledger.connection() as db:
             query='SELECT id,actor_id,kind AS action,status,created_at,result_id FROM native_jobs WHERE group_id=?'
             args=[uuid(group)]
             if entity:query+=' AND result_id=?';args.append(uuid(entity))
-            query+=' ORDER BY created_at DESC LIMIT 100'
+            query+=' ORDER BY created_at DESC LIMIT ? OFFSET ?';args.extend((limit,offset))
             result=[dict(row) for row in db.execute(query,args)]
             for row in result:
                 job_id=row['id']

@@ -18,10 +18,12 @@ from urllib.parse import unquote, urlparse
 
 ROOT = pathlib.Path(os.environ.get('WORKSHOP_ROOT', '/home/user/Desktop/inventory-system'))
 CODE_ROOT = pathlib.Path(os.environ.get('WORKSHOP_CODE_ROOT', str(pathlib.Path(__file__).resolve().parents[1])))
-DEFAULT_ASSET_ROOT = (CODE_ROOT / 'label-ui' if os.environ.get('WORKSHOP_CODE_ROOT')
-                      else ROOT / 'work/label-ui-build')
+DEFAULT_ASSET_ROOT = pathlib.Path(os.environ.get(
+    'WORKSHOP_LABEL_ASSET_ROOT', str(CODE_ROOT / 'work/label-ui-build')))
 NODE = pathlib.Path(os.environ.get('WORKSHOP_NODE', str(ROOT / 'work/toolchains/node-v24.21.0-linux-arm64/bin/node')))
-PLAYWRIGHT_PYTHON = str(ROOT / 'work/hardware/python')
+PLAYWRIGHT_PYTHON = os.environ.get(
+    'WORKSHOP_PLAYWRIGHT_PYTHON', str((CODE_ROOT if os.environ.get('WORKSHOP_CODE_ROOT')
+                                      else ROOT) / 'work/hardware/python'))
 MAX_INPUT = 1024 * 1024
 MAX_TRUSTED_INPUT = 32 * 1024 * 1024
 MAX_OUTPUT = 16 * 1024 * 1024
@@ -142,7 +144,8 @@ def _run(payload, timeout):
     if len(raw)>cap: raise ValueError('Renderer input exceeds its byte limit')
     started=time.monotonic()
     child_env={'PATH':os.environ.get('PATH',''), 'HOME':'/tmp', 'LANG':'C.UTF-8', 'WORKSHOP_ROOT':str(ROOT)}
-    for key in ('WORKSHOP_CODE_ROOT','WORKSHOP_LABEL_ASSET_ROOT','WORKSHOP_NODE','PLAYWRIGHT_BROWSERS_PATH'):
+    for key in ('WORKSHOP_CODE_ROOT','WORKSHOP_LABEL_ASSET_ROOT','WORKSHOP_NODE',
+                'WORKSHOP_PLAYWRIGHT_PYTHON','PLAYWRIGHT_BROWSERS_PATH'):
         if key in os.environ:child_env[key]=os.environ[key]
     process=subprocess.Popen([sys.executable, str(pathlib.Path(__file__).resolve()), '--child'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=child_env, start_new_session=True)
     try:stdout,stderr=process.communicate(raw,timeout=timeout)

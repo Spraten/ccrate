@@ -51,7 +51,10 @@ def validate_return(client,entities,held,verified,versions):
     selected={e['id'] for e in entities};verified=set(verified or []);versions=versions or {}
     for row in held:
         entity=client.entity(row['entity_id'])
-        if members(entity) is None:continue
+        if members(entity) is None:
+            if entity['id'] in versions:
+                raise Conflict('Kit manifest changed; review its contents and verify the return again')
+            continue
         kit=manifest(client,entity['id']);expected={e['id'] for e in kit['entities']}
         if not selected & expected:continue
         if not expected<=selected:raise Conflict(entity['name']+': select the kit container and return its complete manifest')

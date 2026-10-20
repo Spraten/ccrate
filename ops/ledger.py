@@ -159,13 +159,15 @@ class Ledger:
             if not row or row['status'] not in ('pending','review'):raise Conflict('Operation is not awaiting completion')
             self.event(db,uuid(op),kind,detail)
 
-    def history(self,group,entity=None,limit=100):
+    def history(self,group,entity=None,limit=100,offset=0):
+        limit=max(int(limit),1);offset=int(offset)
+        if offset<0:raise ValueError('History offset must be nonnegative')
         with self.connection() as db:
             query='SELECT o.id,o.actor_id,o.action,o.status,o.created_at FROM operations o WHERE o.group_id=?'
             args=[uuid(group)]
             if entity:
                 query+=' AND EXISTS(SELECT 1 FROM operation_assets a WHERE a.operation_id=o.id AND a.entity_id=?)';args.append(uuid(entity))
-            query+=' ORDER BY o.created_at DESC LIMIT ?';args.append(min(max(int(limit),1),100))
+            query+=' ORDER BY o.created_at DESC LIMIT ? OFFSET ?';args.extend((limit,offset))
             result=[dict(r) for r in db.execute(query,args)]
             for row in result:
                 row['source']='ledger_operation'
@@ -181,3 +183,36 @@ class Ledger:
                     completed=db.execute("SELECT created_at FROM events WHERE operation_id=? AND kind='completed' ORDER BY sequence LIMIT 1",(row['id'],)).fetchone()
                     row['return_notes']=[dict(n,author=payload.get('note_author','C-Crate member'),created_at=completed[0] if completed else row['created_at']) for n in payload.get('return_notes',[]) if not entity or n['entity_id']==uuid(entity)]
             return result
+
+    def group_return_notes(self, group, entity_ids, limit=100):
+        """Newest completed return notes, regardless of intervening operations."""
+        ids = [uuid(value) for value in entity_ids]
+        if not ids or len(ids) > 100 or len(ids) != len(set(ids)):
+            raise ValueError('Choose 1 to 100 distinct equipment records')
+        selected = ','.join('?' for _ in ids)
+        query = f'''SELECT o.id, o.created_at, a.entity_id, c.payload,
+            (SELECT e.created_at FROM events e WHERE e.operation_id=o.id AND e.kind='completed'
+             ORDER BY e.sequence LIMIT 1) AS confirmed_at
+            FROM operations o
+            JOIN operation_assets a ON a.operation_id=o.id
+            JOIN operation_context c ON c.operation_id=o.id
+            WHERE o.group_id=? AND o.action='return' AND o.status='completed'
+              AND a.entity_id IN ({selected})
+            ORDER BY COALESCE(confirmed_at,o.created_at) DESC, o.id DESC'''
+        notes, seen = [], set()
+        with self.connection() as db:
+            for row in db.execute(query, [uuid(group), *ids]):
+                payload = json.loads(row['payload'])
+                for note in payload.get('return_notes', []):
+                    if note.get('entity_id') != row['entity_id']:
+                        continue
+                    key = (row['id'], row['entity_id'], note.get('text'))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    notes.append(dict(note, entity_id=row['entity_id'],
+                                      author=payload.get('note_author', 'C-Crate member'),
+                                      created_at=row['confirmed_at'] or row['created_at']))
+                    if len(notes) == limit:
+                        return notes
+        return notes

@@ -11,7 +11,11 @@ class CheckoutCart:
         with ledger.transaction() as db:
             db.execute('''CREATE TABLE IF NOT EXISTS checkout_carts(
               group_id TEXT NOT NULL,actor_id TEXT NOT NULL,revision INTEGER NOT NULL,
-              items TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(group_id,actor_id))''')
+              items TEXT NOT NULL,updated_at TEXT NOT NULL,notes TEXT NOT NULL DEFAULT '{}',
+              PRIMARY KEY(group_id,actor_id))''')
+            columns = {row['name'] for row in db.execute('PRAGMA table_info(checkout_carts)')}
+            if 'notes' not in columns:
+                db.execute("ALTER TABLE checkout_carts ADD COLUMN notes TEXT NOT NULL DEFAULT '{}'")
             db.execute('''CREATE TABLE IF NOT EXISTS checkout_cart_requests(
               group_id TEXT NOT NULL,actor_id TEXT NOT NULL,request_key TEXT NOT NULL,
               payload_hash TEXT NOT NULL,result TEXT NOT NULL,created_at TEXT NOT NULL,
@@ -36,33 +40,79 @@ class CheckoutCart:
         return value
 
     @staticmethod
+    def _notes(values, selected):
+        if values is None:
+            return None
+        if not isinstance(values, dict):
+            raise ValueError('Checkout notes must be an item-to-note mapping')
+        notes = {}
+        for key, value in values.items():
+            entity_id = uuid(key)
+            if entity_id not in selected:
+                raise ValueError('Checkout notes must belong to selected equipment')
+            if entity_id in notes:
+                raise ValueError('Checkout notes must use distinct equipment IDs')
+            if not isinstance(value, str):
+                raise ValueError('Checkout notes must be text')
+            try:
+                value.encode('utf-8')
+            except UnicodeEncodeError:
+                raise ValueError('Checkout note contains invalid Unicode') from None
+            value = value.strip()
+            if len(value) > 1000:
+                raise ValueError('Checkout notes may contain at most 1,000 characters')
+            if value:
+                notes[entity_id] = value
+        return dict(sorted(notes.items()))
+
+    @staticmethod
     def _state(db, group, actor):
-        row = db.execute('SELECT revision,items FROM checkout_carts WHERE group_id=? AND actor_id=?',
+        row = db.execute('SELECT revision,items,notes FROM checkout_carts WHERE group_id=? AND actor_id=?',
                          (group, actor)).fetchone()
-        return {'revision': row['revision'], 'items': json.loads(row['items'])} if row else {'revision': 0, 'items': []}
+        return {'revision': row['revision'], 'items': json.loads(row['items']),
+                'notes': json.loads(row['notes'] or '{}')} if row else {'revision': 0, 'items': [], 'notes': {}}
 
     def get(self, group, actor):
         with self.ledger.connection() as db:
             return self._state(db, uuid(group), uuid(actor))
 
-    def save(self, group, actor, items, revision, request_key):
+    def request_status(self, group, actor, request_key):
+        """Return only this actor's durable cart-save receipt for recovery."""
+        group, actor, request_key = uuid(group), uuid(actor), uuid(request_key)
+        with self.ledger.connection() as db:
+            row = db.execute('SELECT result FROM checkout_cart_requests WHERE group_id=? AND actor_id=? AND request_key=?',
+                             (group, actor, request_key)).fetchone()
+        if not row:
+            return None
+        return {'status': 'completed', 'action': 'checkout-cart', 'result': json.loads(row['result'])}
+
+    def save(self, group, actor, items, revision, request_key, notes=None):
         group, actor = uuid(group), uuid(actor)
         items, revision, request_key = self._items(items), self._revision(revision), uuid(request_key)
-        digest = hashlib.sha256(json.dumps([revision, items], separators=(',', ':')).encode()).hexdigest()
+        normalized_notes = self._notes(notes, set(items))
         with self.ledger.transaction() as db:
+            current = self._state(db, group, actor)
+            retained_notes = {key: value for key, value in current['notes'].items() if key in items}
+            resulting_notes = retained_notes if normalized_notes is None else normalized_notes
+            digest = hashlib.sha256(json.dumps([revision, items, normalized_notes], sort_keys=True,
+                                               separators=(',', ':')).encode()).hexdigest()
             prior = db.execute('SELECT payload_hash,result FROM checkout_cart_requests WHERE group_id=? AND actor_id=? AND request_key=?',
                                (group, actor, request_key)).fetchone()
             if prior:
-                if prior['payload_hash'] != digest:
+                legacy_digest = hashlib.sha256(json.dumps([revision, items], separators=(',', ':')).encode()).hexdigest()
+                compatible = prior['payload_hash'] == digest or (normalized_notes is None and prior['payload_hash'] == legacy_digest)
+                if not compatible:
                     raise Conflict('This checkout cart request key belongs to a different edit.')
-                return json.loads(prior['result'])
-            current = self._state(db, group, actor)
+                result = json.loads(prior['result'])
+                result.setdefault('notes', {})
+                return result
             if current['revision'] != revision:
                 raise Conflict('The checkout cart changed. Reload it before saving.')
-            result = {'revision': revision + 1, 'items': items}
-            db.execute('''INSERT INTO checkout_carts(group_id,actor_id,revision,items,updated_at) VALUES(?,?,?,?,?)
-              ON CONFLICT(group_id,actor_id) DO UPDATE SET revision=excluded.revision,items=excluded.items,updated_at=excluded.updated_at''',
-                       (group, actor, result['revision'], json.dumps(items), timestamp()))
+            result = {'revision': revision + 1, 'items': items, 'notes': resulting_notes}
+            db.execute('''INSERT INTO checkout_carts(group_id,actor_id,revision,items,updated_at,notes) VALUES(?,?,?,?,?,?)
+              ON CONFLICT(group_id,actor_id) DO UPDATE SET revision=excluded.revision,items=excluded.items,
+              updated_at=excluded.updated_at,notes=excluded.notes''',
+                       (group, actor, result['revision'], json.dumps(items), timestamp(), json.dumps(resulting_notes, sort_keys=True)))
             db.execute('INSERT INTO checkout_cart_requests VALUES(?,?,?,?,?,?)',
                        (group, actor, request_key, digest, json.dumps(result), timestamp()))
             return result
@@ -74,7 +124,9 @@ class CheckoutCart:
             if prior:
                 if (prior['group_id'], prior['actor_id']) != (group, actor):
                     raise Conflict('Checkout receipt does not belong to this member and collection.')
-                return json.loads(prior['result'])
+                result = json.loads(prior['result'])
+                result.setdefault('cart', {}).setdefault('notes', {})
+                return result
             operation = db.execute('SELECT * FROM operations WHERE id=? AND group_id=? AND actor_id=?',
                                    (receipt_id, group, actor)).fetchone()
             if not operation or operation['action'] != 'check_out' or operation['status'] != 'completed':
@@ -92,13 +144,20 @@ class CheckoutCart:
             original = set(self._items(cart_intent['original_items'])) if 'original_items' in cart_intent else set(consumed)
             current = self._state(db, group, actor)
             skipped = current['revision'] != revision
-            if not skipped and original:
-                remaining = [item for item in current['items'] if item not in original]
-                current = {'revision': revision + 1, 'items': remaining}
+            consumed_roots = set(consumed) & original
+            if not skipped and consumed_roots:
+                remaining = [item for item in current['items'] if item not in consumed_roots]
+                current = {'revision': revision + 1, 'items': remaining, 'notes': current['notes']}
                 db.execute('UPDATE checkout_carts SET revision=?,items=?,updated_at=? WHERE group_id=? AND actor_id=?',
                            (current['revision'], json.dumps(remaining), timestamp(), group, actor))
-            result = {'consumed': [] if skipped else consumed, 'cart': current,
+            removed = consumed_roots
+            resulting_notes = {key: value for key, value in current['notes'].items() if skipped or key not in removed}
+            result = {'consumed': [] if skipped else consumed, 'cart': dict(current, notes=resulting_notes),
                       'cart_changed': skipped}
+            if not skipped and consumed_roots:
+                db.execute('UPDATE checkout_carts SET revision=?,items=?,notes=?,updated_at=? WHERE group_id=? AND actor_id=?',
+                           (current['revision'], json.dumps(current['items']), json.dumps(resulting_notes, sort_keys=True),
+                            timestamp(), group, actor))
             db.execute('INSERT INTO checkout_cart_receipts VALUES(?,?,?,?,?)',
                        (receipt_id, group, actor, json.dumps(result), timestamp()))
             return result

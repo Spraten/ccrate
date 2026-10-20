@@ -55,6 +55,8 @@ The backend builder uses the selected native UI at `work/homebox-ui-current`. Th
 
 Activation must package the matching frontend, label assets, gateway and companion code with `deploy/release_bundle.py`, then select the release through its backup and compatibility checks. This repository does not currently provide a complete Pi update command. `deploy/run-release.py` launches an already selected release; `deploy/stage-label-release.py` only stages a candidate. Restarting the existing services alone will keep serving the selected release.
 
+The live-UI hot-reload path in [the development guide](docs/development/live-ui.md) applies only to the isolated local-test stack. It avoids rebuilding the frontend for local overlay edits, but it does not change the Pi release process. Python companion/API edits also require their process to restart; Nuxt hot reload applies to the browser UI only.
+
 ## Tests and operational safeguards
 
 For the current beta handoff, use the short [human feature check](docs/BETA_HUMAN_TEST.md). It covers the main inventory, scan/OCR, label, and workshop flows you asked to try. You do not need to run the broad edge-case suite before giving product feedback.

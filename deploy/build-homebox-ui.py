@@ -151,6 +151,121 @@ def item_log_frontend():
     replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Generated from item type and full storage path; regenerated when the item moves.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
 
 
+def equipment_assigned_ids_frontend():
+    """Project collection-assigned IDs into search and detail views."""
+    def once(path, old, new):
+        target = BUILD/path
+        text = target.read_text()
+        if text.count(old) != 1:
+            raise RuntimeError(f'Upstream changed: expected one equipment ID patch anchor in {path}')
+        target.write_text(text.replace(old, new))
+
+    once('pages/items.vue', '  import type { LocationQueryRaw } from "vue-router";',
+         '  import type { LocationQueryRaw } from "vue-router";\n  import { fetchAssignedDisplayIds, projectAssignedDisplayIds, resolveAssignedIdAfterNativeMiss } from "@/lib/equipment-search.js";')
+    once('pages/items.vue', '  const api = useUserApi();', '  const api = useUserApi();\n  const equipmentWorkshop = useWorkshop();\n  let searchRevision = 0;')
+    once('pages/items.vue', '''  async function search() {
+    if (searchLocked.value) {
+      return;
+    }
+
+    loading.value = true;''', '''  async function search() {
+    if (searchLocked.value) {
+      return;
+    }
+    const revision = ++searchRevision;
+    const searchedQuery = query.value;
+
+    loading.value = true;''')
+    once('pages/items.vue', '      q: query.value || "",', '      q: searchedQuery || "",')
+    once('pages/items.vue', '''      fields,
+    });
+
+    function resetItems()''', '''      fields,
+    });
+    if (revision !== searchRevision || searchedQuery !== query.value) return;
+
+    function resetItems()''')
+    once('pages/items.vue', '''    if (!data.items || data.items.length === 0) {
+      resetItems();
+      return;
+    }''', '''    if (!data.items || data.items.length === 0) {
+      const resolvedId = await resolveAssignedIdAfterNativeMiss(searchedQuery, data.items || [], (displayId: string) =>
+        equipmentWorkshop.request("equipment/ids/resolve", { display_id: displayId }),
+        () => revision === searchRevision && searchedQuery === query.value
+      );
+      if (revision !== searchRevision || searchedQuery !== query.value) return;
+      if (resolvedId) {
+        loading.value = false;
+        await navigateTo(`/item/${resolvedId}`);
+        return;
+      }
+      resetItems();
+      return;
+    }''')
+    once('pages/items.vue', '    total.value = data.total;\n    items.value = data.items;', '''    let assignmentMap = {};
+    try {
+      assignmentMap = await fetchAssignedDisplayIds(data.items.map(item => item.id), ids =>
+        equipmentWorkshop.request(`equipment/ids?entity_ids=${encodeURIComponent(ids.join(","))}`)
+      );
+    } catch { /* Keep native IDs if the optional catalog lookup is unavailable. */ }
+    if (revision !== searchRevision || searchedQuery !== query.value) return;
+    total.value = data.total;
+    items.value = projectAssignedDisplayIds(data.items, assignmentMap);''')
+
+    once('pages/items.vue', '  watchDebounced([page, pageSize, query, selectedTags, selectedLocations], search, { debounce: 250, maxWait: 1000 });', '''  watch([page, pageSize, query, selectedTags, selectedLocations], () => { searchRevision++; }, { flush: "sync" });
+  watchDebounced([page, pageSize, query, selectedTags, selectedLocations], search, { debounce: 250, maxWait: 1000 });''')
+
+    once('pages/item/[id]/index.vue', '  const api = useUserApi();', '  const api = useUserApi();\n  const equipmentWorkshop = useWorkshop();\n  const assignedDisplayId = ref("");')
+    data_anchor = '''  const { data: item, refresh } = useAsyncData(itemId.value, async () => {
+    const { data, error } = await api.items.get(itemId.value);
+    if (error) {
+      toast.error(t("items.toast.failed_load_item"));
+      navigateTo("/home");
+      return;
+    }
+    return data;
+  });'''
+    once('pages/item/[id]/index.vue', data_anchor, data_anchor + '''
+  const effectiveDisplayId = computed(() => assignedDisplayId.value || item.value?.displayId || "");
+  watch(itemId, async id => {
+    assignedDisplayId.value = "";
+    try {
+      const assignments = await equipmentWorkshop.request<Record<string, { display_id: string }>>(
+        `equipment/ids?entity_ids=${encodeURIComponent(id)}`
+      );
+      if (itemId.value === id) assignedDisplayId.value = assignments[id]?.display_id || "";
+    } catch { /* Keep the native ID if the optional catalog lookup is unavailable. */ }
+  }, { immediate: true });''')
+    detail_line = '          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Generated from item type and full storage path; regenerated when the item moves.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>'
+    once('pages/item/[id]/index.vue', detail_line, '          <div v-if="effectiveDisplayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground">{{ assignedDisplayId ? "Equipment ID" : "Display ID" }}</span><code class="font-mono font-semibold">{{ effectiveDisplayId }}</code><CopyText :text="effectiveDisplayId" :icon-size="16" /></div>')
+
+    once('components/Item/View/table/columns.ts', '    {\n      id: "name",', '''    {
+      id: "displayId",
+      accessorKey: "displayId",
+      header: () => h("span", { class: "text-sm font-medium" }, "Equipment ID"),
+      cell: ({ row }) => h("code", { class: "font-mono text-sm" }, String(row.getValue("displayId") ?? "")),
+    },
+    {
+      id: "name",''')
+    once('components/Item/View/table/columns.ts', '      id: "displayId",', '''      id: "thumbnail",
+      accessorKey: "thumbnailUrl",
+      header: () => h("span", { class: "text-sm font-medium" }, "Photo"),
+      cell: ({ row }) => {
+        const src = String((row.original as any).thumbnailUrl || "");
+        return src ? h("img", { src, alt: "", class: "size-10 rounded object-cover" }) : h("span", { class: "text-xs text-muted-foreground" }, "No photo");
+      },
+    },
+    {
+      id: "equipmentStatus",
+      accessorKey: "equipmentStatus",
+      header: () => h("span", { class: "text-sm font-medium" }, "Status"),
+      cell: ({ row }) => h("span", { class: "text-sm" }, String(row.getValue("equipmentStatus") || "Unknown")),
+    },
+    {
+      id: "displayId",''')
+    once('components/Item/View/table/data-table.vue', 'const defaultVisible = ["name", "quantity", "insured", "purchasePrice"];', 'const defaultVisible = ["displayId", "thumbnail", "equipmentStatus", "location", "name"];')
+
+
 def move_create_actions_after_photo_preview(source):
     """Keep both existing create actions after uploaded-photo previews."""
     action_open = '      <div class="mt-4 flex flex-row-reverse">'
@@ -184,6 +299,236 @@ def move_create_actions_after_photo_preview(source):
         raise RuntimeError('Upstream changed: expected a self-closing photo preview in CreateModal.vue')
     preview_end = preview_tag_end + 1
     return source[:action_start] + '\n\n' + source[preview_start:preview_end] + '\n\n' + actions + source[preview_end:]
+
+
+def grouped_inventory_frontend():
+    """Render collection filtered inventory as cross-location product groups."""
+    once = lambda old, new: replace('pages/items.vue', old, new)
+    once('  import type { LocationQueryRaw } from "vue-router";',
+         '  import type { LocationQueryRaw } from "vue-router";\n  import { loadAllFilteredInventory, loadInventoryActionStatuses, groupInventoryItems, buildInventoryStoragePath, mergeInventorySummaries, inventoryNoteRequestKey, createInventoryNoteVersionGuard } from "@/lib/child-item-groups.js";\n  import { recentItemNotes } from "@/lib/item-activity-notes.js";')
+    once('  const items = ref<EntitySummary[]>([]);\n  const total = ref(0);',
+         '  const items = ref<EntitySummary[]>([]);\n  const inventoryGroups = ref<any[]>([]);\n  const nativeManagePage = ref(1);\n  const nativeTotal = ref(0);\n  const nativeManageItems = computed(() => items.value.slice((nativeManagePage.value - 1) * pageSize.value, nativeManagePage.value * pageSize.value));\n  const total = ref(0);')
+    once('  const inventoryGroups = ref<any[]>([]);\n  const nativeManagePage = ref(1);', '  const inventoryGroups = ref<any[]>([]);\n  const recentInventoryNotes = ref<Record<string, any>>({});\n  const noteLoadingGroups = ref(new Set<string>());\n  const noteLoadedGroups = ref(new Set<string>());\n  const noteRequestVersions = createInventoryNoteVersionGuard();\n  const noteLoadVersions = new Map<string, number>();\n  let inventoryNotesIdentity = "";\n  const nativeManagePage = ref(1);')
+    once('''    const searchedQuery = query.value;
+
+    loading.value = true;''', '''    const searchedQuery = query.value;
+    const currentIdentity = equipmentWorkshop.context.value?.identity || "";
+    if (inventoryNotesIdentity !== currentIdentity) {
+      inventoryNotesIdentity = currentIdentity;
+      recentInventoryNotes.value = {};
+      noteLoadingGroups.value = new Set();
+      noteLoadedGroups.value = new Set();
+    }
+
+    loading.value = true;''')
+    once('''  const pagination = proxyRefs({
+    page,
+    pageSize,
+    totalSize: total,
+    setPage: (newPage: number) => {
+      page.value = newPage;
+    },
+  });''', '''  const pagination = proxyRefs({
+    page,
+    pageSize,
+    totalSize: total,
+    setPage: (newPage: number) => { page.value = newPage; },
+  });
+  const nativePagination = proxyRefs({
+    page: nativeManagePage,
+    pageSize,
+    totalSize: nativeTotal,
+    setPage: (newPage: number) => { nativeManagePage.value = newPage; },
+  });
+  async function loadInventoryNotes(request: { key: string; entityIds: string[]; refresh?: boolean }) {
+    const noteKey = inventoryNoteRequestKey(request.key, request.entityIds);
+    if ((!request.refresh && noteLoadedGroups.value.has(noteKey)) || (noteLoadingGroups.value.has(noteKey) && !request.refresh)) return;
+    const requestIdentity = equipmentWorkshop.context.value?.identity || "";
+    const entityVersions = noteRequestVersions.begin(request.entityIds);
+    const loadVersion = (noteLoadVersions.get(noteKey) || 0) + 1;
+    noteLoadVersions.set(noteKey, loadVersion);
+    noteLoadingGroups.value = new Set(noteLoadingGroups.value).add(noteKey);
+    try {
+      const found = new Map<string, any[]>();
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(4, request.entityIds.length) }, async () => {
+        while (cursor < request.entityIds.length) {
+          const entityId = request.entityIds[cursor++]!;
+          found.set(entityId, await equipmentWorkshop.request<any[]>("history?entity=" + encodeURIComponent(entityId)));
+        }
+      });
+      await Promise.all(workers);
+      if (requestIdentity !== (equipmentWorkshop.context.value?.identity || "") || requestIdentity !== inventoryNotesIdentity) return;
+      const notes = { ...recentInventoryNotes.value };
+      for (const entityId of request.entityIds) {
+        if (noteRequestVersions.isCurrent(entityVersions, entityId)) notes[entityId] = recentItemNotes(found.get(entityId) || [], entityId, 1)[0] || null;
+      }
+      recentInventoryNotes.value = notes;
+      if (request.entityIds.every(entityId => noteRequestVersions.isCurrent(entityVersions, entityId))) noteLoadedGroups.value = new Set(noteLoadedGroups.value).add(noteKey);
+    } catch { /* The unit row remains usable when optional return history is unavailable. */ }
+    finally {
+      if (requestIdentity === inventoryNotesIdentity && loadVersion === noteLoadVersions.get(noteKey)) {
+        const next = new Set(noteLoadingGroups.value); next.delete(noteKey); noteLoadingGroups.value = next;
+      }
+    }
+  }''')
+    old = '''    const { data, error } = await api.items.getAll({
+      q: searchedQuery || "",
+      parentIds: locIDs.value,
+      tags: tagIDs.value,
+      negateTags: negateTags.value,
+      onlyWithoutPhoto: onlyWithoutPhoto.value,
+      onlyWithPhoto: onlyWithPhoto.value,
+      includeArchived: includeArchived.value,
+      page: page.value,
+      pageSize: pageSize.value,
+      orderBy: orderBy.value,
+      fields,
+    });'''
+    new = '''    const nativeOptions = {
+      q: "",
+      parentIds: locIDs.value,
+      tags: tagIDs.value,
+      negateTags: negateTags.value,
+      onlyWithoutPhoto: onlyWithoutPhoto.value,
+      onlyWithPhoto: onlyWithPhoto.value,
+      includeArchived: includeArchived.value,
+      pageSize: pageSize.value,
+      orderBy: orderBy.value,
+      fields,
+    };
+    let data: any = null;
+    let nativeMatches: any[] = [];
+    let error: any = null;
+    try {
+      const allItems = await loadAllFilteredInventory(async (nativePage: number, nativePageSize: number) => {
+        const response = await api.items.getAll({ ...nativeOptions, page: nativePage, pageSize: nativePageSize });
+        if (response.error) throw response.error;
+        return response.data;
+      }, { pageSize: pageSize.value, isCurrent: () => revision === searchRevision && searchedQuery === query.value });
+      nativeMatches = searchedQuery.trim() ? await loadAllFilteredInventory(async (nativePage: number, nativePageSize: number) => {
+        const response = await api.items.getAll({ ...nativeOptions, q: searchedQuery, page: nativePage, pageSize: nativePageSize });
+        if (response.error) throw response.error;
+        return response.data;
+      }, { pageSize: pageSize.value, isCurrent: () => revision === searchRevision && searchedQuery === query.value }) : allItems;
+      data = { items: allItems, total: allItems.length };
+    } catch (loadError) { error = loadError; }'''
+    once(old, new)
+    once('''    if (error) {
+      resetItems();
+      toast.error(t("items.toast.failed_search_items"));
+      return;
+    }''', '''    if (error) {
+      // A failed page must not replace a previously complete inventory with partial or zero totals.
+      loading.value = false;
+      toast.error(t("items.toast.failed_search_items"));
+      return;
+    }''')
+    once('      total.value = 0;\n      items.value = [];', '      total.value = 0;\n      items.value = [];\n      inventoryGroups.value = [];')
+    old_project = '''    let assignmentMap = {};
+    try {
+      assignmentMap = await fetchAssignedDisplayIds(data.items.map(item => item.id), ids =>
+        equipmentWorkshop.request(`equipment/ids?entity_ids=${encodeURIComponent(ids.join(","))}`)
+      );
+    } catch { /* Keep native IDs if the optional catalog lookup is unavailable. */ }
+    if (revision !== searchRevision || searchedQuery !== query.value) return;
+    total.value = data.total;
+    items.value = projectAssignedDisplayIds(data.items, assignmentMap);'''
+    new_project = '''    let assignmentMap: Record<string, any> = {};
+    let statuses: Record<string, any> = {};
+    let locationRows: any[] = [];
+    let equipmentRows: any[] = [];
+    try {
+      assignmentMap = await fetchAssignedDisplayIds(data.items.map((item: any) => item.id), (ids: string[]) =>
+        equipmentWorkshop.request(`equipment/ids?entity_ids=${encodeURIComponent(ids.join(","))}`)
+      );
+    } catch { /* Native rows remain visible with their native IDs. */ }
+    try {
+      const [fullRows, locations] = await Promise.all([equipmentWorkshop.request<any[]>("equipment"), equipmentWorkshop.request<any[]>("locations")]);
+      equipmentRows = fullRows || [];
+      locationRows = locations || [];
+    } catch { /* Missing authoritative status stays unknown. */ }
+    if (revision !== searchRevision || searchedQuery !== query.value) return;
+    try {
+      statuses = await loadInventoryActionStatuses(equipmentRows.map((row: any) => row.id), (ids: string[]) =>
+        equipmentWorkshop.request(`item-actions/status?ids=${encodeURIComponent(ids.join(","))}`),
+        { isCurrent: () => revision === searchRevision && searchedQuery === query.value && currentIdentity === (equipmentWorkshop.context.value?.identity || "") }
+      );
+    } catch { /* Missing authoritative status stays unknown. */ }
+    if (revision !== searchRevision || searchedQuery !== query.value) return;
+    const enriched = mergeInventorySummaries(data.items, equipmentRows);
+    const projected = projectAssignedDisplayIds(enriched, assignmentMap);
+    const matchingEntityIds = new Set(nativeMatches.map(item => item.id));
+    const normalizedQuery = searchedQuery.trim().toLocaleLowerCase();
+    if (normalizedQuery) for (const item of projected) {
+      if (String(item.displayId || "").toLocaleLowerCase().includes(normalizedQuery)) matchingEntityIds.add(item.id);
+    }
+    const managementMatches = projected.filter((item: any) => matchingEntityIds.has(item.id));
+    const locationById = [...equipmentRows, ...locationRows];
+    const storagePath = (item: any) => buildInventoryStoragePath(item, locationById);
+    let templateThumbnails: Record<string, any> = {};
+    try {
+      const templates = await equipmentWorkshop.request<any[]>("equipment/templates");
+      for (const template of templates || []) {
+        if (template.product_id && template.photo_entity_id && template.photo_attachment_id) templateThumbnails[template.product_id] = { entity_id: template.photo_entity_id, attachment_id: template.photo_attachment_id };
+      }
+    } catch { /* Native item photos remain primary; missing templates are optional. */ }
+    if (revision !== searchRevision || searchedQuery !== query.value) return;
+    inventoryGroups.value = groupInventoryItems(projected, assignmentMap, { query: searchedQuery, matchedEntityIds: [...matchingEntityIds], statuses, storagePath, templateThumbnails, recentNotes: recentInventoryNotes.value });
+    page.value = Math.min(page.value, Math.max(1, Math.ceil(inventoryGroups.value.length / pageSize.value)));
+    total.value = inventoryGroups.value.length;
+    items.value = data.items;'''
+    once(old_project, new_project)
+    once('''    total.value = inventoryGroups.value.length;
+    items.value = data.items;''', '''    total.value = inventoryGroups.value.length;
+    nativeTotal.value = managementMatches.length;
+    nativeManagePage.value = Math.min(nativeManagePage.value, Math.max(1, Math.ceil(managementMatches.length / pageSize.value)));
+    items.value = managementMatches.map((item: any) => {
+      const status = (statuses as Record<string, any>)[item.id]?.status || (statuses as Record<string, any>)[item.id]?.availability || "unknown";
+      const photoId = item.thumbnailId || item.imageId;
+      return { ...item, displayId: assignmentMap[item.id]?.display_id || item.displayId || "", equipmentStatus: status === "unknown" ? "Unknown" : status.replaceAll("_", " "), thumbnailUrl: photoId ? api.authURL(`/entities/${item.id}/attachments/${photoId}`) : "" };
+    });''')
+    once('''      <ItemViewSelectable
+        :items="items"
+        :location-flat-tree="locationFlatTree"
+        :pagination="pagination"
+        disable-sort
+        @refresh="async () => search()"
+      />''', '''      <InventoryGroups :groups="inventoryGroups" :page="page" :page-size="pageSize" :recent-notes="recentInventoryNotes" :note-loading-keys="[...noteLoadingGroups]" :note-loaded-keys="[...noteLoadedGroups]" @load-notes="loadInventoryNotes" @refresh-items="search" @update:page="(value: number) => { page = value; }" />
+      <details v-if="items.length" class="mt-4 rounded-lg border p-3">
+        <summary class="cursor-pointer font-medium">Manage matching native items</summary>
+        <ItemViewSelectable :items="nativeManageItems" :location-flat-tree="locationFlatTree" :pagination="nativePagination" disable-sort @refresh="async () => search()" />
+      </details>''')
+
+
+def item_action_surfaces_frontend():
+    """Mount one shared action host and add exact-item triggers to native rows."""
+    def once(path, old, new):
+        target = BUILD / path
+        source = target.read_text()
+        if source.count(old) != 1:
+            raise RuntimeError(f'Upstream changed: expected one item-action mount anchor in {path}')
+        target.write_text(source.replace(old, new))
+
+    once('layouts/default.vue', '<script lang="ts" setup>', '<script lang="ts" setup>\n  import ItemActionHost from "~/components/Workshop/ItemActionHost.vue";')
+    once('layouts/default.vue', '    <ModalConfirm />', '    <ModalConfirm />\n    <ItemActionHost />')
+    once('components/Item/View/table/table-view.vue', '  import DataTableExpandedRow from "./data-table-expanded-row.vue";', '  import DataTableExpandedRow from "./data-table-expanded-row.vue";\n  import ItemQuickActions from "~/components/Workshop/ItemQuickActions.vue";')
+    once('components/Item/View/table/table-view.vue', '<FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />', '<FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />\n              <ItemQuickActions v-if="cell.column.id === \'actions\'" :item-id="row.original.id" compact />')
+    once('components/Item/View/table/card-view.vue', '  import DropdownAction from "./data-table-dropdown.vue";', '  import DropdownAction from "./data-table-dropdown.vue";\n  import ItemQuickActions from "~/components/Workshop/ItemQuickActions.vue";')
+    once('components/Item/View/table/card-view.vue', '''    <ItemCard
+      v-for="item in table.getRowModel().rows"
+      :key="item.original.id"
+      :item="item.original"
+      :table-row="preferences.quickActions.enabled ? item : undefined"
+      :location-flat-tree="locationFlatTree"
+    />''', '''    <div v-for="item in table.getRowModel().rows" :key="item.original.id" class="space-y-2">
+      <ItemCard
+        :item="item.original"
+        :table-row="preferences.quickActions.enabled ? item : undefined"
+        :location-flat-tree="locationFlatTree"
+      />
+      <ItemQuickActions :item-id="item.original.id" compact />
+    </div>''')
 
 
 def nest_frontend():
@@ -263,4 +608,907 @@ def nest_frontend():
         raise RuntimeError(f'Upstream changed: expected zero or three model-number payloads in {path}')
     if existing_model_number_payloads == 0:
         if text.count('const templateRequest = {') != 1:
-            raise RuntimeError(f'Upstream changed: expecteuÓMµ¶‰Ëkºwµçt(€€€™¥¹…±±äì¥˜€¡É•Ù¥Í¥½¸€ôôô¥Ñ•µI•Ù¥Í¥½¸¤¥Ñ•µ1½…‘¥¹œ¹Ù…±Õ”€ô™…±Í”ìô(€ô(€™Õ¹Ñ¥½¸É•™É•Í¡Y¥Í¥‰±•%Ñ•µÌ ¤ì¥˜€¡‘½Õµ•¹Ğ¹Ù¥Í¥‰¥±¥ÑåMÑ…Ñ”€ôôô€‰Ù¥Í¥‰±”ˆ€˜˜€…¥Ñ•µ1½…‘¥¹œ¹Ù…±Õ”¤Ù½¥±½…‘5•µ‰•É1½…¹Ì ¤ìô(€™Õ¹Ñ¥½¸É•™É•Í¡5•µ‰•ÉÌ ¤ìÙ½¥±½…‘5•µ‰•ÉÌ ¤ìÙ½¥±½…‘	…‘•Ì ¤ìÙ½¥±½…‘5•µ‰•É1½…¹Ì ¤ìô(€±•Ğİ½É­Í¡½ÁI•Ù¥Í¥½¸€ô€Àì(€…Íå¹Œ™Õ¹Ñ¥½¸±½…‘	…‘•Ì ¤ì(€€€½¹ÍĞÉ•Ù¥Í¥½¸€ô€¬­İ½É­Í¡½ÁI•Ù¥Í¥½¸ì(€€€‰…‘•I½İÌ¹Ù…±Õ”€ômtìÁ•½Á±•I½İÌ¹Ù…±Õ”€ômtìİ½É­Í¡½ÁÉÉ½È¹Ù…±Õ”€ô€ˆˆì(€€€ÑÉäì(€€€€€…İ…¥Ğİ½É­Í¡½À¹É•™É•Í  ¤ì(€€€€€¥˜€ …İ½É­Í¡½À¹µ…¹…•È¹Ù…±Õ”¤É•ÑÕÉ¸ì(€€€€€½¹ÍĞm‰…‘•Ì°Á•½Á±•t€ô…İ…¥ĞAÉ½µ¥Í”¹…±°¡mİ½É­Í¡½À¹É•ÅÕ•ÍĞñ…¹åmtø ‰‰…‘•Ìˆ¤°İ½É­Í¡½À¹É•ÅÕ•ÍĞñ…¹åmtø ‰Á•½Á±”ˆ¥t¤ì(€€€€€¥˜€¡É•Ù¥Í¥½¸€ôôôİ½É­Í¡½ÁI•Ù¥Í¥½¸¤ì‰…‘•I½İÌ¹Ù…±Õ”€ô‰…‘•ÌìÁ•½Á±•I½İÌ¹Ù…±Õ”€ôÁ•½Á±”ìô(€€€ô…Ñ €¡…ÕÍ”¤ì¥˜€¡É•Ù¥Í¥½¸€ôôôİ½É­Í¡½ÁI•Ù¥Í¥½¸¤İ½É­Í¡½ÁÉÉ½È¹Ù…±Õ”€ô€¡…ÕÍ”…ÌÉÉ½È¤¹µ•ÍÍ…”ìô(€ô(€İ…Ñ ¡Í•±•Ñ•‘%°€ ¤€ôøìµ•µ‰•É1½…¹Ì¹Ù…±Õ”€ô¹Õ±°ìÉ•™É•Í¡5•µ‰•ÉÌ ¤ìô°ì™±ÕÍ è€‰Íå¹Œˆô¤ì(€½¹5½Õ¹Ñ•  ¤€ôøì(€€€Ù½¥±½…‘5•µ‰•É1½…¹Ì ¤ì(€€€İ¥¹‘½Ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‰™½ÕÌˆ°É•™É•Í¡Y¥Í¥‰±•%Ñ•µÌ¤ì(€€€‘½Õµ•¹Ğ¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ‰Ù¥Í¥‰¥±¥Ñå¡…¹”ˆ°É•™É•Í¡Y¥Í¥‰±•%Ñ•µÌ¤ì(€€€µ•µ‰•ÉQ¥µ•È€ôÍ•Ñ%¹Ñ•ÉÙ…°¡É•™É•Í¡Y¥Í¥‰±•%Ñ•µÌ°€ÌÀÀÀÀ¤ì(€ô¤ì(€½¹	•™½É•U¹µ½Õ¹Ğ  ¤€ôøì(€€€İ½É­Í¡½ÁI•Ù¥Í¥½¸¬¬ì¥Ñ•µI•Ù¥Í¥½¸¬¬ìµ•µ‰•É1½…¹Ì¹Ù…±Õ”€ô¹Õ±°ì(€€€¥˜€¡µ•µ‰•ÉQ¥µ•È¤±•…É%¹Ñ•ÉÙ…°¡µ•µ‰•ÉQ¥µ•È¤ì(€€€İ¥¹‘½Ü¹É•µ½Ù•Ù•¹Ñ1¥ÍÑ•¹•È ‰™½ÕÌˆ°É•™É•Í¡Y¥Í¥‰±•%Ñ•µÌ¤ì(€€€‘½Õµ•¹Ğ¹É•µ½Ù•Ù•¹Ñ1¥ÍÑ•¹•È ‰Ù¥Í¥‰¥±¥Ñå¡…¹”ˆ°É•™É•Í¡Y¥Í¥‰±•%Ñ•µÌ¤ì(€ô¤ì((€½¹ÍĞ±½…‘¥¹œ€ôÉ•˜¡ÑÉÕ”¤ìœœœ¤(€€€É•Á±…”¡Á…Ñ °€œñQ…‰±••±°ùíìÕÍ•È¹¹…µ”õôğ½Q…‰±••±°øœ°€œñQ…‰±••±°øñ‘¥Ø±…ÍÌô‰™±•à¥Ñ•µÌµ•¹Ñ•È…À´Ìˆøñ5•µ‰•ÉÙ…Ñ…È€éµ•µ‰•Èµ¥ô‰ÕÍ•È¹¥ˆ€é¹…µ”ô‰ÕÍ•È¹¹…µ”ˆ€¼øñÍÁ…¸±…ÍÌô‰™½¹Ğµµ•‘¥Õ´ˆùíìÕÍ•È¹¹…µ”õôğ½ÍÁ…¸øğ½‘¥Øøğ½Q…‰±••±°øœ¤(€€€É•Á±…”¡Á…Ñ °€œ€¥µÁ½ÉĞì	ÕÑÑ½¸ôœ°€œ€¥µÁ½ÉĞ5•µ‰•ÉÙ…Ñ…È™É½´€‰ ½½µÁ½¹•¹ÑÌ½]½É­Í¡½À½5•µ‰•ÉÙ…Ñ…È¹ÙÕ”ˆíq¸€¥µÁ½ÉĞ5•µ‰•É%Ñ•µÌ™É½´€‰ ½½µÁ½¹•¹ÑÌ½]½É­Í¡½À½5•µ‰•É%Ñ•µÌ¹ÙÕ”ˆíq¸€¥µÁ½ÉĞÑåÁ”ì]½É­Í¡½Á1½…¸ô™É½´€‰ ½±¥ˆ½İ½É­Í¡½Àµ±½…¹Ìˆíq¸€¥µÁ½ÉĞ	…‘•Ñ¥½¹Ì™É½´€‰ ½½µÁ½¹•¹ÑÌ½]½É­Í¡½À½	…‘•Ñ¥½¹Ì¹ÙÕ”ˆíq¸€¥µÁ½ÉĞì	ÕÑÑ½¸ôœ¤(€€€É•Á±…”¡Á…Ñ °€œ€€€±½…‘5•µ‰•ÉÌ ¤íq¸€ô¤ìœ°€œ€€€±½…‘5•µ‰•ÉÌ ¤íq¸€€€±½…‘	…‘•Ì ¤íq¸€ô¤ìœ¤(€€€É•Á±…”¡Á…Ñ °€œ€€ñ‘¥Ø±…ÍÌô‰ÍÁ…”µä´Ğˆøœ°€œœœ€€ñ‘¥Ø±…ÍÌô‰ÍÁ…”µä´Ğˆø(€€€€ñ‘¥Ø±…ÍÌô‰™±•à™±•àµİÉ…À¥Ñ•µÌµ•¹Ñ•È©ÕÍÑ¥™äµ‰•Ñİ••¸…À´Ìˆø(€€€€€€ñÀ±…ÍÌô‰Ñ•áĞµÍ´Ñ•áĞµµÕÑ•µ™½É•É½Õ¹ˆù5•µ‰•ÉÌ°­¥½Í¬‰…‘•Ì…¹Ñ¡”¥Ñ•µÌ•… Á•ÉÍ½¸¡…Ì¡•­•½ÕĞ¸ğ½Àø(€€€€€€ñ	ÕÑÑ½¸Ù…É¥…¹Ğô‰½ÕÑ±¥¹”ˆÍ¥é”ô‰Í´ˆ€é‘¥Í…‰±•ô‰±½…‘¥¹œñğ¥Ñ•µ1½…‘¥¹œˆ±¥¬ô‰É•™É•Í¡5•µ‰•ÉÌˆùI•™É•Í µ•µ‰•ÉÌ€™…µÀì¥Ñ•µÌğ½	ÕÑÑ½¸ø(€€€€ğ½‘¥Øø(€€€€ñÀØµ¥˜ô‰¥Ñ•µÉÉ½ÈˆÉ½±”ô‰…±•ÉĞˆ±…ÍÌô‰Ñ•áĞµÍ´Ñ•áĞµ‘•ÍÑÉÕÑ¥Ù”ˆù½Õ±¹½Ğ±½…¡•­•µ½ÕĞ¥Ñ•µÌ¸íì¥Ñ•µÉÉ½Èõôğ½Àø(€€€€ñÀØµ¥˜ô‰İ½É­Í¡½ÁÉÉ½ÈˆÉ½±”ô‰…±•ÉĞˆ±…ÍÌô‰Ñ•áĞµÍ´Ñ•áĞµ‘•ÍÑÉÕÑ¥Ù”ˆù	…‘”µ…¹…•µ•¹Ğèíìİ½É­Í¡½ÁÉÉ½Èõô€ñ	ÕÑÑ½¸Ù…É¥…¹Ğô‰±¥¹¬ˆ±¥¬ô‰±½…‘	…‘•ÌˆùI•±½…‰…‘”µ…¹…•µ•¹Ğğ½	ÕÑÑ½¸øğ½Àøœœœ¤(€€€É•Á±…”¡Á…Ñ °€œñQ…‰±•!•…ùíì€‘Ğ ‰½±±•Ñ¥½¸¹µ•µ‰•ÉÌ¹¹…µ”ˆ¤õôğ½Q…‰±•!•…øœ°€œñQ…‰±•!•…ùUÍ•Èğ½Q…‰±•!•…øœ¤(€€€É•Á±…”¡Á…Ñ °€œ€€€€€€€€€€€€€€ñQ…‰±•!•…±…ÍÌô‰Ü´ÌÈœ°€œ€€€€€€€€€€€€€€ñQ…‰±•!•…Øµ¥˜ô‰İ½É­Í¡½À¹µ…¹…•È¹Ù…±Õ”ˆù-¥½Í¬	…‘”ğ½Q…‰±•!•…ùq¸€€€€€€€€€€€€€€ñQ…‰±•!•…ù%Ñ•µÌğ½Q…‰±•!•…ùq¸€€€€€€€€€€€€€€ñQ…‰±•!•…±…ÍÌô‰Ü´ÌÈœ¤(€€€É•Á±…”¡Á…Ñ °€œ€€€€€€€€€€€€€€ñQ…‰±••±°ùq¸€€€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰µ°µ…ÕÑ¼ˆøœ°€œœœ€€€€€€€€€€€€€€ñQ…‰±••±°Øµ¥˜ô‰İ½É­Í¡½À¹µ…¹…•È¹Ù…±Õ”ˆø(€€€€€€€€€€€€€€€€ñ	…‘•Ñ¥½¹Ì€éµ•µ‰•Èô‰ÕÍ•Èˆ€é‰…‘•Ìô‰‰…‘•I½İÌ¹™¥±Ñ•È¡É½Ü€ôøÉ½Ü¹ÕÍ•É}¥€ôôôÕÍ•È¹¥¤ˆ€é…¸µµ…¹…”ôˆ„…Á•½Á±•I½İÌ¹™¥¹¡É½Ü€ôøÉ½Ü¹¥€ôôôÕÍ•È¹¥¤ü¹İ½É­Í¡½Á}µ…¹…•Èˆ€éÁÉ½Ñ•Ñ•µ½İ¹•Èôˆ„…Á•½Á±•I½İÌ¹™¥¹¡É½Ü€ôøÉ½Ü¹¥€ôôôÕÍ•È¹¥¤ü¹ÁÉ½Ñ•Ñ•‘}½İ¹•Èˆ¡…¹•ô‰±½…‘	…‘•Ìˆ€¼ø(€€€€€€€€€€€€€€ğ½Q…‰±••±°ø(€€€€€€€€€€€€€€ñQ…‰±••±°øñ5•µ‰•É%Ñ•µÌ€éµ•µ‰•Èµ¥ô‰ÕÍ•È¹¥ˆ€é±½…¹Ìô‰µ•µ‰•É1½…¹Ìˆ€é±½…‘¥¹œô‰¥Ñ•µ1½…‘¥¹œˆ€é•ÉÉ½Èô‰¥Ñ•µÉÉ½Èˆ€¼øğ½Q…‰±••±°ø(€€€€€€€€€€€€€€ñQ…‰±••±°ø(€€€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰µ°µ…ÕÑ¼ˆøœœœ¤(€€€€Œ%Ñ•´±½…¹ÌÍ¥Ğ…±½¹Í¥‘”¹…Ñ¥Ù”•Ñ…¥±Ì½5…¥¹Ñ•¹…¹”½‘¥Ğì‘•Ñ…¥±ÌÍ¡½ÜÍÑ…ÑÕÌ¸(€€€Á…Ñ €ô€Á…•Ì½¥Ñ•´½m¥‘t½¥¹‘•à¹ÙÕ”œ(€€€¥Ñ•µ}±½}™É½¹Ñ•¹ ¤(€€€É•Á±…”¡Á…Ñ °€œ€€€€€€€¥è€‰•‘¥Ğˆ°œ°€œ€€€€€€€¥è€‰±½…¹Ìˆ°¹…µ”è€‰1½…¹Ì€˜É•ÑÕÉ¸¹½Ñ•Ìˆ°Ñ¼è€½¥Ñ•´¼‘í¥Ñ•µ%¹Ù…±Õ•ô½±½…¹Í€±q¸€€€€€ô±q¸€€€€€íq¸€€€€€€€¥è€‰•‘¥Ğˆ°œ¤(€€€É•Á±…”¡Á…Ñ °€íì€‘Ğ¡Ñ…ˆ¹¹…µ”¤õôœ°€íìÑ…ˆ¹¥€ôôô€‰±½…¹Ìˆ€üÑ…ˆ¹¹…µ”€è€‘Ğ¡Ñ…ˆ¹¹…µ”¤õôœ¤(€€€É•Á±…”¡Á…Ñ °€œé¥ô‰¥Ñ•´¹…ÍÍ•Ñ%‰q¸€€€€€€€€€€€€€€€ÑåÁ”ô‰…ÍÍ•Ğˆœ°€œé¥ô‰¥Ñ•´¹…ÍÍ•Ñ%‰q¸€€€€€€€€€€€€€€€€é•¹Ñ¥Ñäµ¥ô‰¥Ñ•´¹¥‰q¸€€€€€€€€€€€€€€€ÑåÁ”ô‰…ÍÍ•Ğˆœ¤(€€€É•Á±…”¡Á…Ñ °€œñ9ÕáÑA…”€é¥Ñ•´ô‰¥Ñ•´ˆ€éÁ…”µ­•äô‰¥Ñ•µ%ˆ€¼øœ°€œñ9ÕáÑA…”€é¥Ñ•´ô‰¥Ñ•´ˆ€éÁ…”µ­•äô‰¥Ñ•µ%ˆ€¼ùq¸€€€€€€€€ñ%Ñ•µ1½…¹ÌØµ¥˜ôˆ…¡…Í9•ÍÑ•ˆ€é¥Ñ•´µ¥ô‰¥Ñ•µ%ˆ½µÁ…Ğ€¼øœ¤(€€€€ŒáÑ•¹Ñ¡”•á¥ÍÑ¥¹œ±…‰•°‘¥…±½œì‰É½İÍ•ÈÁÉ¥¹Ñ¥¹œÉ•µ…¥¹Ì¹…Ñ¥Ù”¸(€€€Á…Ñ €ô€½µÁ½¹•¹ÑÌ½±½‰…°½1…‰•±5…­•È¹ÙÕ”œ(€€€É•Á±…”¡Á…Ñ °€œ€¥µÁ½ÉĞA…•EI½‘”œ°€œ€¥µÁ½ÉĞA¥AÉ¥¹Ğ™É½´€‰ ½½µÁ½¹•¹ÑÌ½]½É­Í¡½À½A¥AÉ¥¹Ğ¹ÙÕ”ˆíq¸€¥µÁ½ÉĞA…•EI½‘”œ¤(€€€É•Á±…”¡Á…Ñ °€œ€€€¥èÍÑÉ¥¹œìœ°€œ€€€¥èÍÑÉ¥¹œíq¸€€€•¹Ñ¥Ñå%üèÍÑÉ¥¹œìœ¤(€€€É•Á±…”¡Á…Ñ °€œ€€€€€€€€ñ¥µœ€éÍÉŒô‰•Ñ1…‰•±UÉ°¡™…±Í”¤ˆ€¼øœ°€œñ¥µœ€éÍÉŒô‰•Ñ1…‰•±UÉ°¡™…±Í”¤ˆ…±Ğô‰!½µ•‰½à±…‰•°ÁÉ•Ù¥•Üˆ€¼ùq¸€€€€€€€€ñA¥AÉ¥¹Ğ€é¥ô‰¥ˆ€é•¹Ñ¥Ñäµ¥ô‰•¹Ñ¥Ñå%ˆ€¼øœ¤(€€€É•Á±…”¡Á…Ñ °€œñ	ÕÑÑ½¸Í¥é”ô‰¥½¸ˆ±¥¬ô‰½Á•¹¥…±½œ¡¥…±½%¹AÉ¥¹Ñ1…‰•°¤ˆøœ°€œñ	ÕÑÑ½¸Í¥é”ô‰¥½¸ˆ€é…É¥„µ±…‰•°ôˆ‘Ğ¡p½µÁ½¹•¹ÑÌ¹±½‰…°¹±…‰•±}µ…­•È¹‰É½İÍ•É}ÁÉ¥¹Ñpœ¤ˆ±¥¬ô‰½Á•¹¥…±½œ¡¥…±½%¹AÉ¥¹Ñ1…‰•°¤ˆøœ¤(€€€€Œ5…¹…”¹…Ñ¥Ù”Á•½Á±”‰•Í¥‘”‰…‘•Ì…¹ÕÍÑ½‘ä°İ¥Ñ ½±±•Ñ¥½¸µ½İ¹•È…•ÍÌ¸(€€€½¹ÑÉ…Ğõ	U%1¼±¥ˆ½…Á¤½ÑåÁ•Ì½‘…Ñ„µ½¹ÑÉ…ÑÌ¹ÑÌœí‰½‘äõ½¹ÑÉ…Ğ¹É•…‘}Ñ•áĞ ¤(€€€ÍÑ…ÉĞõ‰½‘ä¹¥¹‘•à •áÁ½ÉĞ¥¹Ñ•É™…”UÍ•ÉMÕµµ…Éäìœ¤í•¹õ‰½‘ä¹¥¹‘•à q¹ôœ±ÍÑ…ÉĞ¤(€€€‰½‘äõ‰½‘ålé•¹‘t¬q¸€…Ù…Ñ…ÈüèÍÑÉ¥¹œìœ­‰½‘åm•¹étí½¹ÑÉ…Ğ¹İÉ¥Ñ•}Ñ•áĞ¡‰½‘ä¤(€€€Á…Ñ ôÁ…•Ì½½±±•Ñ¥½¸½¥¹‘•à½µ•µ‰•ÉÌ¹ÙÕ”œíÑ…É•Ğõ	U%1½Á…Ñ í‰½‘äõÑ…É•Ğ¹É•…‘}Ñ•áĞ ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œ€¥µÁ½ÉĞ5•µ‰•ÉÙ…Ñ…È™É½´œ°€œ€¥µÁ½ÉĞUÍ•É5…¹…•È™É½´€‰ ½½µÁ½¹•¹ÑÌ½]½É­Í¡½À½UÍ•É5…¹…•È¹ÙÕ”ˆíq¸€¥µÁ½ÉĞ5•µ‰•ÉÙ…Ñ…È™É½´œ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œ€½¹ÍĞİ½É­Í¡½À€ôÕÍ•]½É­Í¡½À ¤ìœ°€œ€½¹ÍĞİ½É­Í¡½À€ôÕÍ•]½É­Í¡½À ¤íq¸€½¹ÍĞÕÍ•É‘µ¥¸€ôÉ•˜¡™…±Í”¤°ÕÍ•É5…¹…•È€ôÉ•˜ñ%¹ÍÑ…¹•QåÁ”ñÑåÁ•½˜UÍ•É5…¹…•Èøğ¹Õ±°ø¡¹Õ±°¤ìœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” ½¹ÍĞm‰…‘•Ì°Á•½Á±•t€ô…İ…¥ĞAÉ½µ¥Í”¹…±°¡mİ½É­Í¡½À¹É•ÅÕ•ÍĞñ…¹åmtø ‰‰…‘•Ìˆ¤°İ½É­Í¡½À¹É•ÅÕ•ÍĞñ…¹åmtø ‰Á•½Á±”ˆ¥t¤ìœ°½¹ÍĞm‰…‘•Ì°Á•½Á±”°…‘µ¥¹¥ÍÑÉ…Ñ¥½¹t€ô…İ…¥ĞAÉ½µ¥Í”¹…±°¡mİ½É­Í¡½À¹É•ÅÕ•ÍĞñ…¹åmtø ‰‰…‘•Ìˆ¤°İ½É­Í¡½À¹É•ÅÕ•ÍĞñ…¹åmtø ‰Á•½Á±”ˆ¤°İ½É­Í¡½À¹É•ÅÕ•ÍĞñì…¹5…¹…”è‰½½±•…¸ôø ‰ÕÍ•ÉÌ½…‘µ¥¹¥ÍÑÉ…Ñ¥½¸ˆ¥t¤ìœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” ‰…‘•I½İÌ¹Ù…±Õ”€ô‰…‘•ÌìÁ•½Á±•I½İÌ¹Ù…±Õ”€ôÁ•½Á±”ìœ°€‰…‘•I½İÌ¹Ù…±Õ”€ô‰…‘•ÌìÁ•½Á±•I½İÌ¹Ù…±Õ”€ôÁ•½Á±”ìÕÍ•É‘µ¥¸¹Ù…±Õ”€ô…‘µ¥¹¥ÍÑÉ…Ñ¥½¸¹…¹5…¹…”ìœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” ¥˜€ …İ½É­Í¡½À¹µ…¹…•È¹Ù…±Õ”¤É•ÑÕÉ¸ìœ°€¥˜€ …İ½É­Í¡½À¹µ…¹…•È¹Ù…±Õ”¤ìÕÍ•É‘µ¥¸¹Ù…±Õ”€ô™…±Í”ìÉ•ÑÕÉ¸ìôœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” İ…Ñ ¡Í•±•Ñ•‘%°€ ¤€ôøìµ•µ‰•É1½…¹Ì¹Ù…±Õ”€ô¹Õ±°ìœ°€İ…Ñ ¡Í•±•Ñ•‘%°€ ¤€ôøìÕÍ•É‘µ¥¸¹Ù…±Õ”€ô™…±Í”ìµ•µ‰•É1½…¹Ì¹Ù…±Õ”€ô¹Õ±°ìœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œ€€€€€€ñ	ÕÑÑ½¸Ù…É¥…¹Ğô‰½ÕÑ±¥¹”ˆÍ¥é”ô‰Í´ˆ€é‘¥Í…‰±•ô‰±½…‘¥¹œñğ¥Ñ•µ1½…‘¥¹œˆœ°€œ€€€€€€ñ	ÕÑÑ½¸Øµ¥˜ô‰ÕÍ•É‘µ¥¸ˆÙ…É¥…¹Ğô‰½ÕÑ±¥¹”ˆÍ¥é”ô‰Í´ˆ±¥¬ô‰ÕÍ•É5…¹…•Èü¹Í¡½Ü ¤ˆù5…¹…”ÕÍ•ÉÌğ½	ÕÑÑ½¸ùq¸€€€€€€ñ	ÕÑÑ½¸Ù…É¥…¹Ğô‰½ÕÑ±¥¹”ˆÍ¥é”ô‰Í´ˆ€é‘¥Í…‰±•ô‰±½…‘¥¹œñğ¥Ñ•µ1½…‘¥¹œˆœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œ€€€€ñÀØµ¥˜ô‰¥Ñ•µÉÉ½Èˆœ°€œ€€€€ñUÍ•É5…¹…•ÈØµ¥˜ô‰ÕÍ•É‘µ¥¸ˆÉ•˜ô‰ÕÍ•É5…¹…•Èˆ€éµ•µ‰•ÉÌô‰µ•µ‰•ÉÌˆ¡…¹•ô‰É•™É•Í¡5•µ‰•ÉÌˆ€¼ùq¸€€€€ñÀØµ¥˜ô‰¥Ñ•µÉÉ½Èˆœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œñ5•µ‰•ÉÙ…Ñ…È€éµ•µ‰•Èµ¥ô‰ÕÍ•È¹¥ˆ€é¹…µ”ô‰ÕÍ•È¹¹…µ”ˆ€¼øñÍÁ…¸±…ÍÌô‰™½¹Ğµµ•‘¥Õ´ˆùíìÕÍ•È¹¹…µ”õôğ½ÍÁ…¸øœ°€œñ5•µ‰•ÉÙ…Ñ…È€éµ•µ‰•Èµ¥ô‰ÕÍ•È¹¥ˆ€é¹…µ”ô‰ÕÍ•È¹¹…µ”ˆ€éÁ¥ÑÕÉ”ô‰ÕÍ•È¹…Ù…Ñ…Èˆ€¼øñÍÁ…¸øñÍÁ…¸±…ÍÌô‰‰±½¬™½¹Ğµµ•‘¥Õ´ˆùíìÕÍ•È¹¹…µ”õôğ½ÍÁ…¸øñÍÁ…¸±…ÍÌô‰‰±½¬Ñ•áĞµáÌÑ•áĞµµÕÑ•µ™½É•É½Õ¹ˆù%íìÕÍ•È¹¥¹Í±¥” À°à¤õôğ½ÍÁ…¸øğ½ÍÁ…¸øœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œñQ…‰±••±°ùíìÕÍ•È¹•µ…¥°õôğ½Q…‰±••±°øœ°€œñQ…‰±••±°ùíìÕÍ•È¹•µ…¥°ñğ€‹ŠPˆõôğ½Q…‰±••±°øœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œ€€€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰µ°µ…ÕÑ¼ˆøœ°œ€€€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰µ°µ…ÕÑ¼™±•à¥Ñ•µÌµ•¹Ñ•È©ÕÍÑ¥™äµ•¹…À´Èˆùq¸€€€€€€€€€€€€€€€€€€ñ	ÕÑÑ½¸Øµ¥˜ô‰ÕÍ•É‘µ¥¸ˆÙ…É¥…¹Ğô‰½ÕÑ±¥¹”ˆÍ¥é”ô‰Í´ˆ€é…É¥„µ±…‰•°ô‰p5…¹…”ÁÉ½™¥±”èpœ€¬ÕÍ•È¹¹…µ”ˆ±¥¬ô‰ÕÍ•É5…¹…•Èü¹Í¡½Ü¡ÕÍ•È¤ˆù5…¹…”ÁÉ½™¥±”ğ½	ÕÑÑ½¸øœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œé‘¥Í…‰±•ô‰É•µ½Ù¥¹mÕÍ•È¹¥‘tñğ€¡¥Í1…ÍÑ5•µ‰•È€˜˜ÕÍ•È¹¥€ôôôÕÉÉ•¹ÑUÍ•É%¤ˆœ°€œé‘¥Í…‰±•ôˆ…ÕÍ•É‘µ¥¸ñğÉ•µ½Ù¥¹mÕÍ•È¹¥‘tñğÕÍ•È¹¥€ôôôÕÉÉ•¹ÑUÍ•É%ñğ€„…Á•½Á±•I½İÌ¹™¥¹¡É½Ü€ôøÉ½Ü¹¥€ôôôÕÍ•È¹¥¤ü¹ÁÉ½Ñ•Ñ•‘}½İ¹•Èˆœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” œ€½¹ÍĞ±½…‘¥¹œ€ôÉ•˜¡ÑÉÕ”¤ìœ°€œ€±•Ğµ•µ‰•ÉI•Ù¥Í¥½¸€ô€Àíq¸€½¹ÍĞ±½…‘¥¹œ€ôÉ•˜¡ÑÉÕ”¤ìœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” ½¹ÍĞ±½…‘5•µ‰•ÉÌ€ô…Íå¹Œ€ ¤€ôøìœ°€½¹ÍĞ±½…‘5•µ‰•ÉÌ€ô…Íå¹Œ€ ¤€ôøíq¸€€€½¹ÍĞÉ•Ù¥Í¥½¸€ô€¬­µ•µ‰•ÉI•Ù¥Í¥½¸ìœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” ½¹ÍĞÉ•Ì€ô…İ…¥Ğ…Á¤¹É½ÕÀ¹•Ñ5•µ‰•ÉÌ ¤ìœ°€½¹ÍĞÉ•Ì€ô…İ…¥Ğ…Á¤¹É½ÕÀ¹•Ñ5•µ‰•ÉÌ ¤íq¸€€€€€¥˜€¡É•Ù¥Í¥½¸€„ôôµ•µ‰•ÉI•Ù¥Í¥½¸¤É•ÑÕÉ¸ìœ¤(€€€ÍÑ…ÉĞõ‰½‘ä¹¥¹‘•à œ€½¹ÍĞ±½…‘5•µ‰•ÉÌ€ô…Íå¹Œ€ ¤€ôøìœ¤í•¹õ‰½‘ä¹¥¹‘•à œ€½¹ÍĞ¡…¹‘±•I•µ½Ù”œ±ÍÑ…ÉĞ¤(€€€Á…ÉĞõ‰½‘åmÍÑ…ÉĞé•¹‘t¹É•Á±…” œ€€€ô…Ñ €¡”¤ìœ°œ€€€ô…Ñ €¡”¤íq¸€€€€€¥˜€¡É•Ù¥Í¥½¸€„ôôµ•µ‰•ÉI•Ù¥Í¥½¸¤É•ÑÕÉ¸ìœ¤¹É•Á±…” œ€€€€€±½…‘¥¹œ¹Ù…±Õ”€ô™…±Í”ìœ°€œ€€€€€¥˜€¡É•Ù¥Í¥½¸€ôôôµ•µ‰•ÉI•Ù¥Í¥½¸¤±½…‘¥¹œ¹Ù…±Õ”€ô™…±Í”ìœ¤(€€€‰½‘äõ‰½‘åléÍÑ…ÉÑt­Á…ÉĞ­‰½‘åm•¹ét(€€€‰½‘äõ‰½‘ä¹É•Á±…” İ½É­Í¡½ÁI•Ù¥Í¥½¸¬¬ì¥Ñ•µI•Ù¥Í¥½¸¬¬ìœ°€µ•µ‰•ÉI•Ù¥Í¥½¸¬¬ìİ½É­Í¡½ÁI•Ù¥Í¥½¸¬¬ì¥Ñ•µI•Ù¥Í¥½¸¬¬ìœ¤(€€€‰½‘äõ‰½‘ä¹É•Á±…” İ…Ñ ¡Í•±•Ñ•‘%°€ ¤€ôøìÕÍ•É‘µ¥¸¹Ù…±Õ”€ô™…±Í”ìœ°€İ…Ñ ¡mÍ•±•Ñ•‘%°€ ¤€ôø…ÕÑ ¹ÕÍ•Èü¹¥‘t°€ ¤€ôøìµ•µ‰•ÉÌ¹Ù…±Õ”€ômtìÕÍ•É‘µ¥¸¹Ù…±Õ”€ô™…±Í”ìœ¤(€€€Ñ…É•Ğ¹İÉ¥Ñ•}Ñ•áĞ¡‰½‘ä¤(€€€¹•ÍÑ}™É½¹Ñ•¹ ¤(€€€‰É…¹‘}™É½¹Ñ•¹ ¤(()‘•˜ÉÕ¹}™É½¹Ñ•¹‘}½µµ…¹¡½µµ…¹°€¨°İ°•¹Ø¤è(€€€ÁÉ½•ÍÌ€ôÍÕ‰ÁÉ½•ÍÌ¹A½Á•¸ (€€€€€€€½µµ…¹°(€€€€€€€İõİ°(€€€€€€€•¹Øõ•¹Ø°(€€€€€€€ÍÑ‘½ÕĞõÍÕ‰ÁÉ½•ÍÌ¹A%A°(€€€€€€€ÍÑ‘•ÉÈõÍÕ‰ÁÉ½•ÍÌ¹A%A°(€€€€€€€Ñ•áĞõQÉÕ”°(€€€€€€€•¹½‘¥¹œô‰ÕÑ˜´àˆ°(€€€€€€€•ÉÉ½ÉÌô‰É•Á±…”ˆ°(€€€€¤((€€€‘•˜™½Éİ…É¡Í½ÕÉ”°‘•ÍÑ¥¹…Ñ¥½¸¤è(€€€€€€€ÑÉäè(€€€€€€€€€€€™½È±¥¹”¥¸Í½ÕÉ”è(€€€€€€€€€€€€€€€±¥¹”€ô™¥±Ñ•É}­¹½İ¹}İ…Í¥}İ…É¹¥¹œ¡±¥¹”¤(€€€€€€€€€€€€€€€¥˜±¥¹”è(€€€€€€€€€€€€€€€€€€€‘•ÍÑ¥¹…Ñ¥½¸¹İÉ¥Ñ”¡±¥¹”¤(€€€€€€€€€€€€€€€€€€€‘•ÍÑ¥¹…Ñ¥½¸¹™±ÕÍ  ¤(€€€€€€€™¥¹…±±äè(€€€€€€€€€€€Í½ÕÉ”¹±½Í” ¤((€€€½ÕÑÁÕÑ}Ñ¡É•…‘Ì€ôl(€€€€€€€Ñ¡É•…‘¥¹œ¹Q¡É•…¡Ñ…É•Ğõ™½Éİ…É°…ÉÌô¡ÁÉ½•ÍÌ¹ÍÑ‘½ÕĞ°ÍåÌ¹ÍÑ‘½ÕĞ¤¤°(€€€€€€€Ñ¡É•…‘¥¹œ¹Q¡É•…¡Ñ…É•Ğõ™½Éİ…É°…ÉÌô¡ÁÉ½•ÍÌ¹ÍÑ‘•ÉÈ°ÍåÌ¹ÍÑ‘•ÉÈ¤¤°(€€€t(€€€™½ÈÑ¡É•…¥¸½ÕÑÁÕÑ}Ñ¡É•…‘Ìè(€€€€€€€Ñ¡É•…¹ÍÑ…ÉĞ ¤(€€€É•ÑÕÉ¹½‘”€ôÁÉ½•ÍÌ¹İ…¥Ğ ¤(€€€™½ÈÑ¡É•…¥¸½ÕÑÁÕÑ}Ñ¡É•…‘Ìè(€€€€€€€Ñ¡É•…¹©½¥¸ ¤(€€€¥˜É•ÑÕÉ¹½‘”è(€€€€€€€ÁÉ¥¹Ğ¡˜É½¹Ñ•¹½µµ…¹™…¥±•İ¥Ñ •á¥Ğ½‘”íÉ•ÑÕÉ¹½‘•ô¸œ°™¥±”õÍåÌ¹ÍÑ‘•ÉÈ°™±ÕÍ õQÉÕ”¤(€€€€€€€É…¥Í”ÍÕ‰ÁÉ½•ÍÌ¹…±±•‘AÉ½•ÍÍÉÉ½È¡É•ÑÕÉ¹½‘”°½µµ…¹¤(€€€É•ÑÕÉ¸ÍÕ‰ÁÉ½•ÍÌ¹½µÁ±•Ñ•‘AÉ½•ÍÌ¡½µµ…¹°É•ÑÕÉ¹½‘”¤((()‘•˜‰Õ¥± ¤è(€€€±½‰…°	U%1°Q==1!%9}I==P°UAMQI5}I==P(€€€Á…ÉÍ•È€ô…ÉÁ…ÉÍ”¹ÉÕµ•¹ÑA…ÉÍ•È ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µÑ½½±¡…¥¸µÉ½½Ğœ°ÑåÁ”õÁ…Ñ¡±¥ˆ¹A…Ñ °‘•™…Õ±ĞõQ==1!%9}I==P¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µÕÁÍÑÉ•…´µÉ½½Ğœ°ÑåÁ”õÁ…Ñ¡±¥ˆ¹A…Ñ °‘•™…Õ±ĞõUAMQI5}I==P¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µ‰Õ¥±µÉ½½Ğœ°ÑåÁ”õÁ…Ñ¡±¥ˆ¹A…Ñ °¡•±ÀôÕÍ”„¹•Ü½È•µÁÑä™É½¹Ñ•¹İ½É­ÍÁ…”™½È‘¥ÍÁ½Í…‰±”Ù…±¥‘…Ñ¥½¸œ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µÁÉ•Á…É”œ°…Ñ¥½¸ôÍÑ½É•}ÑÉÕ”œ°¡•±ÀôÁÉ•Á…É”‘•Á•¹‘•¹¥•Ìİ¥Ñ¡½ÕĞÉÕ¹¹¥¹œÑåÁ•¡•¬½È‰Õ¥±œ¤(€€€…ÉÌ€ôÁ…ÉÍ•È¹Á…ÉÍ•}…ÉÌ ¤(€€€¥˜…ÉÌ¹‰Õ¥±‘}É½½Ğ¥Ì¹½Ğ9½¹”…¹…ÉÌ¹‰Õ¥±‘}É½½Ğ¹•á¥ÍÑÌ ¤…¹€ (€€€€€€€¹½Ğ…ÉÌ¹‰Õ¥±‘}É½½Ğ¹¥Í}‘¥È ¤½È…¹ä¡…ÉÌ¹‰Õ¥±‘}É½½Ğ¹¥Ñ•É‘¥È ¤¤(€€€€¤è(€€€€€€€Á…ÉÍ•È¹•ÉÉ½È œ´µ‰Õ¥±µÉ½½ĞµÕÍĞ‰”•µÁÑäÍ¼ÍÑ…±”™¥±•Ì…¹¹½Ğ½¹Ñ…µ¥¹…Ñ”„‘¥ÍÁ½Í…‰±”‰Õ¥±œ¤(€€€¥˜…ÉÌ¹‰Õ¥±‘}É½½Ğ¥Ì¹½Ğ9½¹”è(€€€€€€€	U%1€ô…ÉÌ¹‰Õ¥±‘}É½½Ğ¹É•Í½±Ù” ¤(€€€Q==1!%9}I==P°UAMQI5}I==P€ô…ÉÌ¹Ñ½½±¡…¥¹}É½½Ğ¹É•Í½±Ù” ¤°…ÉÌ¹ÕÁÍÑÉ•…µ}É½½Ğ¹É•Í½±Ù” ¤(€€€¹½‘”€ôÁ…Ñ¡±¥ˆ¹A…Ñ  ¡Q==1!%9}I==P¼¹½‘”µÁ…Ñ ¹ÑáĞœ¤¹É•…‘}Ñ•áĞ ¤¹ÍÑÉ¥À ¤¤(€€€•¹Ø€ô‘¥Ğ¡½Ì¹•¹Ù¥É½¸°AQ õÍÑÈ¡¹½‘”¼‰¥¸œ¤­½Ì¹Á…Ñ¡Í•À­½Ì¹•¹Ù¥É½¹lAQ t¤(€€€Á¹Á´€ôÉ•Í½±Ù•}Á¹Áµ}±…Õ¹¡•È¡Q==1!%9}I==P¤(€€€ÁÉ¥¹Ğ AÉ•Á…É¥¹œ™É½¹Ñ•¹Í½ÕÉ”İ½É­ÍÁ…”¸¸¸œ°™±ÕÍ õQÉÕ”¤(€€€ÁÉ•Á…É” ¤(€€€¥˜…ÉÌ¹‰Õ¥±‘}É½½Ğ¥Ì¹½Ğ9½¹”è(€€€€€€€ÁÉ¥¹Ğ %¹ÍÑ…±±¥¹œ™É½¹Ñ•¹‘•Á•¹‘•¹¥•Ì¥¸‘¥ÍÁ½Í…‰±”İ½É­ÍÁ…”¸¸¸œ°™±ÕÍ õQÉÕ”¤(€€€€€€€ÉÕ¹}™É½¹Ñ•¹‘}½µµ…¹¡mÍÑÈ¡Á¹Á´¤°€¥¹ÍÑ…±°œ°€œ´µ™É½é•¸µ±½­™¥±”œ°€œ´µ¥¹½É”µÍÉ¥ÁÑÌt°İõ	U%1°•¹Øõ•¹Ø¤(€€€€€€€ÁÉ¥¹Ğ É½¹Ñ•¹‘•Á•¹‘•¹¥•Ì¥¹ÍÑ…±±•¸œ°™±ÕÍ õQÉÕ”¤(€€€€Œ½áŒµÁ…ÉÍ•È€À¸ÜÈÌ¹…Ñ¥Ù”I4‰¥¹‘¥¹œÉ•ÅÕ¥É•Ì¥¹ÍÑÉÕÑ¥½¹Ì…‰Í•¹Ğ½¸Ñ¡¥ÌA¤¸(€€€€ŒUÍ”Ñ¡”Í…µ”Ù•ÉÍ¥½¸ÌÕÁÍÑÉ•…´]M$‰¥¹‘¥¹œ½¹±ä™½ÈÑ¡¥Ì‰Õ¥±‘•Á•¹‘•¹ä¸(€€€İ…Í¤€ôQ==1!%9}I==P¼½áŒµİ…Í¤½¹½‘•}µ½‘Õ±•Ì½½áŒµÁ…ÉÍ•È½‰¥¹‘¥¹œµİ…Í´ÌÈµİ…Í¤œ(€€€¥˜İ…Í¤¹•á¥ÍÑÌ ¤è(€€€€€€€‰¥¹‘¥¹œ€ô	U%1¼¹½‘•}µ½‘Õ±•Ì¼¹Á¹Á´½½áŒµÁ…ÉÍ•É À¸ÜÈ¸Ì½¹½‘•}µ½‘Õ±•Ì½½áŒµÁ…ÉÍ•È½‰¥¹‘¥¹Ì¹©Ìœ(€€€€€€€Í½ÕÉ”€ô‰¥¹‘¥¹œ¹É•…‘}Ñ•áĞ ¤(€€€€€€€…¹¡½È€ô€¹…Ñ¥Ù•	¥¹‘¥¹œ€ôÉ•ÅÕ¥É•9…Ñ¥Ù” ¤œ(€€€€€€€¥˜…¹¡½È¥¸Í½ÕÉ”è(€€€€€€€€€€€‰¥¹‘¥¹œ¹İÉ¥Ñ•}Ñ•áĞ¡Í½ÕÉ”¹É•Á±…”¡…¹¡½È°€¹…Ñ¥Ù•	¥¹‘¥¹œ€ôÉ•ÅÕ¥É” œ­É•ÁÈ¡ÍÑÈ¡İ…Í¤¤¤¬œ¤œ¤¤(€€€ÁÉ¥¹Ğ AÉ•Á…É¥¹œ9ÕáĞ½µÁ½¹•¹ÑÌ¸¸¸œ°™±ÕÍ õQÉÕ”¤(€€€ÉÕ¹}™É½¹Ñ•¹‘}½µµ…¹¡mÍÑÈ¡Á¹Á´¤°€•á•Œœ°€¹ÕáĞœ°€ÁÉ•Á…É”t°İõ	U%1°•¹Øõ•¹Ø¤(€€€ÁÉ¥¹Ğ 9ÕáĞÁÉ•Á…É…Ñ¥½¸½µÁ±•Ñ”¸œ°™±ÕÍ õQÉÕ”¤(€€€¥˜¹½Ğ…ÉÌ¹ÁÉ•Á…É”è(€€€€€€€ÁÉ¥¹Ğ IÕ¹¹¥¹œ™É½¹Ñ•¹ÑåÁ•¡•¬¸¸¸œ°™±ÕÍ õQÉÕ”¤(€€€€€€€É•ÍÕ±Ğ€ôÍÕ‰ÁÉ½•ÍÌ¹ÉÕ¸¡mÍÑÈ¡Á¹Á´¤°€•á•Œœ°€¹Õá¤œ°€ÑåÁ•¡•¬t°İõ	U%1°•¹Øõ•¹Ø°…ÁÑÕÉ•}½ÕÑÁÕĞõQÉÕ”°Ñ•áĞõQÉÕ”¤(€€€€€€€ÑåÁ•¡•­}½ÕÑÁÕĞ€ôÉ•ÍÕ±Ğ¹ÍÑ‘½ÕĞ€¬É•ÍÕ±Ğ¹ÍÑ‘•ÉÈ(€€€€€€€ÑåÁ•¡•­}±½œ€ô	U%1¼¡½µ•‰½àµÕ¤µÑåÁ•¡•¬¹±½œœ¥˜…ÉÌ¹‰Õ¥±‘}É½½Ğ¥Ì¹½Ğ9½¹”•±Í”I==P¼İ½É¬½¡½µ•‰½àµÕ¤µÑåÁ•¡•¬¹±½œœ(€€€€€€€ÑåÁ•¡•­}±½œ¹İÉ¥Ñ•}Ñ•áĞ¡ÑåÁ•¡•­}½ÕÑÁÕĞ¤(€€€€€€€¥˜¡…Í}™É½¹Ñ•¹‘}Ñ½½±}™…¥±ÕÉ”¡ÑåÁ•¡•­}½ÕÑÁÕĞ¤è(€€€€€€€€€€€ÁÉ¥¹Ğ¡ÑåÁ•¡•­}½ÕÑÁÕĞ¤(€€€€€€€€€€€ÁÉ¥¹Ğ¡˜É½¹Ñ•¹ÑåÁ•¡•¬Ñ½½°™…¥±•İ¥Ñ •á¥Ğ½‘”íÉ•ÍÕ±Ğ¹É•ÑÕÉ¹½‘•ô¸œ°™¥±”õÍåÌ¹ÍÑ‘•ÉÈ°™±ÕÍ õQÉÕ”¤(€€€€€€€€€€€É…¥Í”IÕ¹Ñ¥µ•ÉÉ½È É½¹Ñ•¹ÑåÁ•¡•¬½Õ±¹½Ğ‰”¥¹Ù½­•ÍÕ•ÍÍ™Õ±±ä¸œ¤(€€€€€€€‘¥…¹½ÍÑ¥Ì€ôm±¥ÍĞ¡µ…Ñ ¹É½ÕÁÌ ¤¤™½Èµ…Ñ ¥¸É”¹™¥¹‘¥Ñ•È¡Èx ¸¬ü¥p¡q¬±q­p¤è•ÉÉ½È€¡QMq¬¤è€ ¸¨¤œ°ÑåÁ•¡•­}½ÕÑÁÕĞ°É”¹4¥t(€€€€€€€¥˜É•ÍÕ±Ğ¹É•ÑÕÉ¹½‘”è(€€€€€€€€€€€‰…Í•±¥¹”€ô©Í½¸¹±½…‘Ì ¡I==P¼¡½µ•‰½àµÕ¤½ÕÁÍÑÉ•…´µÑåÁ•¡•¬¹©Í½¸œ¤¹É•…‘}Ñ•áĞ ¤¤(€€€€€€€€€€€Á¥¸€ôÍ½ÕÉ•}½µµ¥Ğ¡UAMQI5}I==P¼ÕÁÍÑÉ•…´½¡½µ•‰½àœ¤(€€€€€€€€€€€¥˜É•ÍÕ±Ğ¹É•ÑÕÉ¹½‘”€„ô€Ä½È¹½Ğ¥Í}½¹±å}­¹½İ¹}ÕÁÍÑÉ•…µ}ÑåÁ•¡•­}™…¥±ÕÉ”¡ÑåÁ•¡•­}½ÕÑÁÕĞ°‰…Í•±¥¹”°Á¥¸¤è(€€€€€€€€€€€€€€€ÁÉ¥¹Ğ¡ÑåÁ•¡•­}½ÕÑÁÕĞ¤(€€€€€€€€€€€€€€€ÁÉ¥¹Ğ¡˜É½¹Ñ•¹ÑåÁ•¡•¬™…¥±•İ¥Ñ •á¥Ğ½‘”íÉ•ÍÕ±Ğ¹É•ÑÕÉ¹½‘•ô¸œ°™¥±”õÍåÌ¹ÍÑ‘•ÉÈ°™±ÕÍ õQÉÕ”¤(€€€€€€€€€€€€€€€É…¥Í”IÕ¹Ñ¥µ•ÉÉ½È É½¹Ñ•¹ÑåÁ•¡•¬¥¹ÑÉ½‘Õ••ÉÉ½ÉÌ½È¥ÑÌÕÁÍÑÉ•…´‰…Í•±¥¹”¡…¹•¸œ¤(€€€€€€€€€€€ÁÉ¥¹Ğ¡˜QåÁ•¡•¬è¹¼…‘‘•‘¥…¹½ÍÑ¥Ììí±•¸¡‘¥…¹½ÍÑ¥Ì¥ôÁÉ”µ•á¥ÍÑ¥¹œÕÁÍÑÉ•…´‘¥…¹½ÍÑ¥Ì¸œ°™±ÕÍ õQÉÕ”¤(€€€€€€€•±Í”è(€€€€€€€€€€€ÁÉ¥¹Ğ É½¹Ñ•¹ÑåÁ•¡•¬Á…ÍÍ•¸œ°™±ÕÍ õQÉÕ”¤(€€€€€€€ÁÉ¥¹Ğ 	Õ¥±‘¥¹œ™É½¹Ñ•¹¸¸¸œ°™±ÕÍ õQÉÕ”¤(€€€€€€€ÉÕ¹}™É½¹Ñ•¹‘}½µµ…¹¡mÍÑÈ¡Á¹Á´¤°€ÉÕ¸œ°€‰Õ¥±t°İõ	U%1°•¹Øõ•¹Ø¤(€€€€€€€ÁÉ¥¹Ğ É½¹Ñ•¹‰Õ¥±½µÁ±•Ñ•ÍÕ•ÍÍ™Õ±±ä¸œ°™±ÕÍ õQÉÕ”¤()¥˜}}¹…µ•}|€ôô€}}µ…¥¹}|œè(€€€‰Õ¥± ¤(
+            raise RuntimeError(f'Upstream changed: expected one template request in {path}')
+        text = text.replace('const templateRequest = {', 'const templateRequest = {\n        modelNumber: form.modelNumber?.trim() || undefined,')
+        payload_anchor = '        name: form.name,\n        quantity: form.quantity,\n        description: form.description,'
+        if text.count(payload_anchor) != 1:
+            raise RuntimeError(f'Upstream changed: expected one normal item payload in {path}')
+        text = text.replace(payload_anchor, '        name: form.name,\n        modelNumber: form.modelNumber?.trim() || undefined,\n        quantity: form.quantity,\n        description: form.description,')
+    import_block = text[text.index('  import type {'):text.index('  } from "~~/lib/api/types/data-contracts";')]
+    form_block = text[text.index('  const form = reactive({'):text.index('\n  });', text.index('  const form = reactive({'))]
+    if import_block.count('EntitySummary,') != 1 or form_block.count('modelNumber: "",') != 1:
+        raise RuntimeError(f'Upstream changed: expected one EntitySummary import and modelNumber form field in {path}')
+    if text.count('modelNumber: form.modelNumber,') != 3:
+        raise RuntimeError(f'Upstream changed: expected modelNumber in each native create payload in {path}')
+    text = move_create_actions_after_photo_preview(text)
+    target.write_text(text)
+    path = 'pages/item/[id]/index/edit.vue'; target=BUILD/path; text=target.read_text()
+    start=text.index('    if (data.parent && data.parent.entityType'); end=text.index('\n    return data;',start)
+    text=text[:start]+text[end:]
+    guard='''    if (!item.value.parent?.id && !parent.value?.id) {
+      toast.error(t("items.toast.failed_save_no_location"));
+      return;
+    }
+'''
+    assert text.count(guard)==2; text=text.replace(guard,'')
+    text=text.replace('parent.value?.id || item.value.parent?.id || null','item.value.parent?.id || null')
+    text=text.replace('<LocationSelector v-model="item.parent" @update:model-value="informAboutDesyncingLocationFromParent()" />','<LocationSelector v-model="item.parent" :current-location="item" />')
+    start=text.index('            <ItemSelector\n'); end=text.index('            <TagSelector',start)
+    text=text[:start]+'            <p class="text-sm text-muted-foreground">Contents stay inside this item when it moves.</p>\n'+text[end:]
+    start=text.index('  async function maybeSyncWithParentLocation()');end=text.index('  onMounted(() => {',start)
+    text=text[:start]+text[end:]
+    text=text.replace('  const { query, results, isLoading, triggerSearch } = useItemSearch(api, { immediate: false });\n  const parent = ref();\n','')
+    target.write_text(text)
+    replace('pages/location/[id]/index/edit.vue', '<LocationSelector v-model="parent" label="Parent Location" :current-location="item" />', '<LocationSelector v-model="parent" :current-location="item" />')
+    for path, model in [('pages/item/[id]/index.vue','item'),('pages/location/[id]/index/index.vue','location')]:
+        replace(path, '  import LabelMaker from', '  import InsideActions from "@/components/Workshop/InsideActions.vue";\n  import LabelMaker from')
+        replace(path, '            <div class="ml-auto mt-2 flex flex-wrap items-center justify-between gap-2">', '            <div class="ml-auto mt-2 flex flex-wrap items-center justify-between gap-2">\n              <InsideActions :entity-id="'+model+'.id" :archived="'+model+'.archived" />')
+    replace('pages/item/[id]/index.vue', '  import ItemViewSelectable from', '  import LocationCard from "@/components/Location/Card.vue";\n  import ItemViewSelectable from')
+    replace('pages/item/[id]/index.vue', '<section v-if="items && items.length > 0" class="mt-6">', '<section v-if="item?.children?.length || (items && items.length > 0)" class="mt-6">')
+    replace('pages/item/[id]/index.vue', '      <ItemViewSelectable :items="items" @refresh="refreshItemList" />', '''      <section v-if="item?.children?.length" class="mt-6">
+        <h2 class="mb-3 text-xl font-semibold">Locations inside</h2>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3"><LocationCard v-for="child in item.children" :key="child.id" :location="child" /></div>
+      </section>
+      <ItemViewSelectable v-if="items && items.length" :items="items || []" @refresh="refreshItemList" />''')
+
+    path='lib/api/types/data-contracts.ts';target=BUILD/path;text=target.read_text();text=text.replace('export interface EntitySummary {','export interface EntitySummary {\n  displayId: string;\n  shortCode: string;').replace('export interface EntityOut {','export interface EntityOut {\n  displayId: string;\n  shortCode: string;').replace('export interface EntityPatch {','export interface EntityPatch {\n  clearParent?: boolean;')
+    for interface_name in ('EntityCreate', 'EntityTemplateCreateItemRequest'):
+        start = text.index(f'export interface {interface_name} {{')
+        end = text.index('\n}', start)
+        if 'modelNumber?: string;' not in text[start:end]:
+            text = text[:start] + text[start:end].replace('{', '{\n  modelNumber?: string;', 1) + text[end:]
+    start=text.index('export interface EntityTemplateCreateItemRequest {');end=text.index('\n}',start)
+    text=text[:start]+text[start:end].replace('parentId: string;','parentId: string | null;')+text[end:];target.write_text(text)
+    replace('composables/use-barcode-detector.ts','api.items.getAll({ locations: [id] })','api.items.getAll({ parentIds: [id] })')
+    path='components/Item/View/ItemChangeDetails.vue';target=BUILD/path;text=target.read_text()
+    text=text.replace('item.location','item.parent').replace(']!.location',']!.parent')
+    text=text.replace('      items.value = params.items;', '      items.value = params.items;\n      newLocation.value = null;')
+    text=text.replace('!items.value.length || (enabled.changeLocation && !location)', '!items.value.length')
+    text=text.replace('patch.parentId = location!.id;', 'if (location) patch.parentId = location.id; else patch.clearParent = true;')
+    text=text.replace('v-model="newLocation" />','v-model="newLocation" :exclude-ids="items.map(item => item.id)" />')
+    text=text.replace('saving || (enabled.changeLocation && !newLocation)','saving')
+    target.write_text(text)
+    path='components/Location/Tree/tree-state.ts';target=BUILD/path;text=target.read_text()
+    text+='\nexport function containsLocation(node: import("@/lib/api/types/data-contracts").TreeItem): boolean { const todo = [node]; while (todo.length) { const current = todo.pop()!; if (current.type === "location") return true; todo.push(...(current.children || [])); } return false; }\n';target.write_text(text)
+    replace('components/Location/Tree/Node.vue','import { useTreeState }','import { useTreeState, containsLocation }')
+    replace('components/Location/Tree/Node.vue','children.filter(child => child.type === "location")','children.filter(containsLocation)')
+    replace('components/Location/Tree/Root.vue','  import type { TreeItem }','  import { containsLocation } from "./tree-state";\n  import type { TreeItem }')
+    replace('components/Location/Tree/Root.vue','const list = props.locs ?? [];','const list = (props.locs ?? []).filter(node => props.showItems !== false || containsLocation(node));')
+    replace('pages/locations.vue','@click="openAll"','@click="openAll" :aria-label="$t(\'locations.expand_tree\')"')
+    replace('pages/locations.vue','@click="closeAll"','@click="closeAll" :aria-label="$t(\'locations.collapse_tree\')"')
+    replace('pages/locations.vue','@click="showItems = !showItems"','@click="showItems = !showItems" :aria-label="showItems ? $t(\'locations.hide_items\') : $t(\'locations.show_items\')"')
+    # Mixed ancestors link to their actual native item/location pages.
+    path='pages/location/[id]/index/index.vue'
+    target=BUILD/path; text=target.read_text()
+    text=text.replace('  const confirm = useConfirm();', '  const fullpath = computedAsync(async () => location.value ? (await api.items.fullpath(location.value.id)).data || [] : []);\n\n  const confirm = useConfirm();')
+    start=text.index('              <Breadcrumb v-if="location?.parent">');end=text.index('              </Breadcrumb>',start)+len('              </Breadcrumb>')
+    text=text[:start]+'''              <Breadcrumb v-if="fullpath && fullpath.length > 1">
+                <BreadcrumbList><template v-for="(part, idx) in fullpath" :key="part.id">
+                  <BreadcrumbItem><BreadcrumbLink v-if="idx < fullpath.length - 1" as-child><NuxtLink :to="`/${part.type}/${part.id}`">{{ part.name }}</NuxtLink></BreadcrumbLink><span v-else>{{ part.name }}</span></BreadcrumbItem>
+                  <BreadcrumbSeparator v-if="idx < fullpath.length - 1" />
+                </template></BreadcrumbList>
+              </Breadcrumb>'''+text[end:]
+    target.write_text(text)
+
+
+def navigation_frontend():
+    replace('layouts/default.vue', '      <Sidebar collapsible="icon">', '      <Sidebar side="left" collapsible="icon">')
+    replace('layouts/default.vue', '<Collapsible v-else default-open', '<Collapsible v-else :default-open="n.name.value !== \'More\'"')
+    replace('layouts/default.vue', '<SidebarMenuLink\n                        :href="n.to"', '<CollapsibleTrigger v-if="n.name.value === \'More\'" as-child><SidebarMenuButton :tooltip="n.name.value" class="flex gap-2"><component :is="n.icon" /><span>{{ n.name.value }}</span><MdiChevronRight class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" /></SidebarMenuButton></CollapsibleTrigger>\n                      <SidebarMenuLink v-else\n                        :href="n.to"')
+    replace('layouts/default.vue', '<CollapsibleTrigger as-child>\n                        <SidebarMenuButton class="flex size-12', '<CollapsibleTrigger v-if="n.name.value !== \'More\'" as-child>\n                        <SidebarMenuButton class="flex size-12')
+    replace('layouts/default.vue', '    collapsible?: {\n      active: ComputedRef<boolean>;', '    collapsible?: {\n      action?: () => void;\n      active: ComputedRef<boolean>;')
+    replace('layouts/default.vue', '<SidebarMenuLink\n                            :href="c.to"', '<SidebarMenuLink v-if="!c.action"\n                            :href="c.to"')
+    replace('layouts/default.vue', '                          </SidebarMenuLink>\n                        </SidebarMenuSubItem>', '                          </SidebarMenuLink>\n                          <SidebarMenuButton v-else @click.prevent="c.action?.()"><span>{{ c.name.value }}</span></SidebarMenuButton>\n                        </SidebarMenuSubItem>')
+
+
+    layout = BUILD/'layouts/default.vue'
+    source = layout.read_text()
+    start = source.index('              <!-- makes scanner accessible easily if using legacy header -->')
+    end = source.index('              </SidebarMenuItem>', start) + len('              </SidebarMenuItem>\n')
+    layout.write_text(source[:start] + source[end:])
+    replace('layouts/default.vue', 'const nav: {', 'const baseNav: {')
+    replace('layouts/default.vue', '  const quickMenuActions = reactive([', '''  const workshop = useWorkshop();
+  const { selectedId: workshopGroup } = useCollections();
+  const workshopLinks = computed(() => [
+    ["loans", "Loans & notes"], ["map", "Workshop & storage"],
+    ["checkout-cart", "Checkout cart"],
+    ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
+  ]);
+  const nav = computed<typeof baseNav>(() => [
+    baseNav[0]!,
+    { ...baseNav[3]!, id: 1, name: computed(() => "Inventory") },
+    { id: 8, icon: MdiWrench, name: computed(() => "Workshop"), to: "/workshop/map", active: computed(() => route.path === "/workshop/map") },
+    { ...baseNav[1]!, id: 12 },
+    { id: 9, icon: MdiTagMultiple, name: computed(() => "Label"), to: "/workshop/labels", active: computed(() => route.path === "/workshop/labels") },
+    { ...baseNav[7]!, id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
+    {
+      id: 11, icon: MdiFileDocumentMultiple, name: computed(() => "More"), to: "",
+      active: computed(() => false),
+      collapsible: [
+        baseNav[2]!, baseNav[4]!, baseNav[5]!, baseNav[6]!,
+        ...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members"),
+        ...workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels").map(([id, name], index) => ({ id: 80 + index, name: computed(() => name!), to: `/workshop/${id}`, active: computed(() => route.path === `/workshop/${id}`) })),
+        { id: 92, name: computed(() => "Report feedback"), to: "/feedback", active: computed(() => route.path === "/feedback") },
+        { id: 90, name: computed(() => "Equipment Terminal"), to: terminalURL.value, active: computed(() => false) },
+        { id: 91, name: computed(() => t("menu.scanner")), to: "", active: computed(() => false), action: openScanner },
+      ],
+    },
+  ]);
+  watch([workshopGroup, () => useAuthContext().user?.id], () => { workshop.context.value = null; workshop.refresh().catch(() => {}); }, { immediate: true });
+
+  const quickMenuActions = computed(() => [''')
+    replace('layouts/default.vue', '...nav.map(v => ({', '...nav.value.filter(v => v.name.value !== "More").map(v => ({')
+    target = BUILD/'layouts/default.vue'
+    target.write_text(target.read_text().replace('text: computed(() => v.name.value),', 'text: v.name.value,'))
+
+
+def location_child_contents_frontend():
+    # The common ChildContents root already owns grouped rows, hydration,
+    # filtering and refresh. Mount it for direct items on every location page;
+    # keep native bulk actions available behind an explicit disclosure.
+    replace(
+        'pages/location/[id]/index/index.vue',
+        '  import ItemViewSelectable from "~/components/Item/View/Selectable.vue";',
+        '  import ItemViewSelectable from "~/components/Item/View/Selectable.vue";\n  import ChildContents from "~/components/Location/ChildContents.vue";',
+    )
+    replace(
+        'pages/location/[id]/index/index.vue',
+        '''      <!-- Items in this location -->
+      <section v-if="location && items">
+        <ItemViewSelectable :items="items" @refresh="refreshItemList" />
+      </section>''',
+        '''      <!-- Grouped direct contents use the same view on root bins and leaves. -->
+      <ChildContents v-if="location" :key="`${location.id}-${contentsRevision}`" :locations="[location]" direct-only heading="Items in this location" />
+      <details v-if="items?.length" :key="`manage-${locationId}`" class="mt-3 rounded-lg border p-3">
+        <summary class="cursor-pointer font-medium">Manage items</summary>
+        <ItemViewSelectable class="mt-3" :items="items" @refresh="async () => { contentsRevision++; await refreshItemList(); }" />
+      </details>''',
+    )
+    replace(
+        'pages/location/[id]/index/index.vue',
+        '''      <!-- Child locations -->
+      <section v-if="location && location.children && location.children.length > 0" class="mt-6">
+        <BaseSectionHeader class="mb-5"> {{ $t("locations.child_locations") }} </BaseSectionHeader>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <LocationCard v-for="child in location.children" :key="child.id" :location="child" />
+        </div>
+      </section>''',
+        '''      <!-- Expandable, read-only previews for child locations -->
+      <ChildContents v-if="location && location.children?.length" :key="`children-${location.id}-${contentsRevision}`" :locations="location.children" />''',
+    )
+    replace(
+        'pages/location/[id]/index/index.vue',
+        '  const locationId = computed<string>(() => route.params.id as string);',
+        '  const locationId = computed<string>(() => route.params.id as string);\n  const contentsRevision = ref(0);',
+    )
+    replace(
+        'pages/location/[id]/index/index.vue',
+        'useAsyncData(locationId.value, async () => {',
+        'useAsyncData(() => locationId.value, async () => {',
+    )
+
+
+def shell_frontend():
+    layout = BUILD/'layouts/default.vue'
+    source = layout.read_text()
+    start = source.index('<SidebarHeader class="items-center">')
+    selector = '          <CollectionSelector />'
+    end = source.index(selector, start) + len(selector)
+    source = source[:start] + '''<SidebarHeader class="items-stretch gap-2 p-3">
+          <NuxtLink to="/home" aria-label="C-Crate home" class="flex h-10 w-full items-center gap-3 rounded-md px-2 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+            <AppLogo aria-hidden="true" class="size-7 shrink-0" />
+          </NuxtLink>
+
+          <CollectionSelector />'''+source[end:]
+    layout.write_text(source)
+    replace('layouts/default.vue', '    SidebarGroupLabel,\n', '')
+    replace('layouts/default.vue', 'drop-shadow-md hover:bg-primary/90', 'hover:bg-primary/90')
+    replace('layouts/default.vue', 'class="flex justify-center group-data-[collapsible=icon]:justify-start group-data-[collapsible=icon]:bg-destructive group-data-[collapsible=icon]:text-destructive-foreground group-data-[collapsible=icon]:shadow-sm group-data-[collapsible=icon]:hover:bg-destructive/90"', 'class="flex justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-start"')
+    replace('layouts/default.vue', 'class="sticky top-0 z-20 flex h-[var(--header-height-mobile)] translate-y-[-0.5px] flex-col bg-secondary p-2 shadow-md sm:h-[var(--header-height)] sm:flex-row"', 'class="sticky top-0 z-20 flex min-h-[var(--header-height-mobile)] flex-col gap-1 border-b border-border bg-card px-3 py-2 sm:min-h-[var(--header-height)] sm:flex-row"')
+    replace('layouts/default.vue', '            <div class="flex h-1/2 grow items-center justify-end gap-2 sm:h-auto">', '            <div class="ccrate-header-tools flex min-w-0 grow flex-wrap items-center justify-end gap-2">\n              <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="ccrate-header-device shrink-0" />')
+    replace('layouts/default.vue', '              <SidebarTrigger variant="default" />', '              <SidebarTrigger class="ccrate-header-sidebar-trigger" variant="default" />')
+    replace('layouts/default.vue', '        <AppHeaderDecor class="-mt-10 hidden lg:block" />', '''        <AppHeaderDecor class="-mt-10 hidden lg:block" />
+            <DeviceStatus v-if="preferences.displayLegacyHeader && terminalHeader" :enabled="preferences.displayLegacyHeader && terminalHeader" class="ccrate-header-device absolute right-6 top-3 z-30 hidden lg:flex" />''')
+    replace('layouts/default.vue', '<SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />', '<SidebarTrigger class="ccrate-header-sidebar-trigger absolute left-2 top-2 hidden lg:flex" variant="default" />')
+    replace('layouts/default.vue', '<Button size="icon" @click="triggerSearch">', '<Button size="icon" :aria-label="$t(\'global.search\')" @click="triggerSearch">')
+    replace('layouts/default.vue', '<Button size="icon" @click="openScanner">', '<Button size="icon" :aria-label="$t(\'menu.scanner\')" @click="openScanner">')
+    replace('layouts/default.vue', '              <Input\n                v-model:model-value="search"', '              <div class="ccrate-header-search-group">\n                <Input\n                v-model:model-value="search"')
+    replace('layouts/default.vue', '<MdiQrcodeScan />\n                </Button>\n              </div>\n            </div>', '<MdiQrcodeScan />\n                </Button>\n              </div>\n              </div>\n            </div>')
+    replace('layouts/default.vue', '  const search = ref("");', '''  const terminalHeader = ref(false);
+  let desktopHeaderMedia: MediaQueryList | null = null;
+  const updateDesktopHeader = () => { terminalHeader.value = desktopHeaderMedia?.matches || false; };
+  onMounted(() => { desktopHeaderMedia = window.matchMedia("(min-width: 1024px)"); updateDesktopHeader(); desktopHeaderMedia.addEventListener("change", updateDesktopHeader); });
+  onBeforeUnmount(() => desktopHeaderMedia?.removeEventListener("change", updateDesktopHeader));
+  const terminalURL = computed(() => { const url = new URL(window.location.href); url.port = "17749"; url.pathname = "/"; url.search = "?mode=editor"; url.hash = ""; return url.href; });
+  const search = ref("");''')
+    replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import DeviceStatus from "~/components/Workshop/DeviceStatus.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
+
+
+def ocr_popover_frontend():
+    regular = '<DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="ccrate-header-device shrink-0" />'
+    replace('layouts/default.vue', regular, regular + '\n              <div id="orc-launcher-toolbar" class="contents"></div>')
+    legacy = '<SidebarTrigger class="ccrate-header-sidebar-trigger absolute left-2 top-2 hidden lg:flex" variant="default" />'
+    replace('layouts/default.vue', legacy, legacy + '\n            <div id="orc-launcher-legacy" class="absolute left-14 top-2 z-30 hidden lg:flex"></div>')
+    replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" />\n      </SidebarInset>')
+    replace('layouts/default.vue', '  const search = ref("");', '  const orcLauncherTarget = computed(() => preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
+    replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import OcrPopover from "~/components/Workshop/OcrPopover.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
+
+
+def strip_item_response_short_codes_from_update_tests():
+    """Keep response-only identifiers out of update payloads in pinned API tests."""
+    relative = pathlib.Path('lib/api/__test__/user/items.test.ts')
+    target = BUILD / relative
+    source = target.read_text()
+    if not re.search(r'\b(?:displayId|shortCode)\b', source):
+        return
+    rewrites = (
+        ("    const itemUpdate = {\n      ...item,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,", "    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;\n    void omittedItemDisplayID;\n    void omittedItemShortCode;\n    const itemUpdate = {\n      ...itemForUpdate,\n      entityTypeId: item.entityType?.id || \"\",\n      parentId: item.parent?.id || null,"),
+        ("    const child1ItemUpdate = {\n      ...child1Item,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild1DisplayID, shortCode: omittedChild1ShortCode, ...child1ForUpdate } = child1Item;\n    void omittedChild1DisplayID;\n    void omittedChild1ShortCode;\n    const child1ItemUpdate = {\n      ...child1ForUpdate,\n      entityTypeId: child1Item.entityType?.id || \"\",\n      parentId: parent.id,"),
+        ("    const child2ItemUpdate = {\n      ...child2Item,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,", "    const { displayId: omittedChild2DisplayID, shortCode: omittedChild2ShortCode, ...child2ForUpdate } = child2Item;\n    void omittedChild2DisplayID;\n    void omittedChild2ShortCode;\n    const child2ItemUpdate = {\n      ...child2ForUpdate,\n      entityTypeId: child2Item.entityType?.id || \"\",\n      parentId: parent.id,"),
+        ("    const itemUpdate = {\n      ...parent,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,", "    const { displayId: omittedParentDisplayID, shortCode: omittedParentShortCode, ...parentForUpdate } = parent;\n    void omittedParentDisplayID;\n    void omittedParentShortCode;\n    const itemUpdate = {\n      ...parentForUpdate,\n      entityTypeId: parent.entityType?.id || \"\",\n      parentId: parentLocation.id,"),
+    )
+    if len(rewrites) != 4:
+        raise RuntimeError('Expected four pinned item update test fixtures')
+    for original, replacement in rewrites:
+        count = source.count(original)
+        if count == 0 and source.count(replacement) == 1:
+            continue
+        if count != 1:
+            raise RuntimeError(f'Expected exactly one item update fixture anchor in {relative}, found {count}')
+        source = source.replace(original, replacement)
+    target.write_text(source)
+
+
+def camera_ocr_frontend():
+    path = 'pages/item/[id]/index/edit.vue'
+    replace(
+        path,
+        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
+        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
+    )
+    replace(
+        path,
+        '''  async function suggestItemNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      item.value.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+        '''  async function suggestItemNameFromPhoto(file: File) {
+    try {
+      nameOcrMessage.value = t("components.form.camera.ocr_running");
+      const outcome = await suggestNameWithoutOverwritingEdits({
+        getName: () => item.value.name,
+        getRevision: () => nameEditRevision.value,
+        setName: (value: string) => { item.value.name = value; },
+        recognize: recognizeNameFromImage,
+        image: file,
+      });
+      if (outcome === "empty") {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+      } else if (outcome === "edited-during-recognition") {
+        nameOcrMessage.value = t("components.form.camera.name_preserved");
+      } else {
+        nameOcrMessage.value = t("components.form.camera.name_suggested");
+      }
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+    )
+    replace(path, '  const nameOcrMessage = ref("");', '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);')
+    replace(
+        path,
+        '                    v-model="item[field.ref]"\n                    class="min-w-0 flex-1"',
+        '                    v-model="item[field.ref]"\n                    @update:model-value="nameEditRevision++"\n                    class="min-w-0 flex-1"',
+    )
+    replace(
+        path,
+        '''                  </Button>
+                </div>
+                <FormTextField
+                  v-else-if="field.type === 'text'"''',
+        '''                  </Button>
+                </div>
+                <p v-if="field.ref === 'name'" class="mt-1 text-xs text-muted-foreground">
+                  {{ $t("components.form.camera.local_ocr_notice") }}
+                </p>
+                <FormTextField
+                  v-else-if="field.type === 'text'"''',
+    )
+
+    modal = 'components/Entity/CreateModal.vue'
+    replace(
+        modal,
+        '  import { recognizeNameFromFileLocally } from "~/components/Form/camera";',
+        '  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";',
+    )
+    replace(
+        modal,
+        '  const { openDialog, closeDialog, registerOpenDialogCallback } = useDialog();',
+        '  const { activeDialog, openDialog, closeDialog, registerOpenDialogCallback } = useDialog();',
+    )
+    replace(
+        modal,
+        '  const nameOcrMessage = ref("");',
+        '  const nameOcrMessage = ref("");\n  const nameEditRevision = ref(0);\n  let nameOcrGeneration = 0;\n  watch(activeDialog, value => { if (value !== DialogID.CreateEntity) { nameOcrGeneration++; nameOcrMessage.value = ""; } }, { flush: "sync" });',
+    )
+    replace(
+        modal,
+        '''  async function suggestNameFromPhoto(file: File) {
+    try {
+      const suggestion = await recognizeNameFromFileLocally(file);
+      if (!suggestion) {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+        return;
+      }
+      form.name = suggestion;
+      nameOcrMessage.value = t("components.form.camera.name_suggested");
+    } catch {
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+        '''  async function suggestNameFromPhoto(file: File) {
+    const request = ++nameOcrGeneration;
+    try {
+      nameOcrMessage.value = t("components.form.camera.ocr_running");
+      const outcome = await suggestNameWithoutOverwritingEdits({
+        getName: () => form.name,
+        getRevision: () => nameEditRevision.value,
+        setName: (value: string) => { form.name = value; },
+        recognize: recognizeNameFromImage,
+        isCurrent: () => request === nameOcrGeneration,
+        image: file,
+      });
+      if (outcome === "stale") return;
+      if (outcome === "empty") {
+        nameOcrMessage.value = t("components.form.camera.name_not_found");
+      } else if (outcome === "edited-during-recognition") {
+        nameOcrMessage.value = t("components.form.camera.name_preserved");
+      } else {
+        nameOcrMessage.value = t("components.form.camera.name_suggested");
+      }
+    } catch {
+      if (request !== nameOcrGeneration) return;
+      nameOcrMessage.value = t("components.form.camera.name_unavailable");
+    }
+  }''',
+    )
+    replace(modal, '    form.name = "";', '    nameOcrGeneration++;\n    nameOcrMessage.value = "";\n    form.name = "";')
+    replace(
+        modal,
+        '          v-model="form.name"\n          class="min-w-0 flex-1"',
+        '          v-model="form.name"\n          @update:model-value="nameEditRevision++"\n          class="min-w-0 flex-1"',
+    )
+    replace(
+        modal,
+        '      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>',
+        '      <p v-if="nameOcrMessage" class="text-sm text-muted-foreground" role="status">{{ nameOcrMessage }}</p>\n      <p class="text-xs text-muted-foreground">{{ $t("components.form.camera.local_ocr_notice") }}</p>',
+    )
+    locale = BUILD/'locales/en.json'
+    data = json.loads(locale.read_text(encoding='utf-8'))
+    camera = data['components']['form']['camera']
+    camera['name_preserved'] = 'Your typed name was kept. OCR finished in the background.'
+    camera['ocr_running'] = 'Reading the label in this browserâ€¦ first use may download OCR code and the English model.'
+    camera['local_ocr_notice'] = 'Name suggestions run in this browser, and the suggestion photo is not uploaded. OCR code and the English model download on first use.'
+    locale.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+
+
+def equipment_catalog_create_frontend():
+    path = BUILD/'components/Entity/CreateModal.vue'
+    text = path.read_text()
+    if 'createEquipmentCreationFlow' in text:
+        if text.count('<EquipmentTemplatePanel') != 1 or text.count('import EquipmentTemplatePanel') != 1:
+            raise RuntimeError('Upstream changed: equipment catalog modal integration is partial')
+        return
+
+    model_anchor = '        <FormTextField v-model="form.modelNumber" :label="$t(\'items.model_number\')" :max-length="255" />'
+    if text.count(model_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one model-number field in CreateModal.vue')
+    text = text.replace(model_anchor, model_anchor + '''
+        <FormTextField v-model="form.modelCode" label="Equipment model code" :max-length="80" />''')
+    panel_anchor = '      <p v-if="barcodeLookupMessage"'
+    if text.count(panel_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one barcode status anchor in CreateModal.vue')
+    text = text.replace(panel_anchor, '''      <EquipmentTemplatePanel
+        v-if="!selectedEntityType?.isLocation"
+        v-model="equipmentTemplateId"
+        :entity-type-id="selectedEntityType?.id"
+        :fields="{ name: form.name, manufacturer: form.manufacturer, modelNumber: form.modelNumber, modelCode: form.modelCode, description: form.description, tags: form.tags }"
+        :has-item-photo="form.photos.length > 0"
+        @apply="applyEquipmentTemplate"
+      />
+      <section v-if="equipmentIntent" class="rounded-md border border-amber-500 p-3" role="status">
+        <p v-if="equipmentIntent.state === 'assignment_pending'">The item was created. Its equipment ID still needs to be assigned.</p>
+        <template v-else-if="equipmentIntent.state === 'native_create_uncertain'">
+          <p>The create result is uncertain. Check inventory before creating another item.</p>
+          <FormTextField v-model="reconcileEntityId" class="mt-2" label="Found native item UUID" :max-length="80" />
+          <div class="mt-2 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" @click="reconcileEquipmentCreate">I found this item</Button>
+            <Button type="button" variant="ghost" @click="confirmNoEquipmentCreate">I confirmed no item was created</Button>
+          </div>
+        </template>
+        <template v-if="equipmentIntent.state === 'assignment_pending'">
+          <p v-for="step in equipmentIntent.post_create_steps || []" :key="step.key" class="mt-1 text-sm">
+            {{ step.name }}: {{ step.status }}<span v-if="step.status === 'pending'"> Â· Re-select this file if this modal was reopened.</span>
+            <template v-if="step.status === 'uncertain'">
+              <Button type="button" size="sm" variant="outline" class="ml-2" @click="reconcileEquipmentPhoto(step.key, true)">Confirm uploaded</Button>
+              <Button type="button" size="sm" variant="outline" class="ml-1" @click="reconcileEquipmentPhoto(step.key, false)">Confirm not uploaded</Button>
+            </template>
+          </p>
+          <Button type="button" variant="outline" class="mt-2" :disabled="loading" @click="retryEquipmentAssignment">Resume item follow-up and ID assignment</Button>
+        </template>
+      </section>
+''' + panel_anchor)
+
+    import_anchor = '  import { useI18n } from "vue-i18n";'
+    if text.count(import_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected Vue i18n import in CreateModal.vue')
+    text = text.replace(import_anchor, import_anchor + '''
+  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";
+  import EquipmentTemplatePanel from "~/components/Workshop/EquipmentTemplatePanel.vue";''')
+    setup_anchor = '  const api = useUserApi();'
+    if text.count(setup_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected user API setup in CreateModal.vue')
+    text = text.replace(setup_anchor, setup_anchor + '''
+  const equipmentWorkshop = useWorkshop();
+  const equipmentTemplateId = ref<string | null>(null);
+  const equipmentIntent = ref<any>(null);
+  const reconcileEntityId = ref("");
+  let equipmentFlow: ReturnType<typeof createEquipmentCreationFlow> | null = null;
+  let equipmentFlowKey = "";
+  let equipmentFlowContext: any = null;
+  async function guardedEquipmentCreate(flow: ReturnType<typeof createEquipmentCreationFlow> | null, request: () => Promise<any>) {
+    try { return await request(); }
+    catch (error) {
+      if (flow) equipmentIntent.value = flow.markNativeRejected(error);
+      return { error };
+    }
+  }
+  async function getEquipmentFlow() {
+    const context = await equipmentWorkshop.refresh();
+    const key = equipmentTemplateStorageKey(context);
+    if (!equipmentFlow || equipmentFlowKey !== key) {
+      const read = () => { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; } };
+      equipmentFlow = createEquipmentCreationFlow({
+        read,
+        write: (value: unknown) => localStorage.setItem(key, JSON.stringify(value)),
+        clear: () => localStorage.removeItem(key),
+        assignCreated: (intent: { request_key: string; entity_id: string; template_id?: string | null; model_code?: string | null; group_id?: string | null; user_id?: string | null; identity?: string | null }) => assignCreatedEquipment(equipmentWorkshop, intent),
+        completePostCreate: async (intent: { group_id: string; user_id: string; identity: string; entity_id: string }, step: { name: string; size: number; last_modified: number; primary: boolean }) => {
+          const current = await equipmentWorkshop.refresh();
+          if (current.group.id !== intent.group_id || current.user.id !== intent.user_id || current.identity !== intent.identity) {
+            return { deferred: true, message: "Switch back to the original account and collection to resume queued photo uploads." };
+          }
+          const photo = form.photos.find((candidate: PhotoPreview) => candidate.photoName === step.name && candidate.file.size === step.size && candidate.file.lastModified === step.last_modified && candidate.primary === step.primary);
+          if (!photo) return { deferred: true, message: `Re-select ${step.name} to finish the queued photo upload.` };
+          return api.items.attachments.add(intent.entity_id, photo.file, photo.photoName, AttachmentTypes.Photo, photo.primary);
+        },
+      });
+      equipmentFlowKey = key;
+    }
+    equipmentFlowContext = context;
+    equipmentIntent.value = equipmentFlow.recover();
+    return equipmentFlow;
+  }
+  const equipmentCollections = useCollections();
+  const equipmentAuth = useAuthContext();
+  watch([equipmentCollections.selectedId, () => equipmentAuth.user?.id, activeDialog], () => {
+    equipmentFlow = null;
+    equipmentFlowKey = "";
+    equipmentFlowContext = null;
+    equipmentIntent.value = null;
+    equipmentTemplateId.value = null;
+    if (activeDialog.value === DialogID.CreateEntity) void getEquipmentFlow();
+  });
+  function applyEquipmentTemplate(template: any) {
+    const defaults = applyEquipmentTemplateDefaults(template);
+    equipmentTemplateId.value = template.id;
+    form.name = defaults.name;
+    form.manufacturer = defaults.manufacturer;
+    form.modelNumber = defaults.modelNumber;
+    form.modelCode = defaults.modelCode;
+    form.description = defaults.description;
+    form.tags = defaults.tagIds;
+  }
+  async function retryEquipmentAssignment() {
+    loading.value = true as boolean;
+    try {
+      const flow = await getEquipmentFlow();
+      const pending = flow.pending();
+      const result = pending?.post_create_steps?.some((step: any) => step.status === "failed")
+        ? await flow.retryFailedPostCreate()
+        : await flow.resumeAssignment();
+      equipmentIntent.value = null;
+      toast.success(`Assigned equipment ID ${result.assignment.display_id}.`);
+      form.photos = [];
+      closeDialog(DialogID.CreateEntity);
+      await navigateTo(`/item/${result.entity_id}`);
+    } catch (error) { equipmentIntent.value = equipmentFlow?.pending() || null; toast.error((error as Error).message || "Equipment ID assignment failed."); }
+    finally { loading.value = false; }
+  }
+  async function reconcileEquipmentCreate() {
+    const id = reconcileEntityId.value.trim();
+    if (!id) return;
+    try {
+      const { data, error } = await api.items.get(id);
+      if (error || !data || data.id !== id || data.entityType?.isLocation || (equipmentIntent.value?.entity_type_id && data.entityType?.id !== equipmentIntent.value.entity_type_id)) {
+        throw new Error("That UUID does not resolve to the expected equipment item in this collection.");
+      }
+      const flow = await getEquipmentFlow();
+      equipmentIntent.value = flow.reconcileCreated(id);
+      reconcileEntityId.value = "";
+    } catch (error) { toast.error((error as Error).message || "Could not verify that native item."); }
+  }
+  async function confirmNoEquipmentCreate() {
+    if (!window.confirm("After checking the selected collection, confirm that no item was created. This clears the pending create and allows a new attempt.")) return;
+    try { const flow = await getEquipmentFlow(); flow.confirmNoNativeCreate(); equipmentIntent.value = null; }
+    catch (error) { toast.error((error as Error).message || "The pending create could not be cleared."); }
+  }
+  async function reconcileEquipmentPhoto(stepKey: string, uploaded: boolean) {
+    try { const flow = await getEquipmentFlow(); equipmentIntent.value = flow.reconcilePostCreateStep(stepKey, uploaded); }
+    catch (error) { toast.error((error as Error).message || "The photo result could not be reconciled."); }
+  }''')
+
+    for anchor, replacement in (
+        ('const result = await api.templates.createItem(templateData.value.id, templateRequest);',
+         'const templateId = templateData.value.id;\n      const result = await guardedEquipmentCreate(equipmentCreateFlow, () => api.templates.createItem(templateId, templateRequest));'),
+        ('const result = await api.items.create(out);',
+         'const result = await guardedEquipmentCreate(equipmentCreateFlow, () => api.items.create(out));'),
+    ):
+        if text.count(anchor) != 1:
+            raise RuntimeError(f'Upstream changed: expected one native item create call: {anchor}')
+        text = text.replace(anchor, replacement)
+
+    form_anchor = '    modelNumber: "",'
+    if text.count(form_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one modelNumber form state in CreateModal.vue')
+    text = text.replace(form_anchor, form_anchor + '\n    modelCode: "",')
+
+    loading_anchor = '    loading.value = true;'
+    if text.count(loading_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one create loading transition in CreateModal.vue')
+    text = text.replace(loading_anchor, '''    let equipmentCreateFlow: Awaited<ReturnType<typeof getEquipmentFlow>> | null = null;
+    if (!selectedEntityType.value?.isLocation) {
+      if (!equipmentTemplateId.value && !form.modelCode.trim()) {
+        toast.error("Enter an equipment model code or choose a saved template.");
+        return;
+      }
+      try {
+        equipmentCreateFlow = await getEquipmentFlow();
+        equipmentCreateFlow.begin({
+          templateId: equipmentTemplateId.value || undefined,
+          modelCode: form.modelCode,
+          groupId: equipmentFlowContext.group.id,
+          userId: equipmentFlowContext.user.id,
+          identity: equipmentFlowContext.identity,
+          entityTypeId: selectedEntityType.value?.id,
+          postCreateSteps: form.photos.map((photo: PhotoPreview, index: number) => ({
+            key: `photo-${index}-${photo.photoName}-${photo.file.size}-${photo.file.lastModified}`,
+            name: photo.photoName, size: photo.file.size, last_modified: photo.file.lastModified, primary: photo.primary,
+          })),
+        });
+        equipmentIntent.value = equipmentCreateFlow.pending();
+      } catch (error) { toast.error((error as Error).message || "Resolve the pending equipment create first."); return; }
+    }
+    loading.value = true;''')
+
+    error_anchor = '''    if (error) {
+      loading.value = false;'''
+    if text.count(error_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one native create error branch in CreateModal.vue')
+    text = text.replace(error_anchor, '''    if (error) {
+      if (equipmentCreateFlow) { equipmentIntent.value = equipmentCreateFlow.markNativeRejected(error); }
+      loading.value = false;''')
+
+    success_anchor = '''    toast.success(
+      t("components.entity.create_modal.toast.create_success", {'''
+    if text.count(success_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one native create success toast in CreateModal.vue')
+    text = text.replace(success_anchor, '''    if (equipmentCreateFlow) {
+      try {
+        equipmentCreateFlow.recordCreated(data.id);
+        equipmentIntent.value = equipmentCreateFlow.pending();
+        if (form.photos.length) toast.info(t("components.entity.create_modal.toast.uploading_photos", { count: form.photos.length }));
+        await equipmentCreateFlow.resumeAssignment();
+        equipmentIntent.value = null;
+      } catch (assignmentError) {
+        equipmentIntent.value = equipmentCreateFlow.pending();
+        loading.value = false;
+        toast.error(`The item was created but its equipment ID is pending: ${(assignmentError as Error).message}`);
+        return;
+      }
+    }
+
+''' + success_anchor)
+
+    reset_anchor = '    form.modelNumber = "";'
+    if text.count(reset_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one modelNumber reset in CreateModal.vue')
+    text = text.replace(reset_anchor, reset_anchor + '\n    form.modelCode = "";\n    equipmentTemplateId.value = null;')
+    photo_upload_anchor = '    if (form.photos.length > 0) {'
+    if text.count(photo_upload_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one native photo upload block in CreateModal.vue')
+    text = text.replace(photo_upload_anchor, '    if (selectedEntityType.value?.isLocation && form.photos.length > 0) {', 1)
+    photo_upload_end = '''    }
+
+    nameOcrGeneration++;'''
+    if text.count(photo_upload_end) != 1:
+        raise RuntimeError('Upstream changed: expected one native photo upload block ending in CreateModal.vue')
+    text = text.replace(photo_upload_end, '''    } else if (form.photos.length > 0) {
+      toast.success(t("components.entity.create_modal.toast.upload_success", { count: form.photos.length }));
+    }
+
+    nameOcrGeneration++;''', 1)
+    path.write_text(text)
+
+
+def prepare():
+    from homebox_patchset import materialize
+    native_source = materialize(UPSTREAM_ROOT)
+    shutil.copytree(native_source/'frontend', BUILD, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns('node_modules', '.nuxt', '.output'))
+    strip_item_response_short_codes_from_update_tests()
+    shutil.copytree(ROOT/'homebox-ui/overlay', BUILD, dirs_exist_ok=True)
+    camera_ocr_frontend()
+    shutil.copy2(ROOT/'kiosk/member-avatar.js', BUILD/'lib/member-avatar.js')
+    shutil.copy2(ROOT/'kiosk/label-editor.js', BUILD/'lib/label-editor.js')
+    package = json.loads((BUILD/'package.json').read_text())
+    overrides = {name: '3.5.20' for name in ('vue', '@vue/runtime-core', '@vue/runtime-dom', '@vue/reactivity', '@vue/shared', '@vue/compiler-sfc', '@vue/compiler-core', '@vue/compiler-dom', '@vue/compiler-ssr', '@vue/server-renderer')}
+    package.pop('pnpm', None)
+    (BUILD/'package.json').write_text(json.dumps(package, indent=2)+'\n')
+    (BUILD/'pnpm-workspace.yaml').write_text('overrides:\n'+''.join(f"  '{name}': {version}\n" for name, version in overrides.items()))
+    if (ROOT/'homebox-ui/pnpm-lock.yaml').exists():
+        shutil.copy2(ROOT/'homebox-ui/pnpm-lock.yaml', BUILD/'pnpm-lock.yaml')
+    configure_ui_component_discovery()
+    replace('nuxt.config.ts', 'css: ["@/assets/css/main.css"],', 'css: ["@/assets/css/main.css", "@/assets/css/workshop.css", "@/assets/css/ccrate.css"],')
+    # The collection aggregate replaces the native purchase-value statistics.
+    replace('pages/home/index.vue', '  import { statCardData } from "./statistics";', '  import QuickStatistics from "@/components/Home/QuickStatistics.vue";')
+    replace('pages/home/index.vue', '  import StatCard from "~/components/global/StatCard/StatCard.vue";\n', '')
+    replace('pages/home/index.vue', '  const stats = statCardData(api);\n', '')
+    replace('pages/home/index.vue', '''      <section>
+        <Subtitle> {{ $t("home.quick_statistics") }} </Subtitle>
+        <div class="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-6">
+          <StatCard v-for="(stat, i) in stats" :key="i" :title="stat.label" :value="stat.value" :type="stat.type" />
+        </div>
+      </section>''', '      <QuickStatistics />')
+    # The Home dashboard shows the same current custody as the equipment terminal.
+    replace('pages/home/index.vue', '  import BaseCard from', '  import CheckedOutItems from "@/components/Workshop/CheckedOutItems.vue";\n  import BaseCard from')
+    replace('pages/home/index.vue', '      <section>\n        <Subtitle> {{ $t("home.recently_added") }}', '      <CheckedOutItems />\n\n      <section>\n        <Subtitle> {{ $t("home.recently_added") }}')
+    # Native sidebar and quick menu, with manager-only entries hidden for members.
+    navigation_frontend()
+    shell_frontend()
+    ocr_popover_frontend()
+    location_child_contents_frontend()
+    replace('layouts/default.vue', 'class="h-9 grow sm:max-w-sm"', 'class="ccrate-header-search h-11 min-w-0 grow sm:max-w-sm"')
+    # Put badges on the actual existing Collection members table.
+    path = 'pages/collection/index/members.vue'
+    replace(path, '  const loading = ref(true);', '''  const workshop = useWorkshop();
+  const { selectedId } = useCollections();
+  const badgeRows = ref<any[]>([]), peopleRows = ref<any[]>([]), workshopError = ref("");
+  const memberLoans = ref<WorkshopLoan[] | null>(null), itemLoading = ref(true), itemError = ref("");
+  let itemRevision = 0, memberTimer: ReturnType<typeof setInterval> | null = null;
+  async function loadMemberLoans() {
+    const revision = ++itemRevision;
+    itemLoading.value = true; itemError.value = "";
+    try {
+      const rows = await workshop.request<WorkshopLoan[]>("loans");
+      if (revision === itemRevision) memberLoans.value = rows;
+    } catch (cause) { if (revision === itemRevision) itemError.value = (cause as Error).message; }
+    finally { if (revision === itemRevision) itemLoading.value = false; }
+  }
+  function refreshVisibleItems() { if (document.visibilityState === "visible" && !itemLoading.value) void loadMemberLoans(); }
+  function refreshMembers() { void loadMembers(); void loadBadges(); void loadMemberLoans(); }
+  let workshopRevision = 0;
+  async function loadBadges() {
+    const revision = ++workshopRevision;
+    badgeRows.value = []; peopleRows.value = []; workshopError.value = "";
+    try {
+      await workshop.refresh();
+      if (!workshop.manager.value) return;
+      const [badges, people] = await Promise.all([workshop.request<any[]>("badges"), workshop.request<any[]>("people")]);
+      if (revision === workshopRevision) { badgeRows.value = badges; peopleRows.value = people; }
+    } catch (cause) { if (revision === workshopRevision) workshopError.value = (cause as Error).message; }
+  }
+  watch(selectedId, () => { memberLoans.value = null; refreshMembers(); }, { flush: "sync" });
+  onMounted(() => {
+    void loadMemberLoans();
+    window.addEventListener("focus", refreshVisibleItems);
+    document.addEventListener("visibilitychange", refreshVisibleItems);
+    memberTimer = setInterval(refreshVisibleItems, 30000);
+  });
+  onBeforeUnmount(() => {
+    workshopRevision++; itemRevision++; memberLoans.value = null;
+    if (memberTimer) clearInterval(memberTimer);
+    window.removeEventListener("focus", refreshVisibleItems);
+    document.removeEventListener("visibilitychange", refreshVisibleItems);
+  });
+
+  const loading = ref(true);''')
+    replace(path, '<TableCell>{{ user.name }}</TableCell>', '<TableCell><div class="flex items-center gap-3"><MemberAvatar :member-id="user.id" :name="user.name" /><span class="font-medium">{{ user.name }}</span></div></TableCell>')
+    replace(path, '  import { Button }', '  import MemberAvatar from "@/components/Workshop/MemberAvatar.vue";\n  import MemberItems from "@/components/Workshop/MemberItems.vue";\n  import type { WorkshopLoan } from "@/lib/workshop-loans";\n  import BadgeActions from "@/components/Workshop/BadgeActions.vue";\n  import { Button }')
+    replace(path, '    loadMembers();\n  });', '    loadMembers();\n    loadBadges();\n  });')
+    replace(path, '  <div class="space-y-4">', '''  <div class="space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="text-sm text-muted-foreground">Members, kiosk badges and the items each person has checked out.</p>
+      <Button variant="outline" size="sm" :disabled="loading || itemLoading" @click="refreshMembers">Refresh members &amp; items</Button>
+    </div>
+    <p v-if="itemError" role="alert" class="text-sm text-destructive">Could not load checked-out items. {{ itemError }}</p>
+    <p v-if="workshopError" role="alert" class="text-sm text-destructive">Badge management: {{ workshopError }} <Button variant="link" @click="loadBadges">Reload badge management</Button></p>''')
+    replace(path, '<TableHead>{{ $t("collection.members.name") }}</TableHead>', '<TableHead>User</TableHead>')
+    replace(path, '              <TableHead class="w-32', '              <TableHead v-if="workshop.manager.value">Kiosk Badge</TableHead>\n              <TableHead>Items</TableHead>\n              <TableHead class="w-32')
+    replace(path, '              <TableCell>\n                <div class="ml-auto">', '''              <TableCell v-if="workshop.manager.value">
+                <BadgeActions :member="user" :badges="badgeRows.filter(row => row.user_id === user.id)" :can-manage="!!peopleRows.find(row => row.id === user.id)?.workshop_manager" :protected-owner="!!peopleRows.find(row => row.id === user.id)?.protected_owner" @changed="loadBadges" />
+              </TableCell>
+              <TableCell><MemberItems :member-id="user.id" :loans="memberLoans" :loading="itemLoading" :error="itemError" /></TableCell>
+              <TableCell>
+                <div class="ml-auto">''')
+    # Item loans sit alongside native Details/Maintenance/Edit; details show status.
+    path = 'pages/item/[id]/index.vue'
+    item_log_frontend()
+    replace(path, '        id: "edit",', '        id: "loans", name: "Loans & return notes", to: `/item/${itemId.value}/loans`,\n      },\n      {\n        id: "edit",')
+    replace(path, '{{ $t(tab.name) }}', '{{ tab.id === "loans" ? tab.name : $t(tab.name) }}')
+    replace(path, ':id="item.assetId"\n                type="asset"', ':id="item.assetId"\n                :entity-id="item.id"\n                type="asset"')
+    replace(path, '<NuxtPage :item="item" :page-key="itemId" />', '<NuxtPage :item="item" :page-key="itemId" />\n        <ItemLoans v-if="!hasNested" :item-id="itemId" activity-mode="details" />')
+    # Extend the existing label dialog; browser printing remains native.
+    path = 'components/global/LabelMaker.vue'
+    replace(path, '  import PageQRCode', '  import PiPrint from "@/components/Workshop/PiPrint.vue";\n  import PageQRCode')
+    replace(path, '    id: string;', '    id: string;\n    entityId?: string;')
+    replace(path, '        <img :src="getLabelUrl(false)" />', '<img :src="getLabelUrl(false)" alt="Homebox label preview" />\n        <PiPrint :id="id" :entity-id="entityId" />')
+    replace(path, '<Button size="icon" @click="openDialog(DialogID.PrintLabel)">', '<Button size="icon" :aria-label="$t(\'components.global.label_maker.browser_print\')" @click="openDialog(DialogID.PrintLabel)">')
+    # Manage native people beside badges and custody, with collection-owner access.
+    contract=BUILD/'lib/api/types/data-contracts.ts';body=contract.read_text()
+    start=body.index('export interface UserSummary {');end=body.index('\n}',start)
+    body=body[:end]+'\n  avatar?: string;'+body[end:];contract.write_text(body)
+    path='pages/collection/index/members.vue';target=BUILD/path;body=target.read_text()
+    body=body.replace('  import MemberAvatar from', '  import UserManager from "@/components/Workshop/UserManager.vue";\n  import MemberAvatar from')
+    body=body.replace('  const workshop = useWorkshop();', '  const workshop = useWorkshop();\n  const userAdmin = ref(false), userManager = ref<InstanceType<typeof UserManager> | null>(null);')
+    body=body.replace('const [badges, people] = await Promise.all([workshop.request<any[]>("badges"), workshop.request<any[]>("people")]);','const [badges, people, administration] = await Promise.all([workshop.request<any[]>("badges"), workshop.request<any[]>("people"), workshop.request<{ canManage: boolean }>("users/administration")]);')
+    body=body.replace('badgeRows.value = badges; peopleRows.value = people;', 'badgeRows.value = badges; peopleRows.value = people; userAdmin.value = administration.canManage;')
+    body=body.replace('if (!workshop.manager.value) return;', 'if (!workshop.manager.value) { userAdmin.value = false; return; }')
+    body=body.replace('watch(selectedId, () => { memberLoans.value = null;', 'watch(selectedId, () => { userAdmin.value = false; memberLoans.value = null;')
+    body=body.replace('      <Button variant="outline" size="sm" :disabled="loading || itemLoading"', '      <Button v-if="userAdmin" variant="outline" size="sm" @click="userManager?.show()">Manage users</Button>\n      <Button variant="outline" size="sm" :disabled="loading || itemLoading"')
+    body=body.replace('    <p v-if="itemError"', '    <UserManager v-if="userAdmin" ref="userManager" :members="members" @changed="refreshMembers" />\n    <p v-if="itemError"')
+    body=body.replace('<MemberAvatar :member-id="user.id" :name="user.name" /><span class="font-medium">{{ user.name }}</span>', '<MemberAvatar :member-id="user.id" :name="user.name" :picture="user.avatar" /><span><span class="block font-medium">{{ user.name }}</span><span class="block text-xs text-muted-foreground">ID {{ user.id.slice(0,8) }}</span></span>')
+    body=body.replace('<TableCell>{{ user.email }}</TableCell>', '<TableCell>{{ user.email || "â€”" }}</TableCell>')
+    body=body.replace('                <div class="ml-auto">','                <div class="ml-auto flex items-center justify-end gap-2">\n                  <Button v-if="userAdmin" variant="outline" size="sm" :aria-label="\'Manage profile: \' + user.name" @click="userManager?.show(user)">Manage profile</Button>')
+    body=body.replace(':disabled="removing[user.id] || (isLastMember && user.id === currentUserId)"', ':disabled="!userAdmin || removing[user.id] || user.id === currentUserId || !!peopleRows.find(row => row.id === user.id)?.protected_owner"')
+    body=body.replace('  const loading = ref(true);', '  let memberRevision = 0;\n  const loading = ref(true);')
+    body=body.replace('const loadMembers = async () => {', 'const loadMembers = async () => {\n    const revision = ++memberRevision;')
+    body=body.replace('const res = await api.group.getMembers();', 'const res = await api.group.getMembers();\n      if (revision !== memberRevision) return;')
+    start=body.index('  const loadMembers = async () => {');end=body.index('  const handleRemove',start)
+    part=body[start:end].replace('    } catch (e) {','    } catch (e) {\n      if (revision !== memberRevision) return;').replace('      loading.value = false;', '      if (revision === memberRevision) loading.value = false;')
+    body=body[:start]+part+body[end:]
+    body=body.replace('workshopRevision++; itemRevision++;', 'memberRevision++; workshopRevision++; itemRevision++;')
+    body=body.replace('watch(selectedId, () => { userAdmin.value = false;', 'watch([selectedId, () => auth.user?.id], () => { members.value = []; userAdmin.value = false;')
+    target.write_text(body)
+    nest_frontend()
+    equipment_catalog_create_frontend()
+    equipment_assigned_ids_frontend()
+    grouped_inventory_frontend()
+    item_action_surfaces_frontend()
+    brand_frontend()
+
+
+def prepare_source_workspace(destination, upstream_root=ROOT):
+    """Apply the release UI source and overlay steps in a separate workspace."""
+    global BUILD, UPSTREAM_ROOT
+    previous_build, previous_upstream = BUILD, UPSTREAM_ROOT
+    BUILD, UPSTREAM_ROOT = pathlib.Path(destination), pathlib.Path(upstream_root)
+    try:
+        prepare()
+    finally:
+        BUILD, UPSTREAM_ROOT = previous_build, previous_upstream
+
+
+def configure_oxc_wasi_binding(workspace, toolchain_root):
+    # oxc-parser 0.72's native ARM binding requires instructions absent on this Pi.
+    wasi = toolchain_root/'oxc-wasi/node_modules/@oxc-parser/binding-wasm32-wasi'
+    binding = workspace/'node_modules/.pnpm/oxc-parser@0.72.3/node_modules/oxc-parser/bindings.js'
+    if wasi.exists() and binding.is_file():
+        source = binding.read_text()
+        anchor = 'nativeBinding = requireNative()'
+        if anchor in source:
+            binding.write_text(source.replace(anchor, 'nativeBinding = require('+repr(str(wasi))+')'))
+
+
+def run_frontend_command(command, *, cwd, env):
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    def forward(source, destination):
+        try:
+            for line in source:
+                line = filter_known_wasi_warning(line)
+                if line:
+                    destination.write(line)
+                    destination.flush()
+        finally:
+            source.close()
+
+    output_threads = [
+        threading.Thread(target=forward, args=(process.stdout, sys.stdout)),
+        threading.Thread(target=forward, args=(process.stderr, sys.stderr)),
+    ]
+    for thread in output_threads:
+        thread.start()
+    returncode = process.wait()
+    for thread in output_threads:
+        thread.join()
+    if returncode:
+        print(f'Frontend command failed with exit code {returncode}.', file=sys.stderr, flush=True)
+        raise subprocess.CalledProcessError(returncode, command)
+    return subprocess.CompletedProcess(command, returncode)
+
+
+
+def build():
+    global BUILD, TOOLCHAIN_ROOT, UPSTREAM_ROOT
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--toolchain-root', type=pathlib.Path, default=TOOLCHAIN_ROOT)
+    parser.add_argument('--upstream-root', type=pathlib.Path, default=UPSTREAM_ROOT)
+    parser.add_argument('--build-root', type=pathlib.Path, help='use a new or empty frontend workspace for disposable validation')
+    parser.add_argument('--prepare', action='store_true', help='prepare dependencies without running typecheck or build')
+    args = parser.parse_args()
+    if args.build_root is not None and args.build_root.exists() and (
+        not args.build_root.is_dir() or any(args.build_root.iterdir())
+    ):
+        parser.error('--build-root must be empty so stale files cannot contaminate a disposable build')
+    if args.build_root is not None:
+        BUILD = args.build_root.resolve()
+    TOOLCHAIN_ROOT, UPSTREAM_ROOT = args.toolchain_root.resolve(), args.upstream_root.resolve()
+    node = pathlib.Path((TOOLCHAIN_ROOT/'node-path.txt').read_text().strip())
+    env = dict(os.environ, PATH=str(node/'bin')+os.pathsep+os.environ['PATH'])
+    pnpm = resolve_pnpm_launcher(TOOLCHAIN_ROOT)
+    print('Preparing frontend source workspace...', flush=True)
+    prepare()
+    if args.build_root is not None:
+        print('Installing frontend dependencies in disposable workspace...', flush=True)
+        run_frontend_command([str(pnpm), 'install', '--frozen-lockfile', '--ignore-scripts'], cwd=BUILD, env=env)
+        print('Frontend dependencies installed.', flush=True)
+    configure_oxc_wasi_binding(BUILD, TOOLCHAIN_ROOT)
+    print('Preparing Nuxt components...', flush=True)
+    run_frontend_command([str(pnpm), 'exec', 'nuxt', 'prepare'], cwd=BUILD, env=env)
+    print('Nuxt preparation complete.', flush=True)
+    if not args.prepare:
+        print('Running frontend typecheck...', flush=True)
+        result = subprocess.run([str(pnpm), 'exec', 'nuxi', 'typecheck'], cwd=BUILD, env=env, capture_output=True, text=True)
+        typecheck_output = result.stdout + result.stderr
+        typecheck_log = BUILD/'homebox-ui-typecheck.log' if args.build_root is not None else ROOT/'work/homebox-ui-typecheck.log'
+        typecheck_log.write_text(typecheck_output)
+        if has_frontend_tool_failure(typecheck_output):
+            print(typecheck_output)
+            print(f'Frontend typecheck tool failed with exit code {result.returncode}.', file=sys.stderr, flush=True)
+            raise RuntimeError('Frontend typecheck could not be invoked successfully.')
+        diagnostics = [list(match.groups()) for match in re.finditer(r'^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$', typecheck_output, re.M)]
+        if result.returncode:
+            baseline = json.loads((ROOT/'homebox-ui/upstream-typecheck.json').read_text())
+            pin = source_commit(UPSTREAM_ROOT/'upstream/homebox')
+            if result.returncode != 1 or not is_only_known_upstream_typecheck_failure(typecheck_output, baseline, pin):
+                print(typecheck_output)
+                print(f'Frontend typecheck failed with exit code {result.returncode}.', file=sys.stderr, flush=True)
+                raise RuntimeError('Frontend typecheck introduced errors or its upstream baseline changed.')
+            print(f'Typecheck: no added diagnostics; {len(diagnostics)} pre-existing upstream diagnostics.', flush=True)
+        else:
+            print('Frontend typecheck passed.', flush=True)
+        print('Building frontend...', flush=True)
+        run_frontend_command([str(pnpm), 'run', 'build'], cwd=BUILD, env=env)
+        print('Frontend build completed successfully.', flush=True)
+
+if __name__ == '__main__':
+    build()

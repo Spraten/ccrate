@@ -6,8 +6,8 @@ from uuid import uuid4
 
 from ledger import Conflict, Ledger, timestamp, uuid
 
-_TEMPLATE_FIELDS = {'name', 'entity_type_id', 'manufacturer', 'model_number', 'model_code', 'description', 'tag_ids', 'photo_attachment_id'}
-_REQUIRED_TEMPLATE_FIELDS = _TEMPLATE_FIELDS - {'photo_attachment_id'}
+_TEMPLATE_FIELDS = {'name', 'entity_type_id', 'manufacturer', 'model_number', 'model_code', 'description', 'tag_ids', 'photo_attachment_id', 'photo_entity_id'}
+_REQUIRED_TEMPLATE_FIELDS = _TEMPLATE_FIELDS - {'photo_attachment_id', 'photo_entity_id'}
 _CODE_RE = re.compile(r'^[A-Z0-9]+(?:-[A-Z0-9]+)*$')
 
 
@@ -39,7 +39,7 @@ class EquipmentCatalog:
               id TEXT PRIMARY KEY, group_id TEXT NOT NULL, entity_type_id TEXT NOT NULL,
               type_prefix TEXT NOT NULL, manufacturer TEXT NOT NULL, model_number TEXT NOT NULL,
               model_code TEXT NOT NULL, high_water INTEGER NOT NULL DEFAULT 0,
-              created_at TEXT NOT NULL, updated_at TEXT NOT NULL, identity_key TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL, updated_at TEXT NOT NULL, identity_key TEXT NOT NULL DEFAULT '', product_group TEXT NOT NULL DEFAULT '',
               UNIQUE(group_id,id));
             DROP INDEX IF EXISTS equipment_product_code_unique;
             CREATE TABLE IF NOT EXISTS equipment_product_codes(
@@ -89,6 +89,12 @@ class EquipmentCatalog:
             columns = {row['name'] for row in db.execute('PRAGMA table_info(equipment_products)')}
             if 'identity_key' not in columns:
                 db.execute("ALTER TABLE equipment_products ADD COLUMN identity_key TEXT NOT NULL DEFAULT ''")
+            if 'product_group' not in columns:
+                db.execute("ALTER TABLE equipment_products ADD COLUMN product_group TEXT NOT NULL DEFAULT ''")
+                for row in db.execute('SELECT * FROM equipment_products').fetchall():
+                    identity = self._identity(row['entity_type_id'], row['manufacturer'], row['model_number'], '')
+                    db.execute('UPDATE equipment_products SET identity_key=? WHERE group_id=? AND id=?',
+                               (identity, row['group_id'], row['id']))
             db.execute('CREATE INDEX IF NOT EXISTS equipment_product_identity ON equipment_products(group_id,identity_key)')
             for row in db.execute("SELECT * FROM equipment_products WHERE identity_key=''").fetchall():
                 db.execute('UPDATE equipment_products SET identity_key=? WHERE group_id=? AND id=?',
@@ -101,18 +107,25 @@ class EquipmentCatalog:
                 db.execute('ALTER TABLE equipment_assignments ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
 
     @staticmethod
-    def _identity(type_id, manufacturer, model):
-        # Partial/blank product metadata is not enough evidence to merge records.
+    def _identity(type_id, manufacturer, model, product_group=''):
+        # Explicit collection group labels define product identity, even when model data differs.
+        if product_group:
+            return _digest([type_id, 'product_group', product_group])
+        # Partial/blank product metadata is not enough evidence to merge ungrouped records.
         if not manufacturer.strip() or not model.strip():
             return ''
-        return _digest([type_id, manufacturer.casefold(), model.casefold()])
+        return _digest([type_id, manufacturer.casefold(), model.casefold(), product_group])
 
     @staticmethod
-    def _request(db, group, key, action, digest):
+    def _request(db, group, key, action, digest, legacy_digests=()):
         row = db.execute('SELECT * FROM equipment_catalog_requests WHERE group_id=? AND request_key=?', (group, key)).fetchone()
         if row:
-            if row['action'] != action or row['request_hash'] != digest:
+            if row['action'] != action:
                 raise Conflict('Request key was already used for a different catalog write')
+            if row['request_hash'] != digest:
+                if row['request_hash'] not in legacy_digests:
+                    raise Conflict('Request key was already used for a different catalog write')
+                db.execute('UPDATE equipment_catalog_requests SET request_hash=? WHERE group_id=? AND request_key=?', (digest, group, key))
             return json.loads(row['result_json'])
         return None
 
@@ -141,14 +154,15 @@ class EquipmentCatalog:
         manufacturer = data['manufacturer'].strip()
         model = data['model_number'].strip()
         code = _code(data['model_code'])
-        identity = self._identity(type_id, manufacturer, model)
+        product_group = str(data.get('product_group') or '')
+        identity = self._identity(type_id, manufacturer, model, product_group)
         row = db.execute('SELECT * FROM equipment_products WHERE group_id=? AND identity_key=?', (group, identity)).fetchone() if identity else None
         if row:
             product_id = row['id']
             # A stable product can adopt edited defaults and codes without changing its UUID/counter.
             self._reserve_code(db, group, prefix, code, product_id)
-            db.execute('UPDATE equipment_products SET type_prefix=?,manufacturer=?,model_number=?,model_code=?,updated_at=? WHERE group_id=? AND id=?',
-                       (prefix, manufacturer, model, code, timestamp(), group, product_id))
+            db.execute('UPDATE equipment_products SET type_prefix=?,manufacturer=?,model_number=?,model_code=?,product_group=?,identity_key=?,updated_at=? WHERE group_id=? AND id=?',
+                       (prefix, manufacturer, model, code, product_group, identity, timestamp(), group, product_id))
         else:
             reserved = db.execute('SELECT product_id FROM equipment_product_codes WHERE group_id=? AND type_prefix=? AND model_code=?', (group, prefix, code)).fetchone()
             if reserved:
@@ -167,9 +181,14 @@ class EquipmentCatalog:
                 product_id = str(uuid4())
                 now = timestamp()
                 member_count = len(set(ids))
-                db.execute('INSERT INTO equipment_products(id,group_id,entity_type_id,type_prefix,manufacturer,model_number,model_code,high_water,created_at,updated_at,identity_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                           (product_id, group, type_id, prefix, manufacturer, model, code, member_count, now, now, identity))
+                db.execute('INSERT INTO equipment_products(id,group_id,entity_type_id,type_prefix,manufacturer,model_number,model_code,high_water,created_at,updated_at,identity_key,product_group) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                           (product_id, group, type_id, prefix, manufacturer, model, code, member_count, now, now, identity, product_group))
                 self._reserve_code(db, group, prefix, code, product_id)
+        self._attach_members(db, group, product_id, ids)
+        return dict(db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone())
+
+    @staticmethod
+    def _attach_members(db, group, product_id, ids):
         for entity_id in sorted(set(ids)):
             linked = db.execute('SELECT product_id FROM equipment_product_members WHERE group_id=? AND entity_id=?', (group, entity_id)).fetchone()
             if linked and linked['product_id'] != product_id:
@@ -177,7 +196,16 @@ class EquipmentCatalog:
             db.execute('INSERT OR IGNORE INTO equipment_product_members VALUES(?,?,?)', (group, product_id, entity_id))
         count = db.execute('SELECT COUNT(*) FROM equipment_product_members WHERE group_id=? AND product_id=?', (group, product_id)).fetchone()[0]
         db.execute('UPDATE equipment_products SET high_water=MAX(high_water,?) WHERE group_id=? AND id=?', (count, group, product_id))
-        return dict(db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone())
+
+    def refresh_product_members(self, group_id, product_id, entity_ids):
+        group, product_id = uuid(group_id), uuid(product_id)
+        ids = sorted({uuid(item) for item in entity_ids})
+        with self.ledger.transaction() as db:
+            exists = db.execute('SELECT 1 FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone()
+            if not exists:
+                raise ValueError('Unknown product')
+            self._attach_members(db, group, product_id, ids)
+            return dict(db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone())
 
     def register_product(self, group_id, actor_id, request_key, product, matching_entity_ids):
         group, actor, key = uuid(group_id), uuid(actor_id), uuid(request_key)
@@ -193,11 +221,12 @@ class EquipmentCatalog:
         data['model_number'] = str(data.get('model_number') or '').strip()
         data['model_code'] = _code(data.get('model_code'))
         ids = sorted({uuid(item) for item in matching_entity_ids})
-        digest = _digest({'product': data, 'matching_entity_ids': ids})
+        digest = _digest({'product': data})
         with self.ledger.transaction() as db:
             prior = self._request(db, group, key, 'product', digest)
             if prior is not None:
-                return prior
+                self._attach_members(db, group, prior['id'], ids)
+                return dict(db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, prior['id'])).fetchone())
             result = self._get_or_create_product(db, group, data, prefix, ids)
             self._save_request(db, group, key, 'product', digest, result['id'], result)
             return result
@@ -223,22 +252,25 @@ class EquipmentCatalog:
         if not isinstance(data['tag_ids'], list):
             raise ValueError('tag_ids must be a list')
         data['tag_ids'] = [uuid(item) for item in data['tag_ids']]
-        if 'photo_attachment_id' in data and data['photo_attachment_id'] is not None:
-            data['photo_attachment_id'] = uuid(data['photo_attachment_id'])
+        for field in ('photo_attachment_id', 'photo_entity_id'):
+            if field in data and data[field] is not None:
+                data[field] = uuid(data[field])
         return data
 
-    def save_template(self, group_id, actor_id, request_key, payload, matching_entity_ids=(), *, type_prefix=None, template_id=None, expected_updated_at=None):
+    def save_template(self, group_id, actor_id, request_key, payload, matching_entity_ids=(), *, type_prefix=None, template_id=None, expected_updated_at=None, product_group=''):
         group, actor, key = uuid(group_id), uuid(actor_id), uuid(request_key)
         data = self._normalize_template(payload)
         if not type_prefix:
             raise ValueError('An authoritative type_prefix is required')
         prefix = _segment(type_prefix, 'type_prefix')
         ids = sorted({uuid(item) for item in matching_entity_ids})
-        digest = _digest({'payload': data, 'type_prefix': prefix, 'matching_entity_ids': ids, 'template_id': uuid(template_id) if template_id else None, 'expected_updated_at': expected_updated_at})
+        product_group = str(product_group or '')
+        digest = _digest({'payload': data, 'type_prefix': prefix, 'product_group': product_group, 'template_id': uuid(template_id) if template_id else None, 'expected_updated_at': expected_updated_at})
+        legacy_digest = _digest({'payload': data, 'type_prefix': prefix, 'matching_entity_ids': ids, 'template_id': uuid(template_id) if template_id else None, 'expected_updated_at': expected_updated_at})
         with self.ledger.transaction() as db:
-            prior = self._request(db, group, key, 'template', digest)
+            prior = self._request(db, group, key, 'template', digest, (legacy_digest,))
             if prior is not None:
-                return prior
+                return self._template(db, group, prior['id'])
             if template_id:
                 tid = uuid(template_id)
                 old = db.execute('SELECT * FROM equipment_templates WHERE group_id=? AND id=?', (group, tid)).fetchone()
@@ -247,11 +279,12 @@ class EquipmentCatalog:
                 if expected_updated_at is None or old['updated_at'] != expected_updated_at:
                     raise Conflict('Template changed since it was read')
                 product_id = old['product_id']
-                product_data = {field: data[field] for field in ('entity_type_id', 'manufacturer', 'model_number', 'model_code')}
                 product = db.execute('SELECT * FROM equipment_products WHERE group_id=? AND id=?', (group, product_id)).fetchone()
                 if product['entity_type_id'] != data['entity_type_id']:
                     raise Conflict('Template item type cannot change product identity')
-                identity = self._identity(data['entity_type_id'], data['manufacturer'], data['model_number'])
+                if str(product['product_group'] or '') != product_group:
+                    raise Conflict('Template product group identity cannot change')
+                identity = self._identity(data['entity_type_id'], data['manufacturer'], data['model_number'], product_group)
                 duplicate = db.execute('SELECT id FROM equipment_products WHERE group_id=? AND identity_key=? AND id<>?', (group, identity, product_id)).fetchone() if identity else None
                 if duplicate:
                     raise Conflict('Template metadata already identifies a different product')
@@ -268,6 +301,7 @@ class EquipmentCatalog:
                 action = 'updated'
             else:
                 product_data = {field: data[field] for field in ('entity_type_id', 'manufacturer', 'model_number', 'model_code')}
+                product_data['product_group'] = product_group
                 product = self._get_or_create_product(db, group, product_data, prefix, ids)
                 product_id, tid, action = product['id'], str(uuid4()), 'saved'
             now = timestamp()
@@ -290,10 +324,10 @@ class EquipmentCatalog:
         result.update(id=row['id'], product_id=row['product_id'], archived=bool(row['archived']), created_at=row['created_at'], updated_at=row['updated_at'], type_prefix=product['type_prefix'])
         return result
 
-    def list_templates(self, group_id):
+    def list_templates(self, group_id, include_archived=False):
         group = uuid(group_id)
         with self.ledger.connection() as db:
-            rows = db.execute('SELECT id FROM equipment_templates WHERE group_id=? AND archived=0 ORDER BY lower(json_extract(payload, "$.name")),id', (group,)).fetchall()
+            rows = db.execute('SELECT id FROM equipment_templates WHERE group_id=? AND (? OR archived=0) ORDER BY lower(json_extract(payload, "$.name")),id', (group, int(bool(include_archived)))).fetchall()
             return [self._template(db, group, row['id']) for row in rows]
 
     def archive_template(self, group_id, actor_id, template_id, request_key):
@@ -310,6 +344,22 @@ class EquipmentCatalog:
             now = timestamp()
             db.execute('UPDATE equipment_templates SET archived=1,updated_at=? WHERE group_id=? AND id=?', (now, group, tid))
             db.execute('INSERT INTO equipment_template_history(group_id,template_id,actor_id,request_key,action,payload,created_at) VALUES(?,?,?,?,?,?,?)', (group, tid, actor, key, 'archived', row['payload'], now))
+            return self._template(db, group, tid)
+
+    def restore_template(self, group_id, actor_id, template_id, request_key):
+        group, actor, key, tid = uuid(group_id), uuid(actor_id), uuid(request_key), uuid(template_id)
+        with self.ledger.transaction() as db:
+            prior = db.execute('SELECT * FROM equipment_template_history WHERE group_id=? AND request_key=?', (group, key)).fetchone()
+            if prior:
+                if prior['template_id'] != tid or prior['action'] != 'restored':
+                    raise Conflict('Request key was already used for another template write')
+                return self._template(db, group, tid)
+            row = db.execute('SELECT * FROM equipment_templates WHERE group_id=? AND id=?', (group, tid)).fetchone()
+            if not row:
+                raise ValueError('Unknown template')
+            now = timestamp()
+            db.execute('UPDATE equipment_templates SET archived=0,updated_at=? WHERE group_id=? AND id=?', (now, group, tid))
+            db.execute('INSERT INTO equipment_template_history(group_id,template_id,actor_id,request_key,action,payload,created_at) VALUES(?,?,?,?,?,?,?)', (group, tid, actor, key, 'restored', row['payload'], now))
             return self._template(db, group, tid)
 
     def template_history(self, group_id, template_id):

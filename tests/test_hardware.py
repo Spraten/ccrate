@@ -3,13 +3,14 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 import hardware
+import labels
 
 
 class HardwareTests(unittest.TestCase):
     def test_printer_reconnect_only_probes_and_explains_failures(self):
         with patch.object(hardware, 'probe', return_value={'width_mm': 40, 'height_mm': 30}) as probe:
             self.assertTrue(hardware.reconnect('printer')['connected']); probe.assert_called_once_with()
-        failures = [(FileNotFoundError(), 'disconnected'), (PermissionError(), 'permission'),
+        failures = [(FileNotFoundError('/dev/hidraw0'), 'disconnected'), (PermissionError(), 'permission'),
                     (OSError('resource busy'), 'busy'), (subprocess.TimeoutExpired('probe', 15), 'timeout'),
                     (subprocess.CalledProcessError(1, 'probe', stderr=b'Permission denied'), 'permission'),
                     (ValueError('Load paper'), 'not_ready')]
@@ -18,6 +19,12 @@ class HardwareTests(unittest.TestCase):
                 result = hardware.reconnect('printer')
                 self.assertFalse(result['connected']); self.assertEqual(result['reason'], reason)
                 self.assertTrue(result['steps'])
+        with patch.object(labels.os.path, 'isfile', return_value=False), patch.object(labels.subprocess, 'run') as run:
+            result = hardware.reconnect('printer')
+            self.assertEqual(result['reason'], 'adapter_missing')
+            self.assertIn('software', result['message'].lower())
+            self.assertFalse(any('usb' in step.lower() or 'cable' in step.lower() for step in result['steps']))
+            run.assert_not_called()
         with self.assertRaises(ValueError): hardware.reconnect('arbitrary-device')
 
     def test_camera_reconnect_uses_original_stable_path_without_changing_controls(self):

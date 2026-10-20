@@ -3,4 +3,4 @@
   definePageMeta({ middleware: ["auth"] });
   const route = useRoute();
 </script>
-<template><ItemLoans :item-id="String(route.params.id)" /></template>
+<template><ItemLoans :item-id="String(route.params.id)" activity-mode="details" /></template>

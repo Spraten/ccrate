@@ -20,7 +20,7 @@
   const manager = computed(() => !trustNeedsConfirmation.value && workshop.manager.value);
   const active = computed(() => props.enabled !== false);
   const label = (device: "printer" | "camera") => device === "printer" ? "SUPVAN printer (Pi)" : "C920 camera (Pi)";
-  const text = (state: State) => state.checking ? "Checking" : state.connected ? "Connected" : state.reason === "unknown" ? "Unavailable / Unknown" : state.reason === "disconnected" ? "Disconnected" : "Not ready";
+  const text = (state: State) => state.checking ? "Checking" : state.connected ? "Connected" : state.reason === "unknown" ? "Unavailable / Unknown" : state.reason === "disconnected" ? "Disconnected" : state.reason === "adapter_missing" ? "Software setup needed" : "Not ready";
   const color = (state: State) => state.checking || (!state.connected && state.reason !== "unknown" && state.reason !== "disconnected") ? "amber" : state.connected ? "green" : state.reason === "disconnected" ? "red" : "neutral";
   function unknown(message: string) {
     states.value = Object.fromEntries((['printer', 'camera'] as const).map(device => [device, {

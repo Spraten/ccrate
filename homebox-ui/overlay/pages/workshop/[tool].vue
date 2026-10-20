@@ -2,16 +2,18 @@
   import BaseContainer from "@/components/Base/Container.vue";
   import { toast } from "@/components/ui/sonner";
   import { mountWorkshopTools } from "@/lib/workshop-tools.js";
+  import { useItemActions } from "@/composables/use-item-actions";
   import LabelGenerator from "@/components/Workshop/LabelGenerator.vue";
   definePageMeta({ middleware: ["auth"], key: route => String(route.params.tool) });
   const route = useRoute(), router = useRouter();
   const workshop = useWorkshop();
+  const itemActions = useItemActions();
   const { selectedId } = useCollections();
   const root = ref<HTMLElement | null>(null);
   const labelWorkspace = shallowRef<any>(null);
   const labelStatus = ref("Loading equipment and saved designs…");
   const tool = computed(() => String(route.params.tool));
-  const allowed = ["loans", "map", "checkout-cart", "imports", "labels", "recovery", "system"];
+  const allowed = ["loans", "map", "equipment", "checkout-cart", "imports", "labels", "recovery", "system"];
   const pageTitle = computed(() => tool.value === 'labels' ? 'Label maker' : tool.value === 'map' ? 'Workshop & storage' : tool.value === 'checkout-cart' ? 'Checkout cart' : tool.value.charAt(0).toUpperCase() + tool.value.slice(1));
   useHead({ title: computed(() => `C-Crate | ${pageTitle.value}`) });
   let mounted: ReturnType<typeof mountWorkshopTools> | null = null;
@@ -22,8 +24,9 @@
     labelStatus.value = "Loading equipment and saved designs…";
     if (!allowed.includes(tool.value)) { await navigateTo("/workshop/loans", { replace: true }); return; }
     const initialSelection: { entityId: string | null; drawingId: string | null; roomId: string | null } = { entityId: queryId(route.query.id) || null, drawingId: queryId(route.query.drawing_id) || null, roomId: queryId(route.query.room_id) || null };
-    if (root.value) mounted = mountWorkshopTools(root.value, tool.value === "map" ? "workshop" : tool.value, workshop, (path: string, replace = false) => replace ? router.replace(path) : router.push(path), (text: string) => toast(text), initialSelection, (workspace: any, status?: string) => { if (!workspace) { labelWorkspace.value = null; labelStatus.value = status || "Your C-Crate access changed. Open C-Crate again and check your account and collection."; return null; } const state = reactive(workspace); labelWorkspace.value = state; labelStatus.value = ""; return state; });
+    if (root.value) mounted = mountWorkshopTools(root.value, tool.value === "map" ? "workshop" : tool.value, workshop, (path: string, replace = false) => replace ? router.replace(path) : router.push(path), (text: string) => toast(text), initialSelection, (workspace: any, status?: string) => { if (!workspace) { labelWorkspace.value = null; labelStatus.value = status || "Your C-Crate access changed. Open C-Crate again and check your account and collection."; return null; } const state = reactive(workspace); labelWorkspace.value = state; labelStatus.value = ""; return state; }, (request: any, trigger?: HTMLElement) => itemActions.open(request, trigger));
   }
+  watch(itemActions.changed, result => { if (result) void mounted?.refreshItemAction(result); });
   function follow(event: MouseEvent) {
     const anchor = (event.target as HTMLElement).closest("a");
     if (anchor && anchor.origin === location.origin && !event.ctrlKey && !event.metaKey && !event.shiftKey && !anchor.target) { event.preventDefault(); void router.push(anchor.pathname + anchor.search); }

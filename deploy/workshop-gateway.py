@@ -23,6 +23,7 @@ CODE_ROOT = pathlib.Path(os.environ.get('WORKSHOP_CODE_ROOT', str(pathlib.Path(_
 ROOT = pathlib.Path(os.environ.get('WORKSHOP_ROOT', '/home/user/Desktop/inventory-system'))
 NATIVE_PORT = int(os.environ.get('WORKSHOP_NATIVE_PORT', '17747'))
 COMPANION_PORT = int(os.environ.get('WORKSHOP_COMPANION_PORT', '17749'))
+UI_DEV_PORT = int(os.environ.get('WORKSHOP_UI_DEV_PORT', '0'))
 PORT = int(os.environ.get('WORKSHOP_PORT', '17745'))
 FIXTURE_PROCESS = os.environ.get('WORKSHOP_FIXTURE_PROCESS') == '1'
 FIXTURE_ROOT = None
@@ -127,12 +128,16 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if websocket:
-            if (path != '/api/v1/ws/events' or self.command != 'GET'
-                    or self.headers.get('Upgrade', '').lower() != 'websocket'
+            native_events = path == '/api/v1/ws/events'
+            ui_hmr = (UI_DEV_PORT and path == '/_nuxt/'
+                      and 'vite-hmr' in {value.strip() for value in
+                                         self.headers.get('Sec-WebSocket-Protocol', '').split(',')})
+            if (not (native_events or ui_hmr) or self.command != 'GET'
+                    or self.headers.get('Upgrade', '').strip().lower() != 'websocket'
                     or 'upgrade' not in connection_tokens
                     or self.headers.get('Sec-WebSocket-Version') != '13'):
                 self.close_connection = True
-                self.error(400, 'Only the native events WebSocket is available.')
+                self.error(400, 'The requested WebSocket is unavailable.')
                 return
             key = self.headers.get('Sec-WebSocket-Key', '')
             try:
@@ -146,7 +151,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.close_connection = True
                 self.error(403, 'Open Workshop on this Pi address before connecting.')
                 return
-            self.websocket_proxy(connection_tokens)
+            self.websocket_proxy(connection_tokens, NATIVE_PORT if native_events else UI_DEV_PORT,
+                                 bool(ui_hmr))
             return
         if path == '/sw.js':
             self.send_bytes(200, WORKER, 'application/javascript', {'Service-Worker-Allowed': '/'})
@@ -160,6 +166,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if desktop and self.command == 'POST' and self.headers.get('Origin') != 'http://' + self.headers['Host']:
             self.error(403, 'Open Workshop on this Pi address before submitting a change.')
+            return
+        if not desktop and not (path == '/api' or path.startswith('/api/')) and UI_DEV_PORT:
+            self.proxy(UI_DEV_PORT, False, ui_dev=True)
             return
         if not desktop and not (path == '/api' or path.startswith('/api/')) and self.frontend(path):
             return
@@ -265,19 +274,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_bytes(200, target.read_bytes(), mimetypes.guess_type(str(target))[0] or 'application/octet-stream', {'X-Frame-Options': 'SAMEORIGIN'})
         return True
 
-    def proxy(self, port, desktop):
+    def proxy(self, port, desktop, ui_dev=False):
         connection = None
+        response_started = False
         try:
             if self.headers.get('Transfer-Encoding'):
+                response_started = True
                 self.error(411, 'Send a Content-Length for uploads.')
                 return
             length = int(self.headers.get('Content-Length', '0'))
             if length < 0 or length > (1024 * 1024 if desktop else 64 * 1024 * 1024):
+                response_started = True
                 self.error(413, 'Request is too large.')
                 return
             self.connection.settimeout(20)
             body = self.rfile.read(length) if length else None
             if body is not None and len(body) != length:
+                response_started = True
                 self.error(400, 'Upload was interrupted.')
                 return
             headers = {key: value for key, value in self.headers.items()
@@ -288,6 +301,7 @@ class Handler(BaseHTTPRequestHandler):
             connection = http.client.HTTPConnection('127.0.0.1', port, timeout=75)
             connection.request(self.command, self.path, body=body, headers=headers)
             response = connection.getresponse()
+            response_started = True
             self.send_response(response.status)
             for key, value in response.getheaders():
                 if key.lower() not in HOP_HEADERS and (not desktop or key.lower() != 'cache-control'):
@@ -304,28 +318,32 @@ class Handler(BaseHTTPRequestHandler):
                     if not chunk:
                         break
                     self.wfile.write(chunk)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
         except (ValueError, OSError, http.client.HTTPException):
-            if not self.close_connection:
-                self.error(503, 'The Pi service is unavailable. Your submitted change may need inspection in Recovery; do not repeat it automatically.')
+            if not response_started:
+                try:
+                    self.error(503, 'The Nuxt UI development server is unavailable. Start or restart the local-test stack and reload the page.'
+                               if ui_dev else 'The Pi service is unavailable. Your submitted change may need inspection in Recovery; do not repeat it automatically.')
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
         finally:
             if connection:
                 connection.close()
 
-    def websocket_proxy(self, connection_tokens):
+    def websocket_proxy(self, connection_tokens, port, ui_dev=False):
         connection = None
         response = None
+        response_started = False
         try:
             headers = {key: value for key, value in self.headers.items()
                        if key.lower() not in HOP_HEADERS and key.lower() not in connection_tokens
                        and not key.lower().startswith(('x-forwarded-', 'x-workshop-gateway'))}
             headers.update({'Connection': 'Upgrade', 'Upgrade': 'websocket',
                             'Accept-Encoding': 'identity'})
-            connection = http.client.HTTPConnection('127.0.0.1', NATIVE_PORT, timeout=75)
+            connection = http.client.HTTPConnection('127.0.0.1', port, timeout=75)
             connection.request('GET', self.path, headers=headers)
             response = connection.getresponse()
             if response.status != 101:
+                response_started = True
                 self.send_response(response.status)
                 for key, value in response.getheaders():
                     if key.lower() not in HOP_HEADERS:
@@ -345,8 +363,11 @@ class Handler(BaseHTTPRequestHandler):
                                          response.getheader('Connection', '').split(',')}
                     or upstream is None or response.fp is None):
                 self.close_connection = True
-                self.error(502, 'The native service returned an invalid WebSocket handshake.')
+                response_started = True
+                self.error(502, 'The UI development server returned an invalid WebSocket handshake.'
+                           if ui_dev else 'The native service returned an invalid WebSocket handshake.')
                 return
+            response_started = True
             self.send_response_only(101)
             for key, value in response.getheaders():
                 if key.lower() not in HOP_HEADERS or key.lower() in ('connection', 'upgrade'):
@@ -382,11 +403,13 @@ class Handler(BaseHTTPRequestHandler):
             down.start()
             up.join()
             down.join()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
         except (ValueError, OSError, http.client.HTTPException):
-            if not self.close_connection:
-                self.error(503, 'The Pi service is unavailable. Your submitted change may need inspection in Recovery; do not repeat it automatically.')
+            if not response_started:
+                try:
+                    self.error(503, 'The Nuxt UI development server is unavailable. Start or restart the local-test stack and reload the page.'
+                               if ui_dev else 'The Pi service is unavailable. Your submitted change may need inspection in Recovery; do not repeat it automatically.')
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
         finally:
             if response:
                 response.close()
@@ -403,7 +426,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    host = '127.0.0.1' if FIXTURE_PROCESS else '0.0.0.0'
+    host = '127.0.0.1' if FIXTURE_PROCESS or os.environ.get('WORKSHOP_LOCAL_TEST_NATIVE') == '1' else '0.0.0.0'
     if FIXTURE_PROCESS:
         ui_root = pathlib.Path(os.environ.get('HOMEBOX_UI_ROOT', '')).resolve(strict=True)
         if not ui_root.is_relative_to(pathlib.Path(CODE_ROOT).resolve()):

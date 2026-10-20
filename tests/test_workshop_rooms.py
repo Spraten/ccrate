@@ -125,6 +125,27 @@ class WorkshopRoomTests(unittest.TestCase):
         self.assertEqual(saved['rooms'][0]['objects'][0]['opacity'],.65)
         self.assertEqual(saved['rooms'][0]['objects'][0]['layer'],'below')
 
+    def test_v2_save_preserves_optional_drawing_show_name_flag(self):
+        room=copy.deepcopy(self.fixture.document['rooms'][0])
+        drawing={'id':str(uuid4()),'kind':'Wall','name':'North wall','x':0,'y':0,
+                 'width':3,'height':.2,'rotation':0,'location_id':None}
+        room['objects']=[drawing]
+        saved=room_document({'version':2,'rooms':[room]})
+        self.assertNotIn('show_name',saved['rooms'][0]['objects'][0])
+        drawing['show_name']=False
+        saved=room_document({'version':2,'rooms':[room]})
+        self.assertIs(saved['rooms'][0]['objects'][0]['show_name'],False)
+        request=self.fixture.request({'version':2,'rooms':[room]})
+        self.fixture.store.save(self.fixture.client,self.fixture.group,request,actor_id=self.fixture.actor)
+        self.assertIs(self.fixture.store.get(self.fixture.group)['document']['rooms'][0]['objects'][0]['show_name'],False)
+        drawing['show_name']=True
+        saved=room_document({'version':2,'rooms':[room]})
+        self.assertIs(saved['rooms'][0]['objects'][0]['show_name'],True)
+        for value in (None,0,1,'false'):
+            drawing['show_name']=value
+            with self.subTest(value=value),self.assertRaises(ValueError):
+                room_document({'version':2,'rooms':[room]})
+
     def test_missing_and_versioned_documents(self):
         f = self.fixture
         result = f.store.get(f.group)

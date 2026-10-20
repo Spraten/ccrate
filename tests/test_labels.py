@@ -1,4 +1,4 @@
-import json,tempfile,unittest
+import hashlib,json,tempfile,unittest
 from pathlib import Path
 from uuid import uuid4
 from unittest.mock import patch
@@ -121,3 +121,81 @@ class LabelTests(unittest.TestCase):
             with self.assertRaises(Conflict):labels.print_badge(self.client,self.badges,self.jobs,self.group,self.user,key,self.badge['id'],self.badge['code'])
         with self.assertRaises(Conflict):self.run_print(str(uuid4()),reprint=True)
         self.assertFalse(self.prints)
+
+
+class PrinterAdapterResolutionTests(unittest.TestCase):
+    def test_adapter_uses_code_root_over_runtime_data_root(self):
+        with patch.dict(labels.os.environ, {'WORKSHOP_PRINTER_ADAPTER':'','WORKSHOP_CODE_ROOT':'/srv/ccrate','WORKSHOP_ROOT':'/srv/data'}, clear=True):
+            self.assertEqual(labels.adapter(), '/srv/ccrate/work/supvan-cups/target/release/examples/kiosk-label')
+
+    def test_explicit_printer_adapter_overrides_code_root(self):
+        with patch.dict(labels.os.environ, {'WORKSHOP_PRINTER_ADAPTER':'/opt/kiosk-label','WORKSHOP_CODE_ROOT':'/srv/ccrate'}, clear=True):
+            self.assertEqual(labels.adapter(), '/opt/kiosk-label')
+
+    def test_legacy_workshop_root_is_used_when_code_root_is_unset(self):
+        with patch.dict(labels.os.environ, {'WORKSHOP_ROOT':'/srv/legacy-code'}, clear=True):
+            self.assertEqual(labels.adapter(), '/srv/legacy-code/work/supvan-cups/target/release/examples/kiosk-label')
+
+    def test_missing_adapter_is_detected_before_hidraw_or_subprocess(self):
+        with patch.dict(labels.os.environ, {'WORKSHOP_PRINTER_ADAPTER':'/missing/kiosk-label'}, clear=True), \
+             patch.object(labels.os.path, 'isfile', return_value=False), \
+             patch.object(labels.subprocess, 'run') as run, \
+             patch.object(labels.pathlib.Path, 'glob') as glob:
+            with self.assertRaisesRegex(FileNotFoundError, 'adapter'):
+                labels.probe()
+            run.assert_not_called()
+            glob.assert_not_called()
+
+
+class AssignedEquipmentLabelTests(unittest.TestCase):
+    def setUp(self):
+        self.group = str(uuid4())
+        self.item = str(uuid4())
+        self.native = {'id': self.item, 'name': 'Drone', 'displayId': 'HB-104', 'updatedAt': 'v1'}
+
+    def test_assigned_id_projection_preserves_native_uuid_and_legacy_display_id(self):
+        class Client:
+            timeout = 5
+            def entity(inner, entity_id): return dict(self.native)
+        class Catalog:
+            def assignment(inner, group, entity_id):
+                return {'entity_id': entity_id, 'display_id': 'DRONE-2S-6'} if group == self.group and entity_id == self.item else None
+        projected = labels.with_assigned_display_ids(Client(), Catalog(), self.group)
+        entity = projected.entity(self.item)
+        self.assertEqual(entity['id'], self.item)
+        self.assertEqual(entity['displayId'], 'DRONE-2S-6')
+        self.assertEqual(projected.timeout, 5)
+        self.assertEqual(labels.with_assigned_display_ids(Client(), Catalog(), str(uuid4())).entity(self.item)['displayId'], 'HB-104')
+
+    def test_label_preview_uses_effective_id_and_keeps_qr_destination_native(self):
+        class Client:
+            def entity(inner, entity_id): return dict(self.native)
+        class Catalog:
+            def assignment(inner, group, entity_id): return {'display_id': 'DRONE-2S-6'}
+        class Layouts:
+            def preview(inner, client, group, actor, data):
+                entity = client.entity(data['entity_id'])
+                return {'variables': {'display_id': entity['displayId'], 'item_path': f"/item/{entity['id']}"}}
+        result = labels.preview(Client(), self.item, layouts=Layouts(), group=self.group, actor=str(uuid4()), template_id='template', template_revision=1, catalog=Catalog())
+        self.assertEqual(result['variables']['display_id'], 'DRONE-2S-6')
+        self.assertEqual(result['variables']['item_path'], f'/item/{self.item}')
+
+    def test_changed_effective_id_invalidates_review_before_printer_access(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        ledger = Ledger(Path(temporary.name)/'ledger.db')
+        jobs = NativeJobs(ledger)
+        review_id = str(uuid4())
+        class Client:
+            def entity(inner, entity_id): return dict(self.native)
+        class Catalog:
+            def assignment(inner, group, entity_id): return {'display_id': 'DRONE-2S-7'}
+        class Layouts:
+            def reconcile_reviews(inner, group, jobs): pass
+            def get(inner, group, template_id): return {'revision': 1, 'document': {}}
+            def review(inner, group, actor, key):
+                digest = hashlib.sha256(json.dumps({}, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+                return {'item_id': self.item, 'attached_job': None, 'item_updated_at': 'v1', 'item_display_id': 'DRONE-2S-6', 'template_id': 'template', 'template_revision': 1, 'template_hash': digest, 'png': b'', 'sha256': 'hash', 'profile': 'supvan', 'label_mm': [40,28], 'dpi': 203.2, 'width': 320, 'height': 224}
+        with patch.object(labels, 'probe', side_effect=AssertionError('stale review must be rejected before printer access')):
+            with self.assertRaisesRegex(Conflict, 'changed since review'):
+                labels.print_label(Client(), jobs, self.group, str(uuid4()), str(uuid4()), self.item, layouts=Layouts(), review_id=review_id, catalog=Catalog())

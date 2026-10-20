@@ -361,12 +361,14 @@ def authenticate_account(account):
 
 def _native_environment(allow_registration):
     root = DATA_ROOT / 'work' / 'baseline'
-    return dict(os.environ, HBOX_WEB_HOST='127.0.0.1', HBOX_WEB_PORT='17747',
+    environment = dict(os.environ, HBOX_WEB_HOST='127.0.0.1', HBOX_WEB_PORT='17747',
                 HBOX_WEB_WRITE_TIMEOUT='60s', HBOX_STORAGE_PREFIX_PATH='data',
                 HBOX_DATABASE_SQLITE_PATH=str(root / 'data' / 'homebox.db') + '?_pragma=busy_timeout=999&_pragma=journal_mode=WAL&_fk=1&_time_format=sqlite',
                 HBOX_AUTH_API_KEY_PEPPER=(root / 'pepper').read_text().strip(),
                 HBOX_OPTIONS_GITHUB_RELEASE_CHECK='false', HBOX_OPTIONS_ALLOW_ANALYTICS='false',
                 HBOX_OPTIONS_ALLOW_REGISTRATION='true' if allow_registration else 'false')
+    environment.pop('WORKSHOP_UI_DEV_PORT', None)
+    return environment
 
 
 def _wait_native(child, timeout=90):
@@ -410,6 +412,7 @@ def _healthcheck():
 def run():
     if os.environ.get('WORKSHOP_LOCAL_TEST') != '1':
         raise BootstrapError('This supervisor only runs an isolated local-test instance')
+    live_ui = os.environ.get('WORKSHOP_LOCAL_UI_DEV', '1') != '0'
     native_mode = os.environ.get('WORKSHOP_LOCAL_TEST_NATIVE') == '1'
     if native_mode:
         expected = pathlib.Path.home() / '.local' / 'share' / 'ccrate-local-test' / 'data'
@@ -437,7 +440,17 @@ def run():
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     env = dict(os.environ, WORKSHOP_NATIVE_PORT='17747', WORKSHOP_COMPANION_PORT='17749', WORKSHOP_PORT='17745')
+    env.pop('WORKSHOP_UI_DEV_HOST', None)
+    env.pop('WORKSHOP_UI_DEV_PORT', None)
     try:
+        if live_ui:
+            preparation = subprocess.Popen(
+                [sys.executable, str(CODE_ROOT / 'deploy' / 'dev-homebox-ui.py'), 'prepare'],
+                cwd=CODE_ROOT, env=env)
+            processes.append(preparation)
+            if preparation.wait() != 0:
+                raise RuntimeError(f'Dev UI preparation failed ({preparation.returncode})')
+            processes.remove(preparation)
         native = subprocess.Popen([str(NATIVE_BINARY)], cwd=DATA_ROOT / 'work' / 'baseline',
                                   env=_native_environment(allow_registration))
         processes.append(native)
@@ -455,7 +468,14 @@ def run():
         companion = subprocess.Popen([sys.executable, str(CODE_ROOT / 'deploy' / 'kiosk-server.py')], cwd=CODE_ROOT, env=env)
         processes.append(companion)
         _wait_http('http://127.0.0.1:17749/api/session', companion)
-        gateway = subprocess.Popen([sys.executable, str(CODE_ROOT / 'deploy' / 'workshop-gateway.py')], cwd=CODE_ROOT, env=env)
+        gateway_env = env
+        if live_ui:
+            dev_ui = subprocess.Popen([sys.executable, str(CODE_ROOT / 'deploy' / 'dev-homebox-ui.py'), 'serve'],
+                                      cwd=CODE_ROOT, env=env)
+            processes.append(dev_ui)
+            _wait_http('http://127.0.0.1:17751/', dev_ui, timeout=120)
+            gateway_env = dict(env, WORKSHOP_UI_DEV_PORT='17751')
+        gateway = subprocess.Popen([sys.executable, str(CODE_ROOT / 'deploy' / 'workshop-gateway.py')], cwd=CODE_ROOT, env=gateway_env)
         processes.append(gateway)
         _wait_http('http://127.0.0.1:17745/api/v1/status', gateway)
         _wait_http('http://127.0.0.1:17749/api/session', companion)

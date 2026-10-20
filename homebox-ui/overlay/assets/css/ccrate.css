@@ -60,3 +60,51 @@
 :root.theme-night #app .ccrate-feedback-submitted {
   color: rgb(134 239 172);
 }
+
+/* Keep the shell search usable when device controls share a narrow header. */
+:root #app .ccrate-header-tools {
+  align-content: center;
+}
+
+:root #app .ccrate-header-search-group {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  min-width: 0;
+  gap: .5rem;
+}
+
+:root #app .ccrate-header-search {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 2.75rem;
+}
+
+:root #app .ccrate-header-tools > div > button,
+:root #app .ccrate-header-search-group button,
+:root #app .ccrate-header-device button,
+:root #app #orc-launcher-toolbar button,
+:root #app #orc-launcher-legacy button,
+:root #app .ccrate-header-sidebar-trigger {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
+@media (min-width: 1536px) {
+  :root #app .ccrate-header-search-group {
+    flex-basis: auto;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --header-height-mobile: 10.3125rem;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1535px) {
+  :root {
+    --header-height: 7.0625rem;
+  }
+}

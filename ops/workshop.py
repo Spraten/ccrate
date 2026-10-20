@@ -78,11 +78,13 @@ def room_document(data):
             if 'color' in source and (not isinstance(color,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',color)):raise ValueError('Choose a valid drawing color')
             if type(opacity) not in (int,float) or not math.isfinite(opacity) or not 0<=opacity<=1:raise ValueError('Drawing opacity is out of range')
             if layer not in ('above','below'):raise ValueError('Choose a valid drawing layer')
+            if 'show_name' in source and type(source['show_name']) is not bool:raise ValueError('Drawing name visibility must be a boolean')
             obj={'id':oid,'kind':kind,'name':label,'x':x,'y':y,'width':obj_width,'height':obj_height,
                  'rotation':rotation,'location_id':obj_location}
             if 'color' in source:obj['color']=color
             if 'opacity' in source:obj['opacity']=opacity
             if 'layer' in source:obj['layer']=layer
+            if 'show_name' in source:obj['show_name']=source['show_name']
             objects.append(obj)
         result.append({'id':room_id,'location_id':location_id,'name':item['name'],
                        'width':width,'height':height,'unit':'ft',

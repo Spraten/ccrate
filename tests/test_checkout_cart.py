@@ -1,4 +1,5 @@
 import pathlib
+import json
 import tempfile
 import unittest
 from uuid import uuid4
@@ -56,7 +57,7 @@ class CheckoutCartTests(unittest.TestCase):
 
         cleared = self.save([], revision=saved['revision'])
 
-        self.assertEqual(cleared, {'revision': 2, 'items': []})
+        self.assertEqual(cleared, {'revision': 2, 'items': [], 'notes': {}})
 
     def test_actor_and_group_scopes_are_independent(self):
         self.save([self.asset])
@@ -106,6 +107,59 @@ class CheckoutCartTests(unittest.TestCase):
         with self.assertRaises(Conflict):
             self.cart.consume_completed_receipt(self.group, self.other_actor, operation['id'])
         self.assertEqual(self.cart.get(self.group, self.actor)['items'], [self.asset])
+
+    def test_cart_notes_legacy_rows_and_payloads(self):
+        with self.ledger.transaction() as db:
+            db.execute('DROP TABLE checkout_carts')
+            db.execute('''CREATE TABLE checkout_carts(group_id TEXT NOT NULL,actor_id TEXT NOT NULL,
+              revision INTEGER NOT NULL,items TEXT NOT NULL,updated_at TEXT NOT NULL,
+              PRIMARY KEY(group_id,actor_id))''')
+            db.execute('INSERT INTO checkout_carts VALUES(?,?,?,?,?)',
+                       (self.group, self.actor, 2, json.dumps([self.asset]), 'old'))
+        migrated = CheckoutCart(self.ledger)
+        self.assertEqual(migrated.get(self.group, self.actor),
+                         {'revision': 2, 'items': [self.asset], 'notes': {}})
+        first = migrated.save(self.group, self.actor, [self.asset, self.other_asset], 2, ident(),
+                              {self.asset: 'measure first'})
+        legacy_update = migrated.save(self.group, self.actor, [self.asset], first['revision'], ident())
+        self.assertEqual(legacy_update['notes'], {self.asset: 'measure first'})
+        self.assertNotIn(self.other_asset, legacy_update['notes'])
+
+    def test_cart_notes_revision_and_replay(self):
+        key = ident()
+        first = self.cart.save(self.group, self.actor, [self.asset], 0, key,
+                               {self.asset: 'measure before use'})
+        self.assertEqual(self.cart.save(self.group, self.actor, [self.asset], 0, key,
+                                        {self.asset: 'measure before use'}), first)
+        with self.assertRaises(Conflict):
+            self.cart.save(self.group, self.actor, [self.asset], 0, key,
+                           {self.asset: 'different note'})
+        with self.assertRaises(Conflict):
+            self.cart.save(self.group, self.actor, [self.other_asset], 0, ident())
+        self.assertEqual(self.cart.get(self.group, self.actor), first)
+
+    def test_cart_note_limits_and_invalid_values_fail_without_saving(self):
+        for note, expected in [('x' * 1001, ValueError), ('\ud800', ValueError)]:
+            with self.assertRaises(expected):
+                self.cart.save(self.group, self.actor, [self.asset], 0, ident(), {self.asset: note})
+            self.assertEqual(self.cart.get(self.group, self.actor), {'revision': 0, 'items': [], 'notes': {}})
+        with self.assertRaises(ValueError):
+            self.cart.save(self.group, self.actor, [self.asset], 0, ident(), {self.other_asset: 'extra'})
+        accepted = self.cart.save(self.group, self.actor, [self.asset], 0, ident(), {self.asset: 'x' * 1000})
+        self.assertEqual(len(accepted['notes'][self.asset]), 1000)
+
+    def test_cart_consumption_preserves_other_notes(self):
+        saved = self.cart.save(self.group, self.actor, [self.asset, self.other_asset], 0, ident(),
+                               {self.asset: 'for this checkout', self.other_asset: 'keep for later'})
+        operation = self.ledger.begin(self.group, self.actor, 'check_out', [self.asset], ident(),
+                                      context={'checkout_cart': {'revision': saved['revision'],
+                                                                 'items': [self.asset, self.other_asset],
+                                                                 'original_items': [self.asset, self.other_asset],
+                                                                 'notes': saved['notes']}})
+        self.ledger.complete(operation['id'])
+        result = self.cart.consume_completed_receipt(self.group, self.actor, operation['id'])
+        self.assertEqual(result['cart']['items'], [self.other_asset])
+        self.assertEqual(result['cart']['notes'], {self.other_asset: 'keep for later'})
 
 
 if __name__ == '__main__':

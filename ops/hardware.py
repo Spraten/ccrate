@@ -23,6 +23,10 @@ def failure(device, error):
         reason = 'busy'
         message = 'Another application is using the device.'
         steps = ['Close other camera previews or printer applications.', 'Try Reconnect again. Your draft remains available.']
+    elif isinstance(error, FileNotFoundError) and 'adapter' in detail:
+        reason = 'adapter_missing'
+        message = 'The SUPVAN printer adapter software is missing or cannot run on the Pi.'
+        steps = ['Ask an administrator to run deploy/restore-printer-adapter.sh from the C-Crate checkout on the Pi, then use Reconnect printer again. The script checks for standard system Rust tools and required development files.']
     elif isinstance(error, FileNotFoundError) or 'connect exactly' in detail or 'not found' in detail:
         reason = 'disconnected'
         message = 'The workshop device was not found.'

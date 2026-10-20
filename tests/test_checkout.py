@@ -1,7 +1,7 @@
 import copy,json,pathlib,tempfile,unittest
 from uuid import uuid4
 from ledger import Ledger,Conflict
-from checkout import checkout_availability, checkout_status_actor, confirm_checkout, expand_cart_assets
+from checkout import checkout_availability, checkout_cart_context, checkout_status_actor, confirm_checkout, expand_cart_assets
 from checkout_cart import CheckoutCart
 from kits import manifest
 
@@ -22,7 +22,7 @@ class Tests(unittest.TestCase):
         self.client=Client(self.user,{self.asset:self.entity})
     def tearDown(self):self.temp.cleanup()
     def confirm(self,**kwargs):
-        return confirm_checkout(self.client,self.ledger,self.group,self.user,kwargs.get('assets',[self.asset]),kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True),kwargs.get('verified'),kwargs.get('kit_versions'),kwargs.get('cart_context'))
+        return confirm_checkout(self.client,self.ledger,self.group,self.user,kwargs.get('assets',[self.asset]),kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True),kwargs.get('verified'),kwargs.get('kit_versions'),kwargs.get('cart_context'),kwargs.get('notes'))
     def test_native_shelf_preserved_and_repeat_confirm_idempotent(self):
         original=copy.deepcopy(self.entity);key=str(uuid4())
         first=self.confirm(key=key);second=self.confirm(key=key)
@@ -60,7 +60,8 @@ class Tests(unittest.TestCase):
                                                                'original_items':[self.asset,other]})
 
         result=cart.consume_completed_receipt(self.group,self.user,receipt['id'])
-        self.assertEqual(result['cart']['items'],[])
+        self.assertEqual(result['cart']['items'],[other])
+        self.assertEqual(result['cart']['notes'],{})
         self.assertEqual(result['cart']['revision'],saved['revision']+1)
 
     def test_kiosk_can_confirm_items_added_beyond_the_desk_cart(self):
@@ -118,6 +119,91 @@ class Tests(unittest.TestCase):
 
         self.assertEqual(checkout_status_actor(self.ledger,self.group,operation['request_key'],self.user,'service-actor'),self.user)
         self.assertIsNone(checkout_status_actor(self.ledger,self.group,operation['request_key'],None,'service-actor'))
+
+    def test_checkout_notes_bound_to_receipt(self):
+        note = 'Use the shorter clamp.'
+        receipt = self.confirm(notes={self.asset: note})
+        detail = self.ledger.detail(self.group, receipt['id'])
+        self.assertEqual(detail['context']['checkout_notes'], {self.asset: note})
+        self.assertEqual(detail['events'][0]['detail']['intent']['checkout_notes'], {self.asset: note})
+        self.assertEqual(receipt, self.confirm(key=self.ledger.detail(self.group, receipt['id'])['request_key'],
+                                                notes={self.asset: note}))
+
+    def test_cart_checkout_carries_only_root_notes_to_receipt(self):
+        cart = CheckoutCart(self.ledger)
+        child = str(uuid4())
+        self.client.assets[child] = {'id': child, 'name': 'Component', 'quantity': 1, 'archived': False,
+                                     'parent': {'id': str(uuid4())}, 'entityType': {'isLocation': False},
+                                     'fields': [{'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}]}
+        self.entity['fields'].append({'name': 'Equipment kit manifest', 'type': 'text',
+                                      'textValue': json.dumps({'version': 1, 'members': [child]})})
+        saved = cart.save(self.group, self.user, [self.asset], 0, str(uuid4()), {self.asset: 'return clamp'})
+        expanded = expand_cart_assets(self.client, [self.asset])
+        receipt = self.confirm(assets=expanded, verified=expanded, kit_versions=manifest(self.client, self.asset)['versions'],
+                              cart_context={'revision': saved['revision'], 'items': [self.asset], 'notes': saved['notes']})
+        self.assertEqual(self.ledger.detail(self.group, receipt['id'])['context']['checkout_notes'],
+                         {self.asset: 'return clamp'})
+        consumed = cart.consume_completed_receipt(self.group, self.user, receipt['id'])
+        self.assertEqual(consumed['consumed'], [self.asset])
+        self.assertEqual(consumed['cart']['notes'], {})
+        self.assertEqual(consumed['cart']['items'], [])
+        with self.assertRaises(ValueError):
+            self.confirm(assets=expanded, verified=expanded, kit_versions=manifest(self.client, self.asset)['versions'],
+                         cart_context={'revision': saved['revision'], 'items': [self.asset],
+                                       'notes': {child: 'wrong component'}})
+
+    def test_legacy_cart_checkout_replay_keeps_original_intent_shape(self):
+        key = str(uuid4())
+        cart_context = {'revision': 4, 'items': [self.asset], 'original_items': [self.asset]}
+        prior = self.ledger.begin(self.group, self.user, 'check_out', [self.asset], key,
+                                  context={'checkout_cart': cart_context},
+                                  intent={'checkout_cart': cart_context})
+        self.ledger.complete(prior['id'])
+
+        replay = self.confirm(key=key, cart_context=cart_context)
+
+        self.assertEqual(replay, {'id': prior['id'], 'status': 'completed', 'action': 'check_out', 'count': 1})
+        self.assertEqual(self.ledger.detail(self.group, prior['id'])['context']['checkout_cart'], cart_context)
+
+    def test_kiosk_adapter_replays_empty_note_context_with_or_without_original_items(self):
+        for include_original in (True, False):
+            for include_empty_notes in (True, False):
+                with self.subTest(include_original=include_original, include_empty_notes=include_empty_notes):
+                    asset = str(uuid4())
+                    entity = copy.deepcopy(self.entity)
+                    entity['id'] = asset
+                    self.client.assets[asset] = entity
+                    saved = {'revision': 4, 'items': [asset]}
+                    if include_empty_notes:
+                        saved['notes'] = {}
+                    saved = json.loads(json.dumps(saved))
+                    context = checkout_cart_context(saved, [asset], include_original_items=include_original)
+                    expected = {'revision': 4, 'items': [asset]}
+                    if include_original:
+                        expected['original_items'] = [asset]
+                    self.assertEqual(context, expected)
+
+                    key = str(uuid4())
+                    prior = self.ledger.begin(self.group, self.user, 'check_out', [asset], key,
+                                              context={'checkout_cart': context},
+                                              intent={'checkout_cart': context})
+                    self.ledger.complete(prior['id'])
+                    replay = self.confirm(assets=[asset], key=key, cart_context=context)
+                    self.assertEqual(replay['id'], prior['id'])
+
+    def test_failed_checkout_note_does_not_create_operation_or_standalone_job(self):
+        with self.assertRaises(ValueError):
+            self.confirm(notes={self.asset: 'x' * 1001})
+        self.assertEqual(self.ledger.unresolved(), [])
+        with self.ledger.connection() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM operations').fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT count(*) FROM native_jobs').fetchone()[0], 0)
+
+    def test_checkout_note_limits_unicode_and_selected_ids(self):
+        self.assertEqual(self.confirm(notes={self.asset: 'x' * 1000})['status'], 'completed')
+        for key, value in [(self.asset, '\ud800'), (str(uuid4()), 'extra')]:
+            with self.assertRaises(ValueError):
+                self.confirm(notes={key: value})
 
 
 if __name__=='__main__':unittest.main()

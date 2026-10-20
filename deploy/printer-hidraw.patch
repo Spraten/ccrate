@@ -1,0 +1,100 @@
+diff --git a/crates/supvan-proto/src/hidraw.rs b/crates/supvan-proto/src/hidraw.rs
+index 13274c6..09d5b91 100644
+--- a/crates/supvan-proto/src/hidraw.rs
++++ b/crates/supvan-proto/src/hidraw.rs
+@@ -10,6 +10,28 @@ use std::time::Duration;
+ /// HID report size for the Supvan T50 Pro USB interface.
+ pub const HID_REPORT_SIZE: usize = 64;
+ 
++/// Linux hidraw expects the report ID in byte 0 even for unnumbered reports.
++/// The device's 64-byte payload therefore needs a separate leading zero byte.
++const HID_REPORT_BUFFER_SIZE: usize = HID_REPORT_SIZE + 1;
++
++fn encode_output_report(data: &[u8]) -> [u8; HID_REPORT_BUFFER_SIZE] {
++    let mut report = [0u8; HID_REPORT_BUFFER_SIZE];
++    let copy_len = data.len().min(HID_REPORT_SIZE);
++    report[1..1 + copy_len].copy_from_slice(&data[..copy_len]);
++    report
++}
++
++fn ensure_full_write(actual: usize, expected: usize) -> Result<()> {
++    if actual == expected {
++        Ok(())
++    } else {
++        Err(Error::Io(std::io::Error::new(
++            std::io::ErrorKind::WriteZero,
++            format!("short hidraw write: {actual} of {expected} bytes"),
++        )))
++    }
++}
++
+ /// A raw HID device opened via `/dev/hidrawN`.
+ pub struct HidrawDevice {
+     fd: RawFd,
+@@ -32,23 +54,22 @@ impl HidrawDevice {
+         self.fd
+     }
+ 
+-    /// Write a HID output report. Data is padded with zeros to 64 bytes.
++    /// Write a 64-byte HID output report, prefixing the unnumbered report ID
++    /// required by hidraw and padding the payload with zeros when needed.
+     pub fn write_report(&self, data: &[u8]) -> Result<()> {
+-        let mut report = [0u8; HID_REPORT_SIZE];
+-        let copy_len = data.len().min(HID_REPORT_SIZE);
+-        report[..copy_len].copy_from_slice(&data[..copy_len]);
++        let report = encode_output_report(data);
+ 
+         let n = unsafe {
+             libc::write(
+                 self.fd,
+                 report.as_ptr() as *const libc::c_void,
+-                HID_REPORT_SIZE,
++                report.len(),
+             )
+         };
+         if n < 0 {
+             return Err(Error::Io(std::io::Error::last_os_error()));
+         }
+-        Ok(())
++        ensure_full_write(n as usize, report.len())
+     }
+ 
+     /// Read a HID input report (up to 64 bytes) with a timeout.
+@@ -102,3 +123,37 @@ impl Drop for HidrawDevice {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn output_report_keeps_zero_leading_payload_after_report_id() {
++        let payload: [u8; HID_REPORT_SIZE] = std::array::from_fn(|i| i as u8);
++        let report = encode_output_report(&payload);
++
++        assert_eq!(report[0], 0, "unnumbered HID report ID");
++        assert_eq!(&report[1..], &payload);
++    }
++
++    #[test]
++    fn output_report_preserves_nonzero_leading_payload() {
++        let mut payload = [0u8; HID_REPORT_SIZE];
++        payload[0] = 0xc0;
++        let report = encode_output_report(&payload);
++
++        assert_eq!(report[0], 0, "unnumbered HID report ID");
++        assert_eq!(&report[1..], &payload);
++    }
++
++    #[test]
++    fn output_report_is_padded_and_reports_short_write() {
++        let report = encode_output_report(&[0xc0, 0x40]);
++
++        assert_eq!(report[0], 0);
++        assert_eq!(&report[1..3], &[0xc0, 0x40]);
++        assert!(report[3..].iter().all(|byte| *byte == 0));
++        assert!(ensure_full_write(HID_REPORT_SIZE, HID_REPORT_SIZE + 1).is_err());
++    }
++}

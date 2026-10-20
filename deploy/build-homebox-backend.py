@@ -33,7 +33,7 @@ assert body.count(anchor)==1
 body=body.replace(anchor,anchor+'\t\tfield.String("display_id_base").Default(""),\n')
 schema.write_text(body)
 go=pathlib.Path((ROOT/'work/toolchains/go-path.txt').read_text().strip())/'bin/go'
-env=dict(os.environ,CGO_ENABLED='0',GOTOOLCHAIN='local',GOPATH=str(ROOT/'work/toolchains/go-cache'),GOCACHE=str(ROOT/'work/toolchains/go-build-cache'))
+env=dict(os.environ,CGO_ENABLED='0',GOTOOLCHAIN='auto',GOPATH=str(ROOT/'work/toolchains/go-cache'),GOCACHE=str(ROOT/'work/toolchains/go-build-cache'))
 subprocess.run([str(go),'generate','./internal/data/ent'],cwd=BUILD,env=env,check=True)
 test_main=BUILD/'internal/data/repo/main_test.go';mb=test_main.read_text()
 mb=mb.replace('"github.com/sysadminsmedia/homebox/backend/internal/data/ent"','"github.com/sysadminsmedia/homebox/backend/internal/data/ent"\n\t"github.com/sysadminsmedia/homebox/backend/internal/data/shortcodes"\n\t"github.com/sysadminsmedia/homebox/backend/internal/data/displayids"',1)

@@ -1,4 +1,7 @@
 import concurrent.futures
+import hashlib
+import json
+import sqlite3
 import tempfile
 import unittest
 import uuid
@@ -26,6 +29,85 @@ class EquipmentCatalogTests(unittest.TestCase):
         return {'name': 'Air 2S', 'entity_type_id': self.type_id, 'manufacturer': 'DJI',
                 'model_number': 'Air 2S', 'model_code': ' 2s ', 'description': 'Drone', 'tag_ids': [], **extra}
 
+
+
+    def test_legacy_schema_template_and_assignment_replay_after_migration(self):
+        path = Path(self.tmp.name) / 'legacy-replay.sqlite'
+        group, actor, request_key, assign_key = uid(), uid(), uid(), uid()
+        type_id, entity_id, product_id, template_id = uid(), uid(), uid(), uid()
+        payload = {'name': 'Kit', 'entity_type_id': type_id, 'manufacturer': 'Maker', 'model_number': 'Kit model',
+                   'model_code': 'KIT', 'description': 'shared', 'tag_ids': []}
+        encoded = json.dumps(payload, sort_keys=True)
+        digest = lambda value: hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        legacy_identity = digest([type_id, 'maker', 'kit model'])
+        legacy_template_result = {**payload, 'id': template_id, 'product_id': product_id, 'archived': False,
+                                  'created_at': '2026-01-01T00:00:00Z', 'updated_at': '2026-01-01T00:00:00Z', 'type_prefix': 'DRONE'}
+        assignment = {'group_id': group, 'entity_id': entity_id, 'product_id': product_id,
+                      'display_id': 'DRONE-KIT-1', 'type_prefix': 'DRONE', 'model_code': 'KIT',
+                      'number': 1, 'request_key': assign_key, 'actor_id': actor,
+                      'assigned_at': '2026-01-01T00:00:00Z', 'deleted': 0}
+        legacy_template_digest = digest({'payload': payload, 'type_prefix': 'DRONE', 'matching_entity_ids': [entity_id],
+                                         'template_id': None, 'expected_updated_at': None})
+        with sqlite3.connect(path) as db:
+            db.executescript('''
+            CREATE TABLE equipment_products(id TEXT PRIMARY KEY, group_id TEXT NOT NULL, entity_type_id TEXT NOT NULL,
+              type_prefix TEXT NOT NULL, manufacturer TEXT NOT NULL, model_number TEXT NOT NULL, model_code TEXT NOT NULL,
+              high_water INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+              identity_key TEXT NOT NULL DEFAULT '', UNIQUE(group_id,id));
+            CREATE TABLE equipment_templates(id TEXT PRIMARY KEY, group_id TEXT NOT NULL, product_id TEXT NOT NULL,
+              payload TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+            CREATE TABLE equipment_template_history(sequence INTEGER PRIMARY KEY, group_id TEXT NOT NULL, template_id TEXT NOT NULL,
+              actor_id TEXT NOT NULL, request_key TEXT NOT NULL, action TEXT NOT NULL, payload TEXT NOT NULL,
+              created_at TEXT NOT NULL, UNIQUE(group_id,request_key));
+            CREATE TABLE equipment_catalog_requests(group_id TEXT NOT NULL, request_key TEXT NOT NULL, action TEXT NOT NULL,
+              request_hash TEXT NOT NULL, result_id TEXT NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL,
+              PRIMARY KEY(group_id,request_key));
+            CREATE TABLE equipment_product_members(group_id TEXT NOT NULL, product_id TEXT NOT NULL, entity_id TEXT NOT NULL,
+              PRIMARY KEY(group_id,product_id,entity_id));
+            CREATE TABLE equipment_assignments(group_id TEXT NOT NULL, entity_id TEXT NOT NULL, product_id TEXT NOT NULL,
+              display_id TEXT NOT NULL, type_prefix TEXT NOT NULL, model_code TEXT NOT NULL, number INTEGER NOT NULL,
+              request_key TEXT NOT NULL, actor_id TEXT NOT NULL, assigned_at TEXT NOT NULL,
+              PRIMARY KEY(group_id,entity_id), UNIQUE(group_id,display_id));
+            CREATE TABLE equipment_assignment_requests(group_id TEXT NOT NULL, request_key TEXT NOT NULL, request_hash TEXT NOT NULL,
+              entity_id TEXT NOT NULL, product_id TEXT NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL,
+              PRIMARY KEY(group_id,request_key));
+            ''')
+            db.execute('INSERT INTO equipment_products VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                       (product_id, group, type_id, 'DRONE', 'Maker', 'Kit model', 'KIT', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', legacy_identity))
+            db.execute('INSERT INTO equipment_templates VALUES(?,?,?,?,0,?,?)',
+                       (template_id, group, product_id, encoded, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'))
+            db.execute('INSERT INTO equipment_template_history(group_id,template_id,actor_id,request_key,action,payload,created_at) VALUES(?,?,?,?,?,?,?)',
+                       (group, template_id, actor, request_key, 'saved', encoded, '2026-01-01T00:00:00Z'))
+            db.execute('INSERT INTO equipment_catalog_requests VALUES(?,?,?,?,?,?,?)',
+                       (group, request_key, 'template', legacy_template_digest, template_id, json.dumps(legacy_template_result, sort_keys=True), '2026-01-01T00:00:00Z'))
+            db.execute('INSERT INTO equipment_product_members VALUES(?,?,?)', (group, product_id, entity_id))
+            db.execute('INSERT INTO equipment_assignments VALUES(?,?,?,?,?,?,?,?,?,?)', tuple(assignment[key] for key in
+                       ('group_id','entity_id','product_id','display_id','type_prefix','model_code','number','request_key','actor_id','assigned_at')))
+            db.execute('INSERT INTO equipment_assignment_requests VALUES(?,?,?,?,?,?,?)',
+                       (group, assign_key, digest([entity_id, product_id]), entity_id, product_id, json.dumps(assignment, sort_keys=True), '2026-01-01T00:00:00Z'))
+        current = EquipmentCatalog(path)
+        replay = current.save_template(group, actor, request_key, payload, [entity_id], type_prefix='DRONE')
+        self.assertEqual(template_id, replay['id'])
+        self.assertEqual(product_id, replay['product_id'])
+        assignment_replay = current.assign_item(group, actor, entity_id, product_id, assign_key)
+        self.assertEqual('DRONE-KIT-1', assignment_replay['display_id'])
+
+    def test_additive_product_group_schema_migration_preserves_legacy_products(self):
+        path = Path(self.tmp.name) / 'legacy.sqlite'
+        group, product_id, type_id = uid(), uid(), uid()
+        legacy_identity = hashlib.sha256(json.dumps([type_id, 'dji', 'air 2s'], separators=(',', ':')).encode()).hexdigest()
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE equipment_products(id TEXT PRIMARY KEY, group_id TEXT NOT NULL, entity_type_id TEXT NOT NULL, type_prefix TEXT NOT NULL, manufacturer TEXT NOT NULL, model_number TEXT NOT NULL, model_code TEXT NOT NULL, high_water INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, identity_key TEXT NOT NULL DEFAULT '', UNIQUE(group_id,id))")
+            db.execute('INSERT INTO equipment_products VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                       (product_id, group, type_id, 'DRONE', 'DJI', 'Air 2S', '2S', 4, 't', 't', legacy_identity))
+        migrated = EquipmentCatalog(path)
+        with migrated.ledger.connection() as db:
+            row = db.execute('SELECT * FROM equipment_products WHERE id=?', (product_id,)).fetchone()
+            self.assertIn('product_group', row.keys())
+            self.assertEqual('', row['product_group'])
+            self.assertNotEqual(legacy_identity, row['identity_key'])
+            self.assertEqual(4, row['high_water'])
+
     def test_collection_scoping_validation_normalization_and_audit(self):
         template = self.catalog.save_template(self.group, self.actor, uid(), self.payload(), type_prefix='DRONE')
         self.assertEqual(template['model_code'], '2S')
@@ -52,6 +134,22 @@ class EquipmentCatalogTests(unittest.TestCase):
         self.assertNotIn(first['id'], [row['id'] for row in self.catalog.list_templates(self.group)])
         with self.assertRaises(Conflict):
             self.catalog.save_template(self.group, self.actor, uid(), self.payload(name='Replacement', model_number='Different model'), type_prefix='DRONE')
+
+    def test_archive_restore_is_replay_safe_and_records_each_lifecycle_transition(self):
+        template = self.catalog.save_template(self.group, self.actor, uid(), self.payload(), type_prefix='DRONE')
+        archive_key, restore_key = uid(), uid()
+        archived = self.catalog.archive_template(self.group, self.actor, template['id'], archive_key)
+        self.assertTrue(archived['archived'])
+        self.assertEqual(archived, self.catalog.archive_template(self.group, self.actor, template['id'], archive_key))
+        self.assertEqual([], self.catalog.list_templates(self.group))
+        self.assertEqual([archived], self.catalog.list_templates(self.group, include_archived=True))
+        restored = self.catalog.restore_template(self.group, self.actor, template['id'], restore_key)
+        self.assertFalse(restored['archived'])
+        self.assertEqual(restored, self.catalog.restore_template(self.group, self.actor, template['id'], restore_key))
+        self.assertEqual([restored], self.catalog.list_templates(self.group))
+        self.assertEqual(['saved', 'archived', 'restored'], [row['action'] for row in self.catalog.template_history(self.group, template['id'])])
+        with self.assertRaises(Conflict):
+            self.catalog.restore_template(self.group, self.actor, template['id'], archive_key)
 
     def test_matching_legacy_members_seed_after_active_and_archived_records_without_id_mutation(self):
         ids = [uid() for _ in range(5)]

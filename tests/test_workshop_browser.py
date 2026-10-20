@@ -1738,6 +1738,37 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertTrue(self.page.locator('tr').filter(has_text='Blocked camera').count())
         self.assertEqual(self.errors,[])
 
+    def test_optional_eighth_action_callback_targets_expanded_filtered_unit_only(self):
+        self.page.evaluate("""() => {
+          window.fixtureSearchEquipment=Array.from({length:20},(_,index)=>({
+            id:`a0000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,
+            name:`Camera bin ${index+1}`,assetId:`CAM-${index+1}`,manufacturer:'Northwind',modelNumber:'Cam-X',
+            serialNumber:`SN-${index+1}`,condition:'Ready',quantity:1,parent:{id:'11111111-1111-4111-8111-111111111111'}
+          }));
+          window.itemActionRequests=[];
+          window.instance.dispose();
+          window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment',window.fixtureWorkshop,
+            window.fixtureNavigate,window.fixtureNotify,{entityId:null,drawingId:null,roomId:null},undefined,
+            (request,trigger)=>window.itemActionRequests.push({request,trigger:trigger?.dataset.workshopActionItem}));
+        }""")
+        group=self.page.locator('details.equipment-group')
+        group.wait_for(state='visible')
+        self.assertEqual(self.page.locator('details.equipment-group').count(),1)
+        self.assertFalse(self.page.get_by_text('Add to cart',exact=True).is_visible())
+        group.locator('summary').click()
+        self.assertEqual(self.page.locator('.equipment-member').count(),20)
+        self.page.locator('[aria-label="Search equipment"]').fill('Camera bin 20')
+        self.assertEqual(self.page.locator('.equipment-member').count(),1)
+        unit=self.page.locator('.equipment-member').filter(has_text='Camera bin 20')
+        unit.get_by_text('Item actions',exact=True).click()
+        unit.get_by_role('button',name='Add note',exact=True).click()
+        self.assertEqual(self.page.evaluate('window.itemActionRequests[0].request'),{
+            'kind':'note','itemId':'a0000000-0000-4000-8000-000000000020','source':'workshop'})
+        self.assertEqual(self.page.evaluate('window.itemActionRequests[0].trigger'),'a0000000-0000-4000-8000-000000000020')
+        self.assertEqual(self.page.locator('[aria-label="Search equipment"]').input_value(),'Camera bin 20')
+        self.assertEqual(self.page.evaluate('window.navigate'),[])
+        self.assertEqual(self.errors,[])
+
     def test_rooms4_planner_contents_inspector_preserves_checkout_blocker(self):
         room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
         document={'version':2,'rooms':[{'id':room,'location_id':None,'name':'Main','width':14,'height':20,'unit':'ft','approximate':False,'objects':[

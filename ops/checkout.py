@@ -1,6 +1,7 @@
 """Native validation around the approved operational ledger."""
 from conditions import checkout_blocker
 from ledger import Conflict,uuid
+from checkout_cart import CheckoutCart
 from kits import manifest,validate_checkout
 
 
@@ -19,6 +20,19 @@ def expand_cart_assets(client, cart_items):
         else:
             assets.add(root)
     return sorted(assets)
+
+
+def checkout_cart_context(saved, selected_items, include_original_items=True):
+    """Build the kiosk receipt context while keeping empty legacy notes absent."""
+    context = {'revision': saved['revision'], 'items': list(selected_items)}
+    if include_original_items:
+        context['original_items'] = list(saved['items'])
+    notes = saved.get('notes') or {}
+    selected = set(context['items'])
+    selected_notes = {key: value for key, value in notes.items() if key in selected and value}
+    if selected_notes:
+        context['notes'] = selected_notes
+    return context
 
 
 def checkout_status_actor(ledger, group, request_key, badge_actor, service_actor):
@@ -56,7 +70,7 @@ def checkout_availability(client, ledger, group, entity_ids):
     return result
 
 
-def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None, cart_context=None):
+def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None, cart_context=None, notes=None):
     group,actor=uuid(group),uuid(actor)
     assets=[uuid(a) for a in assets]
     if not assets or len(assets)>50 or len(assets)!=len(set(assets)):
@@ -74,6 +88,10 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
         if len(items)!=len(set(items)) or set(expand_cart_assets(client,items))!=set(assets):
             raise Conflict('Checkout items do not match the saved cart selection and current kit manifests.')
         snapshot={'revision':revision,'items':sorted(items)}
+        if 'notes' in cart_context:
+            cart_notes = CheckoutCart._notes(cart_context.get('notes'), set(items))
+            if cart_notes:
+                snapshot['notes'] = cart_notes
         if 'original_items' in cart_context:
             original=cart_context['original_items']
             if not isinstance(original,list) or len(original)>50:
@@ -82,6 +100,12 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
             if len(original)!=len(set(original)):
                 raise ValueError('Checkout cart changed; reload the saved selection.')
             snapshot['original_items']=sorted(original)
+    if notes is None:
+        normalized_notes = (snapshot or {}).get('notes', {})
+    else:
+        selected_note_ids = set(snapshot['items']) if snapshot is not None else set(assets)
+        normalized_notes = CheckoutCart._notes(notes, selected_note_ids)
+    normalized_notes = normalized_notes or {}
     entities=[]
     for asset in assets:
         entity=client.entity(asset)
@@ -92,10 +116,11 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
     validate_checkout(client,entities,verified,kit_versions)
     if not session_valid():
         raise Conflict('Session ended; scan your badge again')
-    operation_context = operation_intent = None
+    operation_context = {'checkout_notes': normalized_notes} if normalized_notes else None
+    operation_intent = {'checkout_notes': normalized_notes} if normalized_notes else None
     if snapshot is not None:
-        operation_context = {'checkout_cart': snapshot}
-        operation_intent = {'checkout_cart': snapshot}
+        operation_context = dict(operation_context or {}, checkout_cart=snapshot)
+        operation_intent = dict(operation_intent or {}, checkout_cart=snapshot)
     operation=ledger.begin(group,actor,'check_out',assets,request_key,context=operation_context,intent=operation_intent)
     ledger.complete(operation['id'])
     return {'id':operation['id'],'status':'completed','action':'check_out','count':len(assets)}

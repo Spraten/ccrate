@@ -25,5 +25,6 @@ export type WorkshopHistoryRow = {
   note_state?: string;
   note_author?: string;
   return_notes?: Array<{ text: string; author?: string; created_at?: string }>;
+  checkout_notes?: Array<{ entity_id: string; text: string; author: string; created_at: string }>;
   previous_borrowers?: Array<{ user_id?: string; name?: string; name_snapshot?: string }>;
 };

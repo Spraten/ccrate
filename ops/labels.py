@@ -3,16 +3,25 @@ import io,base64,json,pathlib,subprocess,hashlib,os,re,unicodedata
 import qrcode
 from PIL import Image,ImageDraw,ImageFont
 from ledger import Conflict,uuid
-ROOT=pathlib.Path(os.environ.get('WORKSHOP_ROOT','/home/user/Desktop/inventory-system'))
+LEGACY_ROOT='/home/user/Desktop/inventory-system'
 def printer_path():
     matches=[]
     for device in pathlib.Path('/sys/class/hidraw').glob('hidraw*'):
         if 'HID_ID=0003:00001820:0000207F' in (device/'device/uevent').read_text():matches.append('/dev/'+device.name)
     if len(matches)!=1:raise ValueError('Connect exactly one SUPVAN printer')
     return matches[0]
-def adapter():return str(ROOT/'work/supvan-cups/target/release/examples/kiosk-label')
+def adapter():
+    explicit=os.environ.get('WORKSHOP_PRINTER_ADAPTER')
+    if explicit:return explicit
+    code_root=os.environ.get('WORKSHOP_CODE_ROOT')
+    if code_root:return str(pathlib.Path(code_root)/'work/supvan-cups/target/release/examples/kiosk-label')
+    # Preserve deployments that historically used WORKSHOP_ROOT as the code root.
+    return str(pathlib.Path(os.environ.get('WORKSHOP_ROOT',LEGACY_ROOT))/'work/supvan-cups/target/release/examples/kiosk-label')
 def probe():
-    result=subprocess.run([adapter(),'probe',printer_path()],capture_output=True,timeout=15,check=True)
+    executable=adapter()
+    if not os.path.isfile(executable) or not os.access(executable,os.X_OK):
+        raise FileNotFoundError(f'Printer adapter is missing or not executable: {executable}')
+    result=subprocess.run([executable,'probe',printer_path()],capture_output=True,timeout=15,check=True)
     return json.loads(result.stdout)
 def font(size):return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',size)
 def _fit_name_lines(content,draw,name_font,available,max_lines):
@@ -89,7 +98,28 @@ def render(entity,width_mm=40,height_mm=30,code_override=None,title_override=Non
     draw.text((left,height-56),identifier,font=identifier_font,fill=0)
     draw.text((left,height-32),'C-Crate',font=font(13),fill=0)
     return image,code
-def preview(client,entity_id,*,layouts=None,group=None,actor=None,template_id=None,template_revision=None):
+class _AssignedDisplayIdClient:
+    """Read-only Homebox client view with collection-assigned display IDs."""
+    def __init__(self,client,catalog,group):self._client=client;self._catalog=catalog;self._group=uuid(group)
+    def __getattr__(self,name):return getattr(self._client,name)
+    @property
+    def timeout(self):return getattr(self._client,'timeout',None)
+    @timeout.setter
+    def timeout(self,value):setattr(self._client,'timeout',value)
+    def entity(self,entity_id):
+        entity=self._client.entity(entity_id)
+        assignment=self._catalog.assignment(self._group,uuid(entity_id))
+        if not assignment or not isinstance(assignment.get('display_id'),str) or not assignment['display_id']:
+            return entity
+        if assignment.get('entity_id') and uuid(assignment['entity_id'])!=uuid(entity_id):
+            return entity
+        projected=dict(entity);projected['displayId']=assignment['display_id'];return projected
+
+def with_assigned_display_ids(client,catalog,group):
+    return _AssignedDisplayIdClient(client,catalog,group) if catalog is not None else client
+
+def preview(client,entity_id,*,layouts=None,group=None,actor=None,template_id=None,template_revision=None,catalog=None):
+    client=with_assigned_display_ids(client,catalog,group)
     if layouts is not None and (template_id is not None or template_revision is not None):
         return layouts.preview(client,group,actor,{'mode':'item','entity_id':entity_id,'template_id':template_id,'template_revision':template_revision})
     entity=client.entity(uuid(entity_id))
@@ -98,7 +128,8 @@ def preview(client,entity_id,*,layouts=None,group=None,actor=None,template_id=No
     response={'entity_id':entity['id'],'name':entity['name'],'code':code,'width':image.width,'height':image.height,'image':'data:image/png;base64,'+base64.b64encode(png).decode()}
     if layouts is not None:response['review_id']=layouts.save_legacy_review(group,actor,entity,png,image.width,image.height)
     return response
-def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=None,valid_context=None):
+def print_label(client,jobs,group,actor,key,entity_id,*,layouts=None,review_id=None,valid_context=None,catalog=None):
+    client=with_assigned_display_ids(client,catalog,group)
     entity_id=uuid(entity_id)
     if layouts is None:raise ValueError('Review the location label again before printing')
     if review_id is None:raise ValueError('Select and review a saved label template before printing')
@@ -208,8 +239,9 @@ def recover_print(client,jobs,group,job_id,outcome,*,layouts=None):
             except Exception:pass
     return {'id':job_id,'status':'completed','entity_id':job['result_id']}
 
-def paper(client,layouts,group,actor,data,*,deadline=None):
+def paper(client,layouts,group,actor,data,*,deadline=None,catalog=None):
     import time,label_render
+    client=with_assigned_display_ids(client,catalog,group)
     deadline=deadline or time.monotonic()+20;ids=data.get('review_ids');geometry=data.get('geometry')
     if not isinstance(ids,list) or not 1<=len(ids)<=36 or not isinstance(geometry,dict):raise ValueError('Select 1 to 36 reviewed labels and provide sheet geometry')
     frozen=[]

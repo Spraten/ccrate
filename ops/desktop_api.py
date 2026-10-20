@@ -18,18 +18,21 @@ from urllib.parse import parse_qs, urlsplit, quote
 from uuid import uuid4
 
 from conditions import STATES, checkout_blocker, condition
-from checkout import confirm_checkout
+from equipment_api import equipment_catalog_get, equipment_catalog_post, equipment_catalog_service
 from homebox import Homebox, session_cookie
 from ledger import Conflict, timestamp, uuid, UNIDENTIFIED_ACTOR
 from returns import RETURN_STATES, confirm_return, recover
 from item_notes import project_note_history
+from home_statistics import build_home_statistics
 from workshop import submit_shelf_order
 from workshop_views import build_view, resolve_workshop_code
 from shelf_checks import CheckAccessDenied, shelf_check_action
 from network_access import trusted_native_origins
+from native_fields import update_payload
 
 PREFIX = '/workshop-api/'
-READ_POSTS = {'labels/preview', 'labels/paper', 'labels/templates/result', 'imports/get', 'operation/status', 'workshop/checks/resolve', 'workshop/checks/request'}
+PRODUCT_GROUP_TAG_PREFIX = 'C-Crate Product group: '
+READ_POSTS = {'labels/preview', 'labels/paper', 'labels/templates/result', 'imports/get', 'operation/status', 'history/group', 'workshop/checks/resolve', 'workshop/checks/request'}
 MANAGER_READS = {'people', 'badges', 'recovery', 'system', 'hardware/status', 'imports', 'invitations', 'users/administration', 'users/profile', 'labels/templates', 'workshop/checks/list', 'workshop/checks/get'}
 SHELF_CHECK_POSTS = {'workshop/checks/resolve', 'workshop/checks/request'}
 SHELF_CHECK_WRITES = {'workshop/checks/start', 'workshop/checks/observe', 'workshop/checks/notes', 'workshop/checks/refresh', 'workshop/checks/finish', 'workshop/checks/cancel'}
@@ -189,23 +192,122 @@ def public_entity(client, value):
     return client.entity(uuid(value))
 
 
-def history(ctx, deps, entity_id=None):
+def custom_group_change(client, route, data):
+    name = data.get('group_name')
+    if not isinstance(name, str):
+        raise ValueError('Enter a product group name.')
+    name = ' '.join(name.split())
+    if not name or len(PRODUCT_GROUP_TAG_PREFIX + name) > 255:
+        raise ValueError('Product group name must fit in a native tag.')
+    full_name = PRODUCT_GROUP_TAG_PREFIX + name
+    entity = public_entity(client, data.get('entity_id'))
+    if (entity.get('entityType') or {}).get('isLocation'):
+        raise ValueError('Choose equipment, not a storage location.')
+
+    native_tags = client.call('/api/v1/tags')
+    ids = [tag['id'] for tag in native_tags]
+    if len(ids) != len(set(ids)):
+        raise Conflict('Duplicate native tags need review in C-Crate.')
+    candidates = [tag for tag in native_tags
+                  if tag['name'].casefold().startswith(PRODUCT_GROUP_TAG_PREFIX.casefold())
+                  and ' '.join(tag['name'][len(PRODUCT_GROUP_TAG_PREFIX):].split()).casefold() == name.casefold()]
+    if route != 'equipment/groups/remove' and (len(candidates) > 1 or (candidates and
+        candidates[0].get('parentId') not in (None, '', '00000000-0000-0000-0000-000000000000'))):
+        raise Conflict('Product group tag name collides with a native tag; review it in C-Crate.')
+    group_tags = [tag for tag in entity.get('tags', [])
+                  if tag['name'].strip().casefold().startswith(PRODUCT_GROUP_TAG_PREFIX.casefold())]
+    if len(group_tags) > 1 or len({tag['id'] for tag in entity.get('tags', [])}) != len(entity.get('tags', [])):
+        raise Conflict('Duplicate product group tags need review in C-Crate.')
+    existing = group_tags[0] if group_tags else None
+    if existing and ' '.join(existing['name'][len(PRODUCT_GROUP_TAG_PREFIX):].split()).casefold() != name.casefold():
+        raise Conflict('Remove the current product group before assigning another.')
+    if existing and existing['id'] not in {tag['id'] for tag in candidates}:
+        raise Conflict('Product group membership needs review in C-Crate.')
+
+    if route == 'equipment/groups/remove':
+        if not existing:
+            raise Conflict('This equipment is not in that product group.')
+        desired_ids = [tag['id'] for tag in entity.get('tags', []) if tag['id'] != existing['id']]
+    else:
+        if existing:
+            return {'id': entity['id'], 'tags': entity.get('tags', [])}
+        tag = candidates[0] if candidates else None
+        if tag is None:
+            try:
+                tag = client.call('/api/v1/tags', 'POST',
+                                  {'name': full_name, 'description': 'C-Crate product group', 'color': '#64748b'})
+            except urllib.error.HTTPError:
+                raise
+            except (OSError, TimeoutError):
+                reread = [item for item in client.call('/api/v1/tags') if item['name'] == full_name]
+                if len(reread) != 1:
+                    raise Conflict('Product group tag creation needs review in C-Crate.') from None
+                tag = reread[0]
+        desired_ids = [item['id'] for item in entity.get('tags', [])] + [tag['id']]
+
+    payload = update_payload(entity)
+    payload['tagIds'] = desired_ids
+    client.call('/api/v1/entities/' + entity['id'], 'PUT', payload)
+    updated = client.entity(entity['id'])
+    if updated['id'] != entity['id'] or {tag['id'] for tag in updated.get('tags', [])} != set(desired_ids):
+        raise Conflict('C-Crate did not confirm the product group change.')
+    for key in entity:
+        if key not in ('tags', 'updatedAt', 'updatedBy') and updated.get(key) != entity[key]:
+            raise Conflict('Native equipment metadata changed during the product group update; review it in C-Crate.')
+    return {'id': updated['id'], 'tags': updated.get('tags', [])}
+
+
+
+def history(ctx, deps, entity_id=None, offset=0):
     client, group = ctx['client'], ctx['group']
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise ValueError('History offset must be a nonnegative integer.')
     if entity_id:
         public_entity(client, entity_id)
-    rows = dependency(deps, 'ledger').history(group, entity_id)+dependency(deps, 'native_jobs').history(group, entity_id)
+    # Fetch enough candidates from each store to produce the requested page
+    # after merging their common timestamp order.
+    store_limit = offset + 100
+    rows = dependency(deps, 'ledger').history(group, entity_id, limit=store_limit)+dependency(deps, 'native_jobs').history(group, entity_id, limit=store_limit)
+    ordered = sorted(rows, key=lambda row: row['created_at'], reverse=True)[offset:offset + 100]
     names = {member['id']: member['name'] for member in client.call('/api/v1/groups/members')}
     labels = {entity['id']: entity['name'] for entity in client.entities()+client.entities(True)}
     labels.update(names)
-    for row in rows:
+    for row in ordered:
         row['actor'] = 'Unidentified returner' if row['actor_id'] == UNIDENTIFIED_ACTOR else names.get(row['actor_id'], 'Former C-Crate member')
         row['asset_names'] = [labels.get(key, 'Deleted native record') for key in row['assets']]
         if row['action'] == 'return':
             detail = dependency(deps, 'ledger').detail(group, row['id'])
             row['previous_borrowers'] = (detail['context'] or {}).get('desktop_previous_borrowers', [])
+        elif row['action'] == 'check_out' and row['status'] == 'completed':
+            detail = dependency(deps, 'ledger').detail(group, row['id'])
+            context = detail['context'] or {}
+            confirmed_at = row.get('confirmed_at') or row['created_at']
+            row['checkout_notes'] = [
+                {'entity_id': entity_id, 'text': text, 'author': row['actor'], 'created_at': confirmed_at}
+                for entity_id, text in sorted(context.get('checkout_notes', {}).items())
+            ]
         elif row['action'] == 'add_note' and entity_id:
             project_note_history(row, client, dependency(deps, 'native_jobs'), group, entity_id)
-    return sorted(rows, key=lambda row: row['created_at'], reverse=True)[:100]
+        else:
+            row.setdefault('checkout_notes', [])
+        if row['action'] == 'check_out' and entity_id:
+            row['checkout_notes'] = [note for note in row.get('checkout_notes', []) if note['entity_id'] == uuid(entity_id)]
+    return ordered
+
+
+def group_history(ctx, deps, data):
+    values = data.get('entity_ids')
+    if not isinstance(values, list) or not 1 <= len(values) <= 100:
+        raise ValueError('Choose 1 to 100 distinct equipment records.')
+    if not all(isinstance(value, str) for value in values):
+        raise ValueError('Choose valid equipment record IDs.')
+    ids = [uuid(value) for value in values]
+    if len(ids) != len(set(ids)):
+        raise ValueError('Choose distinct equipment records.')
+    available = {uuid(entity['id']) for entity in ctx['client'].entities(False)}
+    if any(entity_id not in available for entity_id in ids):
+        raise ApiError(403, 'C-Crate denied access to this collection or record.', 'collection_forbidden')
+    return dependency(deps, 'ledger').group_return_notes(ctx['group'], ids, limit=100)
 
 
 def journal_schema(ledger):
@@ -276,7 +378,474 @@ def once(ctx, deps, kind, data, perform, redact=lambda value: value):
             if prior['digest'] != digest:
                 raise Conflict('This confirmation key belongs to a different action.')
             if kind == 'workshop/save':
-                }Ó}m¢G§²ÚîÆ­yÑpi/v1/groups/members')
+                if prior['kind'] != kind or prior['actor_id'] != ctx['actor']:
+                    raise Conflict('This confirmation key belongs to a different action or actor.')
+                workshop_prior = dict(prior)
+            else:
+                if prior['status'] == 'completed':
+                    return dict(json.loads(prior['result']), status='completed', message='This action already completed. Secret codes are shown only once.')
+                raise Conflict('This action has an uncertain result. Inspect Workshop recovery before repeating it.')
+        else:
+            request_id = str(uuid4())
+            db.execute('INSERT INTO desktop_requests(id,group_id,actor_id,kind,request_key,digest,status,result,created_at,intent) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                       (request_id, ctx['group'], ctx['actor'], kind, key, digest, 'pending', None, timestamp(), json.dumps(safe_intent(kind, data))))
+    if workshop_prior:
+        workshop = dependency(deps, 'workshop')
+        saved = workshop.replay_save(ctx['group'], data, actor_id=ctx['actor'])
+        receipt = workshop.save_binding(ctx['group'], key)
+        if saved is None or not receipt or receipt['actor_id'] != workshop_prior['actor_id'] or receipt['digest'] != workshop_prior['digest']:
+            raise Conflict('This Workshop save has no matching completed receipt; inspect recovery before repeating it.')
+        if workshop_prior['status'] != 'completed':
+            with ledger.transaction() as db:
+                db.execute("UPDATE desktop_requests SET status='completed',result=? WHERE id=?", (json.dumps(saved), workshop_prior['id']))
+        return saved
+    try:
+        result = perform()
+        safe = redact(result)
+        with ledger.transaction() as db:
+            db.execute("UPDATE desktop_requests SET status='completed',result=? WHERE id=?", (json.dumps(safe), request_id))
+        return result
+    except Exception:
+        with ledger.transaction() as db:
+            db.execute("UPDATE desktop_requests SET status='review' WHERE id=?", (request_id,))
+        raise
+
+
+def badge_qr(code):
+    import qrcode
+    stream = io.BytesIO(); qrcode.make(code).save(stream, format='PNG')
+    return 'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()
+
+
+class ReturnLedger:
+    """Add operator/borrower provenance to the intent before native writes start."""
+    def __init__(self, ledger, borrowers):
+        self.ledger, self.borrowers = ledger, borrowers
+
+    def __getattr__(self, name):
+        return getattr(self.ledger, name)
+
+    def begin(self, group, actor, action, assets, request_key, context=None, intent=None):
+        if action == 'return':
+            context = dict(context or {}, desktop_previous_borrowers=[self.borrowers[key] for key in assets if key in self.borrowers])
+        return self.ledger.begin(group, actor, action, assets, request_key, context=context, intent=intent)
+
+
+class ActorJobs:
+    """Keep CSV uploader provenance while attributing new jobs to this operator."""
+    def __init__(self, jobs, actor):
+        self.jobs, self.actor = jobs, actor
+
+    def __getattr__(self, name):
+        return getattr(self.jobs, name)
+
+    def prepare(self, group, actor, kind, key, payload):
+        return self.jobs.prepare(group, self.actor, kind, key, payload)
+
+
+def recovery_rows(ctx, deps):
+    ledger, jobs, client = dependency(deps, 'ledger'), dependency(deps, 'native_jobs'), ctx['client']
+    rows = []
+    for row in ledger.unresolved():
+        if row['group_id'] != ctx['group']:
+            continue
+        detail = ledger.detail(ctx['group'], row['id'])
+        detail.pop('request_hash', None); detail.pop('request_key', None)
+        detail['native_assets'] = []
+        for entity_id in detail['assets']:
+            try:
+                entity = public_entity(client, entity_id)
+                detail['native_assets'].append({'id': entity_id, 'name': entity['name'], 'condition': condition(entity), 'parent': (entity.get('parent') or {}).get('name', 'Unassigned')})
+            except urllib.error.HTTPError as error:
+                if error.code not in (403, 404):
+                    raise
+                detail['native_assets'].append({'id': entity_id, 'name': 'Native equipment unavailable', 'error': 'Inspect C-Crate before resolving.'})
+        rows.append(detail)
+    for job in jobs.unresolved(ctx['group']):
+        payload = job['payload'] or {}
+        target = job['result_id'] or payload.get('entity_id')
+        name = payload.get('name') or 'Native workflow task'
+        asset_id = None
+        if job['kind'] == 'print_badge':
+            member_names = {member['id']: member['name'] for member in client.call('/api/v1/groups/members')}
+            badge = next((row for row in dependency(deps, 'badges').list(ctx['group']) if row['id'] == payload.get('badge_id')), None)
+            target = target or (badge['user_id'] if badge else None)
+            name = 'Badge for '+member_names.get(target, 'Former C-Crate member')
+        elif target:
+            try:
+                entity = public_entity(client, target)
+                name, asset_id = entity['name'], entity.get('assetId')
+            except urllib.error.HTTPError as error:
+                if error.code not in (403, 404):
+                    raise
+                name = payload.get('name') or 'Native equipment unavailable'
+        safe = {key: payload[key] for key in ('entity_id', 'badge_id', 'maintenance_id') if payload.get(key)}
+        rows.append({'id': job['id'], 'action': job['kind'], 'status': job['status'], 'native_job': True, 'actor_id': job['actor_id'],
+                     'created_at': job['created_at'], 'intent': safe,
+                     'native_assets': [{'id': target, 'name': name, 'assetId': asset_id}], 'context': None,
+                     **({'message': 'Inspect the native rack shelf order in C-Crate before resolving it. No automatic retry.'}
+                        if job['kind'] == 'workshop_shelf_order' else {})})
+    journal_schema(ledger)
+    with ledger.connection() as db:
+        requests = db.execute("SELECT id,kind,status,actor_id,created_at,intent FROM desktop_requests WHERE group_id=? AND status IN ('pending','review')", (ctx['group'],)).fetchall()
+    rows.extend({'id': row['id'], 'action': row['kind'], 'status': row['status'], 'desktop_job': True, 'actor_id': row['actor_id'],
+                 'native_assets': [], 'context': None, 'created_at': row['created_at'], 'intent': json.loads(row['intent']),
+                 'message': 'Inspect Manage users and the saved profile before acknowledging this action. No automatic retry.' if row['kind'].startswith('users/') else 'Inspect People badges, native invitations or saved imports before acknowledging this action. No automatic retry.'} for row in requests)
+    return rows
+
+
+def home_statistics(ctx, deps):
+    client, group = ctx['client'], ctx['group']
+    items = entities(client)
+    locations = entities(client, True)
+    loans = dependency(deps, 'ledger').custody(group)
+    unresolved_assets = set()
+    ledger = dependency(deps, 'ledger')
+    for row in ledger.unresolved():
+        if row['group_id'] == group:
+            unresolved_assets.update(ledger.detail(group, row['id'])['assets'])
+    jobs = optional(deps, 'native_jobs')
+    if jobs is not None:
+        for job in jobs.unresolved(group):
+            payload = job.get('payload') or {}
+            target = job.get('result_id') or payload.get('entity_id')
+            if target:
+                unresolved_assets.add(target)
+    return build_home_statistics(items, locations, loans, unresolved_assets,
+                                 len(locations), len(client.call('/api/v1/tags')))
+
+
+def get_action(route, query, ctx, deps):
+    client, group = ctx['client'], ctx['group']
+    if route == 'home/statistics':
+        return home_statistics(ctx, deps)
+    if route == 'context':
+        return {'user': ctx['user'], 'group': ctx['collection'], 'manager': ctx['manager'], 'identity': ctx['identity']}
+    if route in {'equipment/templates', 'equipment/ids'}:
+        return equipment_catalog_get(route, query, ctx, deps, ApiError)
+    if route == 'item-actions/status':
+        if set(query) != {'ids'}:
+            raise ValueError('Provide only the item IDs for status.')
+        return dependency(deps, 'web_item_actions').status(ctx, dependency(deps, 'ledger'), query['ids'])
+    if route == 'checkout-cart':
+        return checkout_cart_service(deps).get(group, ctx['actor'])
+    if route == 'checkout-availability':
+        values = query.get('ids', [])
+        if len(values) != 1 or not values[0]:
+            raise ValueError('Choose checkout assets to check.')
+        return native_op('checkout', 'checkout_availability', client, dependency(deps, 'ledger'), group, values[0].split(','))
+    if route in MANAGER_READS:
+        require_manager(ctx)
+    if route == 'workshop/checks/list':
+        values = query.get('location_id', [None])
+        limits = query.get('limit', ['100'])
+        if len(values) != 1 or len(limits) != 1:
+            raise ValueError('Choose one shelf location and history limit')
+        try:
+            limit = int(limits[0])
+        except (TypeError, ValueError):
+            raise ValueError('History limit must be between 1 and 100') from None
+        return shelf_check_action(dependency(deps, 'shelf_checks'), client,
+            {'group': group, 'actor': ctx['actor'], 'manager': ctx['manager']}, 'list',
+            {'location_id': values[0] or None, 'limit': limit})
+    if route == 'workshop/checks/get':
+        values = query.get('id', [])
+        if len(values) != 1:
+            raise ValueError('Choose one shelf check')
+        return shelf_check_action(dependency(deps, 'shelf_checks'), client,
+            {'group': group, 'actor': ctx['actor'], 'manager': ctx['manager']}, 'get', {'id': values[0]})
+    if route == 'equipment':
+        return entities(client)
+    if route == 'locations':
+        return entities(client, True)
+    if route == 'types':
+        return client.call('/api/v1/entity-types')
+    if route == 'entity':
+        entity = public_entity(client, query.get('id', [None])[0])
+        return {'entity': entity, 'condition': condition(entity), 'blocker': checkout_blocker(entity), 'states': STATES, 'return_states': RETURN_STATES}
+    if route == 'kit':
+        return native_op('kits', 'manifest', client, query.get('id', [None])[0])
+    if route == 'loans':
+        members = {member['id']: member['name'] for member in client.call('/api/v1/groups/members')}
+        ledger = dependency(deps, 'ledger')
+        rows = ledger.custody(group)
+        checkout_times = {}
+        for row in rows:
+            row['borrower'] = members.get(row['actor_id'], 'Former C-Crate member')
+            operation_id = row['operation_id']
+            if operation_id not in checkout_times:
+                detail = ledger.detail(group, operation_id)
+                checkout_times[operation_id] = next((event['created_at'] for event in detail['events'] if event['kind'] == 'completed'), detail['created_at'])
+            row['checked_out_at'] = checkout_times[operation_id]
+            try:
+                entity = public_entity(client, row['entity_id'])
+                row['entity_name'] = entity['name']; row['assetId'] = entity.get('assetId'); row['parent'] = entity.get('parent')
+                photos = [attachment for attachment in entity.get('attachments', []) if attachment.get('type') == 'photo']
+                photo = next((attachment for attachment in photos if attachment.get('primary')), photos[0] if photos else None)
+                row['imageId'] = photo['id'] if photo else None
+                row['thumbnailId'] = (photo.get('thumbnail') or {}).get('id') if photo else None
+            except urllib.error.HTTPError as error:
+                if error.code not in (403, 404):
+                    raise
+                row['entity_name'] = 'Native equipment unavailable'; row['unavailable'] = True
+        return rows
+    if route == 'history':
+        return history(ctx, deps, query.get('entity', [None])[0], int(query.get('offset', ['0'])[0]))
+    if route == 'people':
+        path = pathlib.Path(dependency(deps, 'root'))/'work/ops/desktop-managers.json'
+        try:
+            owner = json.loads(path.read_text()).get('owner_id')
+        except (OSError, ValueError):
+            owner = None
+        return [dict(member, workshop_manager=manager(deps, member['id'], group), protected_owner=member['id'] == owner) for member in client.call('/api/v1/groups/members')]
+    if route == 'badges':
+        return dependency(deps, 'badges').list(group)
+    if route == 'users/administration':
+        return client.call('/api/v1/groups/members/administration')
+    if route == 'users/profile':
+        return native_op('accounts', 'get_profile', client, query.get('id', [None])[0])
+    if route == 'invitations':
+        # Native tokens are shown only during explicit invitation creation.
+        return [{name: value for name, value in row.items() if name != 'token'} for row in client.call('/api/v1/groups/invitations')]
+    if route == 'recovery':
+        return recovery_rows(ctx, deps)
+    if route == 'system':
+        return native_op('system_status', 'status')
+    if route == 'hardware/status':
+        return {'printer': native_op('hardware', 'reconnect', 'printer'),
+                'camera': native_op('hardware', 'camera_status')}
+    if route == 'workshop':
+        return dependency(deps, 'workshop').snapshot(client, group)
+    if route == 'labels/templates':
+        import time
+        if ctx.get('label_deadline') is not None and time.monotonic()>=ctx['label_deadline']:raise TimeoutError('Label request exceeded its 20-second budget')
+        layouts=labels_service(deps);jobs=optional(deps,'native_jobs')
+        if jobs and hasattr(layouts,'reconcile_reviews'):
+            try:layouts.reconcile_reviews(group,jobs)
+            except (OSError,TimeoutError):pass
+        result=layouts.list(group)
+        if ctx.get('label_deadline') is not None and time.monotonic()>=ctx['label_deadline']:raise TimeoutError('Label request exceeded its 20-second budget')
+        return result
+    if route == 'workshop/view':
+        nested_values = query.get('nested', ['0'])
+        if len(nested_values) != 1 or nested_values[0] not in ('0', '1'):
+            raise ApiError(400, 'Choose whether to include nested equipment.')
+        nested = nested_values[0]
+        room_values = query.get('room_id', [None])
+        if len(room_values) != 1:
+            raise ApiError(400, 'Choose one workshop room.')
+        room = room_values[0] or None
+        if room is not None:
+            try:
+                room = uuid(room)
+            except (ValueError, TypeError):
+                raise ApiError(400, 'Choose an available workshop room.') from None
+        workshop = dependency(deps, 'workshop').get(group)
+        if room is not None and room not in {item.get('id') for item in workshop.get('document', {}).get('rooms', [])}:
+            raise ApiError(400, 'Choose an available workshop room.')
+        return build_view(client, workshop, dependency(deps, 'ledger').custody(group),
+                          entity_id=query.get('id', [None])[0], include_nested=nested == '1',
+                          room_id=room, can_view_loans=ctx['manager'])
+    if route == 'imports':
+        return dependency(deps, 'imports').list(group)
+    raise ApiError(404, 'Unknown Workshop page.')
+
+
+def operation_status(ctx, deps, data):
+    ledger, jobs, group = dependency(deps, 'ledger'), dependency(deps, 'native_jobs'), ctx['group']
+    key = uuid(data.get('request_key'))
+    cart_receipt = checkout_cart_service(deps).request_status(group, ctx['actor'], key)
+    if cart_receipt is not None:
+        return cart_receipt
+    checks = optional(deps, 'shelf_checks')
+    if checks is not None:
+        with ledger.connection() as db:
+            shelf_request = db.execute('SELECT 1 FROM shelf_check_requests WHERE group_id=? AND request_key=?',
+                                       (group, key)).fetchone()
+        if shelf_request:
+            if any(name in data for name in ('actor', 'actor_id', 'group', 'group_id', 'manager')):
+                raise ValueError('Shelf-check identity is supplied by Workshop')
+            require_manager(ctx)
+            check_request = checks.request({'group': group, 'actor': ctx['actor'], 'manager': ctx['manager']}, key)
+            return check_request
+    row = ledger.request(group, key)
+    if row:
+        if row['actor_id'] != ctx['actor'] and not ctx['manager']:
+            return {'status': 'not_started'}
+        result = {'id': row['id'], 'status': row['status'], 'action': row['action']}
+        if row['action'] == 'check_out' and row['status'] == 'completed':
+            result['count'] = len(ledger.detail(group, row['id'])['assets'])
+        return result
+    with ledger.connection() as db:
+        row = db.execute('SELECT id,status,kind,actor_id FROM native_jobs WHERE group_id=? AND request_key=?', (group, key)).fetchone()
+    if row:
+        if row['actor_id'] != ctx['actor'] and not ctx['manager']:
+            return {'status': 'not_started'}
+        return {'id': row['id'], 'status': row['status'], 'action': row['kind'], 'native_job': True}
+    row = request_row(ledger, group, key)
+    if row and row['actor_id'] != ctx['actor'] and not ctx['manager']:
+        return {'status': 'not_started'}
+    workshop=optional(deps,'workshop')
+    if row and row['kind']!='workshop/save':
+        return {'id': row['id'], 'status': row['status'], 'action': row['kind'], 'desktop_job': True,
+                'result': json.loads(row['result']) if row['result'] else None}
+    if workshop is not None:
+        receipt=workshop.save_status(group,key,actor_id=ctx['actor'])
+        if receipt['status']=='completed':
+            binding=workshop.save_binding(group,key)
+            if row and (row['actor_id']!=binding['actor_id'] or row['kind']!='workshop/save' or row['digest']!=binding['digest']):
+                raise Conflict('This confirmation key belongs to a different save or action.')
+            if row and row['status']!='completed':
+                with ledger.transaction() as db:
+                    db.execute("UPDATE desktop_requests SET status='completed',result=? WHERE id=?",
+                               (json.dumps(receipt['result']),row['id']))
+            return receipt
+    return {'id': row['id'], 'status': row['status'], 'action': row['kind'], 'desktop_job': True,
+            'result': json.loads(row['result']) if row['result'] else None} if row else {'status': 'not_started'}
+
+
+def post_action(route, data, ctx, deps, address):
+    client, group, actor = ctx['client'], ctx['group'], ctx['actor']
+    ledger, jobs, badges = dependency(deps, 'ledger'), dependency(deps, 'native_jobs'), dependency(deps, 'badges')
+    if route.startswith('item-actions/'):
+        service = dependency(deps, 'web_item_actions')
+        if route == 'item-actions/verify-badge':
+            return service.verify_badge(ctx, badges, data)
+        if route == 'item-actions/verify-item':
+            return service.verify_item(ctx, data)
+        if route == 'item-actions/checkout':
+            return service.checkout(ctx, ledger, data)
+        if route == 'item-actions/cancel':
+            return service.cancel(ctx, data)
+        if route == 'item-actions/note':
+            return service.note(ctx, jobs, data)
+        if route == 'item-actions/checkin':
+            previous = {row['entity_id']: {'entity_id': row['entity_id'], 'user_id': row['actor_id'],
+                                           'checkout_operation_id': row['operation_id']}
+                        for row in ledger.custody(group)}
+            return service.checkin(ctx, ReturnLedger(ledger, previous), data)
+        raise ApiError(404, 'Unknown item action.')
+    if route.startswith('equipment/templates/') or route.startswith('equipment/ids/'):
+        return equipment_catalog_post(route, data, ctx, deps, ApiError, public_entity)
+    if route == 'operation/status':
+        return operation_status(ctx, deps, data)
+    if route == 'checkout-cart':
+        items = data.get('items')
+        if not isinstance(items, list) or len(items) > 50:
+            raise ValueError('Select at most 50 distinct assets.')
+        normalized = [uuid(item) for item in items]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError('Select distinct equipment.')
+        for item in normalized:
+            entity = public_entity(client, item)
+            if entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
+                raise ValueError('Choose equipment, not a storage location.')
+        return checkout_cart_service(deps).save(group, actor, normalized, data.get('revision'), data.get('request_key'), data.get('notes'))
+    if route in SHELF_CHECK_ROUTES:
+        require_manager(ctx)
+        store = dependency(deps, 'shelf_checks')
+        check_ctx = {'group': group, 'actor': actor, 'manager': ctx['manager']}
+        return shelf_check_action(store, client, check_ctx, route.rsplit('/', 1)[1], data)
+    if route == 'workshop/resolve':
+        code = data.get('code')
+        if not isinstance(code, str):
+            raise ValueError('Enter a native equipment code.')
+        return resolve_workshop_code(client, code)
+    require_manager(ctx)
+    if route in ('users/create', 'users/update'):
+        if not client.call('/api/v1/groups/members/administration')['canManage']:
+            raise ApiError(403, 'A collection owner is required to manage users.')
+        if route == 'users/create':
+            native_op('accounts', 'creation_input', data)
+            return once(ctx, deps, route, data, lambda: native_op('accounts', 'create_account', client, data), lambda value: {'id': value['id'], 'name': value['name']})
+        user_id = uuid(data.get('user_id'))
+        native_op('accounts', 'profile_input', data)
+        if request_row(ledger, group, data.get('request_key')) is None:
+            current = native_op('accounts', 'get_profile', client, user_id)
+            if not current['editable']:
+                raise ApiError(403, "This person's profile is managed in their primary collection.")
+            if current['updatedAt'] != data.get('updatedAt'):
+                raise ApiError(409, 'This profile changed. Reload it before saving.')
+        return once(ctx, deps, route, data, lambda: native_op('accounts', 'update_profile', client, user_id, data), lambda value: {'id': value['id'], 'name': value['name']})
+    if route == 'hardware/reconnect':
+        return native_op('hardware', 'reconnect', data.get('device'))
+    if route == 'permissions/set':
+        user_id = uuid(data.get('user_id'))
+        enabled = data.get('enabled')
+        if type(enabled) is not bool:
+            raise ValueError('Choose whether to allow management.')
+        if user_id not in {member['id'] for member in client.call('/api/v1/groups/members')}:
+            raise ValueError('Choose a current C-Crate member.')
+        path = pathlib.Path(dependency(deps, 'root'))/'work/ops/desktop-managers.json'
+        configuration = json.loads(path.read_text())
+        if not enabled and (user_id == actor or user_id == configuration.get('owner_id')):
+            raise ValueError('Keep your own management access and the Workshop Admin access enabled.')
+        def save_permission():
+            entries = [entry for entry in configuration['managers'] if not (entry['user_id'] == user_id and entry['group_id'] == group)]
+            if enabled:
+                entries.append({'user_id': user_id, 'group_id': group})
+            configuration['managers'] = entries
+            temporary = path.with_suffix('.tmp')
+            with temporary.open('w', encoding='utf-8') as output:
+                os.chmod(temporary, 0o600)
+                json.dump(configuration, output, indent=2)
+                output.flush(); os.fsync(output.fileno())
+            os.replace(temporary, path)
+            return {'user_id': user_id, 'enabled': enabled, 'status': 'completed'}
+        return once(ctx, deps, route, data, save_permission)
+    if route.startswith('labels/'):
+        import time
+        if ctx.get('label_deadline') is not None and time.monotonic()>=ctx['label_deadline']:raise TimeoutError('Label request exceeded its 20-second budget')
+        layouts=labels_service(deps)
+        def label_client():return native_op('labels','with_assigned_display_ids',client,equipment_catalog_service(deps),group)
+        if route=='labels/templates/save':return layouts.save(group,actor,data)
+        if route=='labels/templates/result':
+            result=layouts.save_result(group,actor,data.get('request_key'))
+            if ctx.get('label_deadline') is not None and time.monotonic()>=ctx['label_deadline']:raise TimeoutError('Label result lookup exceeded the 20-second request budget')
+            return result
+        if route=='labels/preview':
+            if not data.get('mode') and data.get('entity_id'):
+                entity=public_entity(client,data.get('entity_id'))
+                if entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
+                    return native_op('labels','preview',label_client(),data.get('entity_id'),layouts=layouts,group=group,actor=actor)
+                raise ValueError('Choose a saved template and review the item before printing')
+            return layouts.preview(label_client(),group,actor,data,deadline=ctx.get('label_deadline'))
+        if route=='labels/print':
+            if not data.get('review_id'):
+                entity=public_entity(client,data.get('entity_id'))
+                if entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
+                    raise ValueError('Review the location label again before printing')
+            return native_op('labels','print_label',label_client(),jobs,group,actor,data.get('request_key'),data.get('entity_id'),layouts=layouts,review_id=data.get('review_id'))
+        if route=='labels/paper':return native_op('labels','paper',label_client(),layouts,group,actor,data,deadline=ctx.get('label_deadline'))
+        raise ApiError(404,'Unknown label action.')
+    if route == 'badges/issue':
+        user_id = uuid(data.get('user_id')); members = client.call('/api/v1/groups/members')
+        if user_id not in {member['id'] for member in members}:
+            raise ApiError(400, 'Choose a current member of this collection.')
+        def issue():
+            result = badges.issue(group, user_id, [member['id'] for member in members])
+            return dict(result, qr=badge_qr(result['code']), status='completed')
+        return once(ctx, deps, route, data, issue, lambda value: {'id': value['id'], 'user_id': value['user_id'], 'code': None})
+    if route == 'badges/revoke':
+        badge_id = uuid(data.get('id'))
+        badge = next((row for row in badges.list(group) if row['id'] == badge_id), None)
+        if not badge:
+            raise ApiError(404, 'Badge not found in this collection.')
+        def revoke_badge():
+            revoked = badges.revoke(group, badge_id)
+            sessions = optional(deps, 'sessions')
+            if sessions is not None:
+                sessions.revoke_user(badge['user_id'])
+            return {'id': badge_id, 'revoked': revoked, 'status': 'completed'}
+        return once(ctx, deps, route, data, revoke_badge)
+    if route == 'badges/print':
+        return native_op('labels', 'print_badge', client, badges, jobs, group, actor, data.get('request_key'), data.get('badge_id'), data.get('code'))
+    if route == 'badges/reprint':
+        return native_op('labels', 'reprint_badge', client, badges, jobs, group, actor,
+                         data.get('request_key'), data.get('badge_id'))
+    if route == 'badges/replace':
+        badge_id = uuid(data.get('badge_id'))
+        members = client.call('/api/v1/groups/members')
         def replace_badge():
             result = badges.replace(group, badge_id, [member['id'] for member in members])
             sessions = optional(deps, 'sessions')
@@ -434,7 +1003,7 @@ def handle(handler, deps):
                     raise ApiError(400, 'Shelf-check identity is supplied by Workshop.')
                 if route.startswith('workshop/checks/') and route in MANAGER_READS:
                     require_manager(ctx)
-                if route == 'workshop/view' or route.startswith('workshop/checks/'):
+                if route in {'workshop/view', 'item-actions/status'} or route.startswith('workshop/checks/'):
                     binding(handler, ctx)
                 result = get_action(route, query, ctx, deps)
         else:
@@ -451,7 +1020,13 @@ def handle(handler, deps):
             else:
                 with lock:
                     ctx = authenticate(handler, deps); binding(handler, ctx)
-                    result = post_action(route, data, ctx, deps, address)
+                    if route == 'history/group':
+                        result = group_history(ctx, deps, data)
+                    elif route in ('equipment/groups/assign', 'equipment/groups/remove'):
+                        require_manager(ctx)
+                        result = custom_group_change(ctx['client'], route, data)
+                    else:
+                        result = post_action(route, data, ctx, deps, address)
                     if route in {'condition', 'return', 'imports/create', 'workshop/move', 'locations/create', 'recovery/resolve'}:
                         native_op('stock', 'invalidate')
         handler.reply_json(200, result)

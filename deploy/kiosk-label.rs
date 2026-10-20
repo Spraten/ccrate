@@ -16,6 +16,13 @@ async fn main()->Result<(),Box<dyn Error>>{
  if width==0||height<32||width>384||width>material.width_mm as u32*8||height+16>material.height_mm as u32*8{return Err("Raster does not fit the loaded label stock".into())}
  let mut bytes=Vec::new();io::stdin().take((width*height+1) as u64).read_to_end(&mut bytes)?;
  if bytes.len()!=(width*height) as usize{return Err("Raster length does not match dimensions".into())}
- printer.print_grayscale(&bytes,width,height,Density::uniform(4),DitherMode::Bayer).await?;
+ eprintln!("before print: {}",status.summary());
+ let result=printer.print_grayscale(&bytes,width,height,Density::uniform(4),DitherMode::Bayer).await;
+ match printer.query_status().await {
+  Ok(Some(status))=>eprintln!("after print: {}",status.summary()),
+  Ok(None)=>eprintln!("after print: status unavailable"),
+  Err(error)=>eprintln!("after print: status query failed: {error}"),
+ }
+ result?;
  println!("{{\"status\":\"printed\"}}");Ok(())
 }

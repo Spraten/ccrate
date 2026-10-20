@@ -64,6 +64,19 @@ class Native:
         self.owner.native_calls.append((self.token, self.tenant, path, method, copy.deepcopy(data)))
         if self.token not in self.owner.users:
             raise urllib.error.HTTPError('native', 401, 'expired', {}, None)
+        if path == '/api/v1/tags':
+            if self.tenant != self.owner.group:
+                raise urllib.error.HTTPError('native', 403, 'forbidden', {}, None)
+            if method == 'POST':
+                tag = {'id': ident(), **copy.deepcopy(data)}
+                self.owner.tags.append(tag)
+                if self.owner.reject_tag_create:
+                    self.owner.tags.pop()
+                    raise urllib.error.HTTPError('native', 403, 'forbidden', {}, None)
+                if self.owner.fail_tag_create:
+                    raise OSError('Injected lost tag creation response')
+                return copy.deepcopy(tag)
+            return copy.deepcopy(self.owner.tags)
         if path == '/api/v1/users/self':
             return {'item': copy.deepcopy(self.owner.users[self.token])}
         if path == '/api/v1/groups':
@@ -104,7 +117,16 @@ class Native:
                 if self.owner.fail_patch:
                     raise OSError('Injected lost response after native write')
             if method == 'PUT':
-                self.owner.entities[key] = dict(copy.deepcopy(data), parent={'id': data['parentId']})
+                parent_id = data.get('parentId')
+                parent = (copy.deepcopy(entity['parent']) if (entity.get('parent') or {}).get('id') == parent_id
+                          else {'id': parent_id, 'name': self.owner.entities[parent_id]['name']}
+                          if parent_id in self.owner.entities else None)
+                type_id = data.get('entityTypeId')
+                entity_type = (copy.deepcopy(entity['entityType']) if entity['entityType']['id'] == type_id
+                               else {'id': type_id, 'isLocation': False})
+                self.owner.entities[key] = dict(copy.deepcopy(data), parent=parent, entityType=entity_type,
+                    fields=copy.deepcopy(data.get('fields', [])),
+                    tags=[copy.deepcopy(tag) for tag in self.owner.tags if tag['id'] in data['tagIds']])
             return self.entity(key)
         raise AssertionError('Unexpected native request: '+path)
 
@@ -114,6 +136,7 @@ class DesktopTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(); self.root = pathlib.Path(self.temp.name)
         self.group, self.other_group, self.manager, self.borrower, self.asset, self.shelf, self.other_shelf, self.kind = [ident() for _ in range(8)]
         self.other_asset = ident()
+        self.field_id = ident()
         self.users = {
             'alpha': {'id': self.manager, 'name': 'Workshop Admin', 'email': 'fixture@example.invalid', 'defaultGroupId': self.group, 'groupIds': [self.group, self.other_group]},
             'member': {'id': self.borrower, 'name': 'Workshop Admin', 'email': 'member@example.invalid', 'defaultGroupId': self.group, 'groupIds': [self.group]},
@@ -121,7 +144,7 @@ class DesktopTests(unittest.TestCase):
         self.entities = {
             self.asset: {'id': self.asset, 'name': 'Fixture drill', 'assetId': '001-001', 'quantity': 1, 'archived': False,
                          'entityType': {'id': self.kind, 'isLocation': False}, 'parent': {'id': self.shelf, 'name': 'Shelf'},
-                         'fields': [{'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}], 'tags': []},
+                         'fields': [{'id': self.field_id, 'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}], 'tags': []},
             self.other_asset: {'id': self.other_asset, 'name': 'Fixture lamp', 'assetId': '001-002', 'quantity': 1, 'archived': False,
                                'entityType': {'id': self.kind, 'isLocation': False}, 'parent': {'id': self.shelf, 'name': 'Shelf'},
                                'fields': [{'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'}], 'tags': []},
@@ -134,7 +157,8 @@ class DesktopTests(unittest.TestCase):
         self.sessions = Sessions(); self.jobs = NativeJobs(self.ledger)
         self.workshop = Workshop(self.root/'work/ops/workshop.db')
         (self.root/'work/ops/desktop-managers.json').write_text(json.dumps({'managers': [{'user_id': self.manager, 'group_id': self.group}]}))
-        self.native_calls = []; self.invitations = []; self.fail_invite = self.fail_patch = False
+        self.native_calls = []; self.invitations = []; self.tags = []
+        self.fail_invite = self.fail_patch = self.fail_tag_create = self.reject_tag_create = False
         def factory(cookie, base=None):
             self.assertEqual(base, 'http://127.0.0.1:17747')
             token = cookie.split('hb.auth.token=', 1)[1].split(';', 1)[0]
@@ -157,6 +181,205 @@ class DesktopTests(unittest.TestCase):
     def checkout(self):
         operation = self.ledger.begin(self.group, self.borrower, 'check_out', [self.asset], ident())
         self.ledger.complete(operation['id']); return operation
+
+    def test_group_history_validates_collection_entities(self):
+        for ids in ([], [self.asset, self.asset], ['not-a-uuid'], [self.asset, ident()], [self.shelf]):
+            with self.subTest(ids=ids):
+                response = self.request('history/group', {'entity_ids': ids})
+                self.assertEqual(response.status, 400 if ids in ([], [self.asset, self.asset], ['not-a-uuid']) else 403)
+        self.assertEqual(self.request('history/group', {'entity_ids': [self.asset] * 101}).status, 400)
+        self.assertEqual(self.request('history/group', {'entity_ids': 'not-a-list'}).status, 400)
+
+    def test_group_history_returns_latest_entity_linked_notes(self):
+        for entity_id, note in ((self.asset, 'Older drill note'), (self.other_asset, 'Newer lamp note')):
+            checkout = self.ledger.begin(self.group, self.borrower, 'check_out', [entity_id], ident())
+            self.ledger.complete(checkout['id'])
+            returned = self.ledger.begin(self.group, self.manager, 'return', [entity_id], ident(),
+                                         context={'note_author': 'Workshop Admin', 'return_notes': [{'entity_id': entity_id, 'text': note}]})
+            self.ledger.complete(returned['id'])
+        response = self.request('history/group', {'entity_ids': [self.asset, self.other_asset]})
+        self.assertEqual(response.status, 200)
+        self.assertEqual([(row['entity_id'], row['text']) for row in response.result],
+                         [(self.other_asset, 'Newer lamp note'), (self.asset, 'Older drill note')])
+        self.assertTrue(all(row['author'] == 'Workshop Admin' and row['created_at'] for row in response.result))
+
+    def test_group_history_validates_through_collection_equipment_list(self):
+        with patch.object(Native, 'entity', side_effect=AssertionError('Avoid per-item native reads')):
+            response = self.request('history/group', {'entity_ids': [self.asset, self.other_asset]})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.result, [])
+
+    def test_group_history_finds_return_note_beyond_later_operations(self):
+        checkout = self.ledger.begin(self.group, self.borrower, 'check_out', [self.asset], ident())
+        self.ledger.complete(checkout['id'])
+        noted = self.ledger.begin(self.group, self.manager, 'return', [self.asset], ident(),
+                                  context={'note_author': 'Workshop Admin', 'return_notes': [{'entity_id': self.asset, 'text': 'Keep this note'}]})
+        self.ledger.complete(noted['id'])
+        for _ in range(51):
+            checkout = self.ledger.begin(self.group, self.borrower, 'check_out', [self.asset], ident())
+            self.ledger.complete(checkout['id'])
+            returned = self.ledger.begin(self.group, self.manager, 'return', [self.asset], ident())
+            self.ledger.complete(returned['id'])
+        response = self.request('history/group', {'entity_ids': [self.asset]})
+        self.assertEqual(response.status, 200)
+        self.assertEqual([note['text'] for note in response.result], ['Keep this note'])
+
+    def test_custom_group_assign_preserves_native_tags(self):
+        ordinary = {'id': ident(), 'name': 'Fragile', 'description': 'Native label', 'color': '#123456'}
+        self.tags.append(ordinary)
+        self.entities[self.asset]['tags'] = [copy.deepcopy(ordinary)]
+        self.entities[self.asset].update(serialNumber='SN-01', manufacturer='Makita', modelNumber='X1',
+                                         description='Workshop tool', barcode='native-barcode')
+        before = copy.deepcopy(self.entities[self.asset])
+        result = self.request('equipment/groups/assign', {'entity_id': self.asset, 'group_name': '  Drill set  '})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['id'], self.asset)
+        self.assertEqual({tag['name'] for tag in result.result['tags']}, {'Fragile', 'C-Crate Product group: Drill set'})
+        self.assertEqual(self.entities[self.asset]['tags'][0], ordinary)
+        for key in ('id', 'name', 'assetId', 'quantity', 'parent', 'entityType', 'fields', 'serialNumber',
+                    'manufacturer', 'modelNumber', 'description', 'barcode'):
+            self.assertEqual(self.entities[self.asset][key], before[key], key)
+        writes = [call for call in self.native_calls if call[3] == 'PUT']
+        self.assertEqual(len(writes), 1)
+        payload = writes[0][4]
+        self.assertEqual(payload['tagIds'], [ordinary['id'], result.result['tags'][1]['id']])
+        self.assertEqual(payload['parentId'], self.shelf)
+        self.assertEqual(payload['entityTypeId'], self.kind)
+        self.assertEqual(payload['fields'], before['fields'])
+        self.assertEqual(payload['fields'][0]['id'], self.field_id)
+        self.assertEqual({tag['name'] for tag in self.request('equipment').result[0]['tags']},
+                         {'Fragile', 'C-Crate Product group: Drill set'})
+
+    def test_custom_group_readback_detects_missing_native_relationship_ids(self):
+        native_payload = api.update_payload
+        before = copy.deepcopy(self.entities[self.asset])
+        for missing in ('parentId', 'entityTypeId'):
+            with self.subTest(missing=missing):
+                self.entities[self.asset] = copy.deepcopy(before)
+                def incomplete(entity):
+                    payload = native_payload(entity)
+                    payload.pop(missing)
+                    return payload
+                with patch('desktop_api.update_payload', side_effect=incomplete):
+                    result = self.request('equipment/groups/assign',
+                                          {'entity_id': self.asset, 'group_name': 'Drill set'})
+                self.assertEqual(result.status, 409)
+
+    def test_custom_group_remove_preserves_other_tags(self):
+        ordinary = {'id': ident(), 'name': 'Fragile'}
+        grouped = {'id': ident(), 'name': 'C-Crate Product group: Drill set'}
+        self.tags.extend([ordinary, grouped])
+        self.entities[self.asset]['tags'] = [copy.deepcopy(ordinary), copy.deepcopy(grouped)]
+        before = copy.deepcopy(self.entities[self.asset])
+        result = self.request('equipment/groups/remove', {'entity_id': self.asset, 'group_name': ' Drill set '})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result, {'id': self.asset, 'tags': [ordinary]})
+        for key in ('id', 'parent', 'entityType', 'fields', 'assetId', 'quantity'):
+            self.assertEqual(self.entities[self.asset][key], before[key], key)
+        self.assertEqual([call[4]['tagIds'] for call in self.native_calls if call[3] == 'PUT'], [[ordinary['id']]])
+
+    def test_custom_group_reassignment_requires_remove(self):
+        grouped = {'id': ident(), 'name': 'C-Crate Product group: Drill set'}
+        self.tags.append(grouped)
+        self.entities[self.asset]['tags'] = [copy.deepcopy(grouped)]
+        result = self.request('equipment/groups/assign', {'entity_id': self.asset, 'group_name': 'Other set'})
+        self.assertEqual(result.status, 409)
+        self.assertEqual(self.entities[self.asset]['tags'], [grouped])
+        self.assertFalse([call for call in self.native_calls if call[3] in ('POST', 'PUT') and call[2] in
+                          ('/api/v1/tags', '/api/v1/entities/'+self.asset)])
+
+    def test_custom_group_changes_require_manager(self):
+        member = self.request('context', headers={'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}).result
+        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true', 'X-Workshop-Identity': member['identity']}
+        for route in ('equipment/groups/assign', 'equipment/groups/remove'):
+            result = self.request(route, {'entity_id': self.asset, 'group_name': 'Drill set'}, headers)
+            self.assertEqual(result.status, 403)
+        self.assertFalse([call for call in self.native_calls if call[3] in ('POST', 'PUT')])
+
+    def test_custom_group_reuses_exact_tag_and_rejects_prefix_collision(self):
+        existing = {'id': ident(), 'name': 'C-Crate Product group: Drill set'}
+        self.tags.append(existing)
+        result = self.request('equipment/groups/assign', {'entity_id': self.asset, 'group_name': 'Drill set'})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'], [existing])
+        self.assertFalse([call for call in self.native_calls if call[2] == '/api/v1/tags' and call[3] == 'POST'])
+        self.tags.append({'id': ident(), 'name': 'C-Crate Product group:  Drill set '})
+        denied = self.request('equipment/groups/assign', {'entity_id': self.other_asset, 'group_name': 'Drill set'})
+        self.assertEqual(denied.status, 409)
+        self.assertEqual(self.entities[self.other_asset]['tags'], [])
+
+    def test_custom_group_normalizes_internal_whitespace_before_creating_tag(self):
+        result = self.request('equipment/groups/assign',
+                              {'entity_id': self.asset, 'group_name': '  Field  \tkit  '})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'][0]['name'], 'C-Crate Product group: Field kit')
+
+    def test_custom_group_reuses_single_equivalent_native_tag(self):
+        equivalent = {'id': ident(), 'name': 'C-Crate Product group: Field  kit'}
+        self.tags.append(equivalent)
+        result = self.request('equipment/groups/assign',
+                              {'entity_id': self.asset, 'group_name': 'Field kit'})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'], [equivalent])
+        self.assertFalse([call for call in self.native_calls if call[2] == '/api/v1/tags' and call[3] == 'POST'])
+
+    def test_custom_group_rejects_normalized_native_tag_collision(self):
+        self.tags.extend([{'id': ident(), 'name': 'C-Crate Product group: Field kit'},
+                          {'id': ident(), 'name': 'C-Crate Product group: Field  kit'}])
+        result = self.request('equipment/groups/assign',
+                              {'entity_id': self.asset, 'group_name': 'Field   kit'})
+        self.assertEqual(result.status, 409)
+        self.assertEqual(self.entities[self.asset]['tags'], [])
+        self.assertFalse([call for call in self.native_calls if call[3] in ('POST', 'PUT')])
+
+    def test_custom_group_removes_equivalent_whitespace_membership_only(self):
+        ordinary = {'id': ident(), 'name': 'Fragile'}
+        grouped = {'id': ident(), 'name': 'C-Crate Product group: Field  kit'}
+        self.tags.extend([ordinary, grouped])
+        self.entities[self.asset]['tags'] = [copy.deepcopy(ordinary), copy.deepcopy(grouped)]
+        result = self.request('equipment/groups/remove',
+                              {'entity_id': self.asset, 'group_name': 'Field kit'})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'], [ordinary])
+        self.assertEqual([tag['name'] for tag in self.tags], ['Fragile', 'C-Crate Product group: Field  kit'])
+
+    def test_custom_group_removes_its_membership_during_global_name_collision(self):
+        ordinary = {'id': ident(), 'name': 'Fragile'}
+        grouped = {'id': ident(), 'name': 'C-Crate Product group: Field  kit'}
+        other_group = {'id': ident(), 'name': 'C-Crate Product group: Field kit'}
+        self.tags.extend([ordinary, grouped, other_group])
+        self.entities[self.asset]['tags'] = [copy.deepcopy(ordinary), copy.deepcopy(grouped)]
+        self.entities[self.other_asset]['tags'] = [copy.deepcopy(other_group)]
+        result = self.request('equipment/groups/remove',
+                              {'entity_id': self.asset, 'group_name': 'Field kit'})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'], [ordinary])
+        self.assertEqual(self.entities[self.other_asset]['tags'], [other_group])
+        self.assertEqual(self.tags, [ordinary, grouped, other_group])
+
+    def test_custom_group_rejects_duplicate_tags_and_invalid_names(self):
+        for name in ('  ', 'x' * 233):
+            self.assertEqual(self.request('equipment/groups/assign',
+                             {'entity_id': self.asset, 'group_name': name}).status, 400)
+        duplicate = 'C-Crate Product group: Drill set'
+        self.tags.extend([{'id': ident(), 'name': duplicate}, {'id': ident(), 'name': duplicate}])
+        self.assertEqual(self.request('equipment/groups/assign',
+                         {'entity_id': self.asset, 'group_name': 'Drill set'}).status, 409)
+        self.assertFalse([call for call in self.native_calls if call[3] in ('POST', 'PUT')])
+
+    def test_custom_group_lost_tag_create_response_is_reread_without_second_create(self):
+        self.fail_tag_create = True
+        result = self.request('equipment/groups/assign', {'entity_id': self.asset, 'group_name': 'Drill set'})
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.result['tags'][0]['name'], 'C-Crate Product group: Drill set')
+        self.assertEqual(len([call for call in self.native_calls if call[2] == '/api/v1/tags' and call[3] == 'POST']), 1)
+
+    def test_custom_group_native_tag_permission_denial_is_not_retried(self):
+        self.reject_tag_create = True
+        result = self.request('equipment/groups/assign', {'entity_id': self.asset, 'group_name': 'Drill set'})
+        self.assertEqual(result.status, 403)
+        self.assertEqual(self.entities[self.asset]['tags'], [])
+        self.assertEqual(len([call for call in self.native_calls if call[2] == '/api/v1/tags' and call[3] == 'POST']), 1)
 
     def test_management_checkout_confirms_once_and_consumes_its_saved_cart(self):
         saved = self.request('checkout-cart', {'items': [self.asset], 'revision': 0, 'request_key': ident()})

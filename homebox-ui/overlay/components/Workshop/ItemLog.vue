@@ -6,6 +6,7 @@
 
   const props = defineProps<{ itemId: string }>();
   const workshop = useWorkshop();
+  const itemActions = useItemActions();
   const { selectedId } = useCollections();
   const expanded = ref(false);
   const rows = ref<WorkshopHistoryRow[]>([]);
@@ -13,7 +14,7 @@
   const error = ref("");
   const noteFilter = ref("");
   const personFilter = ref("");
-  const actionFilter = ref<"all" | "check_out" | "return">("all");
+  const actionFilter = ref<"all" | "check_out" | "return" | "add_note">("all");
   const fromLocal = ref("");
   const toLocal = ref("");
   let revision = 0;
@@ -78,7 +79,7 @@
   });
 
   function noteText(row: WorkshopHistoryRow) {
-    const text = [row.note_text || "", ...(row.return_notes || []).map(note => note.text || "")];
+    const text = [row.note_text || "", ...(row.return_notes || []).map(note => note.text || ""), ...(row.checkout_notes || []).filter(note => note.entity_id === props.itemId).map(note => note.text || "")];
     return text.join("\n");
   }
   const filteredRows = computed(() => {
@@ -131,6 +132,10 @@
     else { revision++; loading.value = false; }
   }
 
+  watch(itemActions.changed, result => {
+    if (expanded.value && result?.kind !== "cart" && result?.itemIds.includes(props.itemId)) void load();
+  });
+
   watch(scope, () => {
     revision++;
     rows.value = [];
@@ -173,6 +178,7 @@
             <option value="all">All actions</option>
             <option value="check_out">Check-out</option>
             <option value="return">Check-in</option>
+            <option value="add_note">Item note</option>
           </select>
         </div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -222,6 +228,12 @@
                   <div v-for="(note, index) in row.return_notes" :key="`${row.id}:return-note:${index}`">
                     <p class="whitespace-pre-wrap">{{ note.text }}</p>
                     <p class="text-xs text-muted-foreground">{{ returnNoteAuthor(note) }}</p>
+                  </div>
+                </div>
+                <div v-else-if="row.checkout_notes?.some(note => note.entity_id === itemId)" class="space-y-2">
+                  <div v-for="(note, index) in row.checkout_notes.filter(note => note.entity_id === itemId)" :key="`${row.id}:checkout-note:${index}`">
+                    <p class="whitespace-pre-wrap">{{ note.text }}</p>
+                    <p class="text-xs text-muted-foreground">Checkout note · {{ note.author }} · {{ formatTime(note.created_at) }}</p>
                   </div>
                 </div>
                 <span v-else class="text-muted-foreground">—</span>
