@@ -352,26 +352,135 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertIn('window.addEventListener("resize", clampPosition)', component)
 
     def test_generated_create_keeps_one_global_ocr_launcher_and_id_assignment_without_template_controls(self):
-        """Exercise the complete builder against a disposable pinned source fixture."""
-        import homebox_patchset
+        """Exercise the create and layout transforms using local source fixtures."""
+        from unittest.mock import patch
 
-        source = ROOT.parents[1] / "work/homebox-source-patched"
-        if not (source / "frontend/components/Entity/CreateModal.vue").is_file():
-            self.skipTest("pinned patched Homebox source fixture is unavailable")
+        create_source = '''<template>
+          <!-- Template selector button -->
+          <TemplateSelector />
+          <ButtonGroup>
+      <!-- Template Info Display - Collapsible banner -->
+      <div>Saved template details
+      </div>
+
+      <EquipmentTemplatePanel
+        v-model="equipmentTemplateId"
+      />
+      <div>
+        <Button type="button" variant="outline" @click="nameCameraOpen = true">Photo name</Button>
+      <FormTextField
+        v-if="!selectedEntityType?.isLocation"
+          @update:model-value="nameEditRevision++"
+      />
+        <FormTextField v-model="form.modelCode" label="Equipment model code" :max-length="80" />
+      <section v-if="equipmentIntent" />
+      <CameraCaptureDialog v-model:open="nameCameraOpen" @captured="suggestNameFromPhoto" />
+</template>
+<script lang="ts" setup>
+  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";
+  import EquipmentTemplatePanel from "~/components/Workshop/EquipmentTemplatePanel.vue";
+  import TemplateSelector from "~/components/Template/Selector.vue";
+  import CameraCaptureDialog from "~/components/Form/CameraCaptureDialog.vue";
+  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";
+  import MdiFileDocumentOutline from "~icons/mdi/file-document-outline";
+  import MdiChevronDown from "~icons/mdi/chevron-down";
+  import MdiClose from "~icons/mdi/close";
+    EntityTemplateOut,
+    EntityTemplateSummary,
+  const equipmentTemplateId = ref<string | null>(null);
+  const nameCameraOpen = ref(false);
+  // Entity type selection
+  const selectedTemplate = ref<any>(null);
+  const templateData = ref<any>(null);
+  const form = reactive({
+    modelCode: "",
+  });
+  function applyEquipmentTemplate(template: any) {
+    equipmentTemplateId.value = template.id;
+  }
+  async function onEntityTypeChanged(typeId: string) {
+    selectedTemplate.value = null;
+  }
+  const loading = ref(false);
+  async function handleTemplateSelected(template: any) {
+    templateData.value = template;
+  }
+  watch(
+    parent,
+  );
+  async function suggestNameFromPhoto(file: File) {
+    nameOcrMessage.value = "";
+  }
+  async function create() {
+        // Restore last used template if available
+        await restoreLastTemplate();
+      if (!equipmentTemplateId.value && !form.modelCode.trim()) {
+        toast.error("Enter an equipment model code or choose a saved template.");
+          templateId: equipmentTemplateId.value || undefined,
+          postCreateSteps: form.photos.map((photo: PhotoPreview, index: number) => ({
+            name: photo.photoName, size: photo.file.size, last_modified: photo.file.lastModified, primary: photo.primary,
+          })),
+          const photo = form.photos.find(
+      }
+    } else if (templateData.value) {
+      return;
+    } else {
+      // Normal item creation without template
+    }
+    selectedTemplate.value = null;
+    templateData.value = null;
+    templateUserSelected.value = false;
+    showTemplateDetails.value = false;
+    nameOcrGeneration++;
+    nameOcrMessage.value = "";
+    form.modelCode = "";
+  }
+  watch(
+    () => [selectedEntityType.value?.id, selectedTemplate.value?.id, templateData.value?.id, parent.value?.id, subItemCreate.value],
+    () => {
+        selectedTemplateId: selectedTemplate.value?.id,
+        templateId: templateData.value?.id,
+    },
+  );
+  const equipmentWorkshop = useWorkshop();
+  const assignCreated = (intent: any) => assignCreatedEquipment(equipmentWorkshop, intent);
+  async function retryEquipmentAssignment() {
+    await equipmentCreateFlow.resumeAssignment();
+  }
+</script>
+'''
+        layout_source = '''<template>
+  <SidebarInset>
+    <SidebarTrigger class="ccrate-header-sidebar-trigger absolute left-2 top-2 hidden lg:flex" variant="default" />
+    <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="ccrate-header-device shrink-0" />
+      </SidebarInset>
+</template>
+<script lang="ts" setup>
+  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";
+  const search = ref("");
+</script>
+'''
         with tempfile.TemporaryDirectory() as directory:
             previous_build = BUILDER.BUILD
-            previous_materialize = homebox_patchset.materialize
             build = pathlib.Path(directory) / "generated"
+            create = build / "components/Entity/CreateModal.vue"
+            layout_path = build / "layouts/default.vue"
+            create.parent.mkdir(parents=True)
+            layout_path.parent.mkdir(parents=True)
+            create.write_text(create_source)
+            layout_path.write_text(layout_source)
             BUILDER.BUILD = build
-            homebox_patchset.materialize = lambda _root: source
             try:
-                BUILDER.prepare()
+                # Related-item rewriting has its own fixture suite; isolate the
+                # create/template transform while retaining its generated output.
+                with patch.object(BUILDER, "related_create_form_text", lambda text: text):
+                    create.write_text(BUILDER.smart_create_form_text(create.read_text()))
+                BUILDER.ocr_popover_frontend()
             finally:
                 BUILDER.BUILD = previous_build
-                homebox_patchset.materialize = previous_materialize
 
-            layout = (build / "layouts/default.vue").read_text()
-            modal = (build / "components/Entity/CreateModal.vue").read_text()
+            layout = layout_path.read_text()
+            modal = create.read_text()
             self.assertEqual(layout.count('<OcrPopover :launcher-target="orcLauncherTarget" />'), 1)
             self.assertEqual((layout + modal).count("<OcrPopover"), 1)
             self.assertIn('orcActiveDialog.value === DialogID.CreateEntity ? "#orc-launcher-create"', layout)

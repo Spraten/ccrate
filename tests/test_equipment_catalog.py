@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 import uuid
+from contextlib import closing
 from pathlib import Path
 
 from equipment_catalog import EquipmentCatalog, Conflict
@@ -48,7 +49,7 @@ class EquipmentCatalogTests(unittest.TestCase):
                       'assigned_at': '2026-01-01T00:00:00Z', 'deleted': 0}
         legacy_template_digest = digest({'payload': payload, 'type_prefix': 'DRONE', 'matching_entity_ids': [entity_id],
                                          'template_id': None, 'expected_updated_at': None})
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db, db:
             db.executescript('''
             CREATE TABLE equipment_products(id TEXT PRIMARY KEY, group_id TEXT NOT NULL, entity_type_id TEXT NOT NULL,
               type_prefix TEXT NOT NULL, manufacturer TEXT NOT NULL, model_number TEXT NOT NULL, model_code TEXT NOT NULL,
@@ -96,7 +97,7 @@ class EquipmentCatalogTests(unittest.TestCase):
         path = Path(self.tmp.name) / 'legacy.sqlite'
         group, product_id, type_id = uid(), uid(), uid()
         legacy_identity = hashlib.sha256(json.dumps([type_id, 'dji', 'air 2s'], separators=(',', ':')).encode()).hexdigest()
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db, db:
             db.execute("CREATE TABLE equipment_products(id TEXT PRIMARY KEY, group_id TEXT NOT NULL, entity_type_id TEXT NOT NULL, type_prefix TEXT NOT NULL, manufacturer TEXT NOT NULL, model_number TEXT NOT NULL, model_code TEXT NOT NULL, high_water INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, identity_key TEXT NOT NULL DEFAULT '', UNIQUE(group_id,id))")
             db.execute('INSERT INTO equipment_products VALUES(?,?,?,?,?,?,?,?,?,?,?)',
                        (product_id, group, type_id, 'DRONE', 'DJI', 'Air 2S', '2S', 4, 't', 't', legacy_identity))
