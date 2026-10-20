@@ -1738,6 +1738,39 @@ class WorkshopBrowserTests(unittest.TestCase):
         self.assertTrue(self.page.locator('tr').filter(has_text='Blocked camera').count())
         self.assertEqual(self.errors,[])
 
+    def test_equipment_ids_list_edit_errors_preserve_draft_and_retry_load(self):
+        self.page.evaluate("""() => {
+          window.instance.dispose(); window.productFailLoad=false; window.productFailSave=false; window.productWrites=[];
+          window.fixtureWorkshop.request=async(path,data,identity)=>{
+            window.apiCalls.push([path,data,identity]);
+            if(path==='equipment/products'){if(window.productFailLoad)throw new Error('fixture product load failure');return [{id:'product-1',manufacturer:'Northwind',model_number:'Cam-X',model_code:'CX',updated_at:'version-1',next_number:8,active_item_count:2,active_assigned_count:1,assignments:[{entity_id:'22222222-2222-4222-8222-222222222222',display_id:'CX-0007'}]}]}
+            return {};
+          };
+          window.fixtureWorkshop.write=async(path,data,label,subject)=>{window.productWrites.push([path,data]);if(window.productFailSave)throw new Error('fixture product save failure');return {id:'product-1',model_code:data.model_code,updated_at:'version-2',manufacturer:'Northwind',model_number:'Cam-X',next_number:8,active_item_count:2,active_assigned_count:1,assignments:[]}};
+          window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.fixtureWorkshop,window.fixtureNavigate,window.fixtureNotify,{entityId:null,drawingId:null,roomId:null});
+        }""")
+        self.page.get_by_role('heading',name='Equipment ID codes',exact=True).wait_for()
+        self.assertTrue(self.page.get_by_text('Next ID preview — not assigned: 8',exact=True).is_visible())
+        self.assertTrue(self.page.get_by_text('Another assignment may use this number first.',exact=True).is_visible())
+        self.page.get_by_text('Assigned items',exact=True).click()
+        self.assertEqual(self.page.get_by_role('link',name='22222222-2222-4222-8222-222222222222 · CX-0007').get_attribute('href'),'/item/22222222-2222-4222-8222-222222222222')
+        self.page.get_by_role('button',name='Edit model code').click()
+        self.page.get_by_role('textbox',name='Model code').fill('CX2')
+        self.page.evaluate('window.productFailSave=true')
+        self.page.get_by_role('button',name='Confirm model code change').click()
+        self.page.get_by_role('alert').filter(has_text='fixture product save failure').wait_for()
+        self.assertEqual(self.page.get_by_role('textbox',name='Model code').input_value(),'CX2')
+        self.page.evaluate('window.productFailSave=false')
+        self.page.get_by_role('button',name='Confirm model code change').click()
+        self.page.wait_for_function('window.productWrites.length===2')
+        body=self.page.evaluate('window.productWrites[1][1]')
+        self.assertEqual(body['expected_updated_at'],'version-1')
+        self.assertTrue(body['request_key'])
+        self.page.evaluate("window.instance.dispose();window.productFailLoad=true;window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.fixtureWorkshop,window.fixtureNavigate,window.fixtureNotify,{entityId:null,drawingId:null,roomId:null})")
+        self.page.get_by_text('fixture product load failure',exact=True).wait_for()
+        self.assertTrue(self.page.get_by_role('button',name='Try loading again').is_visible())
+        self.assertEqual(self.errors,[])
+
     def test_optional_eighth_action_callback_targets_expanded_filtered_unit_only(self):
         self.page.evaluate("""() => {
           window.fixtureSearchEquipment=Array.from({length:20},(_,index)=>({

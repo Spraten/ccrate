@@ -100,8 +100,36 @@ try {
 
   await page.evaluate(() => {
     window.instance.dispose();
+    window.originalRequestBeforeProducts = window.fixtureWorkshop.request;
+    window.fixtureWorkshop.write = async (path, body) => { window.requests.push([path, body]); if(window.failCodeSave) throw new Error('fixture save failure'); return { model_code: body.model_code, updated_at: 'v2' }; };
+    window.fixtureWorkshop.request = async (path, body) => {
+      if (path === 'equipment/products') return [{ id: 'prod-1', manufacturer: 'Northwind', model_number: 'Cam-X', model_code: 'CX', updated_at: 'v1', next_number: 8, active_item_count: 2, active_assigned_count: 1, assignments: [{ entity_id: 'item-1', display_id: 'CX-0007' }] }];
+      if (path === 'equipment/products/code') { window.codeWrite = body; if(window.failCodeSave) throw new Error('fixture save failure'); return { model_code: body.model_code, updated_at: 'v2' }; }
+      return {};
+    };
+    window.instance = window.mountWorkshopTools(document.querySelector('#root'), 'equipment-ids', window.fixtureWorkshop, () => {}, () => {}, { entityId: null, drawingId: null, roomId: null });
+  });
+  await page.getByRole('heading', { name: 'Equipment ID codes', exact: true }).waitFor();
+  await page.getByText('Next ID preview — not assigned: 8').waitFor();
+  await page.getByText('Another assignment may use this number first.').waitFor();
+  await page.getByText('Assigned items', { exact: true }).click();
+  await page.getByRole('link', { name: 'item-1 · CX-0007' }).waitFor();
+  await page.getByRole('button', { name: 'Edit model code' }).click();
+  await page.getByRole('textbox', { name: 'Model code' }).fill('CX2');
+  await page.getByText('Only future IDs change. Assigned IDs remain unchanged.').waitFor();
+  await page.evaluate(() => window.failCodeSave = true);
+  await page.getByRole('button', { name: 'Confirm model code change' }).click();
+  await page.getByRole('alert').filter({hasText:'fixture save failure'}).waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Model code' }).inputValue(), 'CX2', 'save failure preserves edit draft');
+  await page.evaluate(() => window.failCodeSave = false);
+  await page.getByRole('button', { name: 'Confirm model code change' }).click();
+  await page.waitForFunction(() => { const body=window.requests.at(-1)?.[1]; return body?.expected_updated_at === 'v1' && body?.request_key; });
+  assert.equal(await page.getByText('Next ID preview — not assigned: 8').count(), 1);
+
+  await page.evaluate(() => {
+    window.instance.dispose();
     window.fixtureLoans = [{ entity_id: 'a0000000-0000-4000-8000-000000000020', entity_name: 'Camera bin 20', borrower: 'Member' }];
-    const originalRequest = window.fixtureWorkshop.request;
+    const originalRequest = window.originalRequestBeforeProducts;
     window.fixtureWorkshop.request = async (path, body) => path === 'loans' ? structuredClone(window.fixtureLoans) : originalRequest(path, body);
     window.instance = window.mountWorkshopTools(document.querySelector('#root'), 'loans', window.fixtureWorkshop, path => window.navigation.push(path), () => {}, { entityId: null, drawingId: null, roomId: null }, undefined, (request, trigger) => window.itemActionRequests.push({ request, trigger: trigger?.dataset.workshopActionItem }));
   });

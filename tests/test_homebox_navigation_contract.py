@@ -46,6 +46,12 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn('name: computed(() => "Label"), to: "/workshop/labels"', self.output)
         self.assertIn('name: computed(() => "Users"), to: "/collection/members"', self.output)
 
+    def test_equipment_id_codes_is_a_collection_member_workshop_entry(self):
+        self.assertIn('["equipment-ids", "Equipment ID codes"]', self.output)
+        page = (ROOT / 'homebox-ui/overlay/pages/workshop/[tool].vue').read_text()
+        self.assertIn('"equipment-ids"', page)
+        self.assertIn("tool.value === 'equipment-ids' ? 'Equipment ID codes'", page)
+
     def test_more_is_closed_by_default_and_keeps_secondary_links(self):
         self.assertIn(':default-open="n.name.value !== \'More\'"', self.output)
         self.assertIn('name: computed(() => "More")', self.output)

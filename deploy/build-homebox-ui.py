@@ -717,7 +717,7 @@ def navigation_frontend():
     replace('layouts/default.vue', '  const quickMenuActions = reactive([', '''  const workshop = useWorkshop();
   const { selectedId: workshopGroup } = useCollections();
   const workshopLinks = computed(() => [
-    ["loans", "Loans & notes"], ["map", "Workshop & storage"],
+    ["loans", "Loans & notes"], ["map", "Workshop & storage"], ["equipment-ids", "Equipment ID codes"],
     ["checkout-cart", "Checkout cart"],
     ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
   ]);
