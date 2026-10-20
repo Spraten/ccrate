@@ -5,7 +5,7 @@ export function matchInventoryCustomFields(items = [], query = '') {
   const needle = fold(query);
   if (!needle) return [];
   return items.filter(item => (Array.isArray(item.fields) ? item.fields : []).some(field =>
-    fold(field?.name || field?.label).includes(needle) || fold(field?.value).includes(needle)
+    fold(field?.name).includes(needle) || fold(field?.textValue).includes(needle)
   ));
 }
 
