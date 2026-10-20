@@ -291,32 +291,17 @@ class HomeboxUiBuilderTests(unittest.TestCase):
     def test_create_action_move_fails_clearly_when_photo_preview_markup_shifts(self):
         source = '''      <div class="mt-4 flex flex-row-reverse">
         <ButtonGroup>
-          <Buëm-¢G§²ÚîÆ­yÔs=True)
-            locale.write_text(json.dumps({"components": {"form": {"camera": {}}}}))
-            try:
-                BUILDER.camera_ocr_frontend()
-            finally:
-                BUILDER.BUILD = previous_build
+          <Button type="submit">Create</Button>
+          <Button type="button" @click="create(false)">Create and add</Button>
+        </ButtonGroup>
+      </div>
 
-            generated = page.read_text()
-            camera = json.loads(locale.read_text())["components"]["form"]["camera"]
-            self.assertIn('from "~/lib/local-ocr"', generated)
-            self.assertIn('getRevision: () => nameEditRevision.value', generated)
-            self.assertIn('@update:model-value="nameEditRevision++"', generated)
-            self.assertIn('nameOcrMessage.value = t("components.form.camera.ocr_running")', generated)
-            self.assertIn('setName: (value: string) => { item.value.name = value; }', generated)
-            self.assertIn("not uploaded", camera["local_ocr_notice"])
-            self.assertIn("name_preserved", camera)
-            generated_modal = modal.read_text()
-            self.assertIn('from "~/lib/local-ocr"', generated_modal)
-            self.assertIn('getRevision: () => nameEditRevision.value', generated_modal)
-            self.assertIn('@update:model-value="nameEditRevision++"', generated_modal)
-            self.assertIn('nameOcrMessage.value = t("components.form.camera.ocr_running")', generated_modal)
-            self.assertIn('setName: (value: string) => { form.name = value; }', generated_modal)
-            self.assertIn('const { activeDialog, openDialog, closeDialog, registerOpenDialogCallback } = useDialog();', generated_modal)
-            self.assertIn('watch(activeDialog, value => { if (value !== DialogID.CreateEntity) { nameOcrGeneration++; nameOcrMessage.value = ""; } }, { flush: "sync" });', generated_modal)
-            self.assertIn('isCurrent: () => request === nameOcrGeneration', generated_modal)
-            self.assertIn('nameOcrGeneration++;\n    nameOcrMessage.value = "";\n    form.name = "";', generated_modal)
+      <PhotoUploaderPreview
+        :photos="form.photos"
+      ></PhotoUploaderPreview>
+'''
+        with self.assertRaisesRegex(RuntimeError, "self-closing photo preview"):
+            BUILDER.move_create_actions_after_photo_preview(source)
 
     def test_orc_popover_is_mounted_globally_and_uses_local_ocr_helper(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
@@ -324,7 +309,7 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             BUILDER.BUILD = pathlib.Path(directory)
             layout = BUILDER.BUILD / "layouts/default.vue"
             layout.parent.mkdir(parents=True)
-            layout.write_text('''<template>\n  <Sidebar />\n  <SidebarInset class="min-h-dvh max-w-full overflow-hidden bg-background-accent">\n    <div v-if="preferences.displayLegacyHeader">\n      <AppHeaderDecor />\n      <SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />\n      </div>\n    <div class="flex min-w-0 grow items-center justify-end gap-2">\n      <DeviceStatus :enabled="true" class="shrink-0" />\n      <button>Header action</button>\n    </div>\n    <NuxtPage />\n      </SidebarInset>\n</template>\n<script lang="ts" setup>\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";\n  const search = ref("");\n</script>\n''')
+            layout.write_text('''<template>\n  <Sidebar />\n  <SidebarInset class="min-h-dvh max-w-full overflow-hidden bg-background-accent">\n    <div v-if="preferences.displayLegacyHeader">\n      <AppHeaderDecor />\n      <SidebarTrigger class="ccrate-header-sidebar-trigger absolute left-2 top-2 hidden lg:flex" variant="default" />\n      </div>\n    <div class="flex min-w-0 grow items-center justify-end gap-2">\n      <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="ccrate-header-device shrink-0" />\n      <button>Header action</button>\n    </div>\n    <NuxtPage />\n      </SidebarInset>\n</template>\n<script lang="ts" setup>\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";\n  const search = ref("");\n</script>\n''')
             try:
                 BUILDER.ocr_popover_frontend()
             finally:
@@ -332,15 +317,19 @@ class HomeboxUiBuilderTests(unittest.TestCase):
 
             generated = layout.read_text()
             self.assertEqual(generated.count("<OcrPopover"), 1)
-            device_status = generated.index('<DeviceStatus :enabled="true"')
+            device_status = generated.index('<DeviceStatus v-if="!preferences.displayLegacyHeader')
             regular_target = generated.index('<div id="orc-launcher-toolbar"')
             self.assertGreater(regular_target, device_status)
-            self.assertNotIn('orc-launcher-legacy', generated)
+            self.assertIn('orc-launcher-legacy', generated)
             self.assertEqual(generated.count('<OcrPopover :launcher-target="orcLauncherTarget" />'), 1)
-            self.assertIn('const orcLauncherTarget = computed(() => "#orc-launcher-toolbar")', generated)
+            self.assertIn('orcActiveDialog.value === DialogID.CreateEntity ? "#orc-launcher-create"', generated)
             self.assertIn('import OcrPopover from "~/components/Workshop/OcrPopover.vue";', generated)
             component = (ROOT / "homebox-ui/overlay/components/Workshop/OcrPopover.vue").read_text()
             self.assertIn('from "~/lib/local-ocr"', component)
+            self.assertIn('recognizeStructuredTextFromImage', component)
+            self.assertIn('applyRecognizedTextWithoutOverwritingEdits', component)
+            self.assertIn('Copy', component)
+            self.assertNotIn('form.name', component)
             self.assertIn('<Teleport defer :to="props.launcherTarget">', component)
             self.assertIn(':aria-pressed="enabled"', component)
             self.assertIn('Enable text capture', component)
@@ -449,7 +438,21 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             form_block = create_modal[form_start:create_modal.index("\n  });", form_start)]
             self.assertEqual(import_block.count("EntitySummary,"), 1)
             self.assertEqual(form_block.count('modelNumber: "",'), 1)
-            self.assertEqual(create_modal.count("modelNumber: form.modelNumber,"), 3)
+            self.assertEqual(create_modal.count("modelNumber: form.modelNumber,"), 2)
+            self.assertNotIn("TemplateSelector", create_modal)
+            self.assertNotIn("EquipmentTemplatePanel", create_modal)
+            self.assertNotIn("templateData", create_modal)
+            self.assertNotIn("suggestNameFromPhoto", create_modal)
+            self.assertNotIn("CameraCaptureDialog", create_modal)
+            self.assertIn("createEquipmentCreationFlow", create_modal)
+            self.assertIn("assignCreatedEquipment", create_modal)
+            self.assertIn('id="orc-launcher-create"', create_modal)
+            self.assertIn('@keydown.down.prevent="moveSuggestion(1)"', create_modal)
+            self.assertIn('v-model="form.serialNumber"', create_modal)
+            self.assertIn('v-model="form.packaging"', create_modal)
+            self.assertIn('form.customRows.push', create_modal)
+            self.assertIn('nativeMetadataMatches', create_modal)
+            self.assertIn("item-metadata/field-notes", create_modal)
             self.assertEqual(create_modal.count('v-model="form.modelNumber"'), 1)
             self.assertNotIn("<ItemSelector", create_modal)
             self.assertIn('<div class="flex items-end gap-2">\n        <FormTextField', create_modal)

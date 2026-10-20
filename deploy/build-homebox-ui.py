@@ -830,7 +830,7 @@ def ocr_popover_frontend():
     legacy = '<SidebarTrigger class="ccrate-header-sidebar-trigger absolute left-2 top-2 hidden lg:flex" variant="default" />'
     replace('layouts/default.vue', legacy, legacy + '\n            <div id="orc-launcher-legacy" class="absolute left-14 top-2 z-30 hidden lg:flex"></div>')
     replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" />\n      </SidebarInset>')
-    replace('layouts/default.vue', '  const search = ref("");', '  const orcLauncherTarget = computed(() => preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
+    replace('layouts/default.vue', '  const search = ref("");', '  const { activeDialog: orcActiveDialog } = useDialog();\n  const orcLauncherTarget = computed(() => orcActiveDialog.value === DialogID.CreateEntity ? "#orc-launcher-create" : preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import OcrPopover from "~/components/Workshop/OcrPopover.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
 
 
@@ -1001,6 +1001,144 @@ def camera_ocr_frontend():
     locale.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
 
 
+import re
+
+def smart_create_form_text(text):
+    def once(old, new):
+        nonlocal text
+        if text.count(old) != 1: raise RuntimeError(f'Smart create anchor changed: {old[:80]}')
+        text = text.replace(old, new)
+    # Drop all native and equipment template entry points, retaining their APIs and data.
+    text, count = re.subn(r'          <!-- Template selector button -->.*?\n\s*<ButtonGroup>', '          <ButtonGroup>', text, count=1, flags=re.S)
+    if count != 1: raise RuntimeError('Template selector markup changed')
+    text, count = re.subn(r'      <!-- Template Info Display - Collapsible banner.*?\n      </div>\n\n', '', text, count=1, flags=re.S)
+    if count != 1: raise RuntimeError('Template banner markup changed')
+    text, count = re.subn(r'      <EquipmentTemplatePanel.*?\n      />\n', '', text, count=1, flags=re.S)
+    if count != 1: raise RuntimeError('Equipment template panel changed')
+    text, count = re.subn(r'    } else if \(templateData.value\) \{.*?\n    } else \{\n      // Normal item creation without template', '    } else {\n      // Normal item creation without template', text, count=1, flags=re.S)
+    if count != 1: raise RuntimeError('Native template create branch changed')
+    once('  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import EquipmentTemplatePanel from "~/components/Workshop/EquipmentTemplatePanel.vue";',
+         '  import { assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches } from "~/lib/item-create-fields";')
+    once('  import TemplateSelector from "~/components/Template/Selector.vue";\n', '')
+    once('    EntityTemplateOut,\n    EntityTemplateSummary,\n', '')
+    once('  import MdiFileDocumentOutline from "~icons/mdi/file-document-outline";\n  import MdiChevronDown from "~icons/mdi/chevron-down";\n  import MdiClose from "~icons/mdi/close";\n', '')
+    once('  const equipmentTemplateId = ref<string | null>(null);\n', '')
+    text = text.replace('    equipmentTemplateId.value = null;\n', '')
+    text, count = re.subn(r'  function applyEquipmentTemplate\(template: any\) \{.*?\n  }\n', '', text, count=1, flags=re.S)
+    if count != 1: raise RuntimeError('Template apply function changed')
+    start=text.index('  async function onEntityTypeChanged(typeId: string) {')
+    end=text.index('  const loading = ref(false);', start)
+    text=text[:start]+'''  function onEntityTypeChanged(typeId: string) {
+    selectedEntityType.value = entityTypes.value.find(t => t.id === typeId) || null;
+    suggestionSearchVersion++;
+    suggestionLookup.invalidate();
+    suggestions.value = [];
+  }
+
+'''+text[end:]
+    start=text.index('  const selectedTemplate = ref<')
+    end=text.index('  const form = reactive({', start)
+    text=text[:start]+text[end:]
+    start=text.index('  async function handleTemplateSelected(')
+    end=text.index('  watch(\n    parent,',start)
+    text=text[:start]+text[end:]
+    once('        // Restore last used template if available\n        await restoreLastTemplate();\n', '')
+    once('      if (!equipmentTemplateId.value && !form.modelCode.trim()) {\n        toast.error("Enter an equipment model code or choose a saved template.");',
+         '      if (!form.modelCode.trim()) {\n        toast.error("Enter an equipment model code.");')
+    once('          templateId: equipmentTemplateId.value || undefined,\n', '')
+    once('    selectedTemplate.value = null;\n    templateData.value = null;\n    templateUserSelected.value = false;\n    showTemplateDetails.value = false;\n', '')
+    once('    () => [selectedEntityType.value?.id, selectedTemplate.value?.id, templateData.value?.id, parent.value?.id, subItemCreate.value],',
+         '    () => [selectedEntityType.value?.id, parent.value?.id, subItemCreate.value],')
+    once('        selectedTemplateId: selectedTemplate.value?.id,\n        templateId: templateData.value?.id,\n', '')
+    # Retain standalone OCR popover; remove photo-to-name camera controls from this form.
+    start=text.index('        <Button type="button" variant="outline" @click="nameCameraOpen = true">')
+    end=text.index('      <FormTextField\n        v-if="!selectedEntityType?.isLocation"',start)
+    text=text[:start]+'''      </div>
+      <div id="orc-launcher-create" class="min-h-10"></div>
+      <div v-if="suggestions.length" class="rounded-md border p-2" role="listbox" aria-label="Similar items">
+        <button v-for="(item, index) in suggestions" :key="item.id" type="button" role="option" :aria-selected="index === suggestionIndex" class="block w-full rounded p-2 text-left hover:bg-accent" @click="chooseSuggestion(item)">
+          {{ item.name }} · {{ item.manufacturer }} {{ item.modelNumber }}
+        </button>
+      </div>
+'''+text[end:]
+    once('          @update:model-value="nameEditRevision++"', '          @update:model-value="searchSuggestions"\n          @keydown.down.prevent="moveSuggestion(1)"\n          @keydown.up.prevent="moveSuggestion(-1)"\n          @keydown.enter="chooseHighlightedSuggestion"\n          @keydown.esc="suggestions = []"')
+    once('    <CameraCaptureDialog v-model:open="nameCameraOpen" @captured="suggestNameFromPhoto" />\n', '')
+    once('  import CameraCaptureDialog from "~/components/Form/CameraCaptureDialog.vue";\n  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";\n', '')
+    start=text.index('  const nameCameraOpen = ref(false);')
+    end=text.index('  // Entity type selection',start)
+    text=text[:start]+text[end:]
+    start=text.index('  async function suggestNameFromPhoto(')
+    end=text.index('  const ',start) if False else -1
+    # OCR helper appears later; remove its exact function by balanced braces.
+    depth=0; close=None
+    for index in range(start,len(text)):
+        if text[index]=='{': depth+=1
+        elif text[index]=='}':
+            depth-=1
+            if depth==0: close=index+1; break
+    text=text[:start]+text[close:]
+    once('    nameOcrGeneration++;\n    nameOcrMessage.value = "";\n', '')
+    once('    modelCode: "",', '    modelCode: "",\n    serialNumber: "",\n    packaging: "",\n    customRows: [] as Array<{ name: string; value: string; note: string }>,')
+    once('        <FormTextField v-model="form.modelCode" label="Equipment model code" :max-length="80" />', '''        <FormTextField v-model="form.modelCode" label="Equipment model code" :max-length="80" />
+        <FormTextField v-model="form.serialNumber" label="Manufacturer serial number" :max-length="255" />''')
+    once('      <section v-if="equipmentIntent"', '''      <div v-if="!selectedEntityType?.isLocation" class="space-y-2">
+        <label for="device-packaging">Device Packaging</label>
+        <select id="device-packaging" v-model="form.packaging" class="w-full rounded-md border bg-background p-2">
+          <option value="">Unknown</option>
+          <option v-for="option in PACKAGING_OPTIONS" :key="option" :value="option">{{ option }}</option>
+        </select>
+        <table class="w-full"><thead><tr><th>Name</th><th>Value</th><th>Note</th><th></th></tr></thead><tbody>
+          <tr v-for="(row, index) in form.customRows" :key="index">
+            <td><input v-model="row.name" aria-label="Custom field name" class="w-full rounded border p-1" /></td>
+            <td><input v-model="row.value" aria-label="Custom field value" class="w-full rounded border p-1" /></td>
+            <td><input v-model="row.note" aria-label="Custom field note" class="w-full rounded border p-1" /></td>
+            <td><Button type="button" variant="ghost" @click="form.customRows.splice(index, 1)">Remove</Button></td>
+          </tr>
+        </tbody></table>
+        <Button type="button" variant="outline" @click="form.customRows.push({ name: '', value: '', note: '' })">Add field</Button>
+      </div>
+      <section v-if="equipmentIntent"''')
+    once('  const equipmentWorkshop = useWorkshop();', '''  const equipmentWorkshop = useWorkshop();
+  const suggestions = ref<any[]>([]);
+  const suggestionIndex = ref(0);
+  let suggestionSearchVersion = 0;
+  const suggestionLookup = createSuggestionLookup((typeId: string, query: string) => equipmentWorkshop.request(`equipment/suggestions?type_id=${encodeURIComponent(typeId)}&q=${encodeURIComponent(query)}`));
+  async function searchSuggestions() {
+    const typeId = selectedEntityType.value?.isLocation ? '' : selectedEntityType.value?.id || '';
+    const version = ++suggestionSearchVersion;
+    try { const found = await suggestionLookup.search(typeId, form.name); if (version === suggestionSearchVersion) { suggestions.value = found; suggestionIndex.value = 0; } }
+    catch { if (version === suggestionSearchVersion) suggestions.value = []; }
+  }
+  function moveSuggestion(delta: number) { if (suggestions.value.length) suggestionIndex.value = (suggestionIndex.value + delta + suggestions.value.length) % suggestions.value.length; }
+  function chooseSuggestion(item: any) { suggestionSearchVersion++; suggestionLookup.invalidate(); selectSuggestion(form, item); suggestions.value = []; }
+  function chooseHighlightedSuggestion(event: KeyboardEvent) { if (suggestions.value.length) { event.preventDefault(); chooseSuggestion(suggestions.value[suggestionIndex.value]); } }''')
+    once('          postCreateSteps: form.photos.map((photo: PhotoPreview, index: number) => ({', '''          postCreateSteps: [
+            { key: 'metadata', name: 'Native item fields', draft: { serialNumber: form.serialNumber, packaging: form.packaging, rows: validateCustomRows(form.customRows) } },
+            { key: 'field-notes', name: 'Custom field notes', request_key: crypto.randomUUID(), fields: validateCustomRows(form.customRows).map(row => ({ name: row.name, note: row.note.trim() })) },
+            ...form.photos.map((photo: PhotoPreview, index: number) => ({''')
+    once('            name: photo.photoName, size: photo.file.size, last_modified: photo.file.lastModified, primary: photo.primary,\n          })),',
+         '            name: photo.photoName, size: photo.file.size, last_modified: photo.file.lastModified, primary: photo.primary,\n          })),\n          ],')
+    once('          const photo = form.photos.find(', '''          if (step.key === 'metadata') {
+            const before = await api.items.get(intent.entity_id);
+            if (before.error || !before.data) return { error: before.error || new Error('Could not read the native item.') };
+            if (nativeMetadataMatches(before.data, step.draft)) return {};
+            const payload = buildNativeMetadataUpdate(before.data, step.draft);
+            const updated = await api.items.update(intent.entity_id, payload);
+            if (updated.error) return updated;
+            const after = await api.items.get(intent.entity_id);
+            if (after.error || !after.data || !nativeMetadataMatches(after.data, step.draft)) return { error: new Error('Homebox did not confirm item fields.') };
+            return {};
+          }
+          if (step.key === 'field-notes') {
+            await equipmentWorkshop.request('item-metadata/field-notes', { request_key: step.request_key, entity_id: intent.entity_id, fields: step.fields }, intent.identity);
+            const notes = await equipmentWorkshop.request(`item-metadata?entity_id=${encodeURIComponent(intent.entity_id)}`);
+            if (!step.fields.every((field: any) => (notes.fieldNotes?.[field.name.trim().replace(/\\s+/g, ' ').toLocaleLowerCase()] || '') === field.note)) return { error: new Error('Custom field notes were not confirmed.') };
+            return {};
+          }
+          const photo = form.photos.find(''')
+    once('    form.modelCode = "";\n', '    form.modelCode = "";\n    form.serialNumber = "";\n    form.packaging = "";\n    form.customRows = [];\n    suggestions.value = [];\n')
+    return text
+
 def equipment_catalog_create_frontend():
     path = BUILD/'components/Entity/CreateModal.vue'
     text = path.read_text()
@@ -1037,8 +1175,11 @@ def equipment_catalog_create_frontend():
         </template>
         <template v-if="equipmentIntent.state === 'assignment_pending'">
           <p v-for="step in equipmentIntent.post_create_steps || []" :key="step.key" class="mt-1 text-sm">
-            {{ step.name }}: {{ step.status }}<span v-if="step.status === 'pending'"> · Re-select this file if this modal was reopened.</span>
-            <template v-if="step.status === 'uncertain'">
+            {{ step.name }}: {{ step.status }}<span v-if="step.status === 'pending' && step.key.startsWith('photo-')"> · Re-select this file if this modal was reopened.</span>
+            <template v-if="step.status === 'uncertain' && !step.key.startsWith('photo-')">
+              <Button type="button" size="sm" variant="outline" class="ml-2" @click="reconcileEquipmentMetadata(step)">Check saved value</Button>
+            </template>
+            <template v-if="step.status === 'uncertain' && step.key.startsWith('photo-')">
               <Button type="button" size="sm" variant="outline" class="ml-2" @click="reconcileEquipmentPhoto(step.key, true)">Confirm uploaded</Button>
               <Button type="button" size="sm" variant="outline" class="ml-1" @click="reconcileEquipmentPhoto(step.key, false)">Confirm not uploaded</Button>
             </template>
@@ -1082,10 +1223,10 @@ def equipment_catalog_create_frontend():
         write: (value: unknown) => localStorage.setItem(key, JSON.stringify(value)),
         clear: () => localStorage.removeItem(key),
         assignCreated: (intent: { request_key: string; entity_id: string; template_id?: string | null; model_code?: string | null; group_id?: string | null; user_id?: string | null; identity?: string | null }) => assignCreatedEquipment(equipmentWorkshop, intent),
-        completePostCreate: async (intent: { group_id: string; user_id: string; identity: string; entity_id: string }, step: { name: string; size: number; last_modified: number; primary: boolean }) => {
+        completePostCreate: async (intent: { group_id: string; user_id: string; identity: string; entity_id: string; request_key: string }, step: any) => {
           const current = await equipmentWorkshop.refresh();
           if (current.group.id !== intent.group_id || current.user.id !== intent.user_id || current.identity !== intent.identity) {
-            return { deferred: true, message: "Switch back to the original account and collection to resume queued photo uploads." };
+            return { deferred: true, message: "Switch back to the original account and collection to resume item follow-up." };
           }
           const photo = form.photos.find((candidate: PhotoPreview) => candidate.photoName === step.name && candidate.file.size === step.size && candidate.file.lastModified === step.last_modified && candidate.primary === step.primary);
           if (!photo) return { deferred: true, message: `Re-select ${step.name} to finish the queued photo upload.` };
@@ -1101,6 +1242,7 @@ def equipment_catalog_create_frontend():
   const equipmentCollections = useCollections();
   const equipmentAuth = useAuthContext();
   watch([equipmentCollections.selectedId, () => equipmentAuth.user?.id, activeDialog], () => {
+    suggestionSearchVersion++; suggestionLookup.invalidate(); suggestions.value = [];
     equipmentFlow = null;
     equipmentFlowKey = "";
     equipmentFlowContext = null;
@@ -1151,6 +1293,23 @@ def equipment_catalog_create_frontend():
     if (!window.confirm("After checking the selected collection, confirm that no item was created. This clears the pending create and allows a new attempt.")) return;
     try { const flow = await getEquipmentFlow(); flow.confirmNoNativeCreate(); equipmentIntent.value = null; }
     catch (error) { toast.error((error as Error).message || "The pending create could not be cleared."); }
+  }
+  async function reconcileEquipmentMetadata(step: any) {
+    try {
+      const flow = await getEquipmentFlow();
+      const intent = flow.pending();
+      if (!intent?.entity_id) throw new Error('The created item is missing.');
+      let confirmed = false;
+      if (step.key === 'metadata') {
+        const result = await api.items.get(intent.entity_id);
+        if (result.error || !result.data) throw result.error || new Error('Could not read item fields.');
+        confirmed = nativeMetadataMatches(result.data, step.draft);
+      } else if (step.key === 'field-notes') {
+        const notes = await equipmentWorkshop.request(`item-metadata?entity_id=${encodeURIComponent(intent.entity_id)}`);
+        confirmed = step.fields.every((field: any) => (notes.fieldNotes?.[field.name.trim().replace(/\\s+/g, ' ').toLocaleLowerCase()] || '') === field.note);
+      }
+      equipmentIntent.value = flow.reconcilePostCreateStep(step.key, confirmed);
+    } catch (error) { toast.error((error as Error).message || 'Could not check the saved value.'); }
   }
   async function reconcileEquipmentPhoto(stepKey: string, uploaded: boolean) {
     try { const flow = await getEquipmentFlow(); equipmentIntent.value = flow.reconcilePostCreateStep(stepKey, uploaded); }
@@ -1247,7 +1406,15 @@ def equipment_catalog_create_frontend():
     }
 
     nameOcrGeneration++;''', 1)
-    path.write_text(text)
+    path.write_text(smart_create_form_text(text))
+    replace('layouts/default.vue', '''    {
+      icon: MdiFileDocumentMultiple,
+      id: 4,
+      active: computed(() => route.path === "/templates"),
+      name: computed(() => t("menu.templates")),
+      to: "/templates",
+    },
+''', '')
 
 
 def prepare():
