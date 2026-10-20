@@ -1,6 +1,80 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, sameFieldNotes, persistFieldNotes } from '../homebox-ui/overlay/lib/item-create-fields.js';
+import * as detailHelpers from '../homebox-ui/overlay/lib/item-metadata.js';
+const { detailMetadataDraft, saveDetailMetadata, changeRelatedItem, searchRelatedItems } = detailHelpers;
+
+test('detail draft loads packaging and Name, Value, Note from native item and metadata', () => {
+  const item = { serialNumber: 'SN', fields: [{ id: 'p', name: 'Device Packaging', type: 'text', textValue: 'Bag' }, { id: 'f', name: 'Color', type: 'text', textValue: 'red' }] };
+  assert.deepEqual(detailMetadataDraft(item, { fieldNotes: { color: 'shade' } }), { serialNumber: 'SN', packaging: 'Bag', rows: [{ id: 'f', name: 'Color', value: 'red', note: 'shade' }] });
+});
+
+test('detail draft reads canonical Notes keys for expanding Unicode field names', () => {
+  assert.deepEqual(detailMetadataDraft({ fields: [{ name: 'Straße', type: 'text', textValue: 'A' }] }, { fieldNotes: { strasse: 'label' } }).rows, [{ name: 'Straße', value: 'A', note: 'label' }]);
+});
+
+test('renaming a detail custom field preserves its native field ID', async () => {
+  const current = { id: 'a', parent: { id: 'loc' }, entityType: { id: 'type' }, tags: [], serialNumber: '', fields: [{ id: 'field-id', name: 'Color', type: 'text', textValue: 'red' }] };
+  let stored = current;
+  const api = { items: { get: async () => ({ data: stored }), update: async (_id, update) => { stored = { ...current, ...update }; return { data: stored }; } } };
+  const workshop = { request: async () => ({ fieldNotes: { hue: 'shade' } }) };
+  await saveDetailMetadata({ api, workshop, item: current, draft: { serialNumber: '', packaging: '', rows: [{ id: 'field-id', name: 'Hue', value: 'red', note: 'shade' }] }, identity: 'session', requestKey: 'key' });
+  assert.deepEqual(stored.fields.map(field => [field.id, field.name]), [['field-id', 'Hue']]);
+});
+
+test('detail save keeps field IDs and unrelated fields, then saves Notes with confirmed readback', async () => {
+  const calls = [];
+  const item = { id: 'one', name: 'Camera', parent: { id: 'loc' }, entityType: { id: 'type' }, tags: [], serialNumber: 'old', fields: [{ id: 'p', name: 'Device Packaging', type: 'text', textValue: 'Bag' }, { id: 'f', name: 'Color', type: 'text', textValue: 'red' }, { id: 'u', name: 'Weight', type: 'number', numberValue: 4 }] };
+  const draft = { serialNumber: 'new', packaging: 'HardCase', rows: [{ name: 'Color', value: 'blue', note: 'deep' }] };
+  const updated = { ...item, serialNumber: 'new', fields: [{ ...item.fields[0], textValue: 'HardCase' }, { ...item.fields[1], textValue: 'blue' }, item.fields[2]] };
+  let nativeSaved = false;
+  const api = { items: { update: async (id, payload) => { calls.push(['native', id, payload]); nativeSaved = true; return { data: updated }; }, get: async () => ({ data: nativeSaved ? updated : item }) } };
+  const workshop = { request: async (path, body) => { calls.push(['metadata', path, body]); return { fieldNotes: { color: 'deep' } }; } };
+  await saveDetailMetadata({ api, workshop, item, draft, identity: 'session', requestKey: 'same-key' });
+  assert.equal(calls[0][0], 'native');
+  assert.deepEqual(calls[0][2].fields.map(field => field.id), ['p', 'f', 'u']);
+  assert.equal(calls[0][2].parentId, 'loc');
+  assert.equal(calls[1][1], 'item-metadata/field-notes');
+  assert.equal(calls[1][2].request_key, 'same-key');
+});
+
+test('failed Notes save leaves native item saved and retry reuses request key', async () => {
+  let writes = 0; let fail = true;
+  const item = { id: 'one', parent: { id: 'loc' }, entityType: { id: 'type' }, tags: [], serialNumber: '', fields: [] };
+  const draft = { serialNumber: '', packaging: 'Bag', rows: [{ name: 'Color', value: 'red', note: 'shade' }] };
+  const saved = { ...item, fields: [{ name: 'Device Packaging', type: 'text', textValue: 'Bag' }, { name: 'Color', type: 'text', textValue: 'red' }] };
+  const api = { items: { update: async () => { writes++; return { data: saved }; }, get: async () => ({ data: writes ? saved : item }) } };
+  const keys = [];
+  const workshop = { request: async (path, body) => { if (path === 'item-metadata/field-notes') { keys.push(body.request_key); if (fail) { fail = false; throw Error('Notes unavailable'); } } return { fieldNotes: { color: 'shade' } }; } };
+  await assert.rejects(() => saveDetailMetadata({ api, workshop, item, draft, identity: 'session', requestKey: 'same-key' }), /Notes unavailable/);
+  await saveDetailMetadata({ api, workshop, item: saved, draft, identity: 'session', requestKey: 'same-key' });
+  assert.equal(writes, 1); assert.deepEqual(keys, ['same-key', 'same-key']);
+});
+
+test('detail save rejects a Notes readback that omits a requested note', async () => {
+  const item = { id: 'a', parent: { id: 'loc' }, entityType: { id: 'type' }, tags: [], serialNumber: '', fields: [{ id: 'f', name: 'Color', type: 'text', textValue: 'red' }] };
+  const api = { items: { get: async () => ({ data: item }), update: async () => { throw Error('native update should be skipped'); } } };
+  const workshop = { request: async () => ({ fieldNotes: {} }) };
+  await assert.rejects(() => saveDetailMetadata({ api, workshop, item, draft: { serialNumber: '', packaging: '', rows: [{ id: 'f', name: 'Color', value: 'red', note: 'shade' }] }, identity: 'session', requestKey: 'key' }), /notes were not confirmed/i);
+});
+
+test('related mutations are collection scoped, symmetric and never update parent', async () => {
+  const relations = new Set(); const paths = [];
+  const workshop = { request: async (path, body) => { paths.push([path, body]); if (path.endsWith('/add')) relations.add(['a', 'b'].sort().join(':')); if (path.endsWith('/remove')) relations.clear(); return { relatedItems: [...relations].map(() => ({ id: body.entity_id === 'a' ? 'b' : 'a' })) }; } };
+  await changeRelatedItem(workshop, 'a', 'b', 'add', 'key-add', 'session');
+  assert.equal(relations.size, 1);
+  await changeRelatedItem(workshop, 'b', 'a', 'remove', 'key-remove', 'session');
+  assert.equal(relations.size, 0);
+  assert.deepEqual(paths.map(row => row[0]), ['item-metadata/related/add', 'item-metadata/related/remove']);
+  assert.ok(paths.every(row => !('parentId' in row[1]) && !('locationId' in row[1])));
+});
+
+test('related search accepts authenticated native UUID results and excludes current item', async () => {
+  const args = [];
+  const api = { items: { getAll: async query => { args.push(query); return { data: { items: [{ id: 'a', name: 'Self' }, { id: 'b', name: 'Battery' }] } }; } } };
+  assert.deepEqual(await searchRelatedItems(api, 'bat', 'a'), [{ id: 'b', name: 'Battery' }]);
+  assert.equal(args[0].q, 'bat');
+});
 
 test('explicit suggestion selection copies shared values and clears serial', () => {
   const form = { name: 'typed', manufacturer: '', modelNumber: '', modelCode: '', tags: [], serialNumber: 'old', description: 'mine', location: { id: 'loc' }, packaging: '' };
@@ -222,4 +296,77 @@ await window.__openCreate({baseType:'item'});
     await page.getByRole('button',{name:'Copy text'}).click();
     assert.equal(await page.evaluate(()=>window.__copiedText),'OCR label text');
   } finally { await browser.close(); await server.close(); await rm(fixtureRoot,{recursive:true,force:true}); }
+});
+
+test('mounted generated detail panel edits fields, links both sides, and hides inaccessible targets', async () => {
+  const { mkdtemp, rm, readFile, writeFile, access } = await import('node:fs/promises');
+  const { spawnSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { pathToFileURL, fileURLToPath } = await import('node:url');
+  const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const cache = path.resolve(repo, '../..');
+  await access(path.join(cache, 'work/homebox-ui-dev/node_modules/vite/dist/node/index.js'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'item-detail-sfc-'));
+  const python = `import importlib.util,pathlib,sys\nrepo=pathlib.Path(sys.argv[1]); out=pathlib.Path(sys.argv[2]); source=pathlib.Path(sys.argv[3])\ns=importlib.util.spec_from_file_location('builder',repo/'deploy/build-homebox-ui.py'); b=importlib.util.module_from_spec(s); s.loader.exec_module(b)\nimport homebox_patchset\nhomebox_patchset.materialize=lambda _root: source\nb.BUILD=out; b.prepare()\n`;
+  const prepared = spawnSync('python', ['-c', python, repo, root, path.join(cache, 'work/homebox-source-patched')], { encoding: 'utf8' });
+  if (prepared.status !== 0) throw new Error(`Generated detail fixture failed: ${prepared.stdout}${prepared.stderr}`);
+  const detailPage = await readFile(path.join(root, 'pages/item/[id]/index.vue'), 'utf8');
+  assert.match(detailPage, /ItemMetadataPanel v-if="!hasNested && item" :item="item" @changed="refresh"/);
+  const panel = path.join(root, 'components/Workshop/ItemMetadataPanel.vue');
+  await writeFile(panel, (await readFile(panel, 'utf8')).replace(/(^\s*import\b[\s\S]*?;\s*\n)/gm, ''));
+  await writeFile(path.join(root, 'tsconfig.json'), '{"compilerOptions":{"target":"ESNext"}}');
+  await writeFile(path.join(root, 'index.html'), '<!doctype html><div id="app"></div><script type="module" src="/main.js"></script>');
+  await writeFile(path.join(root, 'main.js'), `
+import { createApp, defineComponent, h, ref, watch, onMounted, computed, nextTick } from 'vue';
+import Panel from './components/Workshop/ItemMetadataPanel.vue';
+import { PACKAGING_OPTIONS, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes, validateCustomRows } from './lib/item-create-fields.js';
+import { changeRelatedItem, detailMetadataDraft, saveDetailMetadata, searchRelatedItems } from './lib/item-metadata.js';
+Object.assign(window,{ref,watch,onMounted,computed,PACKAGING_OPTIONS,buildNativeMetadataUpdate,nativeMetadataMatches,persistFieldNotes,validateCustomRows,changeRelatedItem,detailMetadataDraft,saveDetailMetadata,searchRelatedItems});
+window.__items={a:{id:'a',name:'Camera',parent:{id:'loc'},entityType:{id:'type'},tags:[],serialNumber:'SN',fields:[{id:'p',name:'Device Packaging',type:'text',textValue:'Bag'},{id:'f',name:'Color',type:'text',textValue:'red'},{id:'u',name:'Weight',type:'number',numberValue:4}]},b:{id:'b',name:'Battery',parent:{id:'loc2'},entityType:{id:'type'},tags:[],serialNumber:'',fields:[]},c:{id:'c',name:'Lens',parent:{id:'loc3'},entityType:{id:'type'},tags:[],serialNumber:'',fields:[]}};
+window.__links=new Set();window.__notes={a:{color:'shade'},b:{}};window.__calls=[];window.__failNotes=false;
+window.__id=ref('a');window.__item=ref(window.__items.a);window.__switch=id=>{window.__id.value=id;window.__item.value=window.__items[id];};
+window.useUserApi=()=>({items:{get:async id=>({data:structuredClone(window.__items[id])}),update:async(id,payload)=>{window.__calls.push(['native',id,payload]);window.__items[id]={...window.__items[id],...payload};return{data:window.__items[id]};},getAll:async({q})=>({data:{items:Object.values(window.__items).filter(item=>item.name.toLowerCase().includes(q.toLowerCase()))}})}});
+window.useWorkshop=()=>({refresh:async()=>({group:{id:'group'},user:{id:'user'},identity:'session'}),request:async(path,body)=>{window.__calls.push(['metadata',path,body]);if(path.startsWith('item-metadata?')){const id=new URLSearchParams(path.split('?')[1]).get('entity_id');return{fieldNotes:window.__notes[id],relatedItems:[...window.__links].filter(pair=>pair.includes(id)).map(pair=>{const other=pair.find(value=>value!==id);return other==='stale'?{unavailable:true}:{id:other,name:window.__items[other].name,unavailable:false};})};}if(path==='item-metadata/field-notes'){if(window.__failNotes){window.__failNotes=false;throw Error('Notes unavailable');}window.__notes[body.entity_id]=Object.fromEntries(body.fields.map(field=>[field.name.toLowerCase(),field.note]));return{fieldNotes:window.__notes[body.entity_id]};}if(path.endsWith('/add'))window.__links.add([body.entity_id,body.related_entity_id].sort());if(path.endsWith('/remove')){for(const pair of window.__links)if(pair.includes(body.entity_id)&&pair.includes(body.related_entity_id))window.__links.delete(pair);}return{relatedItems:[...window.__links].filter(pair=>pair.includes(body.entity_id)).map(pair=>({id:pair.find(value=>value!==body.entity_id)}))};}});
+window.useCollections=()=>({selectedId:ref('group')});window.useAuthContext=()=>({user:{id:'user'}});
+const Link=defineComponent({props:['to'],setup(props,{slots}){return()=>h('a',{href:props.to},slots.default?.());}});
+const app=createApp({components:{Panel},setup(){return{item:window.__item};},template:'<Panel :item="item" />'});app.config.globalProperties.PACKAGING_OPTIONS=PACKAGING_OPTIONS;app.component('NuxtLink',Link).mount('#app');await nextTick();
+`);
+  const vite = await import(pathToFileURL(path.join(cache, 'work/homebox-ui-dev/node_modules/vite/dist/node/index.js')).href);
+  const plugin = await import(pathToFileURL(path.join(cache, 'work/homebox-ui-dev/node_modules/.pnpm/@vitejs+plugin-vue@6.0.7_vite@7.3.5_@types+node@25.9.3_jiti@1.21.7_terser@5.48.0_yaml@2_67e8ab11f94c3b8609189be60bcd60d1/node_modules/@vitejs/plugin-vue/dist/index.mjs')).href);
+  const { chromium } = await import(pathToFileURL(path.join(cache, 'work/homebox-ui-dev/node_modules/.pnpm/@playwright+test@1.60.0/node_modules/@playwright/test/index.mjs')).href);
+  const server = await vite.createServer({configFile:false,root,plugins:[plugin.default()],optimizeDeps:{noDiscovery:true,include:[]},resolve:{alias:[{find:/^vue$/,replacement:path.join(cache,'work/homebox-ui-dev/node_modules/vue/dist/vue.esm-browser.js')}]},server:{host:'127.0.0.1',port:44000+Math.floor(Math.random()*15000),strictPort:true}});
+  const browser = await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
+  try {
+    await server.listen();
+    const page = await browser.newPage();page.setDefaultTimeout(5000);
+    page.on('pageerror',error=>console.error('Detail browser error:',error.stack));
+    await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/index.html`);
+    await page.getByLabel('Device Packaging').selectOption('HardCase');
+    assert.equal(await page.getByLabel('Custom field note').inputValue(),'shade');
+    await page.getByLabel('Custom field value').fill('blue');
+    await page.getByLabel('Custom field note').fill('deep');
+    await page.evaluate(()=>window.__failNotes=true);
+    await page.getByRole('button',{name:'Save fields'}).click();
+    await page.getByRole('alert',{name:''}).filter({hasText:'Notes unavailable'}).waitFor();
+    await page.getByRole('button',{name:'Retry metadata save'}).click();
+    await page.getByRole('status').filter({hasText:'Packaging and custom fields saved.'}).waitFor();
+    assert.equal(await page.evaluate(()=>window.__calls.filter(call=>call[0]==='native').length),1);
+    assert.deepEqual(await page.evaluate(()=>window.__items.a.fields.map(field=>field.id)),['p','f','u']);
+    await page.getByLabel('Find an existing item').fill('Bat');
+    await page.getByLabel('Search results').selectOption('b');
+    await page.getByRole('button',{name:'Link existing item'}).click();
+    await page.getByRole('link',{name:'Battery'}).waitFor();
+    await page.evaluate(()=>window.__switch('b'));
+    await page.getByRole('link',{name:'Camera'}).waitFor();
+    await page.getByRole('button',{name:'Remove link'}).click();
+    await page.getByText('No related items.').waitFor();
+    await page.evaluate(()=>{window.__links.add(['b','stale']);window.__links.add(['b','c']);window.__switch('a');});
+    await page.getByText('No related items.').waitFor();
+    await page.evaluate(()=>window.__switch('b'));
+    await page.getByText('Unavailable item').waitFor();
+    await page.getByRole('link',{name:'Lens'}).waitFor();
+    assert.equal(await page.getByRole('link',{name:'stale'}).count(),0);
+    assert.equal(await page.getByRole('button',{name:'Remove link'}).count(),1);
+  } finally {await browser.close();await server.close();await rm(root,{recursive:true,force:true});}
 });

@@ -151,6 +151,12 @@ def item_log_frontend():
     replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Generated from item type and full storage path; regenerated when the item moves.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
 
 
+def item_metadata_detail_frontend():
+    path = 'pages/item/[id]/index.vue'
+    replace(path, '  import LabelMaker from', '  import ItemMetadataPanel from "@/components/Workshop/ItemMetadataPanel.vue";\n  import LabelMaker from')
+    replace(path, '<WorkshopItemLog v-if="!hasNested" :item-id="itemId" />', '<ItemMetadataPanel v-if="!hasNested && item" :item="item" @changed="refresh" />\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />')
+
+
 def equipment_assigned_ids_frontend():
     """Project collection-assigned IDs into search and detail views."""
     def once(path, old, new):
@@ -1696,6 +1702,7 @@ def prepare():
     equipment_assigned_ids_frontend()
     grouped_inventory_frontend()
     item_action_surfaces_frontend()
+    item_metadata_detail_frontend()
     brand_frontend()
 
 
