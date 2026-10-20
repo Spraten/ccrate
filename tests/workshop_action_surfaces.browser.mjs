@@ -121,7 +121,7 @@ try {
       if(path==='context') return ok({...window.durableContext});
       if(path==='equipment/products') { if(window.durableLoadFail){window.durableLoadFail=false;return ok({error:'fixture load failure'},503)} return ok(window.emptyProductList?[]:structuredClone(window.durableProducts)); }
       if(path==='operation/status') { const key=JSON.parse(options.body).request_key; if(key===window.durableHistoricalKey)return ok({status:'completed',action:'equipment_product_model_code',result:{...structuredClone(window.durableProducts[0]),model_code:'CX2',updated_at:'v2'}}); return ok(key===window.durableConflictKey||key===window.durableNoStartKey?{status:'not_started'}:{status:'completed',action:'equipment_product_model_code',result:structuredClone(window.durableProducts[0])}); }
-      if(path==='equipment/products/code') { const payload=JSON.parse(options.body); if(payload.model_code==='DUP'){window.durableConflictKey=payload.request_key;return ok({error:'Model code conflicts with another product'},409)} window.durableSaves++; const index=window.durableProducts.findIndex(product=>product.id===payload.product_id); window.durableProducts[index]={...window.durableProducts[index],model_code:payload.model_code,updated_at:'v'+(window.durableSaves+1)}; if(window.durableSaves===1) throw new Error('fixture lost committed response'); return ok(structuredClone(window.durableProducts[index])); }
+      if(path==='equipment/products/code') { const payload=JSON.parse(options.body); if(payload.model_code==='DUP'){window.durableConflictKey=payload.request_key;return ok({error:'Model code conflicts with another product'},409)} window.durableSaves++; const index=window.durableProducts.findIndex(product=>product.id===payload.product_id); window.durableProducts[index]={...window.durableProducts[index],model_code:payload.model_code,updated_at:'v'+(window.durableSaves+1)}; if(window.durableSaves===1) throw new Error('fixture lost committed response'); return ok({saved:structuredClone(window.durableProducts[index]),current:structuredClone(window.durableProducts[index])}); }
       return ok({});
     };
     window.realWorkshop=window.useWorkshop(); window.realWorkshop.context.value=structuredClone(window.durableContext);
@@ -150,6 +150,11 @@ try {
   const codeDraft = page.getByRole('textbox', { name: 'Model code' });
   await codeDraft.fill('CX2');
   assert.equal(await page.getByText('Next ID preview — not assigned: DRONE-CX2-8').count(),1,'edit preview updates from the draft code');
+  let discardPrompt=null;
+  page.once('dialog',async dialog=>{discardPrompt=dialog.message();await dialog.dismiss()});
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  assert.equal(discardPrompt,'Discard these unsaved edits?','cancelling a changed code asks before discarding the draft');
+  assert.equal(await page.locator('#dialog[open]').count(),1,'dismissing the discard warning keeps the draft open');
   await page.getByRole('button', { name: 'Confirm model code change' }).click();
   await page.getByRole('alert').waitFor();
   assert.equal(await page.evaluate(() => window.durableSaves), 1, 'the real durable write helper must reach the API for an ordinary member');
@@ -180,8 +185,11 @@ try {
     localStorage.setItem('workshop-pending:collection:member',JSON.stringify([{key:window.durableHistoricalKey,path:'equipment/products/code',label:'Update model code',subject:'prod-1',at:new Date().toISOString(),intent:payload,identity:'member-session',group_id:'collection',user_id:'member'}]));
     window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.realWorkshop,()=>{},()=>{}, {entityId:null,drawingId:null,roomId:null});
   });
+  const productReadsBeforeHistoricalRecovery=await page.evaluate(()=>window.durableCalls.filter(call=>call.path==='equipment/products').length);
   await page.getByRole('button', { name: 'Check saved code update' }).click();
   await page.waitForFunction(() => window.durableCalls.filter(call=>call.path==='operation/status').length>=2);
+  await page.waitForTimeout(50);
+  assert.ok(await page.evaluate(before=>window.durableCalls.filter(call=>call.path==='equipment/products').length>before,productReadsBeforeHistoricalRecovery),'confirming a historical receipt reloads the current product summary');
   assert.equal(await page.getByText('Model code: CX4').count(),1,'a historical receipt cannot overwrite the newer product summary loaded on remount');
   await northwindCard.getByRole('button', { name: 'Edit model code' }).click();
   await page.getByRole('textbox', { name: 'Model code' }).fill('DUP');

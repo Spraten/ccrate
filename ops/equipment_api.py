@@ -187,7 +187,7 @@ def equipment_product_model_code_post(data, ctx, deps, ApiError):
                                                data.get('request_key'))
     summary = next(product for product in _product_summaries(catalog, ctx['group'], ctx['client'])
                    if product['id'] == updated['id'])
-    return {**summary, 'model_code': updated['model_code'], 'updated_at': updated['updated_at']}
+    return {'saved': updated, 'current': summary}
 
 
 def equipment_catalog_post(route, data, ctx, deps, ApiError, public_entity):

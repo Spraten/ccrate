@@ -480,8 +480,9 @@ class EquipmentCatalogApiTests(unittest.TestCase):
             'request_key': code_edit_key,
         }, headers=headers)
         self.assertEqual(200, updated.status)
-        self.assertEqual('NEW', updated.result['model_code'])
-        self.assertNotEqual(product['updated_at'], updated.result['updated_at'])
+        self.assertEqual('NEW', updated.result['saved']['model_code'])
+        self.assertNotEqual(product['updated_at'], updated.result['saved']['updated_at'])
+        self.assertEqual('NEW', updated.result['current']['model_code'])
         with self.ledger.connection() as db:
             history = db.execute('SELECT actor_id FROM equipment_product_model_code_history WHERE group_id=? AND product_id=?',
                                  (self.group, product['id'])).fetchone()
@@ -502,19 +503,28 @@ class EquipmentCatalogApiTests(unittest.TestCase):
                          'expected_updated_at': product['updated_at'], 'request_key': first_key}
         first = self.request('equipment/products/code', first_payload)
         self.assertEqual(200, first.status)
+        self.assertEqual('MID', first.result['saved']['model_code'])
+        original_saved_result = copy.deepcopy(first.result['saved'])
         second = self.request('equipment/products/code', {
             'product_id': product['id'], 'model_code': 'NEW',
-            'expected_updated_at': first.result['updated_at'], 'request_key': second_key,
+            'expected_updated_at': original_saved_result['updated_at'], 'request_key': second_key,
         })
         self.assertEqual(200, second.status)
+        later_item = ident()
+        self.entities[later_item] = {**copy.deepcopy(self.entities[self.item]), 'id': later_item,
+                                     'serialNumber': 'SERIAL-2'}
+        self.catalog.refresh_product_members(self.group, product['id'], [later_item])
+        self.catalog.assign_item(self.group, self.actor, later_item, product['id'], ident())
         replay = self.request('equipment/products/code', first_payload)
         self.assertEqual(200, replay.status)
-        self.assertEqual('MID', replay.result['model_code'])
-        self.assertEqual(first.result['updated_at'], replay.result['updated_at'])
-        self.assertEqual(1, replay.result['active_item_count'])
+        self.assertEqual(original_saved_result, replay.result['saved'])
+        self.assertEqual('NEW', replay.result['current']['model_code'])
+        self.assertEqual(2, replay.result['current']['active_item_count'])
+        self.assertEqual(1, replay.result['current']['active_assigned_count'])
+        self.assertEqual(1, len(replay.result['current']['assignments']))
         receipt = self.request('operation/status', {'request_key': first_key})
         self.assertEqual('MID', receipt.result['result']['model_code'])
-        self.assertEqual(first.result['updated_at'], receipt.result['result']['updated_at'])
+        self.assertEqual(original_saved_result, receipt.result['result'])
         self.assertEqual('NEW', self.request('equipment/products').result[0]['model_code'])
 
     def test_products_reject_unauthenticated_and_foreign_collection_access(self):
