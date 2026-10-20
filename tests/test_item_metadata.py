@@ -28,6 +28,11 @@ class ItemMetadataTests(unittest.TestCase):
         saved = self.store.save_field_notes(self.group, self.actor, self.a, [{'name':name, 'note':'label'}], ident())
         self.assertEqual({'ss' * 120:'label'}, saved)
         self.assertEqual(saved, self.store.field_notes(self.group, self.a))
+    def test_unicode_canonical_keys_match_sharp_s_and_greek_final_sigma(self):
+        fields = [{'name':'Straße', 'note':'German label'}, {'name':'ος', 'note':'Greek label'}, {'name':'ﬀ', 'note':'Ligature label'}]
+        saved = self.store.save_field_notes(self.group, self.actor, self.a, fields, ident())
+        self.assertEqual({'strasse':'German label', 'οσ':'Greek label', 'ff':'Ligature label'}, saved)
+        self.assertEqual(saved, self.store.field_notes(self.group, self.a))
         with self.assertRaises(ValueError):
             self.store.save_field_notes(self.group, self.actor, self.a, [{'name':'ß' * 121, 'note':'label'}], ident())
         self.assertEqual(saved, self.store.field_notes(self.group, self.a))

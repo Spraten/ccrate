@@ -1,7 +1,8 @@
 /** Related create/link intents live apart from the main create's metadata steps. */
-import { PACKAGING_OPTIONS, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes, validateCustomRows } from './item-create-fields.js';
+import { PACKAGING_OPTIONS, buildNativeMetadataUpdate, canonicalFieldName, nativeMetadataMatches, persistFieldNotes, validateCustomRows } from './item-create-fields.js';
+import { workshopUUID } from './workshop-uuid.js';
 
-const fieldKey = name => String(name || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase().replace(/ß/g, 'ss');
+const fieldKey = canonicalFieldName;
 
 export function detailMetadataDraft(item, metadata = {}) {
   const fields = Array.isArray(item?.fields) ? item.fields : [];
@@ -25,20 +26,102 @@ function detailNativeMatches(item, draft) {
 }
 
 /** Native Homebox owns the field records; Notes is committed only after native readback. */
-export async function saveDetailMetadata({ api, workshop, item, draft, identity, requestKey }) {
+function fieldSnapshot(item) {
+  return new Map((item?.fields || []).filter(field => field.type === 'text' && fieldKey(field.name) !== 'device packaging' && field.id)
+    .map(field => [field.id, { name: field.name, value: String(field.textValue || '') }]));
+}
+
+function mergeDetailDraft(baseline, current, draft, baselineNotes = {}, currentNotes = {}) {
+  const before = fieldSnapshot(baseline), now = fieldSnapshot(current);
+  const basePackaging = (baseline?.fields || []).find(field => fieldKey(field.name) === 'device packaging');
+  const currentPackaging = (current?.fields || []).find(field => fieldKey(field.name) === 'device packaging');
+  let packaging = draft.packaging || '';
+  const basePack = String(basePackaging?.textValue || ''), livePack = String(currentPackaging?.textValue || '');
+  if (packaging === basePack) packaging = livePack;
+  else if (livePack !== basePack && livePack !== packaging) throw new Error('Device Packaging changed in another session. Reload and review before saving.');
+  let serialNumber = String(draft.serialNumber || '');
+  const baseSerial = String(baseline?.serialNumber || ''), liveSerial = String(current?.serialNumber || '');
+  if (serialNumber === baseSerial) serialNumber = liveSerial;
+  else if (liveSerial !== baseSerial && liveSerial !== serialNumber) throw new Error('The serial number changed in another session. Reload and review before saving.');
+
+  const userRows = (draft.rows || []).filter(row => row.name || row.value || row.note);
+  const rowsById = new Map(userRows.filter(row => row.id).map(row => [row.id, row]));
+  const newRows = userRows.filter(row => !row.id);
+  const merged = [];
+  const notes = { ...currentNotes };
+  for (const [id, old] of before) {
+    const live = now.get(id), user = rowsById.get(id);
+    const oldNote = baselineNotes[fieldKey(old.name)] || '';
+    const liveNote = currentNotes[fieldKey(live?.name || old.name)] || '';
+    if (!user) {
+      if (live && (live.name !== old.name || live.value !== old.value)) throw new Error(`Custom field “${old.name}” changed in another session. Reload and review before deleting it.`);
+      if (liveNote && liveNote !== oldNote) throw new Error(`The note for “${old.name}” changed in another session. Reload and review before deleting it.`);
+      delete notes[fieldKey(old.name)];
+      continue;
+    }
+    rowsById.delete(id);
+    if (!live) throw new Error(`Custom field “${old.name}” was removed in another session. Reload and review.`);
+    const nameChanged = user.name !== old.name, valueChanged = user.value !== old.value;
+    if (nameChanged && live.name !== old.name && live.name !== user.name) throw new Error(`Custom field “${old.name}” was renamed in another session. Reload and review.`);
+    if (valueChanged && live.value !== old.value && live.value !== user.value) throw new Error(`Custom field “${old.name}” changed in another session. Reload and review.`);
+    const name = nameChanged ? user.name : live.name;
+    const value = valueChanged ? user.value : live.value;
+    const noteChanged = user.note !== oldNote;
+    if (noteChanged && liveNote !== oldNote && liveNote !== user.note) throw new Error(`The note for “${old.name}” changed in another session. Reload and review.`);
+    const note = noteChanged ? user.note : liveNote;
+    merged.push({ id, name, value, note });
+    delete notes[fieldKey(old.name)];
+    if (note.trim()) notes[fieldKey(name)] = note.trim();
+  }
+  for (const user of rowsById.values()) {
+    const collision = [...now.values()].find(field => fieldKey(field.name) === fieldKey(user.name));
+    if (collision) {
+      if (collision.value !== user.value) throw new Error(`Custom field “${user.name}” was added in another session. Reload and review.`);
+      merged.push({ id: [...now].find(([, field]) => field === collision)[0], name: collision.name, value: collision.value, note: currentNotes[fieldKey(collision.name)] || user.note });
+    } else merged.push(user);
+    if (user.note.trim()) notes[fieldKey(user.name)] = user.note.trim();
+  }
+  for (const user of newRows) {
+    const collision = [...now.values()].find(field => fieldKey(field.name) === fieldKey(user.name));
+    if (collision) {
+      if (collision.value !== user.value) throw new Error(`Custom field “${user.name}” was added in another session. Reload and review.`);
+      const id = [...now].find(([, field]) => field === collision)[0];
+      if (!merged.some(row => row.id === id)) merged.push({ id, name: collision.name, value: collision.value, note: currentNotes[fieldKey(collision.name)] || user.note });
+    } else merged.push(user);
+    if (user.note.trim()) notes[fieldKey(user.name)] = user.note.trim();
+  }
+  const beforeIds = new Set(before.keys());
+  for (const field of current?.fields || []) {
+    if (field.type !== 'text' || fieldKey(field.name) === 'device packaging' || beforeIds.has(field.id)) continue;
+    if (!merged.some(row => row.id === field.id)) merged.push({ id: field.id, name: field.name, value: String(field.textValue || ''), note: currentNotes[fieldKey(field.name)] || '' });
+  }
+  return { serialNumber, packaging, rows: merged, notes };
+}
+
+export async function saveDetailMetadata({ api, workshop, item, draft, identity, requestKey, baselineNotes = null }) {
   const presentRows = (draft.rows || []).filter(row => String(row.name || '').trim() || String(row.value || '') || String(row.note || ''));
-  const rows = validateCustomRows(presentRows);
+  const baselineByName = new Map((item.fields || []).filter(field => field.type === 'text' && fieldKey(field.name) !== 'device packaging').map(field => [fieldKey(field.name), field]));
+  const rows = validateCustomRows(presentRows).map((row, index) => {
+    const source = presentRows[index];
+    const prior = source?.id ? null : baselineByName.get(fieldKey(row.name));
+    const id = source?.id || prior?.id;
+    return { ...row, ...(id ? { id } : {}) };
+  });
   if (!requestKey) throw new Error('A stable save request key is required.');
   if (draft.packaging && !PACKAGING_OPTIONS.includes(draft.packaging)) throw new Error('Choose a listed packaging value.');
   const currentResponse = await api.items.get(item.id);
   if (currentResponse.error || !currentResponse.data) throw currentResponse.error || new Error('Item could not be loaded.');
   let current = currentResponse.data;
-  if (!detailNativeMatches(current, draft)) {
-    const update = buildNativeMetadataUpdate(current, { ...draft, rows: [] });
+  const notesResponse = await workshop.request(`item-metadata?entity_id=${encodeURIComponent(item.id)}`);
+  const liveNotes = notesResponse?.fieldNotes || {};
+  const merged = mergeDetailDraft(item, current, { ...draft, rows }, baselineNotes ?? liveNotes, liveNotes);
+  const finalRows = validateCustomRows(merged.rows);
+  if (!detailNativeMatches(current, merged)) {
+    const update = buildNativeMetadataUpdate(current, { ...merged, rows: [] });
     const selected = new Set();
     const additions = [];
-    rows.forEach((row, index) => {
-      const id = presentRows[index]?.id;
+    finalRows.forEach((row, index) => {
+      const id = merged.rows[index]?.id;
       const field = id ? update.fields.find(candidate => candidate.id === id) : update.fields.find(candidate => fieldKey(candidate.name) === fieldKey(row.name));
       if (id && !field) throw new Error(`Custom field ${row.name} changed. Reload before saving.`);
       if (field && (field.type !== 'text' || fieldKey(field.name) === 'device packaging' || selected.has(field))) throw new Error(`Custom field ${row.name} needs review.`);
@@ -47,15 +130,15 @@ export async function saveDetailMetadata({ api, workshop, item, draft, identity,
     });
     update.fields = update.fields.filter(field => field.type !== 'text' || fieldKey(field.name) === 'device packaging' || selected.has(field)).concat(additions);
     const packaging = update.fields.find(field => fieldKey(field.name) === 'device packaging');
-    if (packaging && !draft.packaging) packaging.textValue = '';
+    if (packaging && !merged.packaging) packaging.textValue = '';
     const response = await api.items.update(item.id, update);
     if (response.error) throw response.error;
     const confirmed = await api.items.get(item.id);
-    if (confirmed.error || !confirmed.data || !detailNativeMatches(confirmed.data, draft)) throw new Error('Native item fields were not confirmed. Reload and retry.');
+    if (confirmed.error || !confirmed.data || !detailNativeMatches(confirmed.data, merged)) throw new Error('Native item fields were not confirmed. Reload and retry.');
     current = confirmed.data;
   }
-  const fieldNotes = await persistFieldNotes(workshop, { entity_id: item.id, identity }, { request_key: requestKey, fields: rows.map(row => ({ name: row.name, note: row.note })) });
-  const expectedNotes = Object.fromEntries(rows.filter(row => row.note.trim()).map(row => [fieldKey(row.name), row.note.trim()]));
+  const fieldNotes = await persistFieldNotes(workshop, { entity_id: item.id, identity }, { request_key: requestKey, fields: Object.entries(merged.notes).map(([name, note]) => ({ name, note })) });
+  const expectedNotes = merged.notes;
   if (JSON.stringify(Object.entries(fieldNotes).sort()) !== JSON.stringify(Object.entries(expectedNotes).sort())) throw new Error('Custom field notes were not confirmed.');
   return { item: current, fieldNotes };
 }
@@ -88,7 +171,7 @@ function linked(result, id) {
   return Array.isArray(result?.relatedItems) && result.relatedItems.some(item => (typeof item === 'string' ? item : item?.id) === id);
 }
 
-export function createRelatedItemFlow({ read, write, context, createNative, link, readLinks, keyFactory = () => crypto.randomUUID(), expectedContext }) {
+export function createRelatedItemFlow({ read, write, context, createNative, link, readLinks, keyFactory = workshopUUID, expectedContext }) {
   const expected = expectedContext;
   let busy = false;
   const state = () => read();
@@ -149,6 +232,14 @@ export function createRelatedItemFlow({ read, write, context, createNative, link
     step.state = 'completed';
     const linkStep = record.steps.find(row => row.kind === 'link' && row.source_key === stepKey);
     if (linkStep) linkStep.entity_id = id;
+    return save(record);
+  }
+  function confirmRelatedCreateAbsent(stepKey) {
+    const record = requireState();
+    const step = record.steps.find(row => row.key === stepKey && row.kind === 'create');
+    if (!step || step.state !== 'uncertain') throw new Error('Only an uncertain related create can be confirmed absent.');
+    step.state = 'failed';
+    step.error = 'User confirmed no related item was created; safe to retry.';
     return save(record);
   }
   async function resumeRelatedSteps(onlyKeys = null) {
@@ -224,5 +315,5 @@ export function createRelatedItemFlow({ read, write, context, createNative, link
     }
     return resumeRelatedSteps(onlyKeys);
   }
-  return { pending: state, stageRelated, recordMainCreated, clearBeforeMain, clearCompleted, resumeRelatedSteps, reconcileRelatedCreate, retryRelatedStep };
+  return { pending: state, stageRelated, recordMainCreated, clearBeforeMain, clearCompleted, resumeRelatedSteps, reconcileRelatedCreate, confirmRelatedCreateAbsent, retryRelatedStep };
 }

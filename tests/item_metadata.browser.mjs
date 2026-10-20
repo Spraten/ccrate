@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, sameFieldNotes, persistFieldNotes } from '../homebox-ui/overlay/lib/item-create-fields.js';
+import { PACKAGING_OPTIONS, canonicalFieldName, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, sameFieldNotes, persistFieldNotes } from '../homebox-ui/overlay/lib/item-create-fields.js';
 import * as detailHelpers from '../homebox-ui/overlay/lib/item-metadata.js';
 const { detailMetadataDraft, saveDetailMetadata, changeRelatedItem, searchRelatedItems } = detailHelpers;
 
@@ -11,6 +11,13 @@ test('detail draft loads packaging and Name, Value, Note from native item and me
 
 test('detail draft reads canonical Notes keys for expanding Unicode field names', () => {
   assert.deepEqual(detailMetadataDraft({ fields: [{ name: 'Straße', type: 'text', textValue: 'A' }] }, { fieldNotes: { strasse: 'label' } }).rows, [{ name: 'Straße', value: 'A', note: 'label' }]);
+});
+
+test('custom field canonical names match sharp-s and Greek final sigma consistently', () => {
+  assert.equal(canonicalFieldName('Straße'), canonicalFieldName('STRASSE'));
+  assert.equal(canonicalFieldName('ος'), canonicalFieldName('οσ'));
+  assert.equal(canonicalFieldName('ﬀ'), canonicalFieldName('FF'));
+  assert.deepEqual(detailMetadataDraft({ fields: [{ name: 'ΟΣ', type: 'text', textValue: 'v' }] }, { fieldNotes: { οσ: 'note' } }).rows[0].note, 'note');
 });
 
 test('renaming a detail custom field preserves its native field ID', async () => {
@@ -40,11 +47,41 @@ test('detail save keeps field IDs and unrelated fields, then saves Notes with co
   const api = { items: { update: async (id, payload) => { calls.push(['native', id, payload]); nativeSaved = true; return { data: updated }; }, get: async () => ({ data: nativeSaved ? updated : item }) } };
   const workshop = { request: async (path, body) => { calls.push(['metadata', path, body]); return { fieldNotes: { color: 'deep' } }; } };
   await saveDetailMetadata({ api, workshop, item, draft, identity: 'session', requestKey: 'same-key' });
-  assert.equal(calls[0][0], 'native');
-  assert.deepEqual(calls[0][2].fields.map(field => field.id), ['p', 'f', 'u']);
-  assert.equal(calls[0][2].parentId, 'loc');
-  assert.equal(calls[1][1], 'item-metadata/field-notes');
-  assert.equal(calls[1][2].request_key, 'same-key');
+  const native = calls.find(call => call[0] === 'native');
+  const saveNotes = calls.find(call => call[1] === 'item-metadata/field-notes');
+  assert.deepEqual(native[2].fields.map(field => field.id), ['p', 'f', 'u']);
+  assert.equal(native[2].parentId, 'loc');
+  assert.equal(saveNotes[2].request_key, 'same-key');
+});
+
+test('detail save keeps concurrent fields added after the draft loaded', async () => {
+  const baseline = { id: 'i', entityType: { id: 'type' }, parent: null, tags: [], serialNumber: '', fields: [{ id: 'f', name: 'Color', type: 'text', textValue: 'red' }] };
+  let current = { ...baseline, fields: [...baseline.fields, { id: 'new', name: 'Tracking', type: 'text', textValue: 'barcode-7' }] };
+  const api = { items: { get: async () => ({ data: structuredClone(current) }), update: async (_id, payload) => { current = { ...current, ...payload }; return { data: current }; } } };
+  const notes = { tracking: 'added elsewhere' };
+  const workshop = { request: async (path, body) => path.startsWith('item-metadata?') ? { fieldNotes: notes } : { fieldNotes: body.fields.reduce((result, field) => { if (field.note) result[field.name.toLowerCase()] = field.note; return result; }, {}) } };
+  await saveDetailMetadata({ api, workshop, item: baseline, draft: { serialNumber: '', packaging: '', rows: [{ id: 'f', name: 'Color', value: 'blue', note: '' }] }, identity: 's', requestKey: 'k', baselineNotes: {} });
+  assert.deepEqual(current.fields.map(field => [field.id, field.name, field.textValue]), [['f', 'Color', 'blue'], ['new', 'Tracking', 'barcode-7']]);
+});
+
+test('detail save retains a concurrent value change when the local draft left that field untouched', async () => {
+  const baseline = { id: 'i', entityType: { id: 'type' }, parent: null, tags: [], serialNumber: '', fields: [{ id: 'f', name: 'Color', type: 'text', textValue: 'red' }] };
+  let current = { ...baseline, fields: [{ id: 'f', name: 'Color', type: 'text', textValue: 'green' }] };
+  const api = { items: { get: async () => ({ data: structuredClone(current) }), update: async (_id, payload) => { current = { ...current, ...payload }; return { data: current }; } } };
+  const workshop = { request: async path => path.startsWith('item-metadata?') ? { fieldNotes: {} } : { fieldNotes: {} } };
+  await saveDetailMetadata({ api, workshop, item: baseline, draft: { serialNumber: '', packaging: '', rows: [{ id: 'f', name: 'Color', value: 'red', note: '' }] }, identity: 's', requestKey: 'k', baselineNotes: {} });
+  assert.equal(current.fields[0].textValue, 'green');
+});
+
+test('detail save reports conflicting concurrent edits without overwriting native values or notes', async () => {
+  const baseline = { id: 'i', entityType: { id: 'type' }, parent: null, tags: [], serialNumber: '', fields: [{ id: 'f', name: 'Color', type: 'text', textValue: 'red' }] };
+  const current = { ...baseline, fields: [{ id: 'f', name: 'Color', type: 'text', textValue: 'green' }] };
+  let updates = 0;
+  const api = { items: { get: async () => ({ data: current }), update: async () => { updates++; } } };
+  const workshop = { request: async path => path.startsWith('item-metadata?') ? { fieldNotes: { color: 'other note' } } : { fieldNotes: {} } };
+  await assert.rejects(() => saveDetailMetadata({ api, workshop, item: baseline, draft: { serialNumber: '', packaging: '', rows: [{ id: 'f', name: 'Color', value: 'blue', note: 'my note' }] }, identity: 's', requestKey: 'k', baselineNotes: { color: 'old note' } }), /changed in another session/i);
+  assert.equal(updates, 0);
+  assert.equal(current.fields[0].textValue, 'green');
 });
 
 test('failed Notes save leaves native item saved and retry reuses request key', async () => {
@@ -219,7 +256,8 @@ import OcrPopover from './components/Workshop/OcrPopover.vue';
 import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes } from './lib/item-create-fields.js';
 import { assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from './lib/equipment-catalog.js';
 import { createRelatedItemFlow, relatedItemStorageKey } from './lib/item-metadata.js';
-Object.assign(window, { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey, createRelatedItemFlow, relatedItemStorageKey, ref, reactive, computed, watch, onMounted, onBeforeUnmount, onUnmounted, nextTick });
+import { workshopUUID } from './lib/workshop-uuid.js';
+Object.assign(window, { workshopUUID, PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey, createRelatedItemFlow, relatedItemStorageKey, ref, reactive, computed, watch, onMounted, onBeforeUnmount, onUnmounted, nextTick });
 window.DialogID={CreateEntity:'create',Scanner:'scanner'};
 window.__activeDialog=ref(null);
 window.useDialog=()=>({activeDialog:window.__activeDialog,openDialog:id=>window.__activeDialog.value=id,closeDialog:()=>window.__activeDialog.value=null,registerOpenDialogCallback:(_id,fn)=>{window.__openCreate=fn;return ()=>{};}});
@@ -331,12 +369,13 @@ import { createApp, defineComponent, h, ref, watch, onMounted, computed, nextTic
 import Panel from './components/Workshop/ItemMetadataPanel.vue';
 import { PACKAGING_OPTIONS, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes, validateCustomRows } from './lib/item-create-fields.js';
 import { changeRelatedItem, detailMetadataDraft, saveDetailMetadata, searchRelatedItems } from './lib/item-metadata.js';
-Object.assign(window,{ref,watch,onMounted,computed,PACKAGING_OPTIONS,buildNativeMetadataUpdate,nativeMetadataMatches,persistFieldNotes,validateCustomRows,changeRelatedItem,detailMetadataDraft,saveDetailMetadata,searchRelatedItems});
+import { workshopUUID } from './lib/workshop-uuid.js';
+Object.assign(window,{workshopUUID,ref,watch,onMounted,computed,PACKAGING_OPTIONS,buildNativeMetadataUpdate,nativeMetadataMatches,persistFieldNotes,validateCustomRows,changeRelatedItem,detailMetadataDraft,saveDetailMetadata,searchRelatedItems});
 window.__items={a:{id:'a',name:'Camera',parent:{id:'loc'},entityType:{id:'type'},tags:[],serialNumber:'SN',fields:[{id:'p',name:'Device Packaging',type:'text',textValue:'Bag'},{id:'f',name:'Color',type:'text',textValue:'red'},{id:'u',name:'Weight',type:'number',numberValue:4}]},b:{id:'b',name:'Battery',parent:{id:'loc2'},entityType:{id:'type'},tags:[],serialNumber:'',fields:[]},c:{id:'c',name:'Lens',parent:{id:'loc3'},entityType:{id:'type'},tags:[],serialNumber:'',fields:[]}};
-window.__links=new Set();window.__notes={a:{color:'shade'},b:{}};window.__calls=[];window.__failNotes=false;window.__failLoad=true;
+window.__links=new Set();window.__notes={a:{color:'shade'},b:{}};window.__calls=[];window.__failNotes=false;window.__failLoad=true;window.__relationFailure=false;window.__relationCalls=0;
 window.__id=ref('a');window.__item=ref(window.__items.a);window.__switch=id=>{window.__id.value=id;window.__item.value=window.__items[id];};
 window.useUserApi=()=>({items:{get:async id=>({data:structuredClone(window.__items[id])}),update:async(id,payload)=>{window.__calls.push(['native',id,payload]);window.__items[id]={...window.__items[id],...payload};return{data:window.__items[id]};},getAll:async({q})=>({data:{items:Object.values(window.__items).filter(item=>item.name.toLowerCase().includes(q.toLowerCase()))}})}});
-window.useWorkshop=()=>({refresh:async()=>({group:{id:'group'},user:{id:'user'},identity:'session'}),request:async(path,body)=>{window.__calls.push(['metadata',path,body]);if(path.startsWith('item-metadata?')){if(window.__failLoad){window.__failLoad=false;throw Error('Metadata load unavailable');}const id=new URLSearchParams(path.split('?')[1]).get('entity_id');return{fieldNotes:window.__notes[id],relatedItems:[...window.__links].filter(pair=>pair.includes(id)).map(pair=>{const other=pair.find(value=>value!==id);return other==='stale'?{unavailable:true}:{id:other,name:window.__items[other].name,unavailable:false};})};}if(path==='item-metadata/field-notes'){window.__notes[body.entity_id]=Object.fromEntries(body.fields.map(field=>[field.name.toLowerCase(),field.note]));if(window.__failNotes){window.__failNotes=false;throw Error('Notes response lost');}return{fieldNotes:window.__notes[body.entity_id]};}if(path.endsWith('/add'))window.__links.add([body.entity_id,body.related_entity_id].sort());if(path.endsWith('/remove')){for(const pair of window.__links)if(pair.includes(body.entity_id)&&pair.includes(body.related_entity_id))window.__links.delete(pair);}return{relatedItems:[...window.__links].filter(pair=>pair.includes(body.entity_id)).map(pair=>{const other=pair.find(value=>value!==body.entity_id);return other==='stale'?{unavailable:true}:{id:other,name:window.__items[other].name,unavailable:false};})};}});
+window.useWorkshop=()=>({refresh:async()=>({group:{id:'group'},user:{id:'user'},identity:'session'}),request:async(path,body)=>{window.__calls.push(['metadata',path,body]);if(path.startsWith('item-metadata?')){if(window.__failLoad){window.__failLoad=false;throw Error('Metadata load unavailable');}const id=new URLSearchParams(path.split('?')[1]).get('entity_id');return{fieldNotes:window.__notes[id],relatedItems:[...window.__links].filter(pair=>pair.includes(id)).map(pair=>{const other=pair.find(value=>value!==id);return other==='stale'?{unavailable:true}:{id:other,name:window.__items[other].name,unavailable:false};})};}if(path==='item-metadata/field-notes'){window.__notes[body.entity_id]=Object.fromEntries(body.fields.map(field=>[field.name.toLowerCase(),field.note]));if(window.__failNotes){window.__failNotes=false;throw Error('Notes response lost');}return{fieldNotes:window.__notes[body.entity_id]};}if(path.endsWith('/add')){window.__relationCalls++;if(window.__relationFailure){window.__relationFailure=false;const error=Error('Relation rejected');error.status=422;throw error;}window.__links.add([body.entity_id,body.related_entity_id].sort());}if(path.endsWith('/remove')){for(const pair of window.__links)if(pair.includes(body.entity_id)&&pair.includes(body.related_entity_id))window.__links.delete(pair);}return{relatedItems:[...window.__links].filter(pair=>pair.includes(body.entity_id)).map(pair=>{const other=pair.find(value=>value!==body.entity_id);return other==='stale'?{unavailable:true}:{id:other,name:window.__items[other].name,unavailable:false};})};}});
 window.useCollections=()=>({selectedId:ref('group')});window.useAuthContext=()=>({user:{id:'user'}});
 const Link=defineComponent({props:['to'],setup(props,{slots}){return()=>h('a',{href:props.to},slots.default?.());}});
 const app=createApp({components:{Panel},setup(){return{item:window.__item};},template:'<Panel :item="item" />'});app.config.globalProperties.PACKAGING_OPTIONS=PACKAGING_OPTIONS;app.component('NuxtLink',Link).mount('#app');await nextTick();
@@ -401,5 +440,17 @@ const app=createApp({components:{Panel},setup(){return{item:window.__item};},tem
     await page.getByRole('link',{name:'Lens'}).waitFor();
     assert.equal(await page.getByRole('link',{name:'stale'}).count(),0);
     assert.equal(await page.getByRole('button',{name:'Remove link'}).count(),1);
+    await page.evaluate(()=>window.__switch('a'));
+    await page.getByLabel('Find an existing item').fill('Bat');
+    await page.getByLabel('Search results').selectOption('b');
+    const relationCallsBeforeRetry = await page.evaluate(()=>window.__relationCalls);
+    await page.evaluate(()=>window.__relationFailure=true);
+    await page.getByRole('button',{name:'Link existing item'}).click();
+    await page.getByRole('alert').filter({hasText:'Relation rejected'}).waitFor();
+    await page.getByLabel('Find an existing item').fill('Len');
+    await page.getByLabel('Search results').selectOption('c');
+    await page.getByRole('button',{name:'Link existing item'}).click();
+    await page.getByRole('link',{name:'Lens'}).waitFor();
+    assert.equal(await page.evaluate(()=>window.__relationCalls),relationCallsBeforeRetry+2,'a definitive failure clears the pending relation lock');
   } finally {await browser.close();await server.close();await rm(root,{recursive:true,force:true});}
 });

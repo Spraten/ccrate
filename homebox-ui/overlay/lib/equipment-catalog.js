@@ -1,4 +1,5 @@
 /** Shared catalog fields and recoverable create/assignment flow for CreateEntity. */
+import { workshopUUID } from './workshop-uuid.js';
 export function applyEquipmentTemplateDefaults(template) {
   return {
     name: String(template?.name || ''),
@@ -194,7 +195,7 @@ export async function saveEquipmentTemplate(workshop, fields, requestKey, source
 }
 
 /** Preserve a save key and immutable payload until the server confirms the replay. */
-export function createEquipmentTemplateSaveFlow({ read, write, clear, save, keyFactory = () => crypto.randomUUID() }) {
+export function createEquipmentTemplateSaveFlow({ read, write, clear, save, keyFactory = workshopUUID }) {
   async function resume() {
     const intent = read();
     if (!intent) throw new Error('There is no pending template save.');
@@ -273,7 +274,7 @@ export function equipmentTemplateSaveStorageKey(context) {
  * its UUID and assignment key until assignment is confirmed. An uncertain native
  * response stays locked because its UUID is not safe to recreate automatically.
  */
-export function createEquipmentCreationFlow({ read, write, clear, assignCreated, completePostCreate = async (_intent, _step) => ({}), keyFactory = () => crypto.randomUUID() }) {
+export function createEquipmentCreationFlow({ read, write, clear, assignCreated, completePostCreate = async (_intent, _step) => ({}), keyFactory = workshopUUID }) {
   let creating = false;
   let assigning = false;
 
@@ -455,8 +456,16 @@ export function createEquipmentCreationFlow({ read, write, clear, assignCreated,
 }
 
 
+/** Clear the main and dependent related intents after explicit absence confirmation. */
+export function confirmNoMainCreate(equipmentFlow, relatedFlow) {
+  equipmentFlow.confirmNoNativeCreate();
+  const related = relatedFlow.pending();
+  if (related && !related.main_entity_id) relatedFlow.clearBeforeMain();
+  return true;
+}
+
 /** Stable, retryable archive/restore requests. The server records the lifecycle request key. */
-export function createEquipmentTemplateLifecycleFlow({ read, write, clear, request, keyFactory = () => crypto.randomUUID() }) {
+export function createEquipmentTemplateLifecycleFlow({ read, write, clear, request, keyFactory = workshopUUID }) {
   async function resume() {
     const intent = read();
     if (!intent) throw new Error('There is no pending template archive or restore.');

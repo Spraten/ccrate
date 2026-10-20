@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRelatedItemFlow, relatedItemStorageKey } from '../homebox-ui/overlay/lib/item-metadata.js';
-import { createEquipmentCreationFlow } from '../homebox-ui/overlay/lib/equipment-catalog.js';
+import { confirmNoMainCreate, createEquipmentCreationFlow } from '../homebox-ui/overlay/lib/equipment-catalog.js';
+import { workshopUUID } from '../homebox-ui/overlay/lib/workshop-uuid.js';
 
 const context = { group: { id: 'collection-a' }, user: { id: 'member-a' }, identity: 'session-a' };
 function fixture() {
@@ -153,4 +154,46 @@ test('identity change during link reconciliation prevents link replay', async ()
   f.afterRead = () => { f.currentContext = { ...context, identity: 'session-b' }; };
   await assert.rejects(() => f.flow.resumeRelatedSteps(), /account or collection changed/i);
   assert.deepEqual(f.calls.map(call => call[0]), ['create', 'link', 'read']);
+});
+
+test('confirmed absent related create can retry safely while uncertain create cannot', async () => {
+  const f = fixture();
+  const key = f.flow.stageRelated({ name: 'Battery', entityTypeId: 'type-a', parentId: null });
+  f.flow.recordMainCreated('main-a');
+  f.createResult = { error: new Error('timeout') };
+  await assert.rejects(() => f.flow.resumeRelatedSteps());
+  assert.equal(f.flow.pending().steps.find(step => step.key === key).state, 'uncertain');
+  await assert.rejects(() => f.flow.retryRelatedStep(key), /reconcile/i);
+  assert.equal(f.calls.filter(call => call[0] === 'create').length, 1);
+  f.flow.confirmRelatedCreateAbsent(key);
+  f.createResult = { data: { id: 'related-confirmed' } };
+  await f.flow.retryRelatedStep(key);
+  assert.equal(f.calls.filter(call => call[0] === 'create').length, 2);
+  assert.equal(f.flow.pending().steps.find(step => step.key === key).state, 'completed');
+});
+
+test('workshopUUID remains available when the LAN browser has no randomUUID', () => {
+  const id = workshopUUID({ getRandomValues: bytes => { bytes.fill(7); return bytes; } });
+  assert.match(id, /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+  assert.equal(id[14], '4');
+  assert.ok(['8', '9', 'a', 'b'].includes(id[19]));
+});
+
+test('confirming absent main clears dependent durable steps and allows a new create', () => {
+  const relatedFixture = fixture();
+  const staged = { name: 'Battery', entityTypeId: 'type-a', parentId: 'loc-a' };
+  relatedFixture.flow.stageRelated(staged);
+  let main = null;
+  const equipment = createEquipmentCreationFlow({ read: () => main, write: value => { main = value; }, clear: () => { main = null; }, assignCreated: async () => ({}) });
+  equipment.begin({ modelCode: 'CAM', groupId: context.group.id, userId: context.user.id, identity: context.identity });
+  equipment.markNativeUncertain();
+  equipment.recover();
+  confirmNoMainCreate(equipment, relatedFixture.flow);
+  assert.equal(equipment.pending(), null);
+  assert.equal(relatedFixture.flow.pending(), null);
+  // The modal's editable draft is separate from durable side effects.
+  assert.deepEqual(staged, { name: 'Battery', entityTypeId: 'type-a', parentId: 'loc-a' });
+  equipment.begin({ modelCode: 'CAM', groupId: context.group.id, userId: context.user.id, identity: context.identity });
+  relatedFixture.flow.stageRelated(staged);
+  assert.equal(relatedFixture.flow.pending().steps.length, 2);
 });

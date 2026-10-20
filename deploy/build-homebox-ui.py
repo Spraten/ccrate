@@ -1024,8 +1024,8 @@ def smart_create_form_text(text):
     if count != 1: raise RuntimeError('Equipment template panel changed')
     text, count = re.subn(r'    } else if \(templateData.value\) \{.*?\n    } else \{\n      // Normal item creation without template', '    } else {\n      // Normal item creation without template', text, count=1, flags=re.S)
     if count != 1: raise RuntimeError('Native template create branch changed')
-    once('  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import EquipmentTemplatePanel from "~/components/Workshop/EquipmentTemplatePanel.vue";',
-         '  import { assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes } from "~/lib/item-create-fields";')
+    once('  import { workshopUUID } from "~/lib/workshop-uuid";\n  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, confirmNoMainCreate, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import EquipmentTemplatePanel from "~/components/Workshop/EquipmentTemplatePanel.vue";',
+         '  import { workshopUUID } from "~/lib/workshop-uuid";\n  import { assignCreatedEquipment, confirmNoMainCreate, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";\n  import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes } from "~/lib/item-create-fields";')
     once('  import TemplateSelector from "~/components/Template/Selector.vue";\n', '')
     once('    EntityTemplateOut,\n    EntityTemplateSummary,\n', '')
     once('  import MdiFileDocumentOutline from "~icons/mdi/file-document-outline";\n  import MdiChevronDown from "~icons/mdi/chevron-down";\n  import MdiClose from "~icons/mdi/close";\n', '')
@@ -1120,7 +1120,7 @@ def smart_create_form_text(text):
   function chooseHighlightedSuggestion(event: KeyboardEvent) { if (suggestions.value.length) { event.preventDefault(); chooseSuggestion(suggestions.value[suggestionIndex.value]); } }''')
     once('          postCreateSteps: form.photos.map((photo: PhotoPreview, index: number) => ({', '''          postCreateSteps: [
             { key: 'metadata', name: 'Native item fields', draft: { serialNumber: form.serialNumber, packaging: form.packaging, rows: validateCustomRows(form.customRows) } },
-            { key: 'field-notes', name: 'Custom field notes', request_key: crypto.randomUUID(), fields: validateCustomRows(form.customRows).map(row => ({ name: row.name, note: row.note.trim() })) },
+            { key: 'field-notes', name: 'Custom field notes', request_key: workshopUUID(), fields: validateCustomRows(form.customRows).map(row => ({ name: row.name, note: row.note.trim() })) },
             ...form.photos.map((photo: PhotoPreview, index: number) => ({''')
     once('            name: photo.photoName, size: photo.file.size, last_modified: photo.file.lastModified, primary: photo.primary,\n          })),',
          '            name: photo.photoName, size: photo.file.size, last_modified: photo.file.lastModified, primary: photo.primary,\n          })),\n          ],')
@@ -1143,6 +1143,16 @@ def smart_create_form_text(text):
     once('    form.modelCode = "";\n', '    form.modelCode = "";\n    form.serialNumber = "";\n    form.packaging = "";\n    form.customRows = [];\n    suggestions.value = [];\n')
     return related_create_form_text(text)
 
+def remove_equipment_template_navigation():
+    replace('layouts/default.vue', '''    {
+      icon: MdiFileDocumentMultiple,
+      id: 4,
+      active: computed(() => route.path === "/templates"),
+      name: computed(() => t("menu.templates")),
+      to: "/templates",
+    },
+''', '')
+
 def related_create_form_text(text):
     def once(old, new):
         nonlocal text
@@ -1164,6 +1174,7 @@ def related_create_form_text(text):
       relatedFlow = createRelatedItemFlow({
         read, write: (value: any) => value ? localStorage.setItem(key, JSON.stringify(value)) : localStorage.removeItem(key),
         expectedContext: context, context: () => equipmentWorkshop.refresh(),
+        keyFactory: workshopUUID,
         createNative: (item: any) => api.items.create(item),
         link: (main: string, related: string, requestKey: string) => equipmentWorkshop.request('item-metadata/related/add', { request_key: requestKey, entity_id: main, related_entity_id: related }, context.identity),
         readLinks: (main: string) => equipmentWorkshop.request(`item-metadata?entity_id=${encodeURIComponent(main)}`),
@@ -1193,6 +1204,10 @@ def related_create_form_text(text):
       relatedIntent.value = flow.pending();
       delete relatedReconcileIds.value[stepKey];
     } catch (error) { toast.error((error as Error).message); }
+  }
+  async function confirmRelatedAbsent(stepKey: string) {
+    try { const flow = await getRelatedFlow(); flow.confirmRelatedCreateAbsent(stepKey); relatedIntent.value = flow.pending(); }
+    catch (error) { toast.error((error as Error).message); }
   }
   async function resumeRelated() {
     try { const flow = await getRelatedFlow(); await flow.resumeRelatedSteps(); relatedIntent.value = flow.pending(); }
@@ -1265,8 +1280,9 @@ def related_create_form_text(text):
           <template v-if="step.kind === 'create' && step.state === 'uncertain'">
             <input v-model="relatedReconcileIds[step.key]" :aria-label="`Confirmed UUID for ${step.item?.name}`" placeholder="Confirmed Homebox item UUID" />
             <Button type="button" @click="reconcileRelated(step.key)">Confirm related item</Button>
+            <Button type="button" variant="outline" @click="confirmRelatedAbsent(step.key)">I confirmed no related item was created</Button>
           </template>
-          <Button v-if="step.state === 'failed'" type="button" @click="retryRelated(step.key)">Retry this step</Button>
+          <Button v-if="step.state === 'failed'" type="button" @click="retryRelated(step.key)">{{ step.kind === 'create' ? 'Retry related item create' : 'Retry this step' }}</Button>
         </div>
         <Button v-if="relatedIntent.steps.some((step: any) => step.state === 'pending' || (step.kind === 'link' && step.state === 'uncertain'))" type="button" @click="resumeRelated">Resume related items</Button>
       </section>
@@ -1335,7 +1351,8 @@ def equipment_catalog_create_frontend():
     if text.count(import_anchor) != 1:
         raise RuntimeError('Upstream changed: expected Vue i18n import in CreateModal.vue')
     text = text.replace(import_anchor, import_anchor + '''
-  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";
+  import { workshopUUID } from "~/lib/workshop-uuid";
+  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, confirmNoMainCreate, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";
   import EquipmentTemplatePanel from "~/components/Workshop/EquipmentTemplatePanel.vue";''')
     setup_anchor = '  const api = useUserApi();'
     if text.count(setup_anchor) != 1:
@@ -1433,7 +1450,10 @@ def equipment_catalog_create_frontend():
   }
   async function confirmNoEquipmentCreate() {
     if (!window.confirm("After checking the selected collection, confirm that no item was created. This clears the pending create and allows a new attempt.")) return;
-    try { const flow = await getEquipmentFlow(); flow.confirmNoNativeCreate(); equipmentIntent.value = null; }
+    try {
+      const related = await getRelatedFlow();
+      const flow = await getEquipmentFlow(); confirmNoMainCreate(flow, related); equipmentIntent.value = null; relatedIntent.value = related.pending();
+    }
     catch (error) { toast.error((error as Error).message || "The pending create could not be cleared."); }
   }
   async function reconcileEquipmentMetadata(step: any) {
@@ -1549,14 +1569,7 @@ def equipment_catalog_create_frontend():
 
     nameOcrGeneration++;''', 1)
     path.write_text(smart_create_form_text(text))
-    replace('layouts/default.vue', '''    {
-      icon: MdiFileDocumentMultiple,
-      id: 4,
-      active: computed(() => route.path === "/templates"),
-      name: computed(() => t("menu.templates")),
-      to: "/templates",
-    },
-''', '')
+    remove_equipment_template_navigation()
 
 
 def prepare():

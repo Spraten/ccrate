@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { PACKAGING_OPTIONS, validateCustomRows } from "~/lib/item-create-fields";
 import { changeRelatedItem, detailMetadataDraft, saveDetailMetadata, searchRelatedItems } from "~/lib/item-metadata";
+import { workshopUUID } from "~/lib/workshop-uuid";
 
 type NativeItem = { id: string; name?: string; serialNumber?: string; fields?: any[] };
 type RelatedItem = { id?: string; name?: string; unavailable?: boolean };
@@ -11,22 +12,26 @@ const workshop = useWorkshop();
 const { selectedId } = useCollections();
 const auth = useAuthContext();
 const draft = ref({ serialNumber: "", packaging: "", rows: [] as { name: string; value: string; note: string }[] });
+const baselineItem = ref<NativeItem | null>(null);
 const related = ref<RelatedItem[]>([]);
 const loading = ref(false), ready = ref(false), saving = ref(false), linking = ref(false), searching = ref(false);
 const error = ref(""), message = ref(""), searchError = ref("");
 const query = ref(""), candidates = ref<{ id: string; name: string }[]>([]), chosenId = ref("");
 const pendingSave = ref<{ requestKey: string; identity: string; draft: typeof draft.value } | null>(null);
 const pendingRelation = ref<{ action: "add" | "remove"; relatedId: string; requestKey: string; identity: string } | null>(null);
+const baselineNotes = ref<Record<string, string>>({});
 let revision = 0, searchRevision = 0;
 
 async function load() {
   const own = ++revision;
+  const nativeBaseline = JSON.parse(JSON.stringify(props.item)) as NativeItem;
   loading.value = true; ready.value = false; error.value = "";
   try {
     const result = await workshop.request<any>(`item-metadata?entity_id=${encodeURIComponent(props.item.id)}`);
     if (own !== revision) return;
     related.value = Array.isArray(result.relatedItems) ? result.relatedItems : [];
-    if (!pendingSave.value) draft.value = detailMetadataDraft(props.item, result);
+    baselineNotes.value = result.fieldNotes || {};
+    if (!pendingSave.value) { baselineItem.value = nativeBaseline; draft.value = detailMetadataDraft(nativeBaseline, result); }
     ready.value = true;
   } catch (cause) { if (own === revision) error.value = (cause as Error).message || "Item metadata could not be loaded."; }
   finally { if (own === revision) loading.value = false; }
@@ -41,13 +46,15 @@ async function save() {
     if (pendingSave.value && pendingSave.value.identity !== context.identity) throw new Error("The account or collection changed. Return to the original context to retry.");
     if (!pendingSave.value) {
       validateCustomRows(draft.value.rows);
-      pendingSave.value = { requestKey: crypto.randomUUID(), identity: context.identity, draft: {
+      pendingSave.value = { requestKey: workshopUUID(), identity: context.identity, draft: {
         serialNumber: draft.value.serialNumber, packaging: draft.value.packaging, rows: draft.value.rows.map(row => ({ ...row })),
       } };
     }
-    const saved = await saveDetailMetadata({ api, workshop, item: props.item, draft: pendingSave.value.draft, identity: pendingSave.value.identity, requestKey: pendingSave.value.requestKey });
+    const saved = await saveDetailMetadata({ api, workshop, item: baselineItem.value || props.item, draft: pendingSave.value.draft, identity: pendingSave.value.identity, requestKey: pendingSave.value.requestKey, baselineNotes: baselineNotes.value });
     pendingSave.value = null;
     draft.value = detailMetadataDraft(saved.item, { fieldNotes: saved.fieldNotes });
+    baselineItem.value = JSON.parse(JSON.stringify(saved.item)) as NativeItem;
+    baselineNotes.value = saved.fieldNotes;
     message.value = "Packaging and custom fields saved.";
     emit("changed");
   } catch (cause) {
@@ -79,18 +86,22 @@ async function changeRelation(action: "add" | "remove", relatedId: string) {
     if (!context?.group?.id || !context?.user?.id || !context.identity) throw new Error("Refresh the account and collection before changing links.");
     const pending = pendingRelation.value;
     if (pending && (pending.action !== action || pending.relatedId !== relatedId || pending.identity !== context.identity)) throw new Error("Retry the pending related item change first.");
-    pendingRelation.value ||= { action, relatedId, requestKey: crypto.randomUUID(), identity: context.identity };
+    pendingRelation.value ||= { action, relatedId, requestKey: workshopUUID(), identity: context.identity };
     const result = await changeRelatedItem(workshop, props.item.id, relatedId, action, pendingRelation.value.requestKey, context.identity);
     pendingRelation.value = null;
     chosenId.value = ""; query.value = ""; candidates.value = [];
     related.value = result.relatedItems;
     message.value = action === "add" ? "Related item linked." : "Related item removed.";
-  } catch (cause) { error.value = (cause as Error).message || "Related item change could not be confirmed. Retry the same request."; }
+  } catch (cause) {
+    const status = Number((cause as any)?.status || (cause as any)?.statusCode || (cause as any)?.response?.status || 0);
+    if (status >= 400 && status < 500 && ![408, 409, 429].includes(status)) pendingRelation.value = null;
+    error.value = (cause as Error).message || "Related item change could not be confirmed. Retry the same request.";
+  }
   finally { linking.value = false; }
 }
 
-watch(() => props.item.id, () => { revision++; searchRevision++; ready.value = false; pendingSave.value = null; pendingRelation.value = null; related.value = []; void load(); });
-watch([selectedId, () => auth.user?.id], () => { revision++; searchRevision++; ready.value = false; pendingSave.value = null; pendingRelation.value = null; related.value = []; candidates.value = []; void load(); });
+watch(() => props.item.id, () => { revision++; searchRevision++; ready.value = false; baselineItem.value = null; baselineNotes.value = {}; pendingSave.value = null; pendingRelation.value = null; related.value = []; void load(); });
+watch([selectedId, () => auth.user?.id], () => { revision++; searchRevision++; ready.value = false; baselineItem.value = null; baselineNotes.value = {}; pendingSave.value = null; pendingRelation.value = null; related.value = []; candidates.value = []; void load(); });
 onMounted(load);
 </script>
 

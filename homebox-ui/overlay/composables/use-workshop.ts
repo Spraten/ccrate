@@ -6,14 +6,8 @@ export type WorkshopContext = {
 };
 export type PendingAction = { key: string; path: string; label: string; subject: string; at: string; intent?: Record<string, unknown>; identity?: string; group_id?: string; user_id?: string };
 
-export function workshopUUID() {
-  if (crypto.randomUUID) return crypto.randomUUID();
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 15) | 64;
-  bytes[8] = (bytes[8]! & 63) | 128;
-  const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
+export { workshopUUID } from "~/lib/workshop-uuid";
+import { workshopUUID } from "~/lib/workshop-uuid";
 
 export function useWorkshop() {
   const context = useState<WorkshopContext | null>("workshop-context", () => null);

@@ -50,6 +50,29 @@ def isolated_builder_prepare(build_root, materializer_work_root):
 
 
 class HomeboxUiBuilderTests(unittest.TestCase):
+    def test_equipment_template_navigation_removal_uses_a_real_entry_fixture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            previous = BUILDER.BUILD
+            build = pathlib.Path(directory)
+            layout = build / 'layouts/default.vue'
+            layout.parent.mkdir(parents=True)
+            layout.write_text('''const nav = [
+    {
+      icon: MdiFileDocumentMultiple,
+      id: 4,
+      active: computed(() => route.path === "/templates"),
+      name: computed(() => t("menu.templates")),
+      to: "/templates",
+    },
+  ];
+''')
+            BUILDER.BUILD = build
+            try:
+                BUILDER.remove_equipment_template_navigation()
+                self.assertNotIn('/templates', layout.read_text())
+            finally:
+                BUILDER.BUILD = previous
+
     def test_typecheck_tool_failure_is_not_misclassified_as_upstream_diagnostics(self):
         known_diagnostic = (
             "frontend/example.ts(4,8): error TS2307: Cannot find module 'upstream-module'.\n"
@@ -377,7 +400,8 @@ class HomeboxUiBuilderTests(unittest.TestCase):
       <CameraCaptureDialog v-model:open="nameCameraOpen" @captured="suggestNameFromPhoto" />
 </template>
 <script lang="ts" setup>
-  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";
+  import { workshopUUID } from "~/lib/workshop-uuid";
+  import { applyEquipmentTemplateDefaults, assignCreatedEquipment, confirmNoMainCreate, createEquipmentCreationFlow, equipmentTemplateStorageKey } from "~/lib/equipment-catalog";
   import EquipmentTemplatePanel from "~/components/Workshop/EquipmentTemplatePanel.vue";
   import TemplateSelector from "~/components/Template/Selector.vue";
   import CameraCaptureDialog from "~/components/Form/CameraCaptureDialog.vue";
@@ -490,6 +514,8 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertNotIn("templateData", modal)
             self.assertNotIn('to: "/templates"', layout)
             self.assertIn("assignCreatedEquipment(equipmentWorkshop, intent)", modal)
+            self.assertNotIn("crypto.randomUUID()", modal)
+            self.assertIn("confirmNoMainCreate(flow, related)", (ROOT / "deploy/build-homebox-ui.py").read_text())
             self.assertIn("await equipmentCreateFlow.resumeAssignment()", modal)
 
     def test_prepare_api_test_rewrite_is_idempotent_when_first_fixture_is_already_patched(self):

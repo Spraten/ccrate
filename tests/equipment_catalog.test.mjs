@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   applyEquipmentTemplateDefaults,
   buildEquipmentTemplateUpdate,
+  confirmNoMainCreate,
   createEquipmentCreationFlow,
   createEquipmentTemplateApplyFlow,
   createEquipmentTemplateLifecycleFlow,
