@@ -147,6 +147,49 @@ def _catalog_model_code(value):
     return code
 
 
+def _active_product_entity_ids(client):
+    active = set()
+    for summary in client.entities():
+        try:
+            entity_id = uuid(summary.get('id'))
+            entity = client.entity(entity_id)
+        except (ValueError, TypeError, urllib.error.HTTPError):
+            continue
+        if entity.get('archived') or entity.get('isArchived'):
+            continue
+        if entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
+            continue
+        active.add(entity_id)
+    return active
+
+
+def _product_summaries(catalog, group, client):
+    products = catalog.list_products(group, _active_product_entity_ids(client))
+    with catalog.ledger.connection() as db:
+        timestamps = {row['id']: row['updated_at'] for row in db.execute(
+            'SELECT id,updated_at FROM equipment_products WHERE group_id=?', (uuid(group),))}
+    products = [product for product in products if product['active_item_count']]
+    for product in products:
+        product['updated_at'] = timestamps.get(product['id'])
+    return products
+
+
+def equipment_product_model_code_post(data, ctx, deps, ApiError):
+    require_current_member(ctx, ApiError)
+    if set(data) != {'product_id', 'model_code', 'expected_updated_at', 'request_key'}:
+        raise ValueError('Provide product_id, model_code, expected_updated_at, and request_key.')
+    catalog = equipment_catalog_service(deps)
+    product_id = uuid(data.get('product_id'))
+    visible = _product_summaries(catalog, ctx['group'], ctx['client'])
+    if not any(product['id'] == product_id for product in visible):
+        raise ApiError(404, 'Equipment product not found in this collection.')
+    updated = catalog.update_product_model_code(ctx['group'], ctx['actor'], product_id,
+                                               data.get('model_code'), data.get('expected_updated_at'),
+                                               data.get('request_key'))
+    return next(product for product in _product_summaries(catalog, ctx['group'], ctx['client'])
+                if product['id'] == updated['id'])
+
+
 def equipment_catalog_post(route, data, ctx, deps, ApiError, public_entity):
     client, group, actor = ctx['client'], ctx['group'], ctx['actor']
     require_current_member(ctx, ApiError)
@@ -274,6 +317,8 @@ def equipment_catalog_post(route, data, ctx, deps, ApiError, public_entity):
             registered = catalog.register_product(group, actor, str(uuid5(NAMESPACE_URL, 'equipment-assignment:' + request_key)), product, matching)
             product_id = registered['id']
         return _assignment_public(catalog.assign_item(group, actor, entity_id, product_id, request_key))
+    if route == 'equipment/products/code':
+        return equipment_product_model_code_post(data, ctx, deps, ApiError)
     if route == 'equipment/ids/resolve':
         display_id = data.get('display_id')
         if not isinstance(display_id, str) or not display_id.strip() or len(display_id) > 100:
@@ -291,6 +336,10 @@ def equipment_catalog_get(route, query, ctx, deps, ApiError):
         require_current_member(ctx, ApiError)
         include_archived = any(str(value).lower() in ('1', 'true', 'yes') for value in query.get('include_archived', []))
         return equipment_catalog_service(deps).list_templates(group, include_archived=include_archived)
+    if route == 'equipment/products':
+        require_current_member(ctx, ApiError)
+        catalog = equipment_catalog_service(deps)
+        return _product_summaries(catalog, group, client)
     if route == 'equipment/ids':
         require_current_member(ctx, ApiError)
         values = query.get('ids', []) + query.get('entity_ids', [])
@@ -356,10 +405,11 @@ def equipment_catalog_get(route, query, ctx, deps, ApiError):
             if term and term not in _normalized(' '.join((name, entity.get('manufacturer', ''), entity.get('modelNumber', '')))):
                 continue
             assignment = catalog.assignment(group, entity_id)
+            current_code = catalog.current_product_model_code(group, assignment['product_id']) if assignment and not assignment.get('deleted') else None
             results.append({'id': entity_id, 'name': name, 'manufacturer': entity.get('manufacturer', ''),
                             'modelNumber': entity.get('modelNumber', ''),
                             'tagIds': [tag['id'] for tag in entity.get('tags', []) if tag.get('id')],
-                            'modelCode': assignment['model_code'] if assignment and not assignment.get('deleted') else ''})
+                            'modelCode': current_code or ''})
         results.sort(key=lambda item: (_normalized(item['name']), item['id']))
         return results[:limit]
     raise ApiError(404, 'Unknown equipment catalog route.')

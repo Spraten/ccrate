@@ -157,7 +157,7 @@ class EquipmentCatalogApiTests(unittest.TestCase):
             'request_key': ident(), 'fields': self.template_fields(name='Retained drone')
         })
         archived = self.request('equipment/templates/save', {
-            'request_key': ident(), 'fields': self.template_fields(name='Archived drone', model_code='OLD')
+            'request_key': ident(), 'fields': self.template_fields(name='Archived drone', manufacturer='Other maker', model_code='OLD')
         })
         self.assertEqual(200, active.status)
         self.assertEqual(200, archived.status)
@@ -455,6 +455,71 @@ class EquipmentCatalogApiTests(unittest.TestCase):
         self.assertEqual(8, len(limited.result))
         self.assertEqual(8, len(self.request('equipment/suggestions?type_id=' + self.kind + '&q=drone').result))
         self.assertEqual(400, self.request('equipment/suggestions?type_id=bad').status)
+
+    def test_product_listing_and_code_edit_are_member_scoped(self):
+        product = self.catalog.register_product(self.group, self.actor, ident(), {
+            'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker',
+            'model_number': 'Mini 4 Pro', 'model_code': 'OLD',
+        }, [self.item, self.location])
+        member_context = self.request('context', headers={'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}).result
+        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true', 'X-Workshop-Identity': member_context['identity']}
+        listed = self.request('equipment/products', headers=headers)
+        self.assertEqual(200, listed.status)
+        self.assertEqual([product['id']], [row['id'] for row in listed.result])
+        self.assertEqual(1, listed.result[0]['active_item_count'])
+        self.assertEqual([], listed.result[0]['assignments'])
+        self.assertEqual(product['updated_at'], listed.result[0]['updated_at'])
+        updated = self.request('equipment/products/code', {
+            'product_id': product['id'], 'model_code': 'NEW', 'expected_updated_at': product['updated_at'],
+            'request_key': ident(),
+        }, headers=headers)
+        self.assertEqual(200, updated.status)
+        self.assertEqual('NEW', updated.result['model_code'])
+        self.assertNotEqual(product['updated_at'], updated.result['updated_at'])
+        with self.ledger.connection() as db:
+            history = db.execute('SELECT actor_id FROM equipment_product_model_code_history WHERE group_id=? AND product_id=?',
+                                 (self.group, product['id'])).fetchone()
+        self.assertEqual(self.member, history['actor_id'])
+
+    def test_products_reject_unauthenticated_and_foreign_collection_access(self):
+        unauth = self.request('equipment/products', headers={'Cookie': ''})
+        self.assertEqual(401, unauth.status)
+        foreign = self.request('equipment/products', headers={'X-Workshop-Group': ident()})
+        self.assertEqual(403, foreign.status)
+
+    def test_product_code_edit_returns_duplicate_and_stale_conflicts(self):
+        product = self.catalog.register_product(self.group, self.actor, ident(), {
+            'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker',
+            'model_number': 'Mini 4 Pro', 'model_code': 'OLD',
+        }, [self.item])
+        duplicate = self.catalog.register_product(self.group, self.actor, ident(), {
+            'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker',
+            'model_number': 'Other', 'model_code': 'TAKEN',
+        }, [])
+        self.catalog.update_product_model_code(self.group, self.actor, duplicate['id'], 'TAKEN', duplicate['updated_at'], ident())
+        dupe = self.request('equipment/products/code', {
+            'product_id': product['id'], 'model_code': 'TAKEN', 'expected_updated_at': product['updated_at'], 'request_key': ident(),
+        })
+        self.assertEqual(409, dupe.status)
+        stale = self.request('equipment/products/code', {
+            'product_id': product['id'], 'model_code': 'NEW', 'expected_updated_at': 'stale', 'request_key': ident(),
+        })
+        self.assertEqual(409, stale.status)
+
+    def test_suggestion_reads_canonical_code_and_assignment_cannot_revert_it(self):
+        product = self.catalog.register_product(self.group, self.actor, ident(), {
+            'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker',
+            'model_number': 'Mini 4 Pro', 'model_code': 'OLD',
+        }, [self.item])
+        assigned = self.catalog.assign_item(self.group, self.actor, self.item, product['id'], ident())
+        with self.ledger.connection() as db:
+            current_updated_at = db.execute('SELECT updated_at FROM equipment_products WHERE id=?', (product['id'],)).fetchone()['updated_at']
+        self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'NEW', current_updated_at, ident())
+        suggestion = self.request('equipment/suggestions?type_id=' + self.kind + '&q=drone')
+        self.assertEqual('NEW', suggestion.result[0]['modelCode'])
+        conflict = self.request('equipment/ids/assign', {'request_key': ident(), 'entity_id': self.item, 'model_code': 'OLD'})
+        self.assertEqual(409, conflict.status)
+        self.assertEqual('NEW', self.catalog.current_product_model_code(self.group, assigned['product_id']))
 
 
 if __name__ == '__main__':

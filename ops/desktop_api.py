@@ -557,7 +557,7 @@ def get_action(route, query, ctx, deps):
         values = query.get('entity_id', [])
         if len(values) != 1 or not values[0]: raise ValueError('Choose one item.')
         return item_metadata_read(ctx, deps, values[0])
-    if route in {'equipment/templates', 'equipment/ids', 'equipment/suggestions'}:
+    if route in {'equipment/templates', 'equipment/ids', 'equipment/suggestions', 'equipment/products'}:
         return equipment_catalog_get(route, query, ctx, deps, ApiError)
     if route == 'item-actions/status':
         if set(query) != {'ids'}:
@@ -774,7 +774,7 @@ def post_action(route, data, ctx, deps, address):
                         for row in ledger.custody(group)}
             return service.checkin(ctx, ReturnLedger(ledger, previous), data)
         raise ApiError(404, 'Unknown item action.')
-    if route.startswith('equipment/templates/') or route.startswith('equipment/ids/'):
+    if route.startswith('equipment/templates/') or route.startswith('equipment/ids/') or route.startswith('equipment/products/'):
         return equipment_catalog_post(route, data, ctx, deps, ApiError, public_entity)
     if route == 'operation/status':
         return operation_status(ctx, deps, data)
