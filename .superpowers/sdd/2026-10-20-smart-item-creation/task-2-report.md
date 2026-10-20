@@ -69,7 +69,7 @@ ok 3 - empty query and empty list return no suggestions
 - `git diff --check` passed.
 
 ## Commit
-`a488d33` — `Add active equipment item suggestions`.
+Task 2 commit sequence: `54386a6` (`Add active equipment item suggestions`), followed by `63c9d39` (`Align item suggestions with reviewed contract`). The original `a488d33` hash was from the amended pre-review commit and is not present in the branch history.
 
 
 ## Reviewer round 1 fixes
@@ -134,3 +134,6 @@ ok 3 - empty query and empty list return no suggestions
 ```
 
 `git diff --check` passed.
+
+## Factual correction
+The original commit line incorrectly named `a488d33`; it was superseded by amended commit `54386a6`. The reviewed contract fixes are in `63c9d39`.
