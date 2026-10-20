@@ -99,13 +99,14 @@
 - Modify: `tests/test_homebox_ui_builder.py`
 - Create: `tests/item_metadata.browser.mjs`
 
-**Interfaces:** Selected suggestions copy only `name`, `manufacturer`, `modelNumber`, `tagIds`, and `modelCode`; `serialNumber` remains empty. Packaging choices are exactly `Original Packaging`, `No Packaging`, `HardCase`, `Softcase`, `Bag`, `Misc`, with an empty value allowed. Create-form fields are serialized as native Homebox `fields` and confirmed by readback.
+**Interfaces:** Selected suggestions copy only `name`, `manufacturer`, `modelNumber`, `tagIds`, and `modelCode`; the manufacturer `serialNumber` input remains blank but editable. Packaging choices are exactly `Original Packaging`, `No Packaging`, `HardCase`, `Softcase`, `Bag`, `Misc`, with an empty value meaning unknown. Packaging, serial number, and custom Name/Value fields are saved through native item updates and confirmed by readback.
 
-- [ ] Add generated-UI assertions that photo-based name suggestion and every create-template control are absent, while existing durable generated-ID assignment remains.
+- [ ] Repair the pre-existing malformed create-action test fixture in `tests/test_homebox_ui_builder.py`, then add generated-UI assertions that photo-based name suggestion and every create-template control are absent while durable generated-ID assignment remains.
 - [ ] Add interaction cases for keyboard navigation/selection, selection-only autofill, blank serial, packaging options, and custom-field row add/remove/edit.
 - [ ] Add a fixture assertion that the single `OcrPopover` can target the create-form launcher and retains scan/edit/copy without writing into the form.
 - [ ] Implement the create-form UX and preserve existing item-create identity, photo, and generated-ID recovery behavior.
-- [ ] Include native packaging and custom Name/Value rows in the existing durable post-create update steps, preserving parent, type, tags, and unrelated native fields; keep values and expose retry if a post-create step fails.
+- [ ] Add an editable manufacturer serial-number input that stays blank after suggestion selection.
+- [ ] Include serial number, packaging, and custom Name/Value rows in the existing durable post-create update steps, preserving parent, type, tags, and unrelated native fields; keep values and expose retry if a post-create step fails.
 - [ ] Persist custom Notes with the metadata endpoint after the native item update; make replay idempotent.
 - [ ] Remove all template UI imports, launchers, and controls while leaving template API, tables, and saved data untouched.
 - [ ] Run the generated builder and focused create/OCR fixtures; expected: generated form contains no template controls and all new interactions pass.
@@ -138,6 +139,7 @@
 
 - [ ] Add detail fixture cases for load/edit/save packaging, Name/Value/Note, relation visibility from either item, removal from either side, inaccessible targets, and failed metadata save.
 - [ ] Implement the focused detail panel, preserving native field IDs, unrelated native fields, and item permission checks; mount it on generated `pages/item/[id]/index.vue`.
+- [ ] Add existing-item search and link controls plus multiple related-item rows; location edits remain separate from link creation/removal.
 - [ ] Show explicit unavailable states for stale relation targets; do not resolve stale links by name.
 - [ ] Run item-detail builder and browser fixtures; expected: details remain editable and relation changes are symmetric.
 
