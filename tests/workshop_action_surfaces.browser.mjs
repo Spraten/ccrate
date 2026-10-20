@@ -113,14 +113,14 @@ try {
     window.useCollections = () => ({selectedId:{value:'collection'}});
     window.useAuthContext = () => ({user:{id:'member',defaultGroupId:'collection'},invalidateSession(){}});
     window.computed = fn => ({get value(){return fn()}});
-    window.durableCalls=[]; window.durableSaves=0; window.durableProducts=[{id:'prod-1',manufacturer:'Northwind',model_number:'Cam-X',model_code:'CX',updated_at:'v1',next_number:8,active_item_count:2,active_assigned_count:1,assignments:[{entity_id:'item-1',display_id:'CX-0007'}]},{id:'prod-2',manufacturer:'Acme',model_number:'Widget-Z',model_code:'WZ',updated_at:'w1',next_number:3,active_item_count:1,active_assigned_count:1,assignments:[{entity_id:'item-2',display_id:'WZ-0002'}]}];
+    window.durableCalls=[]; window.durableSaves=0; window.durableProducts=[{id:'prod-1',type_prefix:'DRONE',manufacturer:'Northwind',model_number:'Cam-X',model_code:'CX',updated_at:'v1',next_number:8,active_item_count:2,active_assigned_count:1,assignments:[{entity_id:'item-1',display_id:'CX-0007'}]},{id:'prod-2',type_prefix:'DRONE',manufacturer:'Acme',model_number:'Widget-Z',model_code:'WZ',updated_at:'w1',next_number:3,active_item_count:1,active_assigned_count:1,assignments:[{entity_id:'item-2',display_id:'WZ-0002'}]}];
     window.durableContext={user:{id:'member',name:'Member'},group:{id:'collection',name:'Collection'},identity:'member-session',manager:false};
     window.fetch=async(url,options={})=>{
       const path=url.replace('/workshop-api/',''); window.durableCalls.push({path,body:options.body?JSON.parse(options.body):null});
       const ok=(value,status=200)=>({ok:status<400,status,json:async()=>value});
       if(path==='context') return ok({...window.durableContext});
-      if(path==='equipment/products') { if(window.durableLoadFail){window.durableLoadFail=false;return ok({error:'fixture load failure'},503)} return ok(structuredClone(window.durableProducts)); }
-      if(path==='operation/status') { const key=JSON.parse(options.body).request_key; return ok(key===window.durableConflictKey||key===window.durableNoStartKey?{status:'not_started'}:{status:'completed',action:'equipment_product_model_code',result:structuredClone(window.durableProducts[0])}); }
+      if(path==='equipment/products') { if(window.durableLoadFail){window.durableLoadFail=false;return ok({error:'fixture load failure'},503)} return ok(window.emptyProductList?[]:structuredClone(window.durableProducts)); }
+      if(path==='operation/status') { const key=JSON.parse(options.body).request_key; if(key===window.durableHistoricalKey)return ok({status:'completed',action:'equipment_product_model_code',result:{...structuredClone(window.durableProducts[0]),model_code:'CX2',updated_at:'v2'}}); return ok(key===window.durableConflictKey||key===window.durableNoStartKey?{status:'not_started'}:{status:'completed',action:'equipment_product_model_code',result:structuredClone(window.durableProducts[0])}); }
       if(path==='equipment/products/code') { const payload=JSON.parse(options.body); if(payload.model_code==='DUP'){window.durableConflictKey=payload.request_key;return ok({error:'Model code conflicts with another product'},409)} window.durableSaves++; const index=window.durableProducts.findIndex(product=>product.id===payload.product_id); window.durableProducts[index]={...window.durableProducts[index],model_code:payload.model_code,updated_at:'v'+(window.durableSaves+1)}; if(window.durableSaves===1) throw new Error('fixture lost committed response'); return ok(structuredClone(window.durableProducts[index])); }
       return ok({});
     };
@@ -129,6 +129,7 @@ try {
   });
   await page.addScriptTag({ content: durableWorkshopSource });
   await page.getByRole('heading', { name: 'Equipment ID codes', exact: true }).waitFor();
+  assert.equal(await page.getByText('Next ID preview — not assigned: DRONE-CX-8').count(),1,'list preview shows the complete tentative ID');
   const productSearch = page.getByLabel('Search by model, model code, or assigned ID');
   const editButtons = page.getByRole('button', { name: 'Edit model code' });
   assert.equal(await editButtons.count(),2,'both distinguishable products start visible');
@@ -142,10 +143,13 @@ try {
   assert.equal(await editButtons.count(),1,'assigned ID search narrows products');
   await productSearch.fill('missing-product');
   assert.equal(await editButtons.count(),0,'nonmatching search removes every product');
+  assert.equal(await page.getByText('No equipment products match this search.').count(),1,'empty search results explain why the list has no rows');
   await productSearch.fill('');
   const northwindCard = page.locator('section').filter({hasText:'Northwind Cam-X'}).filter({hasText:'Model code:'}).first();
   await northwindCard.getByRole('button', { name: 'Edit model code' }).click();
-  await page.getByRole('textbox', { name: 'Model code' }).fill('CX2');
+  const codeDraft = page.getByRole('textbox', { name: 'Model code' });
+  await codeDraft.fill('CX2');
+  assert.equal(await page.getByText('Next ID preview — not assigned: DRONE-CX2-8').count(),1,'edit preview updates from the draft code');
   await page.getByRole('button', { name: 'Confirm model code change' }).click();
   await page.getByRole('alert').waitFor();
   assert.equal(await page.evaluate(() => window.durableSaves), 1, 'the real durable write helper must reach the API for an ordinary member');
@@ -170,6 +174,15 @@ try {
   const secondConsecutiveSave = await page.evaluate(() => window.durableCalls.filter(call=>call.path==='equipment/products/code')[2].body);
   assert.equal(secondConsecutiveSave.expected_updated_at, 'v3', 'second consecutive edit uses the version returned by the first save without remount');
   assert.equal(await page.getByText('Model code: CX4').count(), 1);
+  await page.evaluate(() => {
+    window.instance.dispose(); window.durableHistoricalKey='historical-code-recovery';
+    const payload={product_id:'prod-1',model_code:'CX2',expected_updated_at:'v1',request_key:window.durableHistoricalKey};
+    localStorage.setItem('workshop-pending:collection:member',JSON.stringify([{key:window.durableHistoricalKey,path:'equipment/products/code',label:'Update model code',subject:'prod-1',at:new Date().toISOString(),intent:payload,identity:'member-session',group_id:'collection',user_id:'member'}]));
+    window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.realWorkshop,()=>{},()=>{}, {entityId:null,drawingId:null,roomId:null});
+  });
+  await page.getByRole('button', { name: 'Check saved code update' }).click();
+  await page.waitForFunction(() => window.durableCalls.filter(call=>call.path==='operation/status').length>=2);
+  assert.equal(await page.getByText('Model code: CX4').count(),1,'a historical receipt cannot overwrite the newer product summary loaded on remount');
   await northwindCard.getByRole('button', { name: 'Edit model code' }).click();
   await page.getByRole('textbox', { name: 'Model code' }).fill('DUP');
   await page.getByRole('button', { name: 'Confirm model code change' }).click();
@@ -190,6 +203,9 @@ try {
   await page.getByRole('heading', { name: 'Could not load this page', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Try loading again' }).click();
   await page.getByRole('heading', { name: 'Equipment ID codes', exact: true }).waitFor();
+  await page.evaluate(() => { window.emptyProductList=true; window.instance.dispose(); window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.realWorkshop,()=>{},()=>{}, {entityId:null,drawingId:null,roomId:null}); });
+  await page.getByText('No equipment products are available yet.').waitFor();
+  await page.evaluate(() => { window.emptyProductList=false; window.instance.dispose(); });
 
   await page.evaluate(() => {
     window.instance.dispose();

@@ -337,6 +337,19 @@ class EquipmentCatalogTests(unittest.TestCase):
         self.assertEqual(1, len(rows))
         self.assertEqual((self.actor, '2S', 'M4P', key), tuple(rows[0]))
 
+    def test_model_code_replay_and_receipt_keep_historical_result_after_later_edit(self):
+        product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
+        first_key = uid()
+        first = self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M4P', product['updated_at'], first_key)
+        second = self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M5P', first['updated_at'], uid())
+        replay = self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M4P', product['updated_at'], first_key)
+        receipt = self.catalog.request_status(self.group, self.actor, first_key)
+        self.assertEqual('M4P', replay['model_code'])
+        self.assertEqual(first['updated_at'], replay['updated_at'])
+        self.assertEqual('M4P', receipt['result']['model_code'])
+        self.assertEqual(first['updated_at'], receipt['result']['updated_at'])
+        self.assertEqual('M5P', second['model_code'])
+
     def test_model_code_update_receipt_is_actor_scoped_and_replayable(self):
         product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
         key = uid()

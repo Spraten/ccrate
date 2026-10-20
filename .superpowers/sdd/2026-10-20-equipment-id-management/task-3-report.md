@@ -55,3 +55,21 @@ Review fix round 1 commit: `89c850027926c9513ae3faec4e947b318e07fcd7 fix: recove
 
 - `node tests/workshop_action_surfaces.browser.mjs` — PASS. Exact output: `PASS Workshop equipment, loan, and cart surfaces use exact unit IDs; permissions gate actions, blocked carts remain plannable with private-note editing, filters persist, and seven-argument mounts remain compatible.`
 - The first run after introducing the second product failed with Playwright strict-mode ambiguity because an unscoped edit-button locator matched both products. Scoped the edit actions to the Northwind product card; the final run above passed.
+
+## Final review fix
+
+- Code-edit POST replay now combines current active-item counts and visible assignments with the saved operation's model code and `updated_at`, so replay after a later edit reports the original result.
+- Workshop receipt recovery and normal/retry responses now merge a saved product summary only when its version is not older than the local row. A historical receipt can confirm an operation without reverting a newer code/version.
+- The tentative preview now renders the complete `TYPE-CODE-N` value on the list and updates from the edit draft as the model code changes. Both previews explicitly retain the “not assigned” label and contention wording.
+- Added explicit empty states for a collection with no available products and a search with no matches.
+- Added regressions for catalog receipt/replay history, API replay after a later edit, stale-receipt recovery, full/draft-sensitive preview, and empty states.
+
+### Final-review verification outputs
+
+- RED, API replay: `PYTHONPATH=ops:kiosk:work/hardware/python python3 -m unittest tests.test_desktop_api_equipment_catalog.EquipmentCatalogApiTests.test_code_edit_replay_returns_saved_summary_after_a_later_edit -v` — failed as expected before the API fix: replay returned `NEW`, expected saved `MID`.
+- RED, list preview: `node tests/workshop_action_surfaces.browser.mjs` — failed as expected before the preview fix: “list preview shows the complete tentative ID”, `0 !== 1`.
+- RED, stale recovery mutation check: temporarily removing the version guard caused the browser assertion “a historical receipt cannot overwrite the newer product summary loaded on remount” to fail (`0 !== 1`). Restored the guard and reran the fixture.
+- GREEN: `node tests/workshop_action_surfaces.browser.mjs` — PASS. Exact output: `PASS Workshop equipment, loan, and cart surfaces use exact unit IDs; permissions gate actions, blocked carts remain plannable with private-note editing, filters persist, and seven-argument mounts remain compatible.`
+- GREEN: `PYTHONPATH=ops:kiosk:work/hardware/python python3 -m unittest discover -s tests -p 'test_equipment_catalog.py' -v` — PASS, 24 tests.
+- GREEN: `PYTHONPATH=ops:kiosk:work/hardware/python python3 -m unittest discover -s tests -p 'test_desktop_api_equipment_catalog.py' -v` — PASS, 30 tests.
+- The existing unrelated dirty fuzzy item-matching changes in `ops/equipment_api.py` were left unstaged; only the model-code replay response hunk is included in this fix.

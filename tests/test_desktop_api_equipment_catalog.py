@@ -492,6 +492,31 @@ class EquipmentCatalogApiTests(unittest.TestCase):
         self.assertEqual('equipment_product_model_code', receipt.result['action'])
         self.assertEqual('NEW', receipt.result['result']['model_code'])
 
+    def test_code_edit_replay_returns_saved_summary_after_a_later_edit(self):
+        product = self.catalog.register_product(self.group, self.actor, ident(), {
+            'entity_type_id': self.kind, 'type_prefix': 'DRONE', 'manufacturer': 'Maker',
+            'model_number': 'Mini 4 Pro', 'model_code': 'OLD',
+        }, [self.item])
+        first_key, second_key = ident(), ident()
+        first_payload = {'product_id': product['id'], 'model_code': 'MID',
+                         'expected_updated_at': product['updated_at'], 'request_key': first_key}
+        first = self.request('equipment/products/code', first_payload)
+        self.assertEqual(200, first.status)
+        second = self.request('equipment/products/code', {
+            'product_id': product['id'], 'model_code': 'NEW',
+            'expected_updated_at': first.result['updated_at'], 'request_key': second_key,
+        })
+        self.assertEqual(200, second.status)
+        replay = self.request('equipment/products/code', first_payload)
+        self.assertEqual(200, replay.status)
+        self.assertEqual('MID', replay.result['model_code'])
+        self.assertEqual(first.result['updated_at'], replay.result['updated_at'])
+        self.assertEqual(1, replay.result['active_item_count'])
+        receipt = self.request('operation/status', {'request_key': first_key})
+        self.assertEqual('MID', receipt.result['result']['model_code'])
+        self.assertEqual(first.result['updated_at'], receipt.result['result']['updated_at'])
+        self.assertEqual('NEW', self.request('equipment/products').result[0]['model_code'])
+
     def test_products_reject_unauthenticated_and_foreign_collection_access(self):
         unauth = self.request('equipment/products', headers={'Cookie': ''})
         self.assertEqual(401, unauth.status)

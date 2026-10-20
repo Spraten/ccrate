@@ -185,8 +185,9 @@ def equipment_product_model_code_post(data, ctx, deps, ApiError):
     updated = catalog.update_product_model_code(ctx['group'], ctx['actor'], product_id,
                                                data.get('model_code'), data.get('expected_updated_at'),
                                                data.get('request_key'))
-    return next(product for product in _product_summaries(catalog, ctx['group'], ctx['client'])
-                if product['id'] == updated['id'])
+    summary = next(product for product in _product_summaries(catalog, ctx['group'], ctx['client'])
+                   if product['id'] == updated['id'])
+    return {**summary, 'model_code': updated['model_code'], 'updated_at': updated['updated_at']}
 
 
 def equipment_catalog_post(route, data, ctx, deps, ApiError, public_entity):
