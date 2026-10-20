@@ -1134,6 +1134,145 @@ def smart_create_form_text(text):
           }
           const photo = form.photos.find(''')
     once('    form.modelCode = "";\n', '    form.modelCode = "";\n    form.serialNumber = "";\n    form.packaging = "";\n    form.customRows = [];\n    suggestions.value = [];\n')
+    return related_create_form_text(text)
+
+def related_create_form_text(text):
+    def once(old, new):
+        nonlocal text
+        if text.count(old) != 1: raise RuntimeError(f'Related create anchor changed: {old[:80]}')
+        text = text.replace(old, new)
+    once('  import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes } from "~/lib/item-create-fields";',
+         '  import { PACKAGING_OPTIONS, createSuggestionLookup, selectSuggestion, validateCustomRows, buildNativeMetadataUpdate, nativeMetadataMatches, persistFieldNotes } from "~/lib/item-create-fields";\n  import { createRelatedItemFlow, relatedItemStorageKey } from "~/lib/item-metadata";')
+    once('  const equipmentWorkshop = useWorkshop();', '''  const equipmentWorkshop = useWorkshop();
+  const stagedRelated = ref<Array<{ name: string; entityTypeId: string; parentId: string; description: string; manufacturer: string; modelNumber: string }>>([]);
+  const relatedIntent = ref<any>(null);
+  const relatedReconcileIds = ref<Record<string, string>>({});
+  let relatedFlow: ReturnType<typeof createRelatedItemFlow> | null = null;
+  let relatedFlowKey = "";
+  async function getRelatedFlow() {
+    const context = await equipmentWorkshop.refresh();
+    const key = relatedItemStorageKey(context);
+    if (!relatedFlow || relatedFlowKey !== key) {
+      const read = () => { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; } };
+      relatedFlow = createRelatedItemFlow({
+        read, write: (value: any) => value ? localStorage.setItem(key, JSON.stringify(value)) : localStorage.removeItem(key),
+        expectedContext: context, context: () => equipmentWorkshop.refresh(),
+        createNative: (item: any) => api.items.create(item),
+        link: (main: string, related: string, requestKey: string) => equipmentWorkshop.request('item-metadata/related/add', { request_key: requestKey, entity_id: main, related_entity_id: related }, context.identity),
+        readLinks: (main: string) => equipmentWorkshop.request(`item-metadata?entity_id=${encodeURIComponent(main)}`),
+      });
+      relatedFlowKey = key;
+    }
+    if (relatedFlow.pending()?.steps.every((step: any) => step.state === 'completed')) relatedFlow.clearCompleted();
+    relatedIntent.value = relatedFlow.pending();
+    return relatedFlow;
+  }
+  function addStagedRelated() {
+    stagedRelated.value.push({ name: "", entityTypeId: selectedEntityType.value?.id || "", parentId: form.location?.id || "", description: "", manufacturer: "", modelNumber: "" });
+  }
+  async function retryRelated(stepKey: string) {
+    try { const flow = await getRelatedFlow(); await flow.retryRelatedStep(stepKey); relatedIntent.value = flow.pending(); }
+    catch (error) { relatedIntent.value = relatedFlow?.pending(); toast.error((error as Error).message); }
+  }
+  async function reconcileRelated(stepKey: string) {
+    const id = relatedReconcileIds.value[stepKey]?.trim();
+    if (!id) return;
+    try {
+      const flow = await getRelatedFlow();
+      const step = flow.pending()?.steps.find((row: any) => row.key === stepKey);
+      const result = await api.items.get(id);
+      if (result.error || !result.data || result.data.id !== id || result.data.entityType?.id !== step?.item?.entityTypeId) throw new Error('This UUID is not the staged related item in this collection.');
+      flow.reconcileRelatedCreate(stepKey, id);
+      relatedIntent.value = flow.pending();
+      delete relatedReconcileIds.value[stepKey];
+    } catch (error) { toast.error((error as Error).message); }
+  }
+  async function resumeRelated() {
+    try { const flow = await getRelatedFlow(); await flow.resumeRelatedSteps(); relatedIntent.value = flow.pending(); }
+    catch (error) { relatedIntent.value = relatedFlow?.pending(); toast.error((error as Error).message); }
+  }''')
+    once('    equipmentFlowContext = null;\n    equipmentIntent.value = null;',
+         '    equipmentFlowContext = null;\n    equipmentIntent.value = null;\n    relatedFlow = null; relatedFlowKey = ""; relatedIntent.value = null;\n    if (activeDialog.value === DialogID.CreateEntity) void getRelatedFlow();')
+    once('      equipmentIntent.value = flow.reconcileCreated(id);',
+         '      equipmentIntent.value = flow.reconcileCreated(id);\n      const related = await getRelatedFlow();\n      if (related.pending()?.steps.length) { related.recordMainCreated(id); relatedIntent.value = related.pending(); }')
+    once('        equipmentCreateFlow = await getEquipmentFlow();\n        equipmentCreateFlow.begin({',
+         '''        equipmentCreateFlow = await getEquipmentFlow();
+        const related = await getRelatedFlow();
+        if (related.pending()?.steps.length) throw new Error('Resolve the pending related items before another main create.');
+        if (stagedRelated.value.some(row => !row.name.trim() || !row.entityTypeId || !row.parentId)) throw new Error('Give each related item a name, type, and location.');
+        for (const row of stagedRelated.value) {
+          related.stageRelated({ ...row, name: row.name.trim(), parentId: row.parentId || null, quantity: 1, tagIds: [] });
+        }
+        equipmentCreateFlow.begin({''')
+    once('        equipmentIntent.value = equipmentCreateFlow.pending();\n      } catch (error)',
+         '''        equipmentIntent.value = equipmentCreateFlow.pending();
+        relatedIntent.value = related.pending();
+      } catch (error)''')
+    once('      } catch (error) { toast.error((error as Error).message || "Resolve the pending equipment create first."); return; }',
+         '''      } catch (error) {
+        if (!equipmentCreateFlow?.pending() && relatedFlow?.pending() && !relatedFlow.pending().main_entity_id) relatedFlow.clearBeforeMain();
+        toast.error((error as Error).message || "Resolve the pending equipment create first."); return;
+      }''')
+    once('      if (equipmentCreateFlow) { equipmentIntent.value = equipmentCreateFlow.markNativeRejected(error); }',
+         '''      if (equipmentCreateFlow) {
+        equipmentIntent.value = equipmentCreateFlow.markNativeRejected(error);
+        if (!equipmentIntent.value && relatedFlow?.pending() && !relatedFlow.pending().main_entity_id) {
+          relatedFlow.clearBeforeMain(); relatedIntent.value = null;
+        }
+      }''')
+    once('        equipmentCreateFlow.recordCreated(data.id);\n        equipmentIntent.value = equipmentCreateFlow.pending();',
+         '''        equipmentCreateFlow.recordCreated(data.id);
+        equipmentIntent.value = equipmentCreateFlow.pending();
+        if (relatedFlow?.pending()?.steps.length) {
+          relatedFlow.recordMainCreated(data.id);
+          relatedIntent.value = relatedFlow.pending();
+        }''')
+    once('    toast.success(\n      t("components.entity.create_modal.toast.create_success", {',
+         '''    if (relatedIntent.value?.steps.length) {
+      try { await (await getRelatedFlow()).resumeRelatedSteps(); relatedIntent.value = relatedFlow?.pending(); }
+      catch (relatedError) {
+        relatedIntent.value = relatedFlow?.pending();
+        loading.value = false;
+        toast.error(`Main item saved; related item needs review: ${(relatedError as Error).message}`);
+        return;
+      }
+    }
+    toast.success(
+      t("components.entity.create_modal.toast.create_success", {''')
+    once('      <section v-if="equipmentIntent"', '''      <section v-if="!selectedEntityType?.isLocation" class="space-y-2" aria-label="Related items">
+        <h3 class="font-medium">Related items</h3>
+        <div v-for="(related, index) in stagedRelated" :key="index" class="space-y-2 rounded border p-2">
+          <label>Related item name <input v-model="related.name" class="w-full rounded border p-1" /></label>
+          <label>Related item type <select v-model="related.entityTypeId" class="w-full rounded border p-1"><option v-for="type in entityTypes.filter(t => !t.isLocation)" :key="type.id" :value="type.id">{{ type.name }}</option></select></label>
+          <label>Related item location <select v-model="related.parentId" class="w-full rounded border p-1"><option value="">No location</option><option v-for="location in locations" :key="location.id" :value="location.id">{{ location.name }}</option></select></label>
+          <label>Related description <input v-model="related.description" class="w-full rounded border p-1" /></label>
+          <label>Related manufacturer <input v-model="related.manufacturer" class="w-full rounded border p-1" /></label>
+          <label>Related model number <input v-model="related.modelNumber" class="w-full rounded border p-1" /></label>
+          <Button type="button" variant="ghost" @click="stagedRelated.splice(index, 1)">Remove related item</Button>
+        </div>
+        <Button type="button" variant="outline" @click="addStagedRelated">Stage related item</Button>
+      </section>
+      <section v-if="relatedIntent?.main_entity_id" class="space-y-2 rounded border p-2" aria-label="Related item recovery">
+        <p>Main item saved: <a :href="`/item/${relatedIntent.main_entity_id}`">Open main item</a></p>
+        <div v-for="step in relatedIntent.steps.filter((row: any) => row.state !== 'completed')" :key="step.key" class="rounded border p-2">
+          <p>{{ step.kind === 'create' ? `Create ${step.item?.name}` : `Link ${step.entity_id || 'related item'}` }}: {{ step.state }}. {{ step.error }}</p>
+          <template v-if="step.kind === 'create' && step.state === 'uncertain'">
+            <input v-model="relatedReconcileIds[step.key]" :aria-label="`Confirmed UUID for ${step.item?.name}`" placeholder="Confirmed Homebox item UUID" />
+            <Button type="button" @click="reconcileRelated(step.key)">Confirm related item</Button>
+          </template>
+          <Button v-if="step.state === 'failed'" type="button" @click="retryRelated(step.key)">Retry this step</Button>
+        </div>
+        <Button v-if="relatedIntent.steps.some((step: any) => step.state === 'pending' || (step.kind === 'link' && step.state === 'uncertain'))" type="button" @click="resumeRelated">Resume related items</Button>
+      </section>
+      <section v-if="equipmentIntent"''')
+    once('    form.customRows = [];\n    suggestions.value = [];\n', '    form.customRows = [];\n    suggestions.value = [];\n    stagedRelated.value = [];\n')
+    once('      equipmentIntent.value = null;\n      toast.success(`Assigned equipment ID ${result.assignment.display_id}.`);',
+         '''      equipmentIntent.value = null;
+      if (relatedFlow?.pending()?.main_entity_id) {
+        await relatedFlow.resumeRelatedSteps();
+        relatedIntent.value = relatedFlow.pending();
+      }
+      toast.success(`Assigned equipment ID ${result.assignment.display_id}.`);''')
     return text
 
 def equipment_catalog_create_frontend():
