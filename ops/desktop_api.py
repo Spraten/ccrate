@@ -23,6 +23,7 @@ from homebox import Homebox, session_cookie
 from ledger import Conflict, timestamp, uuid, UNIDENTIFIED_ACTOR
 from returns import RETURN_STATES, confirm_return, recover
 from item_notes import project_note_history
+from item_metadata import ItemMetadata
 from home_statistics import build_home_statistics
 from workshop import submit_shelf_order
 from workshop_views import build_view, resolve_workshop_code
@@ -73,6 +74,37 @@ def checkout_cart_service(deps):
         if isinstance(deps, dict):
             deps['checkout_cart'] = service
     return service
+
+
+def item_metadata_service(deps):
+    service = optional(deps, 'item_metadata')
+    if service is None:
+        service = ItemMetadata(dependency(deps, 'ledger'))
+        if isinstance(deps, dict): deps['item_metadata'] = service
+    return service
+
+
+def native_item(client, value):
+    try: entity = public_entity(client, value)
+    except urllib.error.HTTPError as error:
+        if error.code in (403, 404): raise ValueError('Choose an item in this collection.') from None
+        raise
+    if entity.get('isLocation') or (entity.get('entityType') or {}).get('isLocation'):
+        raise ValueError('Choose equipment, not a storage location.')
+    return entity
+
+
+def item_metadata_read(ctx, deps, entity_id):
+    entity = native_item(ctx['client'], entity_id)
+    service = item_metadata_service(deps)
+    related = []
+    for target_id in service.related_items(ctx['group'], entity['id']):
+        try:
+            target = native_item(ctx['client'], target_id)
+            related.append({'id': target['id'], 'name': target.get('name', ''), 'unavailable': False})
+        except (ValueError, urllib.error.HTTPError):
+            related.append({'unavailable': True})
+    return {'fieldNotes': service.field_notes(ctx['group'], entity['id']), 'relatedItems': related}
 
 
 def serve_label_asset(handler,root,name,asset_root=None):
@@ -521,6 +553,10 @@ def get_action(route, query, ctx, deps):
         return home_statistics(ctx, deps)
     if route == 'context':
         return {'user': ctx['user'], 'group': ctx['collection'], 'manager': ctx['manager'], 'identity': ctx['identity']}
+    if route == 'item-metadata':
+        values = query.get('entity_id', [])
+        if len(values) != 1 or not values[0]: raise ValueError('Choose one item.')
+        return item_metadata_read(ctx, deps, values[0])
     if route in {'equipment/templates', 'equipment/ids'}:
         return equipment_catalog_get(route, query, ctx, deps, ApiError)
     if route == 'item-actions/status':
@@ -707,6 +743,19 @@ def operation_status(ctx, deps, data):
 def post_action(route, data, ctx, deps, address):
     client, group, actor = ctx['client'], ctx['group'], ctx['actor']
     ledger, jobs, badges = dependency(deps, 'ledger'), dependency(deps, 'native_jobs'), dependency(deps, 'badges')
+    if route == 'item-metadata/field-notes':
+        entity = native_item(client, data.get('entity_id'))
+        return {'fieldNotes': item_metadata_service(deps).save_field_notes(
+            group, actor, entity['id'], data.get('fields'), data.get('request_key'))}
+    if route in ('item-metadata/related/add', 'item-metadata/related/remove'):
+        a = native_item(client, data.get('entity_id'))
+        b = native_item(client, data.get('related_entity_id'))
+        service = item_metadata_service(deps)
+        if route.endswith('/add'):
+            service.add_related(group, actor, a['id'], b['id'], data.get('request_key'))
+        else:
+            service.remove_related(group, actor, a['id'], b['id'], data.get('request_key'))
+        return item_metadata_read(ctx, deps, a['id'])
     if route.startswith('item-actions/'):
         service = dependency(deps, 'web_item_actions')
         if route == 'item-actions/verify-badge':
