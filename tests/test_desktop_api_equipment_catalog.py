@@ -152,6 +152,34 @@ class EquipmentCatalogApiTests(unittest.TestCase):
         other = self.catalog.list_templates(ident())
         self.assertEqual([], other)
 
+    def test_saved_templates_survive_catalog_reopen_and_remain_readable_through_api(self):
+        active = self.request('equipment/templates/save', {
+            'request_key': ident(), 'fields': self.template_fields(name='Retained drone')
+        })
+        archived = self.request('equipment/templates/save', {
+            'request_key': ident(), 'fields': self.template_fields(name='Archived drone', model_code='OLD')
+        })
+        self.assertEqual(200, active.status)
+        self.assertEqual(200, archived.status)
+        self.assertEqual(200, self.request('equipment/templates/archive', {
+            'request_key': ident(), 'template_id': archived.result['id']
+        }).status)
+
+        # A fresh catalog reads the same temporary database after the frontend changes.
+        self.catalog = EquipmentCatalog(Ledger(self.root / 'ledger.db'))
+        self.deps['equipment_catalog'] = self.catalog
+        listing = self.request('equipment/templates')
+        all_records = self.request('equipment/templates?include_archived=true')
+        self.assertEqual(200, listing.status)
+        self.assertEqual(200, all_records.status)
+        self.assertEqual([active.result['id']], [row['id'] for row in listing.result])
+        self.assertEqual({active.result['id'], archived.result['id']}, {row['id'] for row in all_records.result})
+        self.assertEqual('Retained drone', listing.result[0]['name'])
+        self.assertEqual('M4P', listing.result[0]['model_code'])
+        self.assertTrue(next(row for row in all_records.result if row['id'] == archived.result['id'])['archived'])
+        self.assertEqual(['saved'], [row['action'] for row in self.catalog.template_history(self.group, active.result['id'])])
+        self.assertEqual(['saved', 'archived'], [row['action'] for row in self.catalog.template_history(self.group, archived.result['id'])])
+
     def test_template_routes_reject_unknown_members_and_per_unit_fields(self):
         bad = self.request('equipment/templates/save', {'request_key': ident(), 'fields': self.template_fields(serial_number='no')})
         self.assertEqual(400, bad.status)

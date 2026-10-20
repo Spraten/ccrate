@@ -351,6 +351,38 @@ class HomeboxUiBuilderTests(unittest.TestCase):
             self.assertIn('@keydown="moveByKeyboard"', component)
             self.assertIn('window.addEventListener("resize", clampPosition)', component)
 
+    def test_generated_create_keeps_one_global_ocr_launcher_and_id_assignment_without_template_controls(self):
+        """Exercise the complete builder against a disposable pinned source fixture."""
+        import homebox_patchset
+
+        source = ROOT.parents[1] / "work/homebox-source-patched"
+        if not (source / "frontend/components/Entity/CreateModal.vue").is_file():
+            self.skipTest("pinned patched Homebox source fixture is unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            previous_build = BUILDER.BUILD
+            previous_materialize = homebox_patchset.materialize
+            build = pathlib.Path(directory) / "generated"
+            BUILDER.BUILD = build
+            homebox_patchset.materialize = lambda _root: source
+            try:
+                BUILDER.prepare()
+            finally:
+                BUILDER.BUILD = previous_build
+                homebox_patchset.materialize = previous_materialize
+
+            layout = (build / "layouts/default.vue").read_text()
+            modal = (build / "components/Entity/CreateModal.vue").read_text()
+            self.assertEqual(layout.count('<OcrPopover :launcher-target="orcLauncherTarget" />'), 1)
+            self.assertEqual((layout + modal).count("<OcrPopover"), 1)
+            self.assertIn('orcActiveDialog.value === DialogID.CreateEntity ? "#orc-launcher-create"', layout)
+            self.assertEqual(modal.count('id="orc-launcher-create"'), 1)
+            self.assertNotIn("<TemplateSelector", modal)
+            self.assertNotIn("<EquipmentTemplatePanel", modal)
+            self.assertNotIn("templateData", modal)
+            self.assertNotIn('to: "/templates"', layout)
+            self.assertIn("assignCreatedEquipment(equipmentWorkshop, intent)", modal)
+            self.assertIn("await equipmentCreateFlow.resumeAssignment()", modal)
+
     def test_prepare_api_test_rewrite_is_idempotent_when_first_fixture_is_already_patched(self):
         source = '''    const { displayId: omittedItemDisplayID, shortCode: omittedItemShortCode, ...itemForUpdate } = item;
     void omittedItemDisplayID;
