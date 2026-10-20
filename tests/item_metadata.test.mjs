@@ -12,6 +12,8 @@ function fixture() {
   let linkResult = null;
   let readResult = { relatedItems: [] };
   let currentContext = context;
+  let afterLink = null;
+  let afterRead = null;
   let sequence = 0;
   const flow = createRelatedItemFlow({
     read: () => structuredClone(stored),
@@ -19,11 +21,11 @@ function fixture() {
     context: async () => currentContext,
     expectedContext: context,
     createNative: async item => { calls.push(['create', item]); return createResults?.length ? createResults.shift() : createResult; },
-    link: async (main, related, key) => { calls.push(['link', main, related, key]); return linkResult || { relatedItems: [related] }; },
-    readLinks: async main => { calls.push(['read', main]); return readResult; },
+    link: async (main, related, key) => { calls.push(['link', main, related, key]); if (afterLink) afterLink(); return linkResult || { relatedItems: [related] }; },
+    readLinks: async main => { calls.push(['read', main]); if (afterRead) afterRead(); return readResult; },
     keyFactory: () => `key-${++sequence}`,
   });
-  return { flow, calls, get stored() { return stored; }, set createResult(value) { createResult = value; }, set createResults(value) { createResults = value; }, set linkResult(value) { linkResult = value; }, set readResult(value) { readResult = value; }, set currentContext(value) { currentContext = value; } };
+  return { flow, calls, get stored() { return stored; }, set createResult(value) { createResult = value; }, set createResults(value) { createResults = value; }, set linkResult(value) { linkResult = value; }, set readResult(value) { readResult = value; }, set currentContext(value) { currentContext = value; }, set afterLink(value) { afterLink = value; }, set afterRead(value) { afterRead = value; } };
 }
 
 test('related native create waits for confirmed main and keeps an editable location', async () => {
@@ -129,4 +131,26 @@ test('retry of one failed create leaves later pending creates untouched', async 
   await f.flow.retryRelatedStep(second);
   assert.equal(f.calls.filter(call => call[0] === 'create').length, 3);
   assert.equal(f.flow.pending().steps.find(step => step.item?.name === 'Controller').state, 'pending');
+});
+
+test('identity change after first link prevents the next related native create', async () => {
+  const f = fixture();
+  f.flow.stageRelated({ name: 'Battery', entityTypeId: 'type-a', parentId: null });
+  f.flow.stageRelated({ name: 'Case', entityTypeId: 'type-a', parentId: null });
+  f.flow.recordMainCreated('main-a');
+  f.afterLink = () => { f.currentContext = { ...context, group: { id: 'collection-b' } }; };
+  await assert.rejects(() => f.flow.resumeRelatedSteps(), /account or collection changed/i);
+  assert.deepEqual(f.calls.map(call => call[0]), ['create', 'link']);
+  assert.equal(f.flow.pending().steps.find(step => step.item?.name === 'Case').state, 'pending');
+});
+
+test('identity change during link reconciliation prevents link replay', async () => {
+  const f = fixture();
+  f.flow.stageRelated({ name: 'Battery', entityTypeId: 'type-a', parentId: null });
+  f.flow.recordMainCreated('main-a');
+  f.linkResult = { error: new Error('lost link response') };
+  await assert.rejects(() => f.flow.resumeRelatedSteps(), /lost link response/);
+  f.afterRead = () => { f.currentContext = { ...context, identity: 'session-b' }; };
+  await assert.rejects(() => f.flow.resumeRelatedSteps(), /account or collection changed/i);
+  assert.deepEqual(f.calls.map(call => call[0]), ['create', 'link', 'read']);
 });

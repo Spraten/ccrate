@@ -86,6 +86,7 @@ export function createRelatedItemFlow({ read, write, context, createNative, link
       for (const step of record.steps) {
         if (onlyKeys && !onlyKeys.has(step.key)) continue;
         if (step.state === 'completed') continue;
+        await checkIdentity(record);
         if (step.kind === 'create') {
           if (step.state === 'uncertain') throw new Error(`Related item “${step.item.name}” has an uncertain create. Reconcile its UUID before retrying.`);
           if (step.state === 'failed') throw new Error(`Related item “${step.item.name}” failed: ${step.error || 'review and retry this step'}`);
@@ -114,6 +115,7 @@ export function createRelatedItemFlow({ read, write, context, createNative, link
             const current = await readLinks(record.main_entity_id);
             if (linked(current, step.entity_id)) { step.state = 'completed'; step.error = undefined; save(record); continue; }
           }
+          await checkIdentity(record);
           step.state = 'uncertain'; save(record);
           try {
             const result = await link(record.main_entity_id, step.entity_id, step.request_key);

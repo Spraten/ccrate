@@ -1199,7 +1199,6 @@ def related_create_form_text(text):
          '''        equipmentCreateFlow = await getEquipmentFlow();
         const related = await getRelatedFlow();
         if (related.pending()?.steps.length) throw new Error('Resolve the pending related items before another main create.');
-        if (stagedRelated.value.some(row => !row.name.trim() || !row.entityTypeId || !row.parentId)) throw new Error('Give each related item a name, type, and location.');
         for (const row of stagedRelated.value) {
           related.stageRelated({ ...row, name: row.name.trim(), parentId: row.parentId || null, quantity: 1, tagIds: [] });
         }
