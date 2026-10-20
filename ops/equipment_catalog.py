@@ -290,6 +290,21 @@ class EquipmentCatalog:
             self._save_request(db, group, key, 'product_model_code', digest, product_id, result)
             return result
 
+    def request_status(self, group_id: str, actor_id: str, request_key: str, *, manager: bool = False) -> dict | None:
+        group, actor, key = uuid(group_id), uuid(actor_id), uuid(request_key)
+        with self.ledger.connection() as db:
+            row = db.execute('''SELECT r.action,r.result_id,r.result_json,h.actor_id
+                FROM equipment_catalog_requests r
+                LEFT JOIN equipment_product_model_code_history h
+                  ON h.group_id=r.group_id AND h.request_key=r.request_key
+                WHERE r.group_id=? AND r.request_key=?''', (group, key)).fetchone()
+        if not row or row['action'] != 'product_model_code' or not row['actor_id']:
+            return None
+        if row['actor_id'] != actor and not manager:
+            return {'status': 'not_started'}
+        return {'id': row['result_id'], 'status': 'completed', 'action': 'equipment_product_model_code',
+                'result': json.loads(row['result_json'])}
+
     def current_product_model_code(self, group_id: str, product_id: str) -> str | None:
         with self.ledger.connection() as db:
             row = db.execute('SELECT model_code FROM equipment_products WHERE group_id=? AND id=?',

@@ -693,6 +693,9 @@ def operation_status(ctx, deps, data):
     cart_receipt = checkout_cart_service(deps).request_status(group, ctx['actor'], key)
     if cart_receipt is not None:
         return cart_receipt
+    catalog_receipt = equipment_catalog_service(deps).request_status(group, ctx['actor'], key, manager=ctx['manager'])
+    if catalog_receipt is not None:
+        return catalog_receipt
     checks = optional(deps, 'shelf_checks')
     if checks is not None:
         with ledger.connection() as db:

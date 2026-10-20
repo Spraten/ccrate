@@ -88,17 +88,20 @@ export function useWorkshop() {
     const storageKey = pendingKey(expected);
     try {
       const current = await refresh();
-      if (current.identity !== expected.identity || !current.manager) throw new Error("Your account, collection or management access changed. Reload before confirming.");
+      const memberCodeWrite = path === "equipment/products/code";
+      if (current.identity !== expected.identity || (!current.manager && !memberCodeWrite)) throw new Error("Your account, collection or management access changed. Reload before confirming.");
+      const existingCodeIntent = memberCodeWrite ? pending().find(row => row.path === path && row.subject === subject && row.key === key) : undefined;
+      if (existingCodeIntent && JSON.stringify(existingCodeIntent.intent) !== JSON.stringify(intent)) throw new Error("This saved code edit differs from the confirmed request. Check its saved result first.");
       const badgePrint = (value: string) => ["badges/print", "badges/reprint"].includes(value);
-      if (pending().some(row => row.subject === subject && (row.path === path || (badgePrint(row.path) && badgePrint(path))))) throw new Error("This action has an unconfirmed result. Check Recovery before trying again.");
+      if (pending().some(row => row.subject === subject && (row.path === path || (badgePrint(row.path) && badgePrint(path))) && !(memberCodeWrite && row.key === key))) throw new Error("This action has an unconfirmed result. Check Recovery before trying again.");
       const pendingAction: PendingAction = { key, path, label, subject, at: new Date().toISOString() };
-      if (path === "workshop/save" || path === "labels/templates/save") Object.assign(pendingAction, {
+      if (path === "workshop/save" || path === "labels/templates/save" || memberCodeWrite) Object.assign(pendingAction, {
         intent, identity: expected.identity, group_id: expected.group.id, user_id: expected.user.id,
       });
       if (path.startsWith("workshop/checks/")) Object.assign(pendingAction, {
         identity: expected.identity, group_id: expected.group.id, user_id: expected.user.id,
       });
-      localStorage.setItem(storageKey, JSON.stringify([...pending(), pendingAction]));
+      if (!existingCodeIntent) localStorage.setItem(storageKey, JSON.stringify([...pending(), pendingAction]));
       sent = true;
       const result = await request<T>(path, intent, expected.identity);
       const rows: PendingAction[] = JSON.parse(localStorage.getItem(storageKey) || "[]");

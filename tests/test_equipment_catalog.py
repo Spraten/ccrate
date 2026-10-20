@@ -337,6 +337,16 @@ class EquipmentCatalogTests(unittest.TestCase):
         self.assertEqual(1, len(rows))
         self.assertEqual((self.actor, '2S', 'M4P', key), tuple(rows[0]))
 
+    def test_model_code_update_receipt_is_actor_scoped_and_replayable(self):
+        product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
+        key = uid()
+        saved = self.catalog.update_product_model_code(self.group, self.actor, product['id'], 'M4P', product['updated_at'], key)
+        receipt = self.catalog.request_status(self.group, self.actor, key)
+        self.assertEqual({'id': product['id'], 'status': 'completed', 'action': 'equipment_product_model_code', 'result': saved}, receipt)
+        self.assertEqual({'status': 'not_started'}, self.catalog.request_status(self.group, uid(), key))
+        self.assertEqual(receipt, self.catalog.request_status(self.group, uid(), key, manager=True))
+        self.assertIsNone(self.catalog.request_status(uid(), self.actor, key))
+
     def test_register_product_refuses_to_change_code_for_existing_identity(self):
         product = self.catalog.register_product(self.group, self.actor, uid(), self.product, [])
         with self.assertRaises(Conflict):

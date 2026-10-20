@@ -474,9 +474,10 @@ class EquipmentCatalogApiTests(unittest.TestCase):
         self.assertEqual(1, listed.result[0]['active_item_count'])
         self.assertEqual([], listed.result[0]['assignments'])
         self.assertEqual(product['updated_at'], listed.result[0]['updated_at'])
+        code_edit_key = ident()
         updated = self.request('equipment/products/code', {
             'product_id': product['id'], 'model_code': 'NEW', 'expected_updated_at': product['updated_at'],
-            'request_key': ident(),
+            'request_key': code_edit_key,
         }, headers=headers)
         self.assertEqual(200, updated.status)
         self.assertEqual('NEW', updated.result['model_code'])
@@ -485,6 +486,11 @@ class EquipmentCatalogApiTests(unittest.TestCase):
             history = db.execute('SELECT actor_id FROM equipment_product_model_code_history WHERE group_id=? AND product_id=?',
                                  (self.group, product['id'])).fetchone()
         self.assertEqual(self.member, history['actor_id'])
+        receipt = self.request('operation/status', {'request_key': code_edit_key}, headers=headers)
+        self.assertEqual(200, receipt.status)
+        self.assertEqual('completed', receipt.result['status'])
+        self.assertEqual('equipment_product_model_code', receipt.result['action'])
+        self.assertEqual('NEW', receipt.result['result']['model_code'])
 
     def test_products_reject_unauthenticated_and_foreign_collection_access(self):
         unauth = self.request('equipment/products', headers={'Cookie': ''})

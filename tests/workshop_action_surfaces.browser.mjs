@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium } from '../work/homebox-ui-dev/node_modules/.pnpm/@playwright+test@1.60.0/node_modules/@playwright/test/index.mjs';
+import { transform } from '../work/homebox-ui-dev/node_modules/.pnpm/esbuild@0.27.7/node_modules/esbuild/lib/main.js';
 
 const root = new URL('..', import.meta.url);
 const read = async path => readFile(new URL(path, root), 'utf8');
@@ -14,6 +15,12 @@ const source = (await read('homebox-ui/overlay/lib/workshop-tools.js'))
   .replace('import { labelPrintFailure, labelReviewCanPrint, pendingLabelPrint, submitReviewedLabel, applyLabelPreview } from "./label-print-recovery.js";\n', recovery + '\n')
   .replace('export function mountWorkshopTools', 'function mountWorkshopTools')
   + '\nwindow.mountWorkshopTools=mountWorkshopTools;';
+const workshopUUID = (await read('homebox-ui/overlay/lib/workshop-uuid.js')).replace(/^export function /, 'function ');
+const composableSource = (await read('homebox-ui/overlay/composables/use-workshop.ts'))
+  .replace('export { workshopUUID } from "~/lib/workshop-uuid";\nimport { workshopUUID } from "~/lib/workshop-uuid";', workshopUUID)
+  .replace('export function useWorkshop()', 'function useWorkshop()')
+  + '\nwindow.useWorkshop=useWorkshop;';
+const durableWorkshopSource = (await transform(composableSource, { loader: 'ts', format: 'iife', target: 'es2020' })).code;
 
 const browser = await chromium.launch({ headless: true, executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
 try {
@@ -98,33 +105,73 @@ try {
   assert.equal(await page.getByLabel('Search equipment').inputValue(), 'Camera bin 20');
   assert.deepEqual(await page.evaluate(() => window.navigation), []);
 
+  await page.evaluate(() => { window.originalRequestBeforeProducts=window.fixtureWorkshop.request; window.instance.dispose(); });
+  await page.addScriptTag({ content: durableWorkshopSource });
   await page.evaluate(() => {
-    window.instance.dispose();
-    window.originalRequestBeforeProducts = window.fixtureWorkshop.request;
-    window.fixtureWorkshop.write = async (path, body) => { window.requests.push([path, body]); if(window.failCodeSave) throw new Error('fixture save failure'); return { model_code: body.model_code, updated_at: 'v2' }; };
-    window.fixtureWorkshop.request = async (path, body) => {
-      if (path === 'equipment/products') return [{ id: 'prod-1', manufacturer: 'Northwind', model_number: 'Cam-X', model_code: 'CX', updated_at: 'v1', next_number: 8, active_item_count: 2, active_assigned_count: 1, assignments: [{ entity_id: 'item-1', display_id: 'CX-0007' }] }];
-      if (path === 'equipment/products/code') { window.codeWrite = body; if(window.failCodeSave) throw new Error('fixture save failure'); return { model_code: body.model_code, updated_at: 'v2' }; }
-      return {};
+    const memoryStorage=new Map();Object.defineProperty(window,'localStorage',{configurable:true,value:{getItem:key=>memoryStorage.get(key)||null,setItem:(key,value)=>memoryStorage.set(key,String(value)),removeItem:key=>memoryStorage.delete(key)}});
+    const states = new Map(); window.useState = (key, init) => { if(!states.has(key)) states.set(key,{value:init()}); return states.get(key); };
+    window.useCollections = () => ({selectedId:{value:'collection'}});
+    window.useAuthContext = () => ({user:{id:'member',defaultGroupId:'collection'},invalidateSession(){}});
+    window.computed = fn => ({get value(){return fn()}});
+    window.durableCalls=[]; window.durableSaves=0; window.durableProduct={id:'prod-1',manufacturer:'Northwind',model_number:'Cam-X',model_code:'CX',updated_at:'v1',next_number:8,active_item_count:2,active_assigned_count:1,assignments:[{entity_id:'item-1',display_id:'CX-0007'}]};
+    window.durableContext={user:{id:'member',name:'Member'},group:{id:'collection',name:'Collection'},identity:'member-session',manager:false};
+    window.fetch=async(url,options={})=>{
+      const path=url.replace('/workshop-api/',''); window.durableCalls.push({path,body:options.body?JSON.parse(options.body):null});
+      const ok=(value,status=200)=>({ok:status<400,status,json:async()=>value});
+      if(path==='context') return ok({...window.durableContext});
+      if(path==='equipment/products') { if(window.durableLoadFail){window.durableLoadFail=false;return ok({error:'fixture load failure'},503)} return ok([structuredClone(window.durableProduct)]); }
+      if(path==='operation/status') { const key=JSON.parse(options.body).request_key; return ok(key===window.durableConflictKey||key===window.durableNoStartKey?{status:'not_started'}:{status:'completed',action:'equipment_product_model_code',result:structuredClone(window.durableProduct)}); }
+      if(path==='equipment/products/code') { const payload=JSON.parse(options.body); if(payload.model_code==='DUP'){window.durableConflictKey=payload.request_key;return ok({error:'Model code conflicts with another product'},409)} window.durableSaves++; window.durableProduct={...window.durableProduct,model_code:payload.model_code,updated_at:'v'+(window.durableSaves+1)}; if(window.durableSaves===1) throw new Error('fixture lost committed response'); return ok(structuredClone(window.durableProduct)); }
+      return ok({});
     };
-    window.instance = window.mountWorkshopTools(document.querySelector('#root'), 'equipment-ids', window.fixtureWorkshop, () => {}, () => {}, { entityId: null, drawingId: null, roomId: null });
+    window.realWorkshop=window.useWorkshop(); window.realWorkshop.context.value=structuredClone(window.durableContext);
+    window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.realWorkshop,()=>{},()=>{}, {entityId:null,drawingId:null,roomId:null});
   });
+  await page.addScriptTag({ content: durableWorkshopSource });
   await page.getByRole('heading', { name: 'Equipment ID codes', exact: true }).waitFor();
-  await page.getByText('Next ID preview — not assigned: 8').waitFor();
-  await page.getByText('Another assignment may use this number first.').waitFor();
-  await page.getByText('Assigned items', { exact: true }).click();
-  await page.getByRole('link', { name: 'item-1 · CX-0007' }).waitFor();
+  await page.getByLabel('Search by model, model code, or assigned ID').fill('CX-0007');
+  assert.equal(await page.locator('button').filter({hasText:'Edit model code'}).count(),1,'assigned ID search narrows products');
+  await page.getByLabel('Search by model, model code, or assigned ID').fill('');
   await page.getByRole('button', { name: 'Edit model code' }).click();
   await page.getByRole('textbox', { name: 'Model code' }).fill('CX2');
-  await page.getByText('Only future IDs change. Assigned IDs remain unchanged.').waitFor();
-  await page.evaluate(() => window.failCodeSave = true);
   await page.getByRole('button', { name: 'Confirm model code change' }).click();
-  await page.getByRole('alert').filter({hasText:'fixture save failure'}).waitFor();
-  assert.equal(await page.getByRole('textbox', { name: 'Model code' }).inputValue(), 'CX2', 'save failure preserves edit draft');
-  await page.evaluate(() => window.failCodeSave = false);
+  await page.getByRole('alert').waitFor();
+  assert.equal(await page.evaluate(() => window.durableSaves), 1, 'the real durable write helper must reach the API for an ordinary member');
+  const pendingCodeEdit = await page.evaluate(() => JSON.parse(localStorage.getItem('workshop-pending:collection:member')||'[]')[0]);
+  assert.ok(pendingCodeEdit?.key, 'the real helper records the uncertain request key');
+  assert.deepEqual(pendingCodeEdit.intent, {product_id:'prod-1',model_code:'CX2',expected_updated_at:'v1',request_key:pendingCodeEdit.key});
+  await page.evaluate(() => { window.instance.dispose(); window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.realWorkshop,()=>{},()=>{}, {entityId:null,drawingId:null,roomId:null}); });
+  await page.getByRole('button', { name: 'Check saved code update' }).click();
+  await page.waitForFunction(() => window.durableCalls.some(call=>call.path==='operation/status'));
+  assert.equal(await page.evaluate(key=>window.durableCalls.find(call=>call.path==='operation/status')?.body?.request_key===key,pendingCodeEdit.key),true,'status lookup reuses the original request identity');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('workshop-pending:collection:member')||'[]').length), 0, 'receipt reconciliation clears the original pending key after a remount');
+  await page.getByRole('button', { name: 'Edit model code' }).click();
+  await page.getByRole('textbox', { name: 'Model code' }).fill('CX3');
   await page.getByRole('button', { name: 'Confirm model code change' }).click();
-  await page.waitForFunction(() => { const body=window.requests.at(-1)?.[1]; return body?.expected_updated_at === 'v1' && body?.request_key; });
-  assert.equal(await page.getByText('Next ID preview — not assigned: 8').count(), 1);
+  await page.waitForFunction(() => window.durableCalls.filter(call=>call.path==='equipment/products/code').length===2);
+  const secondSave = await page.evaluate(() => window.durableCalls.filter(call=>call.path==='equipment/products/code')[1].body);
+  assert.equal(secondSave.expected_updated_at, 'v2', 'a successful edit advances the expected version for the next edit');
+  assert.equal(await page.getByText('Model code: CX3').count(), 1);
+  await page.getByRole('button', { name: 'Edit model code' }).click();
+  await page.getByRole('textbox', { name: 'Model code' }).fill('DUP');
+  await page.getByRole('button', { name: 'Confirm model code change' }).click();
+  await page.getByRole('alert').filter({hasText:'Model code conflicts with another product'}).waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Model code' }).inputValue(), 'DUP', 'typed conflicts preserve the draft');
+  await page.evaluate(() => {
+    window.instance.dispose(); window.durableNoStartKey='stable-code-retry';
+    const payload={product_id:'prod-1',model_code:'CX4',expected_updated_at:'v3',request_key:window.durableNoStartKey};
+    localStorage.setItem('workshop-pending:collection:member',JSON.stringify([{key:window.durableNoStartKey,path:'equipment/products/code',label:'Update model code',subject:'prod-1',at:new Date().toISOString(),intent:payload,identity:'member-session',group_id:'collection',user_id:'member'}]));
+    window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.realWorkshop,()=>{},()=>{}, {entityId:null,drawingId:null,roomId:null});
+  });
+  await page.getByRole('button', { name: 'Check saved code update' }).click();
+  await page.getByRole('button', { name: 'Retry same code edit' }).click();
+  await page.waitForFunction(() => window.durableProduct.model_code==='CX4');
+  const retryRequests=await page.evaluate(()=>window.durableCalls.filter(call=>call.path==='equipment/products/code').map(call=>call.body));
+  assert.equal(retryRequests.at(-1).request_key,'stable-code-retry','a safe retry reuses the saved request key');
+  await page.evaluate(() => { window.durableLoadFail=true; window.instance.dispose(); window.instance=window.mountWorkshopTools(document.querySelector('#root'),'equipment-ids',window.realWorkshop,()=>{},()=>{}, {entityId:null,drawingId:null,roomId:null}); });
+  await page.getByRole('heading', { name: 'Could not load this page', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Try loading again' }).click();
+  await page.getByRole('heading', { name: 'Equipment ID codes', exact: true }).waitFor();
 
   await page.evaluate(() => {
     window.instance.dispose();
