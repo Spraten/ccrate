@@ -1,5 +1,14 @@
 const fold = value => String(value ?? '').trim().replace(/\s+/gu, ' ').toLocaleLowerCase();
 
+/** Match custom field labels and values within already-projected native records. */
+export function matchInventoryCustomFields(items = [], query = '') {
+  const needle = fold(query);
+  if (!needle) return [];
+  return items.filter(item => (Array.isArray(item.fields) ? item.fields : []).some(field =>
+    fold(field?.name || field?.label).includes(needle) || fold(field?.value).includes(needle)
+  ));
+}
+
 function groupTag(item) {
   const tag = (item.tags || []).find(value => typeof value?.name === 'string' && value.name.toLocaleLowerCase().startsWith('c-crate product group: '));
   return tag?.name.slice('C-Crate Product group: '.length).trim() || '';

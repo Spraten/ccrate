@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fetchAssignedDisplayIds, projectAssignedDisplayIds, resolveAssignedIdAfterNativeMiss } from '../homebox-ui/overlay/lib/equipment-search.js';
+import { matchInventoryCustomFields } from '../homebox-ui/overlay/lib/child-item-groups.js';
+
+test('custom field search matches names and values only among projected native items', () => {
+  const loaded = [
+    { id: 'loaded-1', fields: [{ name: 'Tracking code', value: 'ZX-42' }] },
+    { id: 'loaded-2', fields: [{ name: 'Barcode', value: '12345' }] },
+  ];
+  const collectionRows = [...loaded, { id: 'hidden', fields: [{ name: 'Barcode', value: 'ZX-42' }] }];
+  assert.deepEqual(matchInventoryCustomFields(loaded, 'ZX-42').map(item => item.id), ['loaded-1']);
+  assert.deepEqual(matchInventoryCustomFields(loaded, 'barcode').map(item => item.id), ['loaded-2']);
+  assert.deepEqual(matchInventoryCustomFields(loaded, 'ZX-42', collectionRows).map(item => item.id), ['loaded-1']);
+});
 
 test('assigned ID projection overrides only assigned rows and preserves legacy native IDs', () => {
   const assigned = { id: 'native-1', displayId: 'HB-104' };

@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import tempfile
 import unittest
 from pathlib import Path
@@ -72,6 +73,7 @@ class EquipmentSearchBuilderTests(unittest.TestCase):
             self.assertIn('q: searchedQuery || ""', search)
             self.assertIn('if (revision !== searchRevision || searchedQuery !== query.value) return;', search)
             self.assertIn('projectAssignedDisplayIds(data.items, assignmentMap)', search)
+            self.assertIn('matchInventoryCustomFields', search)
             self.assertIn('equipment/ids?entity_ids=', detail)
             self.assertIn('effectiveDisplayId', detail)
             self.assertIn('item.value?.displayId', detail)  # Native legacy fallback.
@@ -79,6 +81,12 @@ class EquipmentSearchBuilderTests(unittest.TestCase):
             self.assertIn('"displayId", "thumbnail", "equipmentStatus", "location", "name"', table)
             self.assertNotIn('"insured"', table)
             self.assertNotIn('"purchasePrice"', table)
+
+    def test_inventory_search_projection_matches_custom_fields_on_projected_records(self):
+        projection = inspect.getsource(builder.grouped_inventory_frontend)
+        self.assertIn('matchInventoryCustomFields(projected, searchedQuery)', projection)
+        self.assertIn('const projected = projectAssignedDisplayIds(enriched, assignmentMap);', projection)
+        self.assertIn('equipmentRows = fullRows || [];', projection)
 
 
 if __name__ == '__main__':

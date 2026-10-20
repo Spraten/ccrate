@@ -167,7 +167,7 @@ def equipment_assigned_ids_frontend():
         target.write_text(text.replace(old, new))
 
     once('pages/items.vue', '  import type { LocationQueryRaw } from "vue-router";',
-         '  import type { LocationQueryRaw } from "vue-router";\n  import { fetchAssignedDisplayIds, projectAssignedDisplayIds, resolveAssignedIdAfterNativeMiss } from "@/lib/equipment-search.js";')
+         '  import type { LocationQueryRaw } from "vue-router";\n  import { fetchAssignedDisplayIds, projectAssignedDisplayIds, resolveAssignedIdAfterNativeMiss } from "@/lib/equipment-search.js";\n  import { matchInventoryCustomFields } from "@/lib/child-item-groups.js";')
     once('pages/items.vue', '  const api = useUserApi();', '  const api = useUserApi();\n  const equipmentWorkshop = useWorkshop();\n  let searchRevision = 0;')
     once('pages/items.vue', '''  async function search() {
     if (searchLocked.value) {
@@ -469,6 +469,7 @@ def grouped_inventory_frontend():
     if (normalizedQuery) for (const item of projected) {
       if (String(item.displayId || "").toLocaleLowerCase().includes(normalizedQuery)) matchingEntityIds.add(item.id);
     }
+    if (normalizedQuery) for (const item of matchInventoryCustomFields(projected, searchedQuery)) matchingEntityIds.add(item.id);
     const managementMatches = projected.filter((item: any) => matchingEntityIds.has(item.id));
     const locationById = [...equipmentRows, ...locationRows];
     const storagePath = (item: any) => buildInventoryStoragePath(item, locationById);
