@@ -22,6 +22,7 @@ class ItemMetadataTests(unittest.TestCase):
         self.assertEqual({'serial number':'Sticker on base'}, self.store.field_notes(self.group, self.a))
         self.store.save_field_notes(self.group, self.actor, self.a, fields, key)
         with self.assertRaises(ValueError): self.store.save_field_notes(self.group,self.actor,self.a,[{'name':'x','note':'1'},{'name':' X ','note':'2'}],ident())
+        with self.assertRaises(ValueError): self.store.save_field_notes(self.group,self.actor,self.a,[{'name':'x','note':''},{'name':' X ','note':'2'}],ident())
     def test_relations_are_symmetric_idempotent_and_removable(self):
         key=ident(); self.store.add_related(self.group,self.actor,self.a,self.b,key)
         self.store.add_related(self.group,self.actor,self.b,self.a,key)

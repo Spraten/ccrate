@@ -38,5 +38,20 @@ class ItemMetadataApiTests(unittest.TestCase):
             response=self.request('item-metadata/field-notes', {'request_key':ident(),'entity_id':entity,'fields':[]})
             self.assertEqual(400,response.status)
 
+    def test_foreign_collection_item_rejected_for_get_and_both_write_endpoints(self):
+        foreign, other_group = ident(), ident()
+        self.entities[foreign] = {'id':foreign,'name':'Foreign equipment','entityType':{'isLocation':False}}
+        self.entity_collections[foreign] = other_group
+        get = self.request('item-metadata?entity_id='+foreign)
+        self.assertEqual(400, get.status)
+        note = self.request('item-metadata/field-notes', {'request_key':ident(),'entity_id':foreign,'fields':[{'name':'secret','note':'must not persist'}]})
+        self.assertEqual(400, note.status)
+        add = self.request('item-metadata/related/add', {'request_key':ident(),'entity_id':self.item,'related_entity_id':foreign})
+        self.assertEqual(400, add.status)
+        remove = self.request('item-metadata/related/remove', {'request_key':ident(),'entity_id':self.item,'related_entity_id':foreign})
+        self.assertEqual(400, remove.status)
+        self.assertEqual({}, api.item_metadata_service(self.deps).field_notes(self.group, self.item))
+        self.assertEqual([], api.item_metadata_service(self.deps).related_items(self.group, self.item))
+
 
 if __name__ == '__main__': unittest.main()

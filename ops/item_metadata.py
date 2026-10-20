@@ -48,7 +48,7 @@ class ItemMetadata:
         group, actor, entity = uuid(group_id), uuid(actor_id), uuid(entity_id)
         if not isinstance(fields, list) or len(fields) > 100:
             raise ValueError('Provide up to 100 field notes.')
-        normalized = {}
+        normalized, seen = {}, set()
         for entry in fields:
             if not isinstance(entry, dict) or not isinstance(entry.get('note'), str):
                 raise ValueError('Each field note needs a name and note.')
@@ -56,8 +56,9 @@ class ItemMetadata:
             note = entry['note'].strip()
             if len(note) > 2000:
                 raise ValueError('Field notes must be 2000 characters or fewer.')
-            if name in normalized:
+            if name in seen:
                 raise ValueError('Field names must be unique.')
+            seen.add(name)
             if note:
                 normalized[name] = note
         payload = [entity, sorted(normalized.items())]

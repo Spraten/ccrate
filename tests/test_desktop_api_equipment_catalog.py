@@ -49,7 +49,7 @@ class CatalogNative:
 
     def entity(self, entity_id):
         self.owner.native_calls.append((self.token, self.tenant, '/api/v1/entities/' + entity_id, 'GET', None))
-        if self.tenant != self.owner.group or entity_id not in self.owner.entities:
+        if self.tenant != self.owner.group or entity_id not in self.owner.entities or self.owner.entity_collections.get(entity_id, self.owner.group) != self.tenant:
             raise urllib.error.HTTPError('native', 404, 'missing', {}, None)
         return copy.deepcopy(self.owner.entities[entity_id])
 
@@ -94,6 +94,7 @@ class EquipmentCatalogApiTests(unittest.TestCase):
             self.location: {'id': self.location, 'name': 'Shelf', 'entityType': {'id': self.kind, 'name': 'Location', 'isLocation': True},
                             'archived': False, 'quantity': 0, 'tags': [], 'attachments': []},
         }
+        self.entity_collections = {}
         self.users['stale'] = {'id': ident(), 'name': 'Stale', 'defaultGroupId': self.group, 'groupIds': [self.group]}
         self.manager = self.actor
         self.members = [{'id': self.actor, 'name': 'Admin'}, {'id': self.member, 'name': 'Member'}]
