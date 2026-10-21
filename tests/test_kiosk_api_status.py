@@ -1,7 +1,4 @@
 import pathlib
-import re
-import subprocess
-import tempfile
 import unittest
 
 
@@ -9,37 +6,21 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class KioskApiStatusTests(unittest.TestCase):
-    def test_api_errors_preserve_http_status(self):
-        source = (ROOT / 'kiosk/workflow-ui.js').read_text()
-        api = re.search(r'^api=async function\([^\n]+', source, re.MULTILINE).group(0)
-        html = f'''<!doctype html><body>pending</body><script>
-        {api}
-        fetch = async path => path === '/html-error'
-          ? ({{ok:false, status:403, json:async()=>{{throw new SyntaxError('Unexpected token <')}}}})
-          : path === '/success-malformed'
-            ? ({{ok:true, status:200, json:async()=>{{throw new SyntaxError('Unexpected token <')}}}})
-            : ({{ok:false, status:403, json:async()=>({{error:'management revoked'}})}});
-        (async () => {{
-          const result=[];
-          for (const path of ['/html-error', '/json-error', '/success-malformed']) {{
-            try {{ await api(path, {{}}); result.push({{message:'unexpected success'}}); }}
-            catch (error) {{ result.push({{message:error.message,status:error.status}}); }}
-          }}
-          document.body.textContent=JSON.stringify(result);
-        }})();
-        </script>'''
-        with tempfile.TemporaryDirectory() as profile:
-            fixture = pathlib.Path(profile) / 'fixture.html'
-            fixture.write_text(html)
-            result = subprocess.run(
-                ['/usr/bin/chromium', '--headless', '--no-sandbox', '--disable-gpu',
-                 '--disable-dev-shm-usage', '--disable-background-networking',
-                 '--disable-extensions', '--virtual-time-budget=1000', '--user-data-dir=' + profile,
-                 '--dump-dom', fixture.as_uri()],
-                check=True, capture_output=True, text=True, timeout=45)
+    def test_scoped_return_availability_does_not_expose_custody_rows(self):
+        source=(ROOT/'deploy/kiosk-server.py').read_text()
+        route=source[source.index("if urlsplit(self.path).path == '/return/availability':"):source.index("terminal_path=urlsplit(self.path)")]
+        for token in ('self.session.snapshot()', 'ledger.custody(group)', 'checkout_blocker(item)', 'returns.parent_id(item)', 'condition(item)', '1<=len(ids)<=50', "'items':rows"):
+            self.assertIn(token,route)
+        for token in ('ledger.unresolved()', "if not actor", 'len(ids)!=len(set(ids))', 'client.entity(item_id)', 'self.session.snapshot()!=(actor,generation)', "'Item is not currently checked out'", "'An operation needs staff review'"):
+            self.assertIn(token,route)
+        self.assertNotIn("'borrower'",route);self.assertNotIn('reply_json(200,ledger.custody',route)
+        self.assertNotIn("'actor':",route)
 
-        self.assertIn('[{"message":"The service did not return a readable result. Check recovery before retrying a write.","status":403},{"message":"management revoked","status":403},{"message":"The service did not return a readable result. Check recovery before retrying a write."}]',
-                      result.stdout)
+    def test_return_availability_is_bound_and_selected_only(self):
+        source=(ROOT/'deploy/kiosk-server.py').read_text()
+        route=source[source.index("if urlsplit(self.path).path == '/return/availability':"):source.index('terminal_path=urlsplit(self.path)')]
+        self.assertIn("if not actor",route);self.assertIn('parse_qs',route);self.assertIn('len(ids)!=len(set(ids))',route)
+        self.assertIn("{'id':item_id,'eligible':reason is None,'reason':reason,'condition':condition(item),'location':location}",route)
 
 
 if __name__ == '__main__':

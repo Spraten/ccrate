@@ -65,6 +65,7 @@ from homebox import Homebox
 from checkout import confirm_checkout, checkout_availability, checkout_status_actor, checkout_cart_context
 from checkout_cart import CheckoutCart
 from returns import confirm_return, recover, RETURN_STATES
+import returns
 from maps import list_map,save_room,save_object,remove_object
 from native_jobs import NativeJobs
 from categories import create_category,recover_category
@@ -653,8 +654,39 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ('/', '/terminal.css', '/terminal.js', '/checkout-ui.js', '/scanner_input.js'):
             self.send_error(404); return
-        if urlsplit(self.path).path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js', '/checkout-ui.js'):
-            name = {'/touchscreen': 'touchscreen.html', '/touchscreen.css': 'touchscreen.css', '/touchscreen.js': 'touchscreen.js', '/checkout-ui.js': 'checkout-ui.js'}[urlsplit(self.path).path]
+        if urlsplit(self.path).path == '/return/availability':
+            actor,generation=self.session.snapshot()
+            if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
+            try:
+                query=parse_qs(urlsplit(self.path).query,keep_blank_values=True)
+                if set(query)!= {'ids'} or len(query['ids'])!=1:raise ValueError('Choose return items to review')
+                ids=query['ids'][0].split(',')
+                if not 1<=len(ids)<=50 or len(ids)!=len(set(ids)) or any(not x for x in ids):raise ValueError('Choose 1–50 unique return items')
+                with lock:
+                    client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId']
+                    members=client.call('/api/v1/groups/members')
+                    if actor not in {m['id'] for m in members}:raise Conflict('Badge holder is no longer a collection member')
+                    custody={row['entity_id'] for row in ledger.custody(group)}
+                    unresolved=bool(ledger.unresolved())
+                    rows=[]
+                    for raw_id in ids:
+                        try:
+                            item_id=str(NativeUUID(raw_id));item=client.entity(item_id)
+                            reason='An operation needs staff review' if unresolved else ('Item is not currently checked out' if item_id not in custody else checkout_blocker(item))
+                            parent=returns.parent_id(item);location=None
+                            if parent:
+                                loc=client.entity(parent);location={'id':parent,'name':loc.get('name')}
+                            rows.append({'id':item_id,'eligible':reason is None,'reason':reason,'condition':condition(item),'location':location})
+                        except (ValueError,KeyError,OSError):
+                            rows.append({'id':raw_id,'eligible':False,'reason':'Item could not be found','condition':None,'location':None})
+                    if self.session.snapshot()!=(actor,generation):raise Conflict('Badge session changed; refresh return availability')
+                self.reply_json(200,{'items':rows})
+            except ValueError as error:self.reply_json(400,{'error':str(error)})
+            except Conflict as error:self.reply_json(409,{'error':str(error)})
+            except OSError as error:self.reply_json(503,{'error':str(error) or 'C-Crate unavailable'})
+            return
+        if urlsplit(self.path).path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js', '/checkout-ui.js', '/return-ui.js'):
+            name = {'/touchscreen': 'touchscreen.html', '/touchscreen.css': 'touchscreen.css', '/touchscreen.js': 'touchscreen.js', '/checkout-ui.js': 'checkout-ui.js', '/return-ui.js':'return-ui.js'}[urlsplit(self.path).path]
             content = (ROOT / 'kiosk' / name).read_bytes()
             mime = 'text/html; charset=utf-8' if name.endswith('.html') else ('text/css; charset=utf-8' if name.endswith('.css') else 'application/javascript; charset=utf-8')
             self.send_response(200); self.send_header('Content-Type', mime); self.send_header('Content-Length', str(len(content))); self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(content); return
