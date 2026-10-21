@@ -136,12 +136,12 @@
 - Create: `kiosk/checkout-ui.js`
 - Modify: `kiosk/touchscreen.html`
 - Modify: `kiosk/touchscreen.js`
-- Test: `tests/test_checkout_cart_ui.py`
+- Modify: `tests/test_checkout_cart_ui.py` to read the new `touchscreen.html` flow
 - Test: `tests/test_touchscreen_checkout.py` (new)
 
 **Interfaces:**
-- Consumes: Task 2 session shell; `/scan`, `/checkout/availability`, `/checkout/cart`, `/checkout/confirm`, and `/operation/status`.
-- Produces: `beginCheckout()`, `addCheckoutItem()`, `reviewCheckout()`, `confirmCheckout()`, and `recoverCheckout()` flow functions. A scanned selection carries item ID, scan evidence, optional item note, kit version where applicable, and the current session generation/instance.
+- Consumes: Task 2 session shell; `/scan`, `/api/kit`, `/checkout/availability`, `/checkout/cart`, `/checkout/confirm`, and `/operation/status`.
+- Produces: `beginCheckout()`, `addCheckoutItem()`, `reviewCheckout()`, `confirmCheckout()`, and `recoverCheckout()` flow functions. A scanned selection carries item ID, scan evidence, optional item note, kit version where applicable, and the current session generation/instance. For a kit, expand the manifest, show its parts, require scans for every component, and submit a reviewed root selection with the verified manifest version.
 
 - [ ] **Step 1: Add checkout flow contract tests**
 
@@ -159,8 +159,10 @@
 
   Search the current collection's inventory by name/ID. Treat a search result
   as a candidate only; require `/scan` to record a valid physical code before
-  adding it to the confirmable batch. Reject duplicate IDs and stale scan
-  responses.
+  adding it to the confirmable batch. If the scanned item is a kit, fetch its
+  `/api/kit` manifest, show the expected components, and require a scan for
+  each component before the kit can be confirmed. Reject duplicate IDs and
+  stale scan responses.
 
 - [ ] **Step 4: Implement checkout review and confirmation**
 
@@ -190,12 +192,12 @@
 - Modify: `deploy/kiosk-server.py` to add a badge-bound, selected-item return-availability route
 - Modify: `kiosk/touchscreen.html`
 - Modify: `kiosk/touchscreen.js`
-- Test: `tests/test_return_scan_contract.py`
-- Test: `tests/test_kiosk_api_status.py`
+- Modify: `tests/test_return_scan_contract.py`
+- Modify: `tests/test_kiosk_api_status.py`
 - Test: `tests/test_touchscreen_return.py` (new)
 
 **Interfaces:**
-- Consumes: Task 2 session shell; `/scan`, `/api/entity`, `GET /return/availability?ids=<comma-separated item IDs>`, `/return/confirm`, and `/operation/status`.
+- Consumes: Task 2 session shell; `/scan`, `/api/entity`, `/api/kit`, `GET /return/availability?ids=<comma-separated item IDs>`, `/return/confirm`, and `/operation/status`.
 - Produces: `GET /return/availability?ids=<comma-separated item IDs>` requires the current badge session and accepts 1–50 unique IDs. It returns `{items:[{id, eligible, reason, condition, location:{id,name}|null}]}` for only those IDs, with `reason` null when eligible and a plain-language reason when not eligible. It never returns borrower names or a full custody list. It permits a currently checked-out item to be returned by any identified member; `/return/confirm` remains authoritative. The task also produces `beginReturn()`, `addReturnItem()`, `reviewReturn()`, `confirmReturn()`, and `recoverReturn()` flow functions. Each target carries physical scan evidence, optional per-item return note, changed condition/note when applicable, and current badge generation/instance.
 
 - [ ] **Step 1: Add return flow contract tests**
@@ -217,7 +219,9 @@
 
   Use the new badge-bound return-availability route for the scanned/selected
   item IDs. Do not use `/api/custody`, which exposes every borrower's name.
-  Show the recorded condition and assigned return location. Allow an issue
+  Show the recorded condition and assigned return location. If the selected
+  item is a kit, fetch `/api/kit`, show its manifest, and require physical
+  scans for all components before confirming the kit return. Allow an issue
   condition and note, plus an independent optional return note. Keep all
   targets editable until the review is confirmed.
 
