@@ -233,7 +233,7 @@ class Handler(BaseHTTPRequestHandler):
         if desktop_handle(self,{'root':ROOT,'lock':lock,'ledger':ledger,'checkout_cart':checkout_cart,'shelf_checks':shelf_checks,'badges':badges,'native_jobs':native_jobs,'imports':imports,'workshop':workshop,'sessions':sessions,'web_item_actions':web_item_actions,'label_layouts':label_layouts,'label_asset_root':LABEL_ASSET_ROOT}):return
         try:self.session
         except ValueError as error:self.reply_json(400,{'error':str(error)});return
-        if self.path == '/notes/confirm' or self.path.startswith('/workshop/checks/') or self.path in ('/workshop/get','/workshop/save','/workshop/move','/workshop/view','/workshop/resolve','/workshop/shelf-order') or self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/hardware/reconnect','/scan/cancel','/operation/status','/camera/focus','/decode','/scan','/badge/issue','/badge/revoke','/badge/reprint','/badge/replace','/session/end','/session/activity','/condition','/checkout/confirm','/return/session/start','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/label/templates/save','/label/templates/result','/label/paper','/accounts/create','/accounts/update','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print','/equipment/code'):
+        if self.path == '/notes/confirm' or self.path.startswith('/workshop/checks/') or self.path in ('/workshop/get','/workshop/save','/workshop/move','/workshop/view','/workshop/resolve','/workshop/shelf-order') or self.path in ('/imports/upload', '/imports/map', '/imports/save', '/imports/create', '/imports/label', '/imports/get', '/imports/list') or self.path in ('/hardware/reconnect','/scan/cancel','/operation/status','/camera/focus','/decode','/scan','/badge/issue','/badge/revoke','/badge/reprint','/badge/replace','/session/end','/session/activity','/condition','/checkout/cart','/checkout/confirm','/return/session/start','/return/confirm','/recovery/resolve','/map/room','/map/object','/map/remove','/locations/create','/catalog/create','/enroll/confirm','/problem/confirm','/label/preview','/label/print','/label/templates/save','/label/templates/result','/label/paper','/accounts/create','/accounts/update','/backup/start','/kit/save','/maintenance/complete','/categories/create','/badge/print','/equipment/code'):
             if not same_origin(self.headers.get('Origin'),self.headers.get('Host')):self.send_error(403);return
             try:size=int(self.headers.get('Content-Length','0'))
             except ValueError:self.send_error(400);return
@@ -249,6 +249,19 @@ class Handler(BaseHTTPRequestHandler):
                         width,height=frame.size
                     self.reply_json(200,{'codes':codes,'detections':detections,'width':width,'height':height});return
                 data=json.loads(raw)
+                if self.path=='/checkout/cart':
+                    actor,generation=self.session.snapshot()
+                    if not actor:self.reply_json(401,{'error':'Scan your badge first'});return
+                    if data.get('session_generation')!=generation or data.get('session_instance')!=self.session.instance:
+                        raise Conflict('Badge session changed; reload the saved checkout list')
+                    with lock:
+                        client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId']
+                        members=client.call('/api/v1/groups/members')
+                        if actor not in {member['id'] for member in members}:raise Conflict('Badge holder is no longer a collection member')
+                        if self.session.snapshot()!=(actor,generation):raise Conflict('Badge session changed; reload the saved checkout list')
+                        result=checkout_cart.save(group,actor,data.get('items'),data.get('revision'),data.get('request_key'),data.get('notes'))
+                        if self.session.snapshot()!=(actor,generation):raise Conflict('Badge session changed; reload the saved checkout list')
+                    self.reply_json(200,result);return
                 if self.path.startswith('/workshop/checks/'):
                     if not OPEN_ADMIN:self.send_error(403);return
                     if not isinstance(data,dict):raise ValueError('Shelf-check request must be an object')

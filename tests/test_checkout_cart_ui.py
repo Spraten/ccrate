@@ -22,6 +22,8 @@ class CheckoutCartUiTests(unittest.TestCase):
         self.assertIn('cart_revision=state.cart.revision',flow)
         self.assertIn('cart_items=rootIds',flow)
         self.assertIn("method:'POST'",flow)
+        self.assertIn('session_generation:session.generation',flow)
+        self.assertIn('session_instance:session.instance',flow)
         self.assertIn("'/checkout/availability?ids='",flow)
         self.assertIn("'/checkout/confirm'",flow)
         self.assertIn("'/operation/status'",flow)

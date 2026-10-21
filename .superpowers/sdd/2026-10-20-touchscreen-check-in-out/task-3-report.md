@@ -21,3 +21,9 @@ The tests here are focused source/fixture contracts; no live Homebox or browser/
 - Updated regression assertions for supported inventory search, no candidate-to-scan prefill, scan/candidate match, and saved-cart context.
 
 Focused checkout tests and `git diff --check` pass after these fixes.
+
+## Badge-bound saved-cart endpoint
+
+Added `POST /checkout/cart` to the companion route allowlist. It requires an active badge session, exact generation and instance from the request, current collection membership, and a still-current session after acquiring the shared lock. The route delegates item, note, revision, and request-key validation/idempotency to the existing `CheckoutCart.save` service. It uses the existing companion and storage service, with no added dependency or manager route change. The touchscreen Save action now submits generation and instance.
+
+Exact route evidence: `python3 -m unittest tests.test_terminal_members.TerminalMemberTests.test_badge_bound_checkout_cart_save_requires_session_and_is_idempotent -v` passed. This fixture verifies a valid saved cart, same-key idempotent replay, stale revision conflict, stale session conflict, and unauthenticated denial. UI request contract: `python3 -m unittest discover -s tests -p 'test_checkout_cart_ui.py' -v` passed. Checkout flow: `python3 -m unittest discover -s tests -p 'test_touchscreen_checkout.py' -v` passed. `git diff --check` passed.

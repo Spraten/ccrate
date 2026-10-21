@@ -217,6 +217,25 @@ class TerminalMemberTests(unittest.TestCase):
         self.assertEqual(available['thumbnailId'], 'b'*36)
         self.assertTrue(next(row for row in member_rows if row['entity_id'] == unavailable_id)['unavailable'])
 
+    def test_badge_bound_checkout_cart_save_requires_session_and_is_idempotent(self):
+        asset, key = str(uuid4()), str(uuid4())
+        session=self.ns['sessions'].get('fixture-client')
+        generation=session.snapshot()[1]
+        common={'items':[asset],'revision':0,'request_key':key,
+                'session_generation':generation,'session_instance':session.instance,
+                'notes':{asset:'bring adapter'}}
+        saved=self.request('/checkout/cart',common)
+        self.assertEqual(saved.status,200)
+        self.assertEqual(saved.result,{'revision':1,'items':[asset],'notes':{asset:'bring adapter'}})
+        repeated=self.request('/checkout/cart',common)
+        self.assertEqual(repeated.result,saved.result)
+        stale_revision=dict(common,items=[],revision=0,request_key=str(uuid4()),notes={})
+        self.assertEqual(self.request('/checkout/cart',stale_revision).status,409)
+        stale_session=dict(common,session_generation=generation+1,request_key=str(uuid4()))
+        self.assertEqual(self.request('/checkout/cart',stale_session).status,409)
+        session.end(generation)
+        self.assertEqual(self.request('/checkout/cart',common).status,401)
+
     def test_terminal_member_loans_respects_setup_guard(self):
         self.ns['OPEN_ADMIN'] = False
         response = self.get('/api/member-loans')
