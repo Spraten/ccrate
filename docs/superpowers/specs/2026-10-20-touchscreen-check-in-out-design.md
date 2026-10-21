@@ -34,6 +34,11 @@ decide item eligibility itself. Use the badge session and scan records already
 owned by the server, and submit one explicit confirmation request after the
 member reviews the transaction.
 
+For returns, add a badge-session-bound availability lookup that checks only
+the item IDs the member has selected. Return the status, recorded condition,
+and assigned location needed for review, but do not send the touchscreen the
+full custody list or other borrowers' names.
+
 The current source selects `work/kiosk-ui-current` or `kiosk/` for static
 assets, but neither source directory presently contains the page and workflow
 scripts. The implementation should establish one repository-owned static
@@ -97,6 +102,8 @@ message.
 - Preserve the existing server batch limit of 50 distinct checkout items.
 - Keep checkout availability and return condition/location validation on the
   server. A stale or rejected transaction requires review before retry.
+- Return availability lookups require the current badge session and are scoped
+  to the requested item IDs; they do not disclose other borrowers' names.
 - A successful receipt remains visible until the user acknowledges it; an
   uncertain receipt remains recoverable through existing operation-status
   behavior.
@@ -182,6 +189,8 @@ Review concept:
   attached to their items.
 - Checkout/return validation, idempotency, stale-session protection, and
   uncertain-outcome recovery continue to be enforced by the server.
+- Return lookup is bound to the current badge and selected item IDs and does
+  not return other borrowers' names or a complete custody list.
 - The completed result remains visible until **Done**; leaving or expiring a
   session clears its draft.
 - At 800 × 480 landscape, all primary actions are visible and touch-usable
@@ -208,3 +217,6 @@ Review concept:
 - Browser checks with synthetic members/items can validate the flow; physical
   touchscreen and barcode-reader acceptance still requires the actual screen
   and scanner.
+- The existing `/api/custody` route returns borrower names for all open loans.
+  The touchscreen must not consume that route; implement and use the scoped
+  return lookup instead.
