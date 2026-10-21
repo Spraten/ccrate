@@ -1886,6 +1886,30 @@ def run_frontend_command(command, *, cwd, env):
 
 
 
+def emit_kiosk_theme():
+    """Publish Homebox theme declarations to the kiosk's stable asset root."""
+    source = ROOT/'work/homebox-ui-next/assets/css/main.css'
+    ccrate = ROOT/'homebox-ui/overlay/assets/css/ccrate.css'
+    css = source.read_text()
+    start = css.index('@layer base {')
+    depth = 0
+    end = None
+    for index in range(start + len('@layer base '), len(css)):
+        if css[index] == '{':
+            depth += 1
+        elif css[index] == '}':
+            depth -= 1
+            if depth == 0:
+                end = index + 1
+                break
+    if end is None:
+        raise RuntimeError('Could not find complete Homebox theme declarations')
+    base = css[start:end]
+    ccrate_css = ccrate.read_text()
+    override_end = ccrate_css.index('\n:root.theme-homebox #app')
+    (ROOT/'kiosk/theme.css').write_text(base + '\n\n' + ccrate_css[:override_end].rstrip() + '\n')
+
+
 def build():
     global BUILD, TOOLCHAIN_ROOT, UPSTREAM_ROOT
     parser = argparse.ArgumentParser()
@@ -1938,6 +1962,8 @@ def build():
         print('Building frontend...', flush=True)
         run_frontend_command([str(pnpm), 'run', 'build'], cwd=BUILD, env=env)
         print('Frontend build completed successfully.', flush=True)
+        emit_kiosk_theme()
+        print('Emitted stable kiosk theme stylesheet.', flush=True)
 
 if __name__ == '__main__':
     build()

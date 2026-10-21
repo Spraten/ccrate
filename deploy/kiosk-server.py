@@ -688,6 +688,9 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as error:self.reply_json(400,{'error':str(error)})
             except OSError as error:self.reply_json(503,{'error':str(error) or 'C-Crate unavailable'})
             return
+        if urlsplit(self.path).path == '/theme.css':
+            content = (ROOT / 'kiosk' / 'theme.css').read_bytes()
+            self.send_response(200); self.send_header('Content-Type', 'text/css; charset=utf-8'); self.send_header('Content-Length', str(len(content))); self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(content); return
         if urlsplit(self.path).path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js', '/checkout-ui.js', '/return-ui.js'):
             name = {'/touchscreen': 'touchscreen.html', '/touchscreen.css': 'touchscreen.css', '/touchscreen.js': 'touchscreen.js', '/checkout-ui.js': 'checkout-ui.js', '/return-ui.js':'return-ui.js'}[urlsplit(self.path).path]
             content = (ROOT / 'kiosk' / name).read_bytes()
