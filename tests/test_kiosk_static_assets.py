@@ -85,6 +85,11 @@ class CompanionRouteTests(unittest.TestCase):
                 if path in ('/checkout-ui.js', '/return-ui.js'):
                     self.assertIn('javascript', request.response_headers.get('Content-Type', ''))
 
+        css = request_type('/touchscreen.css')
+        do_get(css)
+        self.assertEqual(css.response, 200)
+        self.assertIn('#home[hidden]', css.wfile.getvalue().decode())
+
         inventory = request_type('/api/inventory')
         do_get(inventory)
         self.assertEqual(inventory.response, 200)

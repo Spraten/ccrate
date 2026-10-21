@@ -6,16 +6,13 @@ fixture intercepts every fetch in page JavaScript and never contacts Homebox.
 Screenshots and browser profiles are written under /tmp.
 """
 import json
-import os
+import html
 import pathlib
 import sys
 import signal
 import shutil
 import subprocess
 import tempfile
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -31,6 +28,7 @@ MEMBER = {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Synthetic Test 
 BOOTSTRAP = r"""<script>
 (() => {
  const item=__ITEM__, member=__MEMBER__; let active=false;
+ window.setInterval=()=>0;
  const json=(data,status=200)=>Promise.resolve(new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}}));
  window.fetch=async (input,options={})=>{
    const url=new URL(typeof input==='string'?input:input.url,location.href), path=url.pathname;
@@ -57,10 +55,11 @@ BOOTSTRAP = r"""<script>
  const fill=async (selector,value)=>{await wait(()=>document.querySelector(selector));const el=document.querySelector(selector);el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));};
  const run=async()=>{try{
    const flow=new URLSearchParams(location.search).get('flow'),stage=new URLSearchParams(location.search).get('stage')||'receipt';
-   await click(`[data-flow="${flow}"]`);
-   await fill('#badge-code','SYNTHETIC-BADGE');document.querySelector('#badge-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait(()=>window.checkoutSession?.generation===1);
+   await click(`[data-flow="${flow}"]`); document.body.dataset.step='flow-selected';
+   if(getComputedStyle(document.querySelector('#home')).display!=='none'||document.querySelector('#flow').hidden)throw Error('Flow navigation did not hide the home menu');
+   await fill('#badge-code','SYNTHETIC-BADGE');document.querySelector('#badge-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait(()=>window.checkoutSession?.generation===1);document.body.dataset.step='badge-accepted';
    const search=flow==='checkout'?'#checkout-ui input[aria-label="Search inventory"]':'#return-ui input[placeholder="Search by name or ID"]';
-   await fill(search,'Mavic');await wait(()=>document.querySelector('#checkout-ui button')||document.querySelector('#return-ui button'));
+   await fill(search,'Mavic');await wait(()=>[...document.querySelectorAll('#checkout-ui button,#return-ui button')].some(b=>b.textContent.includes('Mavic')));document.body.dataset.step='search-result';
    const candidate=[...document.querySelectorAll('#checkout-ui button,#return-ui button')].find(b=>b.textContent.includes('Mavic'));
    if(!candidate)throw Error('Search suggestion was not rendered');candidate.click();await new Promise(r=>setTimeout(r,40));
    const scan=flow==='checkout'?'#checkout-ui input[aria-label="Scan item barcode"]':'#return-ui input[placeholder="Scan item barcode"]';await fill(scan,'SYNTHETIC-ITEM');
@@ -70,12 +69,12 @@ BOOTSTRAP = r"""<script>
    if(note){note.value='Synthetic per-item handling note';note.dispatchEvent(new Event('input',{bubbles:true}));}
    const review=[...document.querySelectorAll('#'+flow+'-ui button')].find(b=>b.textContent==='Review '+(flow==='checkout'?'checkout':'return'));
    if(!review)throw Error('Review action missing');review.click();await new Promise(r=>setTimeout(r,180));
-   await wait(()=>[...document.querySelectorAll('#'+flow+'-ui button')].some(b=>b.textContent==='Confirm '+(flow==='checkout'?'checkout':'return')));
+   await wait(()=>[...document.querySelectorAll('#'+flow+'-ui button')].some(b=>b.textContent==='Confirm '+(flow==='checkout'?'checkout':'return')&&!b.disabled));
    const overflow=document.documentElement.scrollWidth>document.documentElement.clientWidth;
    const shortButtons=[...document.querySelectorAll('button')].filter(b=>{const r=b.getBoundingClientRect();return r.width>0&&r.height<44;}).map(b=>b.textContent.trim());
    const manager=/(manager|settings|workshop|badge administration|inventory edit)/i.test(document.body.innerText);
    const reviewData={stage:'review',flow,overflow,shortButtons,manager,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,
-     longNameVisible:document.body.innerText.includes(item.name),noteVisible:document.body.innerText.includes('Synthetic per-item handling note'),locationVisible:document.body.innerText.includes('Lab / D Wing / G38'),
+     longNameVisible:document.body.innerText.includes(item.name),noteVisible:[...document.querySelectorAll('#'+flow+'-ui input')].some(i=>i.value==='Synthetic per-item handling note'),locationVisible:document.body.innerText.includes('Lab / D Wing / G38'),
      conditionVisible:flow==='return'?document.body.innerText.includes('Recorded condition: Ready'):true,
      blockerVisible:document.body.innerText.includes('Blocked:')};
    if(stage==='review'){document.body.dataset.result=JSON.stringify(reviewData);return;}
@@ -89,65 +88,60 @@ BOOTSTRAP = r"""<script>
 </script>"""
 
 
-class FixtureHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        path = urlsplit(self.path).path
-        if path == '/touchscreen':
-            body = (ROOT / 'kiosk/touchscreen.html').read_text(encoding='utf-8')
-            injection = BOOTSTRAP.replace('__ITEM__', json.dumps(ITEM)).replace('__MEMBER__', json.dumps(MEMBER))
-            body = body.replace('<script src="/checkout-ui.js" defer></script>', injection + '<script src="/checkout-ui.js" defer></script>')
-            return self.send_body(body.encode(), 'text/html; charset=utf-8')
-        assets = {'/touchscreen.css': 'touchscreen.css', '/touchscreen.js': 'touchscreen.js',
-                  '/checkout-ui.js': 'checkout-ui.js', '/return-ui.js': 'return-ui.js'}
-        if path in assets:
-            file = ROOT / 'kiosk' / assets[path]
-            return self.send_body(file.read_bytes(), 'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
-        self.send_error(404)
-
-    def send_body(self, body, content_type):
-        self.send_response(200)
-        self.send_header('Content-Type', content_type)
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *_args):
-        print('fixture request:', _args[0] % _args[1:], file=sys.stderr)
+class BrowserUnavailable(RuntimeError):
+    pass
 
 
-def run_case(browser, base, flow, stage, screenshot):
-    url = f'{base}/touchscreen?flow={flow}&stage={stage}'
+def fixture_html():
+    body = (ROOT / 'kiosk/touchscreen.html').read_text(encoding='utf-8')
+    css = (ROOT / 'kiosk/touchscreen.css').read_text(encoding='utf-8')
+    body = body.replace('<link rel="stylesheet" href="/touchscreen.css">', '<style>' + css + '</style>')
+    injection = BOOTSTRAP.replace('__ITEM__', json.dumps(ITEM)).replace('__MEMBER__', json.dumps(MEMBER))
+    body = body.replace('<script src="/checkout-ui.js" defer></script>', injection)
+    for asset in ('checkout-ui.js', 'return-ui.js', 'touchscreen.js'):
+        source = (ROOT / 'kiosk' / asset).read_text(encoding='utf-8')
+        body = body.replace(f'<script src="/{asset}" defer></script>', '<script>' + source + '</script>')
+    # file:// has inconsistent localStorage implementations across Chromium builds.
+    shim = "<script>Object.defineProperty(window,'localStorage',{value:{getItem:()=>null,setItem:()=>{}},configurable:true});</script>"
+    return body.replace('<head>', '<head>' + shim)
+
+
+def run_case(browser, flow, stage, screenshot):
+    command = [browser, '--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+               '--disable-dev-shm-usage', '--disable-background-networking', '--disable-extensions', '--no-proxy-server',
+               '--window-size=800,480', '--force-device-scale-factor=1', '--virtual-time-budget=5000', '--dump-dom']
     command = [browser, '--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
                '--disable-dev-shm-usage', '--disable-background-networking', '--disable-extensions',
                '--window-size=800,480', '--force-device-scale-factor=1', '--timeout=4000', '--dump-dom']
     if screenshot:
         command += [f'--screenshot={screenshot}']
-    profile = tempfile.mkdtemp(prefix='ccrate-touchscreen-chrome-')
-    command += [f'--user-data-dir={profile}', url]
-    process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               start_new_session=True)
-    try:
+    with tempfile.TemporaryDirectory(prefix='ccrate-touchscreen-fixture-') as temp:
+        fixture = pathlib.Path(temp) / 'touchscreen.html'
+        fixture.write_text(fixture_html(), encoding='utf-8')
+        url = fixture.as_uri() + f'?flow={flow}&stage={stage}'
+        profile = pathlib.Path(temp) / 'profile'
+        command += [f'--user-data-dir={profile}', url]
+        process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   start_new_session=True)
         try:
-            stdout, stderr = process.communicate(timeout=12)
+            stdout, stderr = process.communicate(timeout=15)
         except subprocess.TimeoutExpired:
-            # Debian Chromium can leave its browser process alive after --dump-dom.
             os.killpg(process.pid, signal.SIGKILL)
             stdout, stderr = process.communicate(timeout=5)
+            raise BrowserUnavailable(f'Chromium did not finish its file:// capture: {stderr[-1200:]}')
         result = subprocess.CompletedProcess(command, process.returncode or 0, stdout, stderr)
-    finally:
-        shutil.rmtree(profile, ignore_errors=True)
     if result.returncode and not result.stdout:
-        raise RuntimeError(f'Chromium failed ({result.returncode}): {result.stderr[-2000:]}')
+        raise BrowserUnavailable(f'Chromium failed before producing a DOM: {result.stderr[-2000:]}')
     import re
     match = re.search(r'<body[^>]*data-result="([^"]+)"', result.stdout)
     error = re.search(r'<body[^>]*data-error="([^"]+)"', result.stdout)
     if error:
         raise AssertionError('Browser flow failed: ' + error.group(1))
     if not match:
-        if screenshot:
-            pathlib.Path(screenshot).unlink(missing_ok=True)
-        raise AssertionError('Chromium did not emit fixture result. DOM tail: ' + result.stdout[-2500:] + '\nBrowser stderr: ' + result.stderr[-2500:])
-    data = json.loads(match.group(1).replace('&quot;', '"').replace('&amp;', '&'))
+        if not result.stdout or '<html' not in result.stdout:
+            raise BrowserUnavailable('Chromium produced no page DOM: ' + result.stderr[-1200:])
+        raise AssertionError('Synthetic browser flow did not complete and emit results. DOM tail: ' + result.stdout[-1200:])
+    data = json.loads(html.unescape(match.group(1)))
     if data['overflow']:
         raise AssertionError(f"Horizontal overflow at 800x480: {data['scrollWidth']} > {data['clientWidth']}")
     if data['shortButtons']:
@@ -168,27 +162,18 @@ def run_case(browser, base, flow, stage, screenshot):
 def main():
     if not CHROMIUM:
         raise SystemExit('No system Chromium executable is available; install no dependencies for this verifier.')
-    server = ThreadingHTTPServer(('127.0.0.1', 0), FixtureHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    base = f'http://127.0.0.1:{server.server_port}'
     screenshots = pathlib.Path('/tmp')
+    results = []
     try:
-        results = []
-        try:
-            for flow in ('checkout', 'return'):
-                review = run_case(CHROMIUM, base, flow, 'review', screenshots / f'ccrate-{flow}-review-800x480.png')
-                receipt = run_case(CHROMIUM, base, flow, 'receipt', None)
-                results.extend((review, receipt))
-        except (AssertionError, RuntimeError) as error:
-            print(json.dumps({'status': 'browser_unavailable', 'reason': str(error),
-                              'live_homebox_requests': 0}, indent=2))
-            return 2
-        print(json.dumps({'status': 'passed', 'results': results, 'screenshots': [str(screenshots / 'ccrate-checkout-review-800x480.png'), str(screenshots / 'ccrate-return-review-800x480.png')],
-                          'api_mode': 'all fetch calls intercepted by synthetic in-page fixture', 'live_homebox_requests': 0}, indent=2))
-    finally:
-        server.shutdown()
-        server.server_close()
+        for flow in ('checkout', 'return'):
+            review = run_case(CHROMIUM, flow, 'review', screenshots / f'ccrate-{flow}-review-800x480.png')
+            receipt = run_case(CHROMIUM, flow, 'receipt', None)
+            results.extend((review, receipt))
+    except BrowserUnavailable as error:
+        print(json.dumps({'status': 'browser_unavailable', 'reason': str(error), 'live_homebox_requests': 0}, indent=2))
+        return 2
+    print(json.dumps({'status': 'passed', 'results': results, 'screenshots': [str(screenshots / 'ccrate-checkout-review-800x480.png'), str(screenshots / 'ccrate-return-review-800x480.png')],
+                      'api_mode': 'synthetic fetch shim, no network access', 'live_homebox_requests': 0}, indent=2))
 
 
 if __name__ == '__main__':
