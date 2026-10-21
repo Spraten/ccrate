@@ -29,11 +29,16 @@ class Tests(unittest.TestCase):
         checkout=self.ledger.begin(self.group,self.borrower,'check_out',[self.asset],str(uuid4()));self.ledger.complete(checkout['id'])
     def tearDown(self):self.temp.cleanup()
     def confirm(self,**kwargs):
-        return confirm_return(self.client,self.ledger,self.group,self.returner,[{'entity_id':self.asset,**kwargs.get('target',{})}],kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True))
+        return confirm_return(self.client,self.ledger,self.group,self.returner,[{'entity_id':self.asset,**kwargs.get('target',{})}],kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True),kwargs.get('verified'),**({'require_scans':kwargs['require_scans']} if 'require_scans' in kwargs else {}))
     def test_colleague_return_preserves_native_asset_and_records_actor(self):
         before=self.client.entity(self.asset);result=self.confirm()
         self.assertEqual(self.ledger.custody(self.group),[]);self.assertEqual(self.client.entity(self.asset),before);self.assertFalse(self.client.writes)
         self.assertEqual(self.ledger.detail(self.group,result['id'])['actor_id'],self.returner)
+    def test_kiosk_return_requires_physical_scan_proof_but_desktop_does_not(self):
+        with self.assertRaisesRegex(Conflict,'Scan every selected item'):
+            self.confirm(require_scans=True,verified=[])
+        self.assertEqual(len(self.ledger.custody(self.group)),1)
+        self.assertEqual(self.confirm()['count'],1)
     def test_explicit_anonymous_return_preserves_borrower_and_has_honest_audit(self):
         result=confirm_return(self.client,self.ledger,self.group,None,[{'entity_id':self.asset,'return_note':'Returned by someone without a badge'}],str(uuid4()),lambda:True,anonymous_return=True)
         detail=self.ledger.detail(self.group,result['id'])

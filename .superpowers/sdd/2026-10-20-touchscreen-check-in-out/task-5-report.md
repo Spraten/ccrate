@@ -38,3 +38,7 @@ Also passed:
 The checkout and return review screenshots were captured from the post-interaction viewport using Chromium's local DevTools interface, then visually inspected: [checkout](/tmp/ccrate-checkout-review-800x480.png), [return](/tmp/ccrate-return-review-800x480.png). Both show notes above the visible action tray; return condition and issue fields are also visible.
 
 No dependencies were downloaded; no Homebox requests, physical devices, service restart, or deployment were used. Hardware acceptance remains unverified on the Pi.
+
+## Final review fix wave (2026-10-21)
+
+Addressed five follow-up findings: kiosk confirms now require physical scans for each selected expanded asset; transaction notes can include scanned kit components; definite 400/409 and `not_started` outcomes require fresh review and a new key; completed receipts survive session expiry until Done; and saved checkout carts load per authenticated member with stale responses ignored. Regressions were added before code and observed failing. Focused verification passed: checkout ops 20, return ops 37, checkout/return/shell UI 17, manager access 6, kiosk API status 3. Browser verifier passed with synthetic API interception only. The checkout and return review screenshots were visually inspected at `/tmp/ccrate-checkout-review-800x480.png` and `/tmp/ccrate-return-review-800x480.png`. No Homebox traffic, deployment, service restart, or hardware access occurred. See `final-review-fix-wave-report.md` for details.

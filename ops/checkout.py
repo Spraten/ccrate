@@ -70,7 +70,7 @@ def checkout_availability(client, ledger, group, entity_ids):
     return result
 
 
-def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None, cart_context=None, notes=None):
+def confirm_checkout(client, ledger, group, actor, assets, request_key, session_valid, verified=None, kit_versions=None, cart_context=None, notes=None, require_scans=False):
     group,actor=uuid(group),uuid(actor)
     assets=[uuid(a) for a in assets]
     if not assets or len(assets)>50 or len(assets)!=len(set(assets)):
@@ -103,7 +103,7 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
     if notes is None:
         normalized_notes = (snapshot or {}).get('notes', {})
     else:
-        selected_note_ids = set(snapshot['items']) if snapshot is not None else set(assets)
+        selected_note_ids = set(assets)
         normalized_notes = CheckoutCart._notes(notes, selected_note_ids)
     normalized_notes = normalized_notes or {}
     entities=[]
@@ -113,6 +113,8 @@ def confirm_checkout(client, ledger, group, actor, assets, request_key, session_
         reason=checkout_blocker(entity)
         if reason:
             raise Conflict(entity['name']+': '+reason)
+    if require_scans and not set(assets)<=set(verified or []):
+        raise Conflict('Scan every selected item before checkout')
     validate_checkout(client,entities,verified,kit_versions)
     if not session_valid():
         raise Conflict('Session ended; scan your badge again')

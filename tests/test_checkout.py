@@ -22,7 +22,7 @@ class Tests(unittest.TestCase):
         self.client=Client(self.user,{self.asset:self.entity})
     def tearDown(self):self.temp.cleanup()
     def confirm(self,**kwargs):
-        return confirm_checkout(self.client,self.ledger,self.group,self.user,kwargs.get('assets',[self.asset]),kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True),kwargs.get('verified'),kwargs.get('kit_versions'),kwargs.get('cart_context'),kwargs.get('notes'))
+        return confirm_checkout(self.client,self.ledger,self.group,self.user,kwargs.get('assets',[self.asset]),kwargs.get('key',str(uuid4())),kwargs.get('valid',lambda:True),kwargs.get('verified'),kwargs.get('kit_versions'),kwargs.get('cart_context'),kwargs.get('notes'),**({'require_scans':kwargs['require_scans']} if 'require_scans' in kwargs else {}))
     def test_native_shelf_preserved_and_repeat_confirm_idempotent(self):
         original=copy.deepcopy(self.entity);key=str(uuid4())
         first=self.confirm(key=key);second=self.confirm(key=key)
@@ -35,6 +35,11 @@ class Tests(unittest.TestCase):
     def test_expired_session_rejected_after_native_validation(self):
         with self.assertRaises(Conflict):self.confirm(valid=lambda:False)
         self.assertEqual(self.ledger.unresolved(),[])
+    def test_kiosk_requires_physical_scan_proof_for_every_asset_but_desktop_does_not(self):
+        with self.assertRaisesRegex(Conflict,'Scan every selected item'):
+            self.confirm(require_scans=True,verified=[])
+        self.assertEqual(self.ledger.unresolved(),[])
+        self.assertEqual(self.confirm()['status'],'completed')
     def test_removed_member_rejected(self):
         self.client.user=str(uuid4())
         with self.assertRaises(Conflict):self.confirm()
@@ -151,6 +156,21 @@ class Tests(unittest.TestCase):
             self.confirm(assets=expanded, verified=expanded, kit_versions=manifest(self.client, self.asset)['versions'],
                          cart_context={'revision': saved['revision'], 'items': [self.asset],
                                        'notes': {child: 'wrong component'}})
+
+    def test_kiosk_transaction_can_attach_note_to_expanded_kit_component(self):
+        cart=CheckoutCart(self.ledger);child=str(uuid4())
+        self.client.assets[child]={'id':child,'name':'Component','quantity':1,'archived':False,
+                                   'parent':{'id':str(uuid4())},'entityType':{'isLocation':False},
+                                   'fields':[{'name':'Equipment condition','type':'text','textValue':'Ready'}]}
+        self.entity['fields'].append({'name':'Equipment kit manifest','type':'text',
+                                      'textValue':json.dumps({'version':1,'members':[child]})})
+        saved=cart.save(self.group,self.user,[self.asset],0,str(uuid4()))
+        expanded=expand_cart_assets(self.client,[self.asset])
+        receipt=self.confirm(assets=expanded,verified=expanded,kit_versions=manifest(self.client,self.asset)['versions'],
+                             cart_context={'revision':saved['revision'],'items':[self.asset]},
+                             notes={self.asset:'Root note',child:'Component note'})
+        self.assertEqual(self.ledger.detail(self.group,receipt['id'])['context']['checkout_notes'],
+                         {self.asset:'Root note',child:'Component note'})
 
     def test_legacy_cart_checkout_replay_keeps_original_intent_shape(self):
         key = str(uuid4())

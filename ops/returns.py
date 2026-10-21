@@ -40,7 +40,7 @@ def normalize_targets(targets):
     return sorted(result,key=lambda t:t['entity_id'])
 
 
-def confirm_return(client,ledger,group,actor,targets,request_key,session_valid,verified=None,kit_versions=None,anonymous_return=False):
+def confirm_return(client,ledger,group,actor,targets,request_key,session_valid,verified=None,kit_versions=None,anonymous_return=False,require_scans=False):
     if anonymous_return:
         if actor is not None:raise ValueError('Anonymous return cannot carry a badge identity')
         actor=UNIDENTIFIED_ACTOR
@@ -48,6 +48,8 @@ def confirm_return(client,ledger,group,actor,targets,request_key,session_valid,v
         raise ValueError('A current badge session is required')
     group,actor,key=uuid(group),uuid(actor),uuid(request_key)
     targets=normalize_targets(targets);assets=[t['entity_id'] for t in targets]
+    if require_scans and not set(assets)<=set(verified or []):
+        raise Conflict('Scan every selected item before return')
     members=[] if anonymous_return else client.call('/api/v1/groups/members')
     if not anonymous_return and actor not in {m['id'] for m in members}:raise Conflict('Badge holder is no longer a C-Crate group member')
     if not session_valid():raise Conflict('Return context ended; start the return again')

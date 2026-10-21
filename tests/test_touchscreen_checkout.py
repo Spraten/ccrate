@@ -58,10 +58,37 @@ class TouchscreenCheckoutTests(unittest.TestCase):
         body=json.dumps(payload).encode();h.headers['Content-Length']=str(len(body));h.rfile=io.BytesIO(body);h.reply_json=lambda code,data:None
         h.do_POST()
         self.assertEqual(captured.get('notes'),payload['notes'])
+        self.assertTrue(captured.get('require_scans'))
 
     def test_page_serves_the_flow_script(self):
         server=(ROOT/'deploy/kiosk-server.py').read_text()
         self.assertIn("'/checkout-ui.js': 'checkout-ui.js'",server)
+
+    def test_cart_loads_only_for_authenticated_member_and_ignores_stale_member_response(self):
+        node=shutil.which('node')
+        if not node:self.skipTest('Node is unavailable')
+        source=(ROOT/'kiosk/checkout-ui.js').read_text()
+        script=r'''global.Event=class{constructor(type){this.type=type}};global.window={checkoutSession:{generation:null,instance:null,authenticated:false},touchscreenClientId:'stable',listeners:{},addEventListener(k,f){(this.listeners[k]??=[]).push(f)},dispatchEvent(e){for(const f of this.listeners[e.type]||[])f(e)}};global.localStorage={getItem(){return 'stable'}};
+class N{constructor(tag){this.tag=tag;this.children=[];this.listeners={};this.attrs={};this.textContent='';this.value='';this.disabled=false}append(...x){this.children.push(...x)}replaceChildren(...x){this.children=x}addEventListener(k,f){this.listeners[k]=f}setAttribute(k,v){this.attrs[k]=v}focus(){}async fire(k){return await this.listeners[k]?.({preventDefault(){}})}}
+const host=new N('section');global.document={querySelector(){return host},createElement(t){return new N(t)}};let pending=[];global.fetch=path=>{if(path!=='/checkout/cart')throw Error('unexpected request '+path);return new Promise(resolve=>pending.push(resolve))};function response(data){return {ok:true,json:async()=>data}}function find(text){const all=n=>[n,...(n.children||[]).flatMap(all)];return all(host).find(n=>typeof text==='function'?text(n):n.textContent===text)}
+'''+source+r'''
+;(async()=>{window.checkoutSession={generation:null,instance:null,authenticated:false};const opening=window.beginCheckout();await Promise.resolve();if(pending.length)throw Error('cart loaded before member authentication');await opening;window.checkoutSession={generation:1,instance:'member-A',authenticated:true};window.dispatchEvent(new Event('ccrate-session-change'));if(pending.length!==1)throw Error('member A cart was not requested after authentication');window.checkoutSession={generation:2,instance:'member-B',authenticated:true};window.dispatchEvent(new Event('ccrate-session-change'));if(pending.length!==2)throw Error('member B cart was not reloaded');pending[1](response({revision:2,items:['b1','b2'],notes:{}}));for(let i=0;i<8;i++)await Promise.resolve();if(!find('Saved checkout list: 2 item(s). Scan each saved item to verify it for this visit.'))throw Error('member B cart was not displayed');pending[0](response({revision:1,items:['a1'],notes:{}}));for(let i=0;i<8;i++)await Promise.resolve();if(!find('Saved checkout list: 2 item(s). Scan each saved item to verify it for this visit.'))throw Error('late member A cart overwrote member B cart')})().catch(e=>{console.error(e);process.exitCode=1});'''
+        import os
+        env=os.environ.copy();env['CHECKOUT_SOURCE']=source
+        result=subprocess.run([node,'-e',script],cwd=ROOT,capture_output=True,text=True,env=env)
+        self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_definite_checkout_rejection_shows_error_and_requires_fresh_review_and_key(self):
+        node=shutil.which('node')
+        if not node:self.skipTest('Node is unavailable')
+        source=(ROOT/'kiosk/checkout-ui.js').read_text()
+        fixture=r'''global.window={checkoutSession:{generation:2,instance:'member',authenticated:true},touchscreenClientId:'client',listeners:{},addEventListener(k,f){this.listeners[k]=f},dispatchEvent(e){this.listeners[e.type]?.(e)}};global.localStorage={getItem(){return 'client'}};global.crypto={randomUUID:(()=>{let n=0;return()=>`key-${++n}`})()};global.CustomEvent=class extends Event{constructor(type,opts){super(type);this.detail=opts?.detail}};global.Event=class{constructor(type){this.type=type}};
+class N{constructor(tag){this.tag=tag;this.children=[];this.handlers={};this.attrs={};this.textContent='';this.value='';this.disabled=false}append(...v){this.children.push(...v)}appendChild(v){this.children.push(v);return v}replaceChildren(...v){this.children=v}addEventListener(k,f){this.handlers[k]=f}setAttribute(k,v){this.attrs[k]=v}focus(){}async fire(k,e={}){return await this.handlers[k]?.({preventDefault(){},...e})}}
+const host=new N('section');global.document={querySelector(){return host},createElement(t){return new N(t)}};let confirms=[],attempt=0;function response(data,status=200){return{ok:status<400,status,json:async()=>data}};global.fetch=async(path,options={})=>{if(path==='/checkout/cart')return response({revision:0,items:[],notes:{}});if(path==='/scan')return response({entity:{id:'asset',name:'Asset'}});if(path.startsWith('/api/kit'))return response({kit:false});if(path.startsWith('/checkout/availability'))return response([]);if(path==='/checkout/confirm'){confirms.push(JSON.parse(options.body));return ++attempt===1?response({error:'Checkout details need correction'},409):response({id:'receipt',count:1})}throw Error('unexpected '+path)};function all(n){return[n,...(n.children||[]).flatMap(all)]}function find(text){return all(host).find(n=>typeof text==='function'?text(n):n.textContent===text)}function input(ph){return all(host).find(n=>n.placeholder===ph)}
+'''+source+r'''
+;(async()=>{await window.beginCheckout();const scan=input('Scan item barcode');scan.value='asset';await find(n=>n.tag==='form').fire('submit');await find('Review checkout').fire('click');await find('Confirm checkout').fire('click');if(confirms.length!==1)throw Error('confirm was not sent '+JSON.stringify(confirms));if(!all(host).some(n=>n.textContent.includes('Checkout details need correction')))throw Error('definite rejection message was hidden: '+all(host).map(n=>n.tag+':'+n.textContent).join('|'));if(!find('Confirm checkout').disabled)throw Error('definite rejection left confirmation enabled before review');if(find('Check saved result'))throw Error('definite rejection was treated as an ambiguous operation');const note=input('Optional note for this item');note.value='Corrected note';await note.fire('input');if(!find('Confirm checkout').disabled)throw Error('edited rejected checkout did not disable confirmation');await find('Review checkout').fire('click');if(find('Confirm checkout').disabled)throw Error('fresh review did not enable corrected checkout');await find('Confirm checkout').fire('click');if(confirms.length!==2||confirms[0].request_key===confirms[1].request_key||confirms[1].notes.asset!=='Corrected note'||!find('Checkout complete'))throw Error('corrected checkout did not use a fresh request key')})().catch(e=>{console.error(e);process.exitCode=1});'''
+        result=subprocess.run([node,'-e',fixture],cwd=ROOT,capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
 
     def test_uncertain_recovery_is_status_only_and_receipt_done_signals_shell(self):
         node=shutil.which('node')

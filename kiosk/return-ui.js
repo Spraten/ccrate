@@ -26,7 +26,7 @@
       body: body ? JSON.stringify(body) : undefined
     });
     const data = await response.json();
-    if (!response.ok) throw Error(data.error || data.reason || 'Request failed');
+    if (!response.ok) { const error = Error(data.error || data.reason || 'Request failed'); error.status = response.status; throw error; }
     return data;
   };
 
@@ -171,7 +171,11 @@
       state.receipt = result; state.receiptSession = captured; state.sending = false; state.uncertain = false; render();
     } catch (error) {
       if (!current(captured, epoch, true)) return;
-      state.sending = false; state.uncertain = true; render(error.message);
+      state.sending = false;
+      if ((error.status === 400 || error.status === 409) && !/(interrupted|admin recovery|needs staff review|requires recovery)/i.test(error.message)) {
+        state.uncertain = false; state.key = null; state.operationSession = null; state.preserved = false; window.returnReceiptPreserved = false; state.reviewed = false; render(error.message); return;
+      }
+      state.uncertain = true; render(error.message);
     }
   }
   async function recoverReturn() {
@@ -181,6 +185,7 @@
       const result = await request('/operation/status', { request_key: key });
       if (!current(captured, epoch, true)) return;
       if (result.status === 'completed') { state.receipt = result; state.receiptSession = captured; state.uncertain = false; render(); }
+      else if (result.status === 'not_started') { state.uncertain = false; state.key = null; state.operationSession = null; state.preserved = false; window.returnReceiptPreserved = false; state.reviewed = false; render('No return was recorded. Review the updated items before trying again.'); }
       else render('No completed return is recorded. Ask staff to check before starting another return.');
     } catch (error) { if (current(captured, epoch, true)) render('Could not check status. Ask staff to verify before another return.'); }
   }

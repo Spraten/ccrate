@@ -506,7 +506,7 @@ class Handler(BaseHTTPRequestHandler):
                     with lock:
                         client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item']
                         valid=lambda:self.session.returning(generation,self.session.instance) if anonymous_return else self.session.snapshot()==(actor,generation)
-                        result=confirm_return(client,ledger,native['defaultGroupId'],None if anonymous_return else actor,data.get('targets'),data.get('request_key'),valid,self.session.scans(generation),data.get('kit_versions'),anonymous_return=anonymous_return)
+                        result=confirm_return(client,ledger,native['defaultGroupId'],None if anonymous_return else actor,data.get('targets'),data.get('request_key'),valid,self.session.scans(generation),data.get('kit_versions'),anonymous_return=anonymous_return,require_scans=True)
                         self.session.end(generation)
                     self.reply_json(200,result);return
                 if self.path=='/checkout/confirm':
@@ -526,7 +526,7 @@ class Handler(BaseHTTPRequestHandler):
                             if len(requested)>50 or len(requested)!=len(set(requested)):
                                 raise Conflict('Your saved checkout cart changed. Review it again.')
                             cart_context=checkout_cart_context(saved,requested)
-                        result=confirm_checkout(client,ledger,group,actor,data.get('assets',[]),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'),cart_context,notes=data.get('notes'))
+                        result=confirm_checkout(client,ledger,group,actor,data.get('assets',[]),data.get('request_key'),lambda:self.session.snapshot()==(actor,generation),self.session.scans(generation),data.get('kit_versions'),cart_context,notes=data.get('notes'),require_scans=True)
                         if cart_context is not None:
                             result['cart_consumption']=checkout_cart.consume_completed_receipt(group,actor,result['id'])
                     self.reply_json(200,result);return
