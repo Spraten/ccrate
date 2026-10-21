@@ -17,10 +17,10 @@ def load_get_route():
     method = next(node for node in handler.body if isinstance(node, ast.FunctionDef) and node.name == 'do_GET')
     namespace = {
         'desktop_handle': lambda *_args: False,
-        'ROOT': ROOT,
+        'ROOT': ROOT, 'CODE_ROOT': ROOT, 'terminal_assets': lambda: ROOT / 'missing-terminal-assets',
         'lock': nullcontext(), 'ledger': object(), 'shelf_checks': object(), 'badges': object(),
         'checkout_cart': object(), 'native_jobs': object(), 'imports': object(), 'workshop': object(),
-        'sessions': object(), 'label_layouts': object(), 'LABEL_ASSET_ROOT': ROOT,
+        'sessions': object(), 'web_item_actions': object(), 'label_layouts': object(), 'LABEL_ASSET_ROOT': ROOT,
         'urlsplit': urlsplit, 'parse_qs': parse_qs, 'json': json,
         'inventory': lambda *_args: [],
     }
@@ -64,13 +64,20 @@ def load_get_route():
 
 
 class CompanionRouteTests(unittest.TestCase):
-    def test_terminal_root_and_static_assets_are_unavailable_but_api_routes_remain(self):
+    def test_touchscreen_assets_are_served_and_api_routes_remain(self):
         do_get, request_type = load_get_route()
         for path in ('/', '/terminal.css', '/terminal.js', '/checkout-ui.js', '/scanner_input.js'):
             with self.subTest(path=path):
                 request = request_type(path)
                 do_get(request)
                 self.assertEqual(request.response, 404)
+
+        for path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js'):
+            with self.subTest(path=path):
+                request = request_type(path)
+                do_get(request)
+                self.assertEqual(request.response, 200)
+                self.assertGreater(len(request.wfile.getvalue()), 0)
 
         inventory = request_type('/api/inventory')
         do_get(inventory)

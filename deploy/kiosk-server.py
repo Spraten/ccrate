@@ -638,6 +638,13 @@ class Handler(BaseHTTPRequestHandler):
                 except ProcessLookupError:pass
         timer=threading.Timer(0.3,close_window);timer.daemon=True;timer.start()
     def do_GET(self):
+        if self.path in ('/', '/terminal.css', '/terminal.js', '/checkout-ui.js', '/scanner_input.js'):
+            self.send_error(404); return
+        if urlsplit(self.path).path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js'):
+            name = {'/touchscreen': 'touchscreen.html', '/touchscreen.css': 'touchscreen.css', '/touchscreen.js': 'touchscreen.js'}[urlsplit(self.path).path]
+            content = (ROOT / 'kiosk' / name).read_bytes()
+            mime = 'text/html; charset=utf-8' if name.endswith('.html') else ('text/css; charset=utf-8' if name.endswith('.css') else 'application/javascript; charset=utf-8')
+            self.send_response(200); self.send_header('Content-Type', mime); self.send_header('Content-Length', str(len(content))); self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(content); return
         if desktop_handle(self,{'root':ROOT,'lock':lock,'ledger':ledger,'checkout_cart':checkout_cart,'shelf_checks':shelf_checks,'badges':badges,'native_jobs':native_jobs,'imports':imports,'workshop':workshop,'sessions':sessions,'web_item_actions':web_item_actions,'label_layouts':label_layouts,'label_asset_root':LABEL_ASSET_ROOT}):return
         if urlsplit(self.path).path=='/checkout/cart':
             actor,generation=self.session.snapshot()
