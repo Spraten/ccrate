@@ -13,6 +13,12 @@ class TouchscreenShellTests(unittest.TestCase):
   self.assertRegex(js,r'setTimeout\(.*?120000\)')
   self.assertIn('generation',js); self.assertIn('instance',js); self.assertIn('clearDraft()',js)
   self.assertIn('badge-form',html); self.assertIn('focus-visible',css); self.assertIn('min-height:100px',css)
+ def test_newly_adopted_session_arms_expiry_once_without_poll_activity(self):
+  js=(ROOT/'kiosk/touchscreen.js').read_text()
+  adopt=re.search(r'function adopt\(session\)\{(.*?)\n  function armExpiry',js,re.S).group(1)
+  self.assertIn('armExpiry()',adopt)
+  self.assertIn('if(state.generation!==gen||state.instance!==inst)',adopt)
+  self.assertNotIn('armExpiry()',re.search(r'async function refresh\(\)(.*?)\n  badgeForm',js,re.S).group(1))
  def test_server_session_response_shape(self):
   source=(ROOT/'deploy/kiosk-server.py').read_text()
   self.assertRegex(source,r"'user':\{'id':member\['id'\],'name':member\['name'\]\} if member else None,'generation':snapshot\[1\],'instance':self\.session\.instance")

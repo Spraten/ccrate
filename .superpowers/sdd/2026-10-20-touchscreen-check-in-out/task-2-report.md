@@ -19,7 +19,7 @@ The shell establishes the shared entry/session helpers only; checkout and return
 
 ## Review fixes (follow-up commit)
 
-Commit `7a3699fb0ec7304afe089e2a0e335a3a47413199` adds the two requested shell behaviors. Check out and Return now expose a badge input and submit scanned badge text to the existing `/scan` endpoint; the recognized `{kind:"user", user:{id,name}, generation, instance}` response is adopted, and the member name is shown before continuing. User interaction posts `/session/activity`; a local 120-second inactivity timer also ends the captured generation/instance and clears the page draft. `/session/end` uses the server's `expected_generation` and `expected_instance` fields. The timer cannot end a newer session, and session polling rejects stale responses via the shell epoch.
+Commit `55c966d995527226990c0186b55650e843eeaf18` adds the two requested shell behaviors. Check out and Return now expose a badge input and submit scanned badge text to the existing `/scan` endpoint; the recognized `{kind:"user", user:{id,name}, generation, instance}` response is adopted, and the member name is shown before continuing. User interaction posts `/session/activity`; a local 120-second inactivity timer also ends the captured generation/instance and clears the page draft. `/session/end` uses the server's `expected_generation` and `expected_instance` fields. The timer cannot end a newer session, and session polling rejects stale responses via the shell epoch.
 
 The API payload contract was verified against `Handler.do_GET`'s `/api/session` response and `/scan`'s badge response in `deploy/kiosk-server.py`. Focused shell coverage now checks both payload shapes and the badge/activity/expiry integration.
 
@@ -27,4 +27,12 @@ Verification after these fixes:
 
 - `python3 -m unittest discover -s tests -p 'test_kiosk_static_assets.py' -v` — passed.
 - `python3 -m unittest discover -s tests -p 'test_touchscreen_shell.py' -v` — passed (2 tests).
+- `git diff --check` — passed.
+
+## Session adoption timer race fix
+
+Commit `447217ae86129d0f795145e5650f661217ca4ddd` re-arms the 120-second local expiry when `/api/session` adopts a changed, active badge generation/instance. Unchanged periodic polls do not re-arm the timer, so polling cannot extend a user's inactivity window. Added a regression test that failed before the fix and checks both changed-session arming and the absence of refresh-level timer resets.
+
+- `python3 -m unittest discover -s tests -p 'test_kiosk_static_assets.py' -v` — passed.
+- `python3 -m unittest discover -s tests -p 'test_touchscreen_shell.py' -v` — passed (3 tests).
 - `git diff --check` — passed.
