@@ -4,7 +4,7 @@
 
   const state = {
     items: [], key: null, reviewed: false, sending: false, uncertain: false,
-    receipt: null, receiptSession: null, operationSession: null, epoch: 0, preserved: false
+    receipt: null, receiptSession: null, operationSession: null, epoch: 0, preserved: false, reviewView: false
   };
   const el = (tag, text = '') => { const node = document.createElement(tag); node.textContent = text; return node; };
   const context = () => ({
@@ -49,6 +49,13 @@
     const captured = state.operationSession;
     const allowed = valid(context()) || (state.preserved && sameSession(captured));
     if (!allowed) { host.append(el('p', 'Scan your member badge first.')); return; }
+    if (state.reviewView) {
+      host.append(el('h3', 'Review return'));
+      for (const item of state.items) { const summary = el('article'); summary.append(el('strong', item.root.name || item.root.id)); summary.append(el('p', `Condition: ${item.condition || 'Keep recorded condition'} · Return location: ${item.availability.get(item.root.id)?.location?.name || 'Assigned location'}`)); if (item.issueNote) summary.append(el('p', `Issue note: ${item.issueNote}`)); if (item.note) summary.append(el('p', `Return note: ${item.note}`)); host.append(summary); }
+      if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); window.setKioskCancelAllowed?.(false); } else { if (state.sending) host.append(el('p', 'Saving return…')); else button('Back to items', () => { state.reviewView = false; render(); }); const confirm = button('Confirm return', confirmReturn); confirm.disabled = state.sending; window.setKioskCancelAllowed?.(!state.sending); }
+      return;
+    }
+    window.setKioskCancelAllowed?.(!state.sending && !state.uncertain);
 
     const status = el('p', message);
     host.append(status);
@@ -138,14 +145,13 @@
       remove.addEventListener('click', () => { state.items = state.items.filter(entry => entry !== item); state.reviewed = false; render(); }); card.append(remove);
       host.append(card);
     }
-    const review = button('Review return', reviewReturn), confirm = confirmButton = button('Confirm return', confirmReturn);
-    confirm.disabled = !state.reviewed || state.sending || state.uncertain;
-    const actions = el('div'); actions.className = 'flow-actions'; actions.setAttribute('aria-label', 'Return actions'); host.append(actions); actions.append(review, confirm);
-    if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); }
+    const review = button('Review return', reviewReturn);
+    const actions = el('div'); actions.className = 'flow-actions'; actions.setAttribute('aria-label', 'Return actions'); host.append(actions); actions.append(review);
+    if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); window.setKioskCancelAllowed?.(false); }
   }
 
   async function beginReturn() {
-    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, epoch: state.epoch + 1 });
+    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, reviewView: false, epoch: state.epoch + 1 });
     window.returnReceiptPreserved = false;
     render();
   }
@@ -153,12 +159,12 @@
   async function reviewReturn() {
     if (!valid(context()) || !state.items.length) return;
     if (state.items.some(item => item.condition && !item.issueNote.trim())) { render('Add an issue note for every changed condition.'); return; }
-    state.reviewed = true; render('Review complete. Confirm once to record these returns.');
+    state.reviewed = true; state.reviewView = true; render('Review complete. Confirm once to record these returns.');
   }
   async function confirmReturn() {
     const captured = context(), epoch = state.epoch;
     if (!state.reviewed || state.sending || state.uncertain || !valid(captured)) return;
-    state.key ||= crypto.randomUUID(); state.operationSession = captured; state.sending = true; state.preserved = true; window.returnReceiptPreserved = true; render();
+    state.key ||= crypto.randomUUID(); state.operationSession = captured; state.sending = true; state.reviewView = true; state.preserved = true; window.returnReceiptPreserved = true; render(); window.setKioskCancelAllowed?.(false);
     const targetsById = new Map();
     for (const item of state.items) for (const entity of item.entities) targetsById.set(entity.id, { entity_id: entity.id, ...(item.condition ? { condition: item.condition, note: item.issueNote } : {}), return_note: item.componentNotes?.[entity.id] ?? item.note });
     try {
@@ -173,9 +179,9 @@
       if (!current(captured, epoch, true)) return;
       state.sending = false;
       if (error.status === 400 && !/(interrupted|admin recovery|needs staff review|requires recovery|reconciliation)/i.test(error.message)) {
-        state.uncertain = false; state.key = null; state.operationSession = null; state.preserved = false; window.returnReceiptPreserved = false; state.reviewed = false; render(error.message); return;
+        state.uncertain = false; state.key = null; state.operationSession = null; state.preserved = false; window.returnReceiptPreserved = false; state.reviewed = false; state.reviewView = false; render(error.message); return;
       }
-      state.uncertain = true; render(error.message);
+      state.uncertain = true; state.reviewView = true; render(error.message); window.setKioskCancelAllowed?.(false);
     }
   }
   async function recoverReturn() {
@@ -185,7 +191,7 @@
       const result = await request('/operation/status', { request_key: key });
       if (!current(captured, epoch, true)) return;
       if (result.status === 'completed') { state.receipt = result; state.receiptSession = captured; state.uncertain = false; render(); }
-      else if (result.status === 'not_started') { state.uncertain = false; state.key = null; state.operationSession = null; state.preserved = false; window.returnReceiptPreserved = false; state.reviewed = false; render('No return was recorded. Review the updated items before trying again.'); }
+      else if (result.status === 'not_started') { state.uncertain = false; state.key = null; state.operationSession = null; state.preserved = false; window.returnReceiptPreserved = false; state.reviewed = false; state.reviewView = false; render('No return was recorded. Review the updated items before trying again.'); }
       else render('No completed return is recorded. Ask staff to check before starting another return.');
     } catch (error) { if (current(captured, epoch, true)) render('Could not check status. Ask staff to verify before another return.'); }
   }
@@ -195,7 +201,7 @@
   window.addEventListener('ccrate-session-change', () => {
     const captured = state.operationSession;
     if (state.preserved && sameSession(captured)) { render(); return; }
-    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, epoch: state.epoch + 1 });
+    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, reviewView: false, epoch: state.epoch + 1 });
     window.returnReceiptPreserved = false; render();
   });
   window.addEventListener('ccrate-flow-done', event => {
