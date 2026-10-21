@@ -39,3 +39,7 @@ Verification: checkout cart UI suite passed; touchscreen checkout suite passed (
 Checkout confirmation and status recovery receipts now retain the exact generation and instance captured for the operation. Receipt Done passes that context to the shell. If the active shell session has since changed, Done returns to the home screen and hides checkout while preserving the newer member session; it does not send `/session/end` for the newer identity. Behavioral tests cover the session changing between receipt and Done and verify the newer member remains active.
 
 Focused checkout UI and touchscreen checkout suites passed; `git diff --check` passed.
+
+## Pending Done cleanup race
+
+The shell's `/session/end` completion now clears its local state only if generation and instance still match the context captured when Done was pressed. The regression fixture holds the end response pending, adopts a newer session, then resolves the old end request and verifies the new member identity remains visible. Focused checkout suites and `git diff --check` passed.
