@@ -1,6 +1,7 @@
 (() => {
   const CLIENT_KEY = 'ccrate-touchscreen-client';
   const clientId = localStorage.getItem(CLIENT_KEY) || (() => { const id = crypto.randomUUID(); localStorage.setItem(CLIENT_KEY, id); return id; })();
+  window.touchscreenClientId=clientId;
   const state = {generation:null, instance:null, flow:null, draft:[], epoch:0, timer:null, expiry:null};
   const badgeForm=document.querySelector('#badge-form'), badgeCode=document.querySelector('#badge-code');
   const home = document.querySelector('#home'), flow = document.querySelector('#flow'), title = document.querySelector('#flow-title'), message = document.querySelector('#flow-message'), member = document.querySelector('#member'), done = document.querySelector('#done');

@@ -675,7 +675,7 @@ class Handler(BaseHTTPRequestHandler):
                     for raw_id in ids:
                         try:
                             item_id=str(NativeUUID(raw_id));item=client.entity(item_id)
-                            reason='An operation needs staff review' if unresolved else ('Item is not currently checked out' if item_id not in custody else checkout_blocker(item))
+                            reason='An operation needs staff review' if unresolved else ('Item is not currently checked out' if item_id not in custody else ('Locations cannot be returned' if item.get('entityType',{}).get('isLocation') else ('Return individually tracked equipment only' if item.get('quantity')!=1 else None)))
                             parent=returns.parent_id(item);location=None
                             if parent:
                                 loc=client.entity(parent);location={'id':parent,'name':loc.get('name')}

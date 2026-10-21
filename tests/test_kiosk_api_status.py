@@ -46,9 +46,9 @@ def availability_handler():
 class KioskApiStatusTests(unittest.TestCase):
     def test_handler_availability_contract_with_isolated_fixtures(self):
         from uuid import uuid4
-        Handler,ns=availability_handler();actor=str(uuid4());held=str(uuid4());stock=str(uuid4());loc=str(uuid4())
-        def entity(i,name='Item'):
-            return {'id':i,'name':name,'quantity':1,'entityType':{'isLocation':False},'parent':{'id':loc},'fields':[{'name':'Equipment condition','type':'text','textValue':'Ready'}]}
+        Handler,ns=availability_handler();actor=str(uuid4());held=str(uuid4());attention=str(uuid4());stock=str(uuid4());loc=str(uuid4())
+        def entity(i,name='Item',state='Ready'):
+            return {'id':i,'name':name,'quantity':1,'entityType':{'isLocation':False},'parent':{'id':loc},'fields':[{'name':'Equipment condition','type':'text','textValue':state}]}
         class Ledger:
             def __init__(self,rows=(),pending=()):self.rows=rows;self.pending=pending
             def custody(self,group):return list(self.rows)
@@ -56,11 +56,11 @@ class KioskApiStatusTests(unittest.TestCase):
         def get(path,fixture,ledger):
             ns['ledger']=ledger;ns['Homebox']=lambda root:FixtureClient(fixture)
             h=Handler.__new__(Handler);h.fixture=fixture;h.path=path;h.headers={};out=[];h.reply_json=lambda c,d:out.append((c,d));h.do_GET();return out[0]
-        entities={held:entity(held),stock:entity(stock),loc:{'id':loc,'name':'Bench','quantity':1,'entityType':{'isLocation':True}}}
-        f=RouteFixture(actor,4,entities,custody=[{'entity_id':held}]);status,data=get('/return/availability?ids='+held+','+stock,f,Ledger([{'entity_id':held}]))
-        self.assertEqual(status,200);self.assertEqual(set(data),{'items'});self.assertEqual([x['id'] for x in data['items']],[held,stock])
-        self.assertTrue(data['items'][0]['eligible']);self.assertEqual(data['items'][0]['location'],{'id':loc,'name':'Bench'})
-        self.assertFalse(data['items'][1]['eligible']);self.assertIn('not currently checked out',data['items'][1]['reason'])
+        entities={held:entity(held,state='Broken'),attention:entity(attention,state='Needs Attention'),stock:entity(stock),loc:{'id':loc,'name':'Bench','quantity':1,'entityType':{'isLocation':True}}}
+        f=RouteFixture(actor,4,entities,custody=[{'entity_id':held},{'entity_id':attention}]);status,data=get('/return/availability?ids='+held+','+attention+','+stock,f,Ledger([{'entity_id':held},{'entity_id':attention}]))
+        self.assertEqual(status,200);self.assertEqual(set(data),{'items'});self.assertEqual([x['id'] for x in data['items']],[held,attention,stock])
+        self.assertTrue(data['items'][0]['eligible']);self.assertEqual(data['items'][0]['condition'],'Broken');self.assertTrue(data['items'][1]['eligible']);self.assertEqual(data['items'][1]['condition'],'Needs Attention');self.assertEqual(data['items'][0]['location'],{'id':loc,'name':'Bench'})
+        self.assertFalse(data['items'][2]['eligible']);self.assertIn('not currently checked out',data['items'][2]['reason'])
         self.assertFalse(any('borrower' in x or 'actor' in x for x in data['items']))
         status,data=get('/return/availability?ids='+held,RouteFixture(actor,4,entities),Ledger([{'entity_id':held}],[{'status':'pending'}]))
         self.assertFalse(data['items'][0]['eligible']);self.assertIn('staff review',data['items'][0]['reason'])
@@ -73,7 +73,7 @@ class KioskApiStatusTests(unittest.TestCase):
     def test_scoped_return_availability_does_not_expose_custody_rows(self):
         source=(ROOT/'deploy/kiosk-server.py').read_text()
         route=source[source.index("if urlsplit(self.path).path == '/return/availability':"):source.index("terminal_path=urlsplit(self.path)")]
-        for token in ('self.session.snapshot()', 'ledger.custody(group)', 'checkout_blocker(item)', 'returns.parent_id(item)', 'condition(item)', '1<=len(ids)<=50', "'items':rows"):
+        for token in ('self.session.snapshot()', 'ledger.custody(group)', 'item.get(\'entityType\',{}).get(\'isLocation\')', "item.get('quantity')!=1", 'returns.parent_id(item)', 'condition(item)', '1<=len(ids)<=50', "'items':rows"):
             self.assertIn(token,route)
         for token in ('ledger.unresolved()', "if not actor", 'len(ids)!=len(set(ids))', 'client.entity(item_id)', 'self.session.snapshot()!=(actor,generation)', "'Item is not currently checked out'", "'An operation needs staff review'"):
             self.assertIn(token,route)
