@@ -33,3 +33,9 @@ Exact route evidence: `python3 -m unittest tests.test_terminal_members.TerminalM
 The existing uncertain-outcome recovery action remains available after an ambiguous confirmation. Added a Node DOM fixture that drives the real UI: it verifies one confirm attempt, a rendered Check saved result button, one status request with no second confirm, and a completed receipt. The receipt's Done action now signals the shell's existing Done handler, which ends the captured generation/instance and returns the shell home; a shell fixture verifies the request payload and resulting visibility state. Inventory search now indicates when no records match and tells users to refine when results exceed the 12 shown.
 
 Verification: checkout cart UI suite passed; touchscreen checkout suite passed (including the recovery and Done behavioral tests); badge-bound cart route fixture passed; `git diff --check` passed.
+
+## Receipt session identity fix
+
+Checkout confirmation and status recovery receipts now retain the exact generation and instance captured for the operation. Receipt Done passes that context to the shell. If the active shell session has since changed, Done returns to the home screen and hides checkout while preserving the newer member session; it does not send `/session/end` for the newer identity. Behavioral tests cover the session changing between receipt and Done and verify the newer member remains active.
+
+Focused checkout UI and touchscreen checkout suites passed; `git diff --check` passed.
