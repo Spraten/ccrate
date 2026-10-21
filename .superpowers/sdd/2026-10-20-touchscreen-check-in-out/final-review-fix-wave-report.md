@@ -15,3 +15,9 @@ Red-first regressions covered scan enforcement, kit component notes, definite ch
 `python3 deploy/verify-checkout-redesign.py` passed synthetic checkout and return flows at 800×480 with no network access or Homebox requests. Both screenshots were visually inspected: `/tmp/ccrate-checkout-review-800x480.png` and `/tmp/ccrate-return-review-800x480.png`.
 
 No live service, deployment, hardware, or dependencies were used. Full repository suite and physical Pi acceptance were not run in this fix wave.
+
+## Scoped re-review follow-up — 2026-10-21
+
+Changed the kiosk clients to treat HTTP 409 as uncertain by default. This keeps the request key and routes the user to status-only recovery, including for `Operation requires explicit reconciliation`; HTTP 400 validation errors still show the actionable correction and require a fresh review/key. Added executable checkout and return regressions that assert one confirm request, retained key, and one matching status request. The checkout module's changed CRLF lines were also adjusted so `git diff --check` is clean.
+
+Verification: checkout UI/return UI/shell suites passed (19 tests), checkout ops passed (20), return ops passed (37), synthetic browser verifier passed, Python/Node syntax checks passed, and `git diff --check` passed.

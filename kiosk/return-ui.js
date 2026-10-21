@@ -172,7 +172,7 @@
     } catch (error) {
       if (!current(captured, epoch, true)) return;
       state.sending = false;
-      if ((error.status === 400 || error.status === 409) && !/(interrupted|admin recovery|needs staff review|requires recovery)/i.test(error.message)) {
+      if (error.status === 400 && !/(interrupted|admin recovery|needs staff review|requires recovery|reconciliation)/i.test(error.message)) {
         state.uncertain = false; state.key = null; state.operationSession = null; state.preserved = false; window.returnReceiptPreserved = false; state.reviewed = false; render(error.message); return;
       }
       state.uncertain = true; render(error.message);
