@@ -640,8 +640,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ('/', '/terminal.css', '/terminal.js', '/checkout-ui.js', '/scanner_input.js'):
             self.send_error(404); return
-        if urlsplit(self.path).path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js'):
-            name = {'/touchscreen': 'touchscreen.html', '/touchscreen.css': 'touchscreen.css', '/touchscreen.js': 'touchscreen.js'}[urlsplit(self.path).path]
+        if urlsplit(self.path).path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js', '/checkout-ui.js'):
+            name = {'/touchscreen': 'touchscreen.html', '/touchscreen.css': 'touchscreen.css', '/touchscreen.js': 'touchscreen.js', '/checkout-ui.js': 'checkout-ui.js'}[urlsplit(self.path).path]
             content = (ROOT / 'kiosk' / name).read_bytes()
             mime = 'text/html; charset=utf-8' if name.endswith('.html') else ('text/css; charset=utf-8' if name.endswith('.css') else 'application/javascript; charset=utf-8')
             self.send_response(200); self.send_header('Content-Type', mime); self.send_header('Content-Length', str(len(content))); self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(content); return
