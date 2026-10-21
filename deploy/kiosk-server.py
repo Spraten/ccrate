@@ -662,6 +662,9 @@ class Handler(BaseHTTPRequestHandler):
                 if set(query)!= {'ids'} or len(query['ids'])!=1:raise ValueError('Choose return items to review')
                 ids=query['ids'][0].split(',')
                 if not 1<=len(ids)<=50 or len(ids)!=len(set(ids)) or any(not x for x in ids):raise ValueError('Choose 1–50 unique return items')
+                try:ids=[str(NativeUUID(value)) for value in ids]
+                except (ValueError,TypeError):raise ValueError('Return item IDs must be valid UUIDs') from None
+                if len(ids)!=len(set(ids)):raise ValueError('Choose 1–50 unique return items')
                 with lock:
                     client=Homebox(ROOT);native=client.call('/api/v1/users/self')['item'];group=native['defaultGroupId']
                     members=client.call('/api/v1/groups/members')
@@ -681,8 +684,8 @@ class Handler(BaseHTTPRequestHandler):
                             rows.append({'id':raw_id,'eligible':False,'reason':'Item could not be found','condition':None,'location':None})
                     if self.session.snapshot()!=(actor,generation):raise Conflict('Badge session changed; refresh return availability')
                 self.reply_json(200,{'items':rows})
-            except ValueError as error:self.reply_json(400,{'error':str(error)})
             except Conflict as error:self.reply_json(409,{'error':str(error)})
+            except ValueError as error:self.reply_json(400,{'error':str(error)})
             except OSError as error:self.reply_json(503,{'error':str(error) or 'C-Crate unavailable'})
             return
         if urlsplit(self.path).path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js', '/checkout-ui.js', '/return-ui.js'):

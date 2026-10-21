@@ -16,3 +16,9 @@ Validation completed:
 - `git diff --check`
 
 No live Homebox was accessed.
+
+## Review follow-up
+
+Added executable Node behavior coverage for badge gating, search candidate mismatch, availability blockers, displayed condition/location, issue and return notes, uncertain confirmation recovery, and captured-session Done. Added isolated `Handler.do_GET` fixtures for checked-out and in-stock items, unresolved operations, selected-ID-only response, active-badge requirement, malformed/duplicate/over-limit IDs, and stale sessions. Restored the actual anonymous session endpoint regression test. Existing `test_returns.py` confirms backend anonymous return and verified-kit behavior remain intact; the UI contains no anonymous return mode.
+
+Follow-up checks passed: focused kiosk API, return scan, touchscreen return, touchscreen checkout, and return transaction suites; `py_compile`; `git diff --check`. For `test_returns.py`, `PYTHONPATH=ops` is required by its imports.
