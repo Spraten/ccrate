@@ -66,18 +66,24 @@ def load_get_route():
 class CompanionRouteTests(unittest.TestCase):
     def test_touchscreen_assets_are_served_and_api_routes_remain(self):
         do_get, request_type = load_get_route()
-        for path in ('/', '/terminal.css', '/terminal.js', '/checkout-ui.js', '/scanner_input.js'):
+        for path in ('/', '/terminal.css', '/terminal.js', '/scanner_input.js'):
             with self.subTest(path=path):
                 request = request_type(path)
                 do_get(request)
                 self.assertEqual(request.response, 404)
 
-        for path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js'):
+        for path in ('/touchscreen', '/touchscreen.css', '/touchscreen.js', '/checkout-ui.js', '/return-ui.js'):
             with self.subTest(path=path):
                 request = request_type(path)
                 do_get(request)
                 self.assertEqual(request.response, 200)
                 self.assertGreater(len(request.wfile.getvalue()), 0)
+                if path == '/touchscreen':
+                    html = request.wfile.getvalue().decode()
+                    self.assertIn('src="/checkout-ui.js"', html)
+                    self.assertIn('src="/return-ui.js"', html)
+                if path in ('/checkout-ui.js', '/return-ui.js'):
+                    self.assertIn('javascript', request.response_headers.get('Content-Type', ''))
 
         inventory = request_type('/api/inventory')
         do_get(inventory)

@@ -652,7 +652,7 @@ class Handler(BaseHTTPRequestHandler):
                 except ProcessLookupError:pass
         timer=threading.Timer(0.3,close_window);timer.daemon=True;timer.start()
     def do_GET(self):
-        if self.path in ('/', '/terminal.css', '/terminal.js', '/checkout-ui.js', '/scanner_input.js'):
+        if self.path in ('/', '/terminal.css', '/terminal.js', '/scanner_input.js'):
             self.send_error(404); return
         if urlsplit(self.path).path == '/return/availability':
             actor,generation=self.session.snapshot()
