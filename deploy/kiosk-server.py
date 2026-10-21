@@ -566,14 +566,23 @@ class Handler(BaseHTTPRequestHandler):
                                 raise Conflict('This Workshop result requires its original collection and service actor context.')
                         badge_actor,generation=self.session.snapshot()
                         key=uuid(data.get('request_key'))
-                        status_actor=checkout_status_actor(ledger,group,key,badge_actor,native['id'])
-                        result=operation_status({'group':group,'actor':status_actor,'manager':True},globals(),data)
+                        checkout_request=ledger.request(group,key)
+                        if checkout_request and checkout_request['action']=='check_out':
+                            # The request key is a status-only capability for its own checkout.
+                            # Confirmation writes still require the live badge session above.
+                            owner=checkout_request['actor_id']
+                            status_actor=owner if not badge_actor or owner==badge_actor else badge_actor
+                            status_manager=False
+                        else:
+                            status_actor=checkout_status_actor(ledger,group,key,badge_actor,native['id'])
+                            status_manager=True
+                        result=operation_status({'group':group,'actor':status_actor,'manager':status_manager},globals(),data)
                         if result.get('action')=='check_out' and result.get('id'):
                             with ledger.connection() as db:
                                 op=db.execute('SELECT actor_id FROM operations WHERE id=? AND group_id=?',(result['id'],group)).fetchone()
-                            if not badge_actor or not op or op['actor_id']!=badge_actor:
+                            if not op or op['actor_id']!=status_actor or (badge_actor and op['actor_id']!=badge_actor):
                                 result={'status':'not_started'}
-                            elif result.get('status')=='completed':
+                            elif badge_actor and result.get('status')=='completed':
                                 with ledger.connection() as db:
                                     ctxrow=db.execute('SELECT payload FROM operation_context WHERE operation_id=?',(result['id'],)).fetchone()
                                 if ctxrow and json.loads(ctxrow['payload']).get('checkout_cart'):

@@ -207,7 +207,7 @@
     window.returnReceiptPreserved = false; render();
   });
   window.addEventListener('ccrate-flow-done', event => {
-    if (!state.preserved || !sameSession(event.detail)) return;
+    if (!event.detail?.cleanupAcknowledged || !state.preserved || !sameSession(event.detail)) return;
     state.preserved = false;
     Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, cancelled: false, receipt: null, receiptSession: null, operationSession: null, epoch: state.epoch + 1 });
     render();
