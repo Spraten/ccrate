@@ -4,7 +4,7 @@ Implemented a checkout surface in the Task 2 touchscreen shell. Lookup results o
 
 Confirmation sends a single request with the stable request key and captured session generation/instance. Network uncertainty preserves the key and exposes a manual `/operation/status` action without retrying confirmation. Completed receipts remain visible until Done.
 
-Added the `/checkout-ui.js` static asset route needed by the shell. No server checkout/cart mutation was introduced. The server already records scans and enforces scan, session, kit-version, and checkout rules.
+Added the `/checkout-ui.js` static asset route needed by the shell and a badge-scoped `POST /checkout/cart` companion route for saved checkout-list updates. The route uses the existing `CheckoutCart.save` storage service and enforces active badge, generation/instance, collection membership, revision, and idempotency checks. The server already records scans and enforces scan, session, kit-version, and checkout rules.
 
 ## Verification
 
@@ -27,3 +27,9 @@ Focused checkout tests and `git diff --check` pass after these fixes.
 Added `POST /checkout/cart` to the companion route allowlist. It requires an active badge session, exact generation and instance from the request, current collection membership, and a still-current session after acquiring the shared lock. The route delegates item, note, revision, and request-key validation/idempotency to the existing `CheckoutCart.save` service. It uses the existing companion and storage service, with no added dependency or manager route change. The touchscreen Save action now submits generation and instance.
 
 Exact route evidence: `python3 -m unittest tests.test_terminal_members.TerminalMemberTests.test_badge_bound_checkout_cart_save_requires_session_and_is_idempotent -v` passed. This fixture verifies a valid saved cart, same-key idempotent replay, stale revision conflict, stale session conflict, and unauthenticated denial. UI request contract: `python3 -m unittest discover -s tests -p 'test_checkout_cart_ui.py' -v` passed. Checkout flow: `python3 -m unittest discover -s tests -p 'test_touchscreen_checkout.py' -v` passed. `git diff --check` passed.
+
+## Recovery and completion review
+
+The existing uncertain-outcome recovery action remains available after an ambiguous confirmation. Added a Node DOM fixture that drives the real UI: it verifies one confirm attempt, a rendered Check saved result button, one status request with no second confirm, and a completed receipt. The receipt's Done action now signals the shell's existing Done handler, which ends the captured generation/instance and returns the shell home; a shell fixture verifies the request payload and resulting visibility state. Inventory search now indicates when no records match and tells users to refine when results exceed the 12 shown.
+
+Verification: checkout cart UI suite passed; touchscreen checkout suite passed (including the recovery and Done behavioral tests); badge-bound cart route fixture passed; `git diff --check` passed.
