@@ -31,7 +31,7 @@ Verification after these fixes:
 
 ## Session adoption timer race fix
 
-Commit `447217ae86129d0f795145e5650f661217ca4ddd` re-arms the 120-second local expiry when `/api/session` adopts a changed, active badge generation/instance. Unchanged periodic polls do not re-arm the timer, so polling cannot extend a user's inactivity window. Added a regression test that failed before the fix and checks both changed-session arming and the absence of refresh-level timer resets.
+Commit `1fcfd155b4621425f30ddf9599be2b893989bf74` re-arms the 120-second local expiry when `/api/session` adopts a changed, active badge generation/instance. Unchanged periodic polls do not re-arm the timer, so polling cannot extend a user's inactivity window. Added a regression test that failed before the fix and checks both changed-session arming and the absence of refresh-level timer resets.
 
 - `python3 -m unittest discover -s tests -p 'test_kiosk_static_assets.py' -v` — passed.
 - `python3 -m unittest discover -s tests -p 'test_touchscreen_shell.py' -v` — passed (3 tests).
