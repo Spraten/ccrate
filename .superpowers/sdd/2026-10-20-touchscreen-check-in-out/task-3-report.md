@@ -13,3 +13,11 @@ Added the `/checkout-ui.js` static asset route needed by the shell. No server ch
 - `git diff --check` — passed.
 
 The tests here are focused source/fixture contracts; no live Homebox or browser/device operation was performed.
+
+## Review fixes
+
+- Search now reads the companion `/api/inventory` route and filters candidate records locally. Selecting a result leaves the physical scan input empty; the subsequently scanned entity must match the selected candidate before being added.
+- The touchscreen flow loads the member's saved checkout cart, exposes save-list behavior through the existing `/checkout/cart` POST API, and supplies the saved revision/item context when the batch consists of saved roots. Saved item notes are restored when rescanned.
+- Updated regression assertions for supported inventory search, no candidate-to-scan prefill, scan/candidate match, and saved-cart context.
+
+Focused checkout tests and `git diff --check` pass after these fixes.
