@@ -1888,8 +1888,8 @@ def run_frontend_command(command, *, cwd, env):
 
 def emit_kiosk_theme():
     """Publish Homebox theme declarations to the kiosk's stable asset root."""
-    source = ROOT/'work/homebox-ui-next/assets/css/main.css'
-    ccrate = ROOT/'homebox-ui/overlay/assets/css/ccrate.css'
+    source = BUILD/'assets/css/main.css'
+    ccrate = BUILD/'assets/css/ccrate.css'
     css = source.read_text()
     start = css.index('@layer base {')
     depth = 0
