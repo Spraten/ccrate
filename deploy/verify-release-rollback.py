@@ -277,4 +277,890 @@ def _load_fallback_evidence(path, packages):
     created = [row.get('loan_created_at') for row in trace]
     confirmed = [row.get('loan_confirmed_at') for row in trace]
     if (not all(valid_identity(value) for value in native_ids + ledger_ids)
-   5ÛNô¶‰Ëkºwµç}•Ù¥‘•¹”¡•Ù¥‘•¹•}Á…Ñ °€¡ÁÉ•Ù¥½ÕÌ°…¹‘¥‘…Ñ”°™…±±‰…¬¤¤(€€€•±Í”è(€€€€€€€É…İ}¡•­Ì€ô™…±±‰…­}µ…¹¥™•ÍÑlÁÉ½Ù•¹…¹”t¹•Ğ Ñ•ÍÑ}É••¥ÁĞœ°íô¤¹•Ğ ™…±±‰…­}¡•­Ìœ¤(€€€€€€€¥˜¹½Ğ¥Í¥¹ÍÑ…¹”¡É…İ}¡•­Ì°‘¥Ğ¤½ÈÍ•Ğ¡É…İ}¡•­Ì¤€„ôÍ•Ğ¡11	-}!-L¤½È…¹ä (€€€€€€€€€€€€€€€É…İ}¡•­Ì¹•Ğ¡¹…µ”¤€„ô€Á…ÍÍ•œ™½È¹…µ”¥¸11	-}!-L¤è(€€€€€€€€€€€µ¥ÍÍ¥¹œ€ôÍ½ÉÑ•¡¹…µ”™½È¹…µ”¥¸11	-}!-L(€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜¹½Ğ¥Í¥¹ÍÑ…¹”¡É…İ}¡•­Ì°‘¥Ğ¤½ÈÉ…İ}¡•­Ì¹•Ğ¡¹…µ”¤€„ô€Á…ÍÍ•œ¤(€€€€€€€€€€€É…¥Í”¥áÑÕÉ•I•™ÕÍ…° …ÉÑ¥™…Ğµ‰½Õ¹¹…µ•™…±±‰…¬¡•­Ì…É”µ¥ÍÍ¥¹œ½ÈÕ¹Á…ÍÍ•è€œ€¬€œ°€œ¹©½¥¸¡µ¥ÍÍ¥¹œ¤¤(€€€¥˜€¡Á½±¥ä¹•Ğ •Ù¥‘•¹•}Í½Á”œ¤€„ô€™¥áÑÕÉ”µ½¹±äœ(€€€€€€€€€€€½ÈÁ½±¥ä¹•Ğ ÉÕ¹Ñ¥µ•}ÍÑ…Ñ•}Á½±¥äœ¤€„ô€Í…µ”µÍÑ½É•Ìµ¹¼µÉ•ÍÑ½É”œ(€€€€€€€€€€€½ÈÁ½±¥ä¹•Ğ Á¡åÍ¥…±}•™™•Ñ}Á½±¥äœ¤€„ô€¹•Ù•ÈµÉ•Á±…äœ(€€€€€€€€€€€½ÈÁ½±¥ä¹•Ğ É½½µÍØÉ}É•…‘}Ù•ÉÍ¥½¹Ìœ¤€„ô…Á…‰¥±¥Ñä¹•Ğ É•…‘}Ù•ÉÍ¥½¹Ìœ¤(€€€€€€€€€€€½ÈÁ½±¥ä¹•Ğ İ½É­Í¡½Á}µÕÑ…Ñ¥½¹}µ½‘”œ¤€„ô…Á…‰¥±¥Ñä¹•Ğ İÉ¥Ñ•}µ½‘”œ¤(€€€€€€€€€€€½ÈÁ½±¥ä¹•Ğ …¹‘¥‘…Ñ•}µ…¹¥™•ÍÑ}Í¡„ÈÔØœ¤€„ô}µ…¹¥™•ÍÑ}¡…Í ¡…¹‘¥‘…Ñ”¤(€€€€€€€€€€€½ÈÁ½±¥ä¹•Ğ µ•µ‰•É}ÁÉ½™¥±•}±½…¹}½µÁ…Ñ¥‰¥±¥Ñäœ¤€„ô€Ù•É¥™¥•œ¤è(€€€€€€€É…¥Í”¥áÑÕÉ•I•™ÕÍ…° ™¥áÑÕÉ”™…±±‰…¬Á½±¥ä‘½•Ì¹½Ğµ…Ñ ¥ÑÌ…ÉÑ¥™…Ğµ‰½Õ¹…Á…‰¥±¥Ñäœ¤(€€€¥˜…¹‘¥‘…Ñ•}µ…¹¥™•ÍÑlÁÉ½Ù•¹…¹”ulİ½É­Í¡½Á}…Á…‰¥±¥ÑäulİÉ¥Ñ•}µ½‘”t€„ô€ØÈœè(€€€€€€€É…¥Í”¥áÑÕÉ•I•™ÕÍ…° …¹‘¥‘…Ñ”Á…­…”µÕÍĞ¡…Ù”„Ù•ÉÍ¥½¸´È]½É­Í¡½ÀİÉ¥Ñ•Èœ¤(€€€€ŒÍÑ…•}‰Õ¹‘±”¡•­•É…ÜÉ••¥ÁĞ‰åÑ•Ì‰•™½É”Á…­…¥¹œìÙ…±¥‘…Ñ•}‰Õ¹‘±”(€€€€ŒÉ•¡•­ÌÑ¡”•µ‰•‘‘•…¹½¹¥…°½‰©•Ğ¡…Í ¸=¹±äÑ¡•Í”‰½Õ¹Á…ÍÍ•‘€(€€€€ŒÉ•ÍÕ±ÑÌµ…ä¹½Ü‰”ÑÉ…¹Í±…Ñ•™½ÈÍ•±•Ñ}‰Õ¹‘±”Ì‰½½±•…¸Í¡•µ„¸(€€€É••¥ÁĞ€ôì(€€€€€€€€•á•ÕÑ¥½¹}Í½Á”œè€™¥áÑÕÉ”µ½¹±äœ°(€€€€€€€€ÁÉ•Ù¥½ÕÍ}‰Õ¹‘±•}µ…¹¥™•ÍÑ}Í¡„ÈÔØœè}µ…¹¥™•ÍÑ}¡…Í ¡ÁÉ•Ù¥½ÕÌ¤°(€€€€€€€€ÁÉ•Ù¥½ÕÍ}¹…Ñ¥Ù•}Í¡„ÈÔØœèÁÉ•Ù¥½ÕÍ}µ…¹¥™•ÍÑlÁÉ½Ù•¹…¹”ul¹…Ñ¥Ù•}Í¡„ÈÔØt°(€€€€€€€€…¹‘¥‘…Ñ•}‰Õ¹‘±•}µ…¹¥™•ÍÑ}Í¡„ÈÔØœè}µ…¹¥™•ÍÑ}¡…Í ¡…¹‘¥‘…Ñ”¤°(€€€€€€€€…¹‘¥‘…Ñ•}¹…Ñ¥Ù•}Í¡„ÈÔØœè…¹‘¥‘…Ñ•}µ…¹¥™•ÍÑlÁÉ½Ù•¹…¹”ul¹…Ñ¥Ù•}Í¡„ÈÔØt°(€€€€€€€€™…±±‰…­}‰Õ¹‘±•}µ…¹¥™•ÍÑ}Í¡„ÈÔØœè}µ…¹¥™•ÍÑ}¡…Í ¡™…±±‰…¬¤°(€€€€€€€€™…±±‰…­}¹…Ñ¥Ù•}Í¡„ÈÔØœè™…±±‰…­}µ…¹¥™•ÍÑlÁÉ½Ù•¹…¹”ul¹…Ñ¥Ù•}Í¡„ÈÔØt°(€€€€€€€€™…±±‰…­}Á½±¥å}Í¡„ÈÔØœè¡…Í¡±¥ˆ¹Í¡„ÈÔØ¡©Í½¸¹‘ÕµÁÌ¡Á½±¥ä°Í½ÉÑ}­•åÌõQÉÕ”°(€€€€€€€€€€€Í•Á…É…Ñ½ÉÌô œ°œ°€œèœ¤¤¹•¹½‘” ¤¤¹¡•á‘¥•ÍĞ ¤°(€€€€€€€€¡•­Ìœèí¹…µ”èÉ…İ}¡•­Ím¹…µ•t€ôô€Á…ÍÍ•œ™½È¹…µ”¥¸11	-}!-Mô°(€€€ô(€€€ÑÉäè(€€€€€€€Ù…±¥‘…Ñ•}É••¥ÁĞ¡É••¥ÁĞ°ÁÉ•Ù¥½ÕÌ°…¹‘¥‘…Ñ”°™…±±‰…¬¤(€€€•á•ÁĞ	Õ¹‘±•ÉÉ½È…Ì•áŒè(€€€€€€€É…¥Í”¥áÑÕÉ•I•™ÕÍ…°¡˜™¥áÑÕÉ”™…±±‰…¬É••¥ÁĞÁÉ•™±¥¡Ğ™…¥±•èí•áôœ¤™É½´•áŒ(€€€É•ÑÕÉ¸É••¥ÁĞ(()‘•˜}ÁÉ•™±¥¡Ñ}™¥áÑÕÉ•}Á…­…•Ì¡Á…Ñ¡Ì°…Á¤°•Ù¥‘•¹•}Á…Ñ õ9½¹”¤è(€€€|°	Õ¹‘±•ÉÉ½È°|°|°Ù…±¥‘…Ñ•}‰Õ¹‘±”°É•ÅÕ¥É•}…Á…‰¥±¥Ñä°|°|€ô…Á¤(€€€¥˜±•¸¡Á…Ñ¡Ì¤€„ô€Ì½È±•¸¡Í•Ğ¡µ…À¡A…Ñ °Á…Ñ¡Ì¤¤¤€„ô€Ìè(€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ™¥áÑÕÉ”µÁÉ½•ÍÌÉ•ÅÕ¥É•Ì‘¥ÍÑ¥¹Ğ<½½Á…­…•Ìœ¤(€€€µ…¹¥™•ÍÑÌ€ômt(€€€™½ÈÁ…Ñ ¥¸Á…Ñ¡Ìè(€€€€€€€µ…¹¥™•ÍĞ€ôÙ…±¥‘…Ñ•}‰Õ¹‘±”¡Á…Ñ ¤(€€€€€€€}É•ÅÕ¥É•}É••¥ÁÑ}‰¥¹‘¥¹Ì¡µ…¹¥™•ÍĞ¤(€€€€€€€ÁÉ½Ù•¹…¹”€ôµ…¹¥™•ÍĞ¹•Ğ ÁÉ½Ù•¹…¹”œ°íô¤(€€€€€€€¥˜€¡µ…¹¥™•ÍĞ¹•Ğ ™½Éµ…Ğœ¤€„ô€È(€€€€€€€€€€€€€€€½ÈÁÉ½Ù•¹…¹”¹•Ğ ‰Õ¥±‘}É••¥ÁĞœ°íô¤¹•Ğ •á•ÕÑ¥½¹}Í½Á”œ¤€„ô€™¥áÑÕÉ”µ½¹±äœ(€€€€€€€€€€€€€€€½ÈÁÉ½Ù•¹…¹”¹•Ğ Ñ•ÍÑ}É••¥ÁĞœ°íô¤¹•Ğ •á•ÕÑ¥½¹}Í½Á”œ¤€„ô€™¥áÑÕÉ”µ½¹±äœ¤è(€€€€€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ™¥áÑÕÉ”µÁÉ½•ÍÌÉ•ÅÕ¥É•Ì½µÁ±•Ñ”™¥áÑÕÉ”µ½¹±ä™½Éµ…Ğ´È<½½Á…­…•Ìœ¤(€€€€€€€µ…¹¥™•ÍÑÌ¹…ÁÁ•¹¡µ…¹¥™•ÍĞ¤(€€€½}…Á…‰¥±¥Ñä€ôÉ•ÅÕ¥É•}…Á…‰¥±¥Ñä¡µ…¹¥™•ÍÑÍlÁt°É½±”ôÁÉ•Ù¥½ÕÌœ¤(€€€}…Á…‰¥±¥Ñä€ôÉ•ÅÕ¥É•}…Á…‰¥±¥Ñä¡µ…¹¥™•ÍÑÍlÅt°É½±”ô…¹‘¥‘…Ñ”œ°É•ÅÕ¥É•}İÉ¥Ñ•ÈõQÉÕ”¤(€€€™}…Á…‰¥±¥Ñä€ôÉ•ÅÕ¥É•}…Á…‰¥±¥Ñä¡µ…¹¥™•ÍÑÍlÉt°É½±”ô™…±±‰…¬œ¤(€€€¥˜€¡½}…Á…‰¥±¥ÑålİÉ¥Ñ•}µ½‘”t€„ô€‘¥Í…‰±•œ(€€€€€€€€€€€½È}…Á…‰¥±¥ÑålİÉ¥Ñ•}µ½‘”t€„ô€ØÈœ(€€€€€€€€€€€½È™}…Á…‰¥±¥ÑålİÉ¥Ñ•}µ½‘”t¹½Ğ¥¸€ ØÈœ°€‘¥Í…‰±•œ¤¤è(€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ™¥áÑÕÉ”<½½]½É­Í¡½À…Á…‰¥±¥Ñ¥•Ì‘¼¹½ĞÍ…Ñ¥Í™ä‘¥Í…‰±•µ<°ØÈµ°½µÁ…Ñ¥‰±”µÁ½±¥äœ¤(€€€™¥ÉÍÑ}É••¥ÁĞ€ô}™¥áÑÕÉ•}É••¥ÁĞ¡Á…Ñ¡ÍlÁt°Á…Ñ¡ÍlÅt°Á…Ñ¡ÍlÉt°…Á¤°•Ù¥‘•¹•}Á…Ñ ¤(€€€€ŒµÑ¼µÉ•ÑÕÉ¸ÕÍ•ÌÑ¡”Í…µ”‰åÑ”µ¥‘•¹Ñ¥…°…ÉÑ¥™…Ğ…¹Ñ¡”Í…µ”(€€€€Œ…¹‘¥‘…Ñ”µ‰½Õ¹Á½±¥ä°İ¥Ñ …ÌÑ¡”Í•±•Ñ•ÁÉ•Ù¥½ÕÌÁ…­…”¸(€€€É•ÑÕÉ¹}É••¥ÁĞ€ô}™¥áÑÕÉ•}É••¥ÁĞ¡Á…Ñ¡ÍlÉt°Á…Ñ¡ÍlÅt°Á…Ñ¡ÍlÉt°…Á¤°•Ù¥‘•¹•}Á…Ñ ¤(€€€É•ÑÕÉ¸µ…¹¥™•ÍÑÌ°™¥ÉÍÑ}É••¥ÁĞ°É•ÑÕÉ¹}É••¥ÁĞ(()‘•˜}ÉÕ¹}™¥áÑÕÉ•}ÁÉ½•ÍÌ¡…ÉÌ°Á…Ñ¡Ì°‘•Á•¹‘•¹ä°…Á¤¤è(€€€|°	Õ¹‘±•ÉÉ½È°|°|°Ù…±¥‘…Ñ•}‰Õ¹‘±”€ô…Á¥lèÕt(€€€¥˜…ÉÌ¹¥¹©•Ñ}…¹‘¥‘…Ñ•}¥¹Ñ•ÉÉÕÁÑ¥½¸½È…ÉÌ¹¥¹©•Ñ}…¹‘¥‘…Ñ•}Ù•É¥™¥…Ñ¥½¹}™…¥±ÕÉ”è(€€€€€€€É…¥Í”	Õ¹‘±•ÉÉ½È ™¥áÑÕÉ”µÁÉ½•ÍÌµ½‘”ÕÍ•Ì¥ÑÌ½İ¸Í…µ”µÍÑ½É”…¹‘¥‘…Ñ”™…¥±ÕÉ”Í•¹…É¥¼œ¤(€€€µ…¹¥™•ÍÑÌ°™…±±‰…­}É••¥ÁĞ°É•ÑÕÉ¹}™…±±‰…­}É••¥ÁĞ€ô}ÁÉ•™±¥¡Ñ}™¥áÑÕÉ•}Á…­…•Ì (€€€€€€€Á…Ñ¡Ì°…Á¤°•Ñ…ÑÑÈ¡…ÉÌ°€™…±±‰…­}•Ù¥‘•¹”œ°9½¹”¤¤(€€€¥˜¹½Ğ‘•Á•¹‘•¹ä¹¥Í}‘¥È ¤½È‘•Á•¹‘•¹ä¹¥Í}Íåµ±¥¹¬ ¤è(€€€€€€€É…¥Í”¥áÑÕÉ•I•™ÕÍ…° ‘•Á•¹‘•¹äÁ…Ñ µÕÍĞ‰”…¸•á¥ÍÑ¥¹œÉ•½É‘•¹½¸µÍåµ±¥¹¬‘¥É•Ñ½Éäœ¤((€€€€Œ%µÁ½ÉĞÑ¡”ÁÉ½•ÍÌÉÕ¹¹•È½¹±ä…™Ñ•È•Ù•ÉäÁ…­…”°…Á…‰¥±¥Ñä°Á½±¥ä…¹(€€€€ŒÉ…ÜÉ••¥ÁĞ‰¥¹‘¥¹œ¡…ÌÁ…ÍÍ•¸9¼ÉÕ¸½ÍÑ½É”É½½Ğ•á¥ÍÑÌ…ĞÑ¡¥ÌÁ½¥¹Ğ¸(€€€¥µÁ½ÉĞÉÕ¹Áä(€€€É½½µ}Ù•É¥™¥•È€ôÉÕ¹Áä¹ÉÕ¹}Á…Ñ ¡ÍÑÈ¡AI=)P€¼€‘•Á±½ä½Ù•É¥™äµİ½É­Í¡½ÀµÉ½½µÌ¹Áäœ¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÉÕ¹}¹…µ”ô™¥áÑÕÉ•}ÁÉ½•ÍÍ}É½½µÌœ¤((€€€ÉÕ¹}¥€ôÕÕ¥¹ÕÕ¥Ğ ¤¹¡•à(€€€É•Ñ…¥¹•€ôAI=)P€¼€İ½É¬½ÅÕ•Õ”µ½½É‘¥¹…Ñ½Èœ€¼˜İ¡½±”µµ…ÀµÁÉ½•ÍÌµÉÕ¸µíÉÕ¹}¥‘ôœ(€€€É•Ñ…¥¹•¹µ­‘¥È¡µ½‘”ôÁ¼ÜÀÀ°Á…É•¹ÑÌõQÉÕ”¤(€€€±½Ì€ôÉ•Ñ…¥¹•€¼€±½Ìœ(€€€±½Ì¹µ­‘¥È¡µ½‘”ôÁ¼ÜÀÀ¤(€€€Ñ½­•¸€ôÕÕ¥¹ÕÕ¥Ğ ¤¹¡•à€¬ÕÕ¥¹ÕÕ¥Ğ ¤¹¡•à(€€€É•Á½ÉÑ}Á…Ñ €ôÉ•Ñ…¥¹•€¼€É••¥ÁĞ¹©Í½¸œ(€€€ÁÉ½•ÍÍ}µ…¹…•È€ô9½¹”(€€€É•ÍÕ±Ğ€ô9½¹”(€€€™…¥±ÕÉ”€ô9½¹”(€€€Ñ•µÁ}É½½Ğ€ô9½¹”(€€€±•…¹ÕÁ}•ÉÉ½ÉÌ€ômt(€€€ÑÉäè(€€€€€€€Ñ•µÁ}É½½Ğ€ôA…Ñ ¡Ñ•µÁ™¥±”¹µ­‘Ñ•µÀ¡ÁÉ•™¥àôİ¡½±”µµ…Àµ™¥áÑÕÉ”µÁÉ½•ÍÌ´œ¤¤(€€€€€€€½Ì¹¡µ½¡Ñ•µÁ}É½½Ğ°€Á¼ÜÀÀ¤(€€€€€€€É•±•…Í•Ì€ôÑ•µÁ}É½½Ğ€¼€É•±•…Í•Ìœ(€€€€€€€É•±•…Í•Ì¹µ­‘¥È¡µ½‘”ôÁ¼ÜÀÀ¤(€€€€€€€½Á¥•€ômt(€€€€€€€™½È¹…µ”°Á…Ñ ¥¸é¥À  <œ°€œ°€œ¤°Á…Ñ¡Ì¤è(€€€€€€€€€€€‘•ÍÑ¥¹…Ñ¥½¸€ôÉ•±•…Í•Ì€¼¹…µ”(€€€€€€€€€€€Í¡ÕÑ¥°¹½ÁåÑÉ•”¡Á…Ñ °‘•ÍÑ¥¹…Ñ¥½¸°Íåµ±¥¹­Ìõ…±Í”¤(€€€€€€€€€€€½Á¥•¹…ÁÁ•¹¡‘•ÍÑ¥¹…Ñ¥½¸¹É•Í½±Ù”¡ÍÑÉ¥ĞõQÉÕ”¤¤(€€€€€€€ÁÉ•Ù¥½ÕÌ°…¹‘¥‘…Ñ”°™…±±‰…¬€ô½Á¥•(€€€€€€€É•ÑÕÉ¹}™…±±‰…¬€ôÉ•±•…Í•Ì€¼€µÉ•ÑÕÉ¸œ(€€€€€€€Í¡ÕÑ¥°¹½ÁåÑÉ•”¡™…±±‰…¬°É•ÑÕÉ¹}™…±±‰…¬°Íåµ±¥¹­Ìõ…±Í”¤(€€€€€€€É•ÑÕÉ¹}™…±±‰…¬€ôÉ•ÑÕÉ¹}™…±±‰…¬¹É•Í½±Ù”¡ÍÑÉ¥ĞõQÉÕ”¤(€€€€€€€™½ÈÁ…­…”¥¸€ ©½Á¥•°É•ÑÕÉ¹}™…±±‰…¬¤è(€€€€€€€€€€€¥˜Ù…±¥‘…Ñ•}‰Õ¹‘±”¡Á…­…”¤¹•Ğ ™½Éµ…Ğœ¤€„ô€Èè(€€€€€€€€€€€€€€€É…¥Í”¥áÑÕÉ•I•™ÕÍ…° ½Á¥•™¥áÑÕÉ”Á…­…”¡…¹•‘ÕÉ¥¹œÍÑ…¥¹œœ¤((€€€€€€€ÉÕ¹Ñ¥µ”€ôÑ•µÁ}É½½Ğ€¼€ÉÕ¹Ñ¥µ”œ(€€€€€€€ÉÕ¹Ñ¥µ”¹µ­‘¥È¡µ½‘”ôÁ¼ÜÀÀ¤(€€€€€€€€¡ÉÕ¹Ñ¥µ”€¼€œ¹™¥áÑÕÉ”µÁÉ½•ÍÌµÑ½­•¸œ¤¹İÉ¥Ñ•}Ñ•áĞ¡Ñ½­•¸¤(€€€€€€€€¡ÉÕ¹Ñ¥µ”€¼€œ¹™¥áÑÕÉ”µÁÉ½•ÍÌµÑ½­•¸œ¤¹¡µ½ Á¼ØÀÀ¤(€€€€€€€İ½É¬€ôÉÕ¹Ñ¥µ”€¼€İ½É¬œ(€€€€€€€İ½É¬¹µ­‘¥È¡µ½‘”ôÁ¼ÜÀÀ¤(€€€€€€€€¡İ½É¬€¼€…ÁÁ±¥…Ñ¥½¸µÕÉÉ•¹Ğœ¤¹Íåµ±¥¹­}Ñ¼¡ÁÉ•Ù¥½ÕÌ°Ñ…É•Ñ}¥Í}‘¥É•Ñ½ÉäõQÉÕ”¤(€€€€€€€½İ¹•É}ÍÑ…Ğ€ôÑ•µÁ}É½½Ğ¹ÍÑ…Ğ ¤(€€€€€€€™¥áÑÕÉ”€ôì(€€€€€€€€€€€€½İ¹•‘}É½½ĞœèÍÑÈ¡Ñ•µÁ}É½½Ğ¤°€½İ¹•É}¥‘•¹Ñ¥Ñäœè€¡½İ¹•É}ÍÑ…Ğ¹ÍÑ}‘•Ø°½İ¹•É}ÍÑ…Ğ¹ÍÑ}¥¹¼°½İ¹•É}ÍÑ…Ğ¹ÍÑ}Õ¥¤°(€€€€€€€€€€€€ÉÕ¹Ñ¥µ”œèÍÑÈ¡ÉÕ¹Ñ¥µ”¤°€™…±±‰…¬œèÍÑÈ¡™…±±‰…¬¤°€É•ÑÕÉ¹}™…±±‰…¬œèÍÑÈ¡É•ÑÕÉ¹}™…±±‰…¬¤°(€€€€€€€€€€€€ÁÉ½•ÍÍ}™¥áÑÕÉ”œèQÉÕ”°(€€€€€€€€€€€€İ½É­Í¡½Á}‘ˆœèÍÑÈ¡İ½É¬€¼€½ÁÌ½İ½É­Í¡½À¹‘ˆœ¤°(€€€€€€€€€€€€¹…Ñ¥Ù•}‘ˆœèÍÑÈ¡İ½É¬€¼€‰…Í•±¥¹”½‘…Ñ„½¡½µ•‰½à¹‘ˆœ¤°(€€€€€€€€€€€€™…±±‰…­}É••¥ÁĞœè™…±±‰…­}É••¥ÁĞ°(€€€€€€€€€€€€É•ÑÕÉ¹}™…±±‰…­}É••¥ÁĞœèÉ•ÑÕÉ¹}™…±±‰…­}É••¥ÁĞ°(€€€€€€€ô(€€€€€€€ÁÉ½•ÍÍ}µ…¹…•È€ô}A…­…•‘AÉ½•ÍÍ•Ì¡ÉÕ¹Ñ¥µ”°Ñ½­•¸°‘•Á•¹‘•¹ä°±½Ì¤(€€€€€€€É½½µ}Ù•É¥™¥•ÉlÑ•ÍÑ}É½½µ}‰Õ¹‘±•}É½±±‰…¬t¡™¥áÑÕÉ”°ÁÉ•Ù¥½ÕÌ°…¹‘¥‘…Ñ”°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€ÁÉ½•ÍÍ}ÉÕ¹¹•ÈõÁÉ½•ÍÍ}µ…¹…•È¹ÉÕ¹}Í•ÉÙ¥•Ì¤(€€€€€€€É•ÍÕ±Ğ€ôì(€€€€€€€€€€€€µ½‘”œè€™¥áÑÕÉ”µÁÉ½•ÍÌœ°€™¥áÑÕÉ•}½¹±äœèQÉÕ”°(€€€€€€€€€€€€½µÁ…Ñ¥‰¥±¥Ñå}±…¥´œè€Íå¹Ñ¡•Ñ¥Œµ…Ñ¡•µÁ…­…”ÁÉ½•ÍÌ•Ù¥‘•¹”½¹±äìÁÉ½‘ÕÑ¥½¸½µÁ…Ñ¥‰¥±¥ÑäÕ¹±…¥µ•œ°(€€€€€€€€€€€€ÁÉ½•ÍÍ•Í}ÍÑ…ÉÑ•œèÁÉ½•ÍÍ}µ…¹…•È¹ÁÉ½•ÍÍ•Í}ÍÑ…ÉÑ•°(€€€€€€€€€€€€¹…µ•‘}…ÍÍ•ÉÑ¥½¹}½Õ¹Ğœè±•¸¡ÁÉ½•ÍÍ}µ…¹…•È¹É½İÌ¤°(€€€€€€€€€€€€¹…µ•‘}…ÍÍ•ÉÑ¥½¹ÌœèÁÉ½•ÍÍ}µ…¹…•È¹É½İÌ°(€€€€€€€€€€€€¹…Ñ¥Ù•}Á½ÉÑ}É•ÑÉ¥•ÌœèÁÉ½•ÍÍ}µ…¹…•È¹¹…Ñ¥Ù•}Á½ÉÑ}É•ÑÉ¥•Ì°(€€€€€€€€€€€€Í…µ•}ÍÑ½É•}É½½µÌœè™¥áÑÕÉ”¹•Ğ É½½µ}É½±±‰…­}¡•­Ìœ¤°(€€€€€€€€€€€€Í…µ•}ÍÑ½É•}É½½µÍ}•Ù¥‘•¹•}Í½Á”œè€Íå¹Ñ¡•Ñ¥ŒI½½µÌ½¹…Ñ¥Ù”™¥áÑÕÉ”Ñ…‰±•Ìì¹½Ğ¹…Ñ¥Ù”µ•µ‰•È½±½…¸½µÁ…Ñ¥‰¥±¥Ñä•Ù¥‘•¹”œ°(€€€€€€€€€€€€‰Õ¹‘±•}µ…¹¥™•ÍÑÌœèí¹…µ”è}µ…¹¥™•ÍÑ}¡…Í ¡Á…Ñ ¤™½È¹…µ”°Á…Ñ ¥¸(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€é¥À  <œ°€œ°€œ¤°½Á¥•¥ô°(€€€€€€€€€€€€‰Õ¹‘±•}…ÉÑ¥™…Ñ}‰¥¹‘¥¹Ìœèí¹…µ”è}…ÉÑ¥™…Ñ}‰¥¹‘¥¹œ¡Á…Ñ ¤™½È¹…µ”°Á…Ñ ¥¸(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€é¥À  <œ°€œ°€œ¤°½Á¥•¥ô°(€€€€€€€€€€€€™…±±‰…­}•Ù¥‘•¹•}Á…Ñ œè€¡ÍÑÈ¡…ÉÌ¹™…±±‰…­}•Ù¥‘•¹”¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜•Ñ…ÑÑÈ¡…ÉÌ°€™…±±‰…­}•Ù¥‘•¹”œ°9½¹”¤•±Í”9½¹”¤°(€€€€€€€€€€€€™…±±‰…­}¡•­Ìœè™…±±‰…­}É••¥ÁÑl¡•­Ìt°(€€€€€€€€€€€€‘•Á•¹‘•¹å}Á…Ñ œèÍÑÈ¡‘•Á•¹‘•¹ä¤°(€€€€€€€€€€€€Í•ÉÙ¥•}±¥™•å±•}ÑÉ…”œèÁÉ½•ÍÍ}µ…¹…•È¹É½İÌ°(€€€€€€€€€€€€±½ÌœèmÍÑÈ¡Á…Ñ ¤™½ÈÁ…Ñ ¥¸Í½ÉÑ•¡±½Ì¹±½ˆ œ¨¹±½œœ¤¥t°(€€€€€€€ô(€€€€€€€¥˜¹½ĞÉ•ÍÕ±ÑlÍ…µ•}ÍÑ½É•}É½½µÌtè(€€€€€€€€€€€É…¥Í”¥áÑÕÉ•I•™ÕÍ…° Í…µ”µÍÑ½É”I½½µÌ…ÍÍ•ÉÑ¥½¹Ìİ•É”¹½Ğ•µ¥ÑÑ•œ¤(€€€•á•ÁĞ	…Í•á•ÁÑ¥½¸…Ì•áŒè(€€€€€€€™…¥±ÕÉ”€ô˜íÑåÁ”¡•áŒ¤¹}}¹…µ•}}ôèí•áôœ(€€€€€€€É…¥Í”(€€€™¥¹…±±äè(€€€€€€€¥˜ÁÉ½•ÍÍ}µ…¹…•Èè(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€ÁÉ½•ÍÍ}µ…¹…•È¹ÍÑ½Á}…±° ¤(€€€€€€€€€€€•á•ÁĞá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€€€€€€€€€±•…¹ÕÁ}•ÉÉ½ÉÌ¹…ÁÁ•¹¡ÍÑÈ¡•áŒ¤¤(€€€€€€€ÉÕ¹Ñ¥µ•}ÍÑ½É•}É•µ½Ù•€ô€¡}É•µ½Ù•}ÉÕ¹Ñ¥µ•}É½½Ğ¡Ñ•µÁ}É½½Ğ°±•…¹ÕÁ}•ÉÉ½ÉÌ¤(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€¥˜Ñ•µÁ}É½½Ğ¥Ì¹½Ğ9½¹”•±Í”QÉÕ”¤(€€€€€€€É••¥ÁĞ€ôÉ•ÍÕ±Ğ½Èìµ½‘”œè€™¥áÑÕÉ”µÁÉ½•ÍÌœ°€™¥áÑÕÉ•}½¹±äœèQÉÕ•ô(€€€€€€€É••¥ÁÑlÍÑ…ÑÕÌt€ô€Á…ÍÍ•œ¥˜™…¥±ÕÉ”¥Ì9½¹”…¹¹½Ğ±•…¹ÕÁ}•ÉÉ½ÉÌ•±Í”€™…¥±•œ(€€€€€€€¥˜™…¥±ÕÉ”è(€€€€€€€€€€€É••¥ÁÑl™…¥±ÕÉ”t€ô™…¥±ÕÉ”(€€€€€€€¥˜±•…¹ÕÁ}•ÉÉ½ÉÌè(€€€€€€€€€€€É••¥ÁÑl±•…¹ÕÁ}•ÉÉ½ÉÌt€ô±•…¹ÕÁ}•ÉÉ½ÉÌ(€€€€€€€É••¥ÁÑlÉÕ¹Ñ¥µ•}ÍÑ½É•}É•µ½Ù•t€ôÉÕ¹Ñ¥µ•}ÍÑ½É•}É•µ½Ù•(€€€€€€€É•Á½ÉÑ}Á…Ñ ¹İÉ¥Ñ•}Ñ•áĞ¡©Í½¸¹‘ÕµÁÌ¡É••¥ÁĞ°Í½ÉÑ}­•åÌõQÉÕ”°¥¹‘•¹ĞôÈ¤€¬€q¸œ¤(€€€€€€€¥˜±•…¹ÕÁ}•ÉÉ½ÉÌ…¹™…¥±ÕÉ”¥Ì9½¹”è(€€€€€€€€€€€É…¥Í”¥áÑÕÉ•I•™ÕÍ…° ™¥áÑÕÉ”±•…¹ÕÀ™…¥±•ìÉ••¥ÁĞÉ•½É‘•…Ğ€œ(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€˜íÉ•Á½ÉÑ}Á…Ñ¡ôè€œ€¬€œì€œ¹©½¥¸¡±•…¹ÕÁ}•ÉÉ½ÉÌ¤¤(€€€É•ÍÕ±ÑlÉ••¥ÁÑ}Á…Ñ t€ôÍÑÈ¡É•Á½ÉÑ}Á…Ñ ¤(€€€É•ÑÕÉ¸É•ÍÕ±Ğ(()‘•˜}É•µ½Ù•}ÉÕ¹Ñ¥µ•}É½½Ğ¡É½½Ğ°•ÉÉ½ÉÌ¤è(€€€É½½Ğ€ôA…Ñ ¡É½½Ğ¤(€€€ÑÉäè(€€€€€€€€ŒI•ÍÑÉ¥Ğ±•…¹ÕÀÑ¼„É•…°°½İ¹•Ñ•µÁ½É…ÉäÉ½½Ğ¸Q¡¥ÌÉ•©•ÑÌ(€€€€€€€€ŒÍåµ±¥¹­•Á…Ñ ½µÁ½¹•¹ÑÌ‰•™½É”É•Í½±Ù¥¹œÑ¡•´…¹•á±Õ‘•ÌÑ¡”(€€€€€€€€Œ½Á•É…Ñ¥½¹…°ÑÉ•”¸(€€€€€€€É½½Ğ€ô}É•©•Ñ}½Á•É…Ñ¥½¹…°¡É½½Ğ¤(€€€€€€€½Ì¹¡µ½¡É½½Ğ°€Á¼ÜÀÀ¤(€€€€€€€™½ÈÕÉÉ•¹Ğ°‘¥É•Ñ½É¥•Ì°}™¥±•Ì¥¸½Ì¹İ…±¬¡É½½Ğ°Ñ½Á‘½İ¸õQÉÕ”°™½±±½İ±¥¹­Ìõ…±Í”¤è(€€€€€€€€€€€Á…É•¹Ğ€ôA…Ñ ¡ÕÉÉ•¹Ğ¤(€€€€€€€€€€€™½È¹…µ”¥¸±¥ÍĞ¡‘¥É•Ñ½É¥•Ì¤è(€€€€€€€€€€€€€€€¡¥±€ôÁ…É•¹Ğ€¼¹…µ”(€€€€€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€€€€€µ½‘”€ô¡¥±¹±ÍÑ…Ğ ¤¹ÍÑ}µ½‘”(€€€€€€€€€€€€€€€•á•ÁĞ¥±•9½Ñ½Õ¹‘ÉÉ½Èè(€€€€€€€€€€€€€€€€€€€‘¥É•Ñ½É¥•Ì¹É•µ½Ù”¡¹…µ”¤(€€€€€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€€€€€€€€€¥˜ÍÑ…Ğ¹M}%M19,¡µ½‘”¤è(€€€€€€€€€€€€€€€€€€€€Œ9•Ù•ÈÑÉ…Ù•ÉÍ”½È¡µ½„Íåµ±¥¹¬°•Ù•¸¥˜¥ĞÁ½¥¹ÑÌ(€€€€€€€€€€€€€€€€€€€€Œ‰…¬¥¹Ñ¼Ñ¡”™¥áÑÕÉ”É½½Ğ¸(€€€€€€€€€€€€€€€€€€€‘¥É•Ñ½É¥•Ì¹É•µ½Ù”¡¹…µ”¤(€€€€€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€€€€€€€€€¥˜¹½ĞÍÑ…Ğ¹M}%M%H¡µ½‘”¤è(€€€€€€€€€€€€€€€€€€€‘¥É•Ñ½É¥•Ì¹É•µ½Ù”¡¹…µ”¤(€€€€€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€€€€€€€€€¥˜¹½Ğµ½‘”€˜ÍÑ…Ğ¹M}%]UMH½È¹½Ğµ½‘”€˜ÍÑ…Ğ¹M}%aUMHè(€€€€€€€€€€€€€€€€€€€½Ì¹¡µ½¡¡¥±°€Á¼ÜÀÀ°™½±±½İ}Íåµ±¥¹­Ìõ…±Í”¤(€€€€€€€Í¡ÕÑ¥°¹ÉµÑÉ•”¡É½½Ğ¤(€€€•á•ÁĞá•ÁÑ¥½¸…Ì•áŒè(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜ÉÕ¹Ñ¥µ”±•…¹ÕÀ™…¥±•èíÑåÁ”¡•áŒ¤¹}}¹…µ•}}ôèí•áôœ¤(€€€É•µ½Ù•€ô¹½ĞÉ½½Ğ¹•á¥ÍÑÌ ¤…¹¹½ĞÉ½½Ğ¹¥Í}Íåµ±¥¹¬ ¤(€€€¥˜¹½ĞÉ•µ½Ù•…¹¹½Ğ…¹ä¡µ•ÍÍ…”¹ÍÑ…ÉÑÍİ¥Ñ  ÉÕ¹Ñ¥µ”±•…¹ÕÀ™…¥±•èœ¤™½Èµ•ÍÍ…”¥¸•ÉÉ½ÉÌ¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ÉÕ¹Ñ¥µ”±•…¹ÕÀ™…¥±•è™¥áÑÕÉ”É½½ĞÍÑ¥±°•á¥ÍÑÌœ¤(€€€É•ÑÕÉ¸É•µ½Ù•(()‘•˜µ…¥¸¡…ÉØõ9½¹”¤è(€€€Á…ÉÍ•È€ô…ÉÁ…ÉÍ”¹ÉÕµ•¹ÑA…ÉÍ•È¡‘•ÍÉ¥ÁÑ¥½¸õ}}‘½}|¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µµ½‘”œ°¡½¥•Ìô ¥¹•ÉĞµÙ…±¥‘…Ñ¥½¸œ°€™¥áÑÕÉ”µÁÉ½•ÍÌœ¤°‘•™…Õ±Ğô¥¹•ÉĞµÙ…±¥‘…Ñ¥½¸œ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µÁÉ•Ù¥½ÕÌœ°É•ÅÕ¥É•õQÉÕ”°ÑåÁ”õA…Ñ ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µ…¹‘¥‘…Ñ”œ°É•ÅÕ¥É•õQÉÕ”°ÑåÁ”õA…Ñ ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µ™…±±‰…¬œ°É•ÅÕ¥É•õQÉÕ”°ÑåÁ”õA…Ñ ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µ™…±±‰…¬µ•Ù¥‘•¹”œ°ÑåÁ”õA…Ñ °(€€€€€€€€€€€€€€€€€€€€€€€¡•±Àô½İ¹•™¥áÑÕÉ”µ½¹±ä•áÑ•É¹…°É••¥ÁĞ™É½´•á•ÕÑ•…ÉÑ¥™…Ğµ‰½Õ¹™…±±‰…¬…ÍÍ•ÉÑ¥½¹Ìœ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µ‘•Á•¹‘•¹äµÁ…Ñ œ°ÑåÁ”õA…Ñ ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µ¥¹©•Ğµ…¹‘¥‘…Ñ”µÙ•É¥™¥…Ñ¥½¸µ™…¥±ÕÉ”œ°…Ñ¥½¸ôÍÑ½É•}ÑÉÕ”œ¤(€€€Á…ÉÍ•È¹…‘‘}…ÉÕµ•¹Ğ œ´µ¥¹©•Ğµ…¹‘¥‘…Ñ”µ¥¹Ñ•ÉÉÕÁÑ¥½¸œ°…Ñ¥½¸ôÍÑ½É•}ÑÉÕ”œ¤(€€€…ÉÌ€ôÁ…ÉÍ•È¹Á…ÉÍ•}…ÉÌ¡…ÉØ¤((€€€¥˜…ÉÌ¹µ½‘”€ôô€™¥áÑÕÉ”µÁÉ½•ÍÌœè(€€€€€€€¥¹¡•É¥Ñ•€ôm­•ä™½È­•ä¥¸½Ì¹•¹Ù¥É½¸¥˜­•ä¹ÍÑ…ÉÑÍİ¥Ñ   !	=a|œ°€]=I-M!=A|œ°€!=5	=a}]	|œ¤¥t(€€€€€€€¥˜¥¹¡•É¥Ñ•è(€€€€€€€€€€€Á…ÉÍ•È¹•ÉÉ½È ¥¹¡•É¥Ñ•!	=`•¹‘Á½¥¹Ğ½¹™¥ÕÉ…Ñ¥½¸¥ÌÉ•™ÕÍ•¥¸™¥áÑÕÉ”µÁÉ½•ÍÌµ½‘”œ¤(€€€ÑÉäè(€€€€€€€Á…Ñ¡Ì€ôÑÕÁ±”¡}É•©•Ñ}½Á•É…Ñ¥½¹…°¡Á…Ñ ¤™½ÈÁ…Ñ ¥¸(€€€€€€€€€€€€€€€€€€€€€€¡…ÉÌ¹ÁÉ•Ù¥½ÕÌ°…ÉÌ¹…¹‘¥‘…Ñ”°…ÉÌ¹™…±±‰…¬¤¤(€€€•á•ÁĞ€¡¥áÑÕÉ•I•™ÕÍ…°°=MÉÉ½È¤…Ì•áŒè(€€€€€€€Á…ÉÍ•È¹•ÉÉ½È¡ÍÑÈ¡•áŒ¤¤(€€€¥˜±•¸¡Í•Ğ¡Á…Ñ¡Ì¤¤€„ô€Ìè(€€€€€€€Á…ÉÍ•È¹•ÉÉ½È ÁÉ•Ù¥½ÕÌ°…¹‘¥‘…Ñ”…¹™…±±‰…¬‰Õ¹‘±•ÌµÕÍĞ‘¥™™•Èœ¤(€€€¥˜…ÉÌ¹µ½‘”€ôô€™¥áÑÕÉ”µÁÉ½•ÍÌœ…¹…ÉÌ¹‘•Á•¹‘•¹å}Á…Ñ ¥Ì9½¹”è(€€€€€€€Á…ÉÍ•È¹•ÉÉ½È ™¥áÑÕÉ”µÁÉ½•ÍÌÉ•ÅÕ¥É•Ì…¸•áÁ±¥¥Ğ¥¹ÍÑ…±±•€´µ‘•Á•¹‘•¹äµÁ…Ñ œ¤(€€€¥˜…ÉÌ¹™…±±‰…­}•Ù¥‘•¹”¥Ì¹½Ğ9½¹”è(€€€€€€€¥˜…ÉÌ¹µ½‘”€„ô€™¥áÑÕÉ”µÁÉ½•ÍÌœè(€€€€€€€€€€€Á…ÉÍ•È¹•ÉÉ½È œ´µ™…±±‰…¬µ•Ù¥‘•¹”É•ÅÕ¥É•Ì™¥áÑÕÉ”µÁÉ½•ÍÌµ½‘”œ¤(€€€€€€€ÑÉäè(€€€€€€€€€€€…ÉÌ¹™…±±‰…­}•Ù¥‘•¹”€ô}½İ¹•‘}™¥áÑÕÉ•}•Ù¥‘•¹”¡…ÉÌ¹™…±±‰…­}•Ù¥‘•¹”¤(€€€€€€€•á•ÁĞ€¡¥áÑÕÉ•I•™ÕÍ…°°=MÉÉ½È¤…Ì•áŒè(€€€€€€€€€€€Á…ÉÍ•È¹•ÉÉ½È¡ÍÑÈ¡•áŒ¤¤(€€€‘•Á•¹‘•¹ä€ô9½¹”(€€€¥˜…ÉÌ¹µ½‘”€ôô€™¥áÑÕÉ”µÁÉ½•ÍÌœè(€€€€€€€ÑÉäè(€€€€€€€€€€€‘•Á•¹‘•¹ä€ô}½İ¹•‘}‘•Á•¹‘•¹ä¡…ÉÌ¹‘•Á•¹‘•¹å}Á…Ñ ¤(€€€€€€€•á•ÁĞ€¡¥áÑÕÉ•I•™ÕÍ…°°=MÉÉ½È¤…Ì•áŒè(€€€€€€€€€€€Á…ÉÍ•È¹•ÉÉ½È¡ÍÑÈ¡•áŒ¤¤(€€€¥˜…ÉÌ¹µ½‘”€ôô€¥¹•ÉĞµÙ…±¥‘…Ñ¥½¸œ…¹€¡…ÉÌ¹¥¹©•Ñ}…¹‘¥‘…Ñ•}¥¹Ñ•ÉÉÕÁÑ¥½¸(€€€€€€€€€€€½È…ÉÌ¹¥¹©•Ñ}…¹‘¥‘…Ñ•}Ù•É¥™¥…Ñ¥½¹}™…¥±ÕÉ”¤è(€€€€€€€Á…ÉÍ•È¹•ÉÉ½È ™…¥±ÕÉ”¥¹©•Ñ¥½¸É•ÅÕ¥É•Ì™¥áÑÕÉ”µÁÉ½•ÍÌµ½‘”…¹…ÉÑ¥™…Ğµ‰½Õ¹™…±±‰…¬¡•­Ìœ¤((€€€€Œ9¼ÁÉ½©•ĞÁ…­…”¥Ì¥µÁ½ÉÑ•Õ¹Ñ¥°•¹‘Á½¥¹Ğ…¹Á…Ñ Õ…É‘Ì¡…Ù”Á…ÍÍ•¸(€€€…Á¤€ô}±½…‘}‰Õ¹‘±•}…Á¤ ¤(€€€¥˜…ÉÌ¹¥¹©•Ñ}…¹‘¥‘…Ñ•}Ù•É¥™¥…Ñ¥½¹}™…¥±ÕÉ”…¹…ÉÌ¹¥¹©•Ñ}…¹‘¥‘…Ñ•}¥¹Ñ•ÉÉÕÁÑ¥½¸è(€€€€€€€É…¥Í”…Á¥lÅt Í•±•Ğ½¹”™…¥±ÕÉ”¥¹©•Ñ¥½¸…Ğ„Ñ¥µ”œ¤(€€€ÑÉäè(€€€€€€€¥˜…ÉÌ¹µ½‘”€ôô€™¥áÑÕÉ”µÁÉ½•ÍÌœè(€€€€€€€€€€€É•Á½ÉĞ€ô}ÉÕ¹}™¥áÑÕÉ•}ÁÉ½•ÍÌ¡…ÉÌ°Á…Ñ¡Ì°‘•Á•¹‘•¹ä°…Á¤¤(€€€€€€€•±Í”è(€€€€€€€€€€€É•Á½ÉĞ€ô}¥¹•ÉÑ}Ù…±¥‘…Ñ¥½¸¡…ÉÌ°Á…Ñ¡Ì°…Á¤¤(€€€•á•ÁĞ¥áÑÕÉ•I•™ÕÍ…°…Ì•áŒè(€€€€€€€Á…ÉÍ•È¹•ÉÉ½È¡ÍÑÈ¡•áŒ¤¤(€€€ÁÉ¥¹Ğ¡©Í½¸¹‘ÕµÁÌ¡É•Á½ÉĞ°Í½ÉÑ}­•åÌõQÉÕ”¤¤(()¥˜}}¹…µ•}|€ôô€}}µ…¥¹}|œè(€€€µ…¥¸ ¤
+            or len({tuple(value) for value in native_ids}) != 1
+            or len({tuple(value) for value in ledger_ids}) != 1):
+        raise FixtureRefusal('native and Ledger store identities must be positive device/inode pairs preserved through O/C/F/C')
+    import runpy
+    gap_verifier = runpy.run_path(str(PROJECT / 'deploy/verify-packaged-workflow-gaps.py'),
+                                  run_name='validate_packaged_workflow_gap_evidence')
+    expected_manifests = [native_expected[name]['bundle_manifest_sha256'] for name in expected_transitions]
+    try:
+        shelf_workflow = native.get('shelf_workflow')
+        label_workflow = native.get('label_workflow')
+        note_workflow = native.get('uncertain_note_workflow')
+        gap_verifier['validate_shelf_workflow'](shelf_workflow, expected_manifests, bundles=packages)
+        gap_verifier['validate_label_workflow'](label_workflow, expected_manifests, bundles=packages)
+        gap_verifier['validate_note_workflow'](note_workflow, expected_manifests, bundles=packages)
+    except (TypeError, ValueError, KeyError) as exc:
+        raise FixtureRefusal(f'packaged workflow assertion details are invalid: {exc}') from exc
+    for workflow in (shelf_workflow, label_workflow, note_workflow):
+        for row in workflow['trace']:
+            if row.get('ledger_store_identity') != ledger_ids[0]:
+                raise FixtureRefusal('Shelf, label or note workflow escaped the native process Ledger store')
+    publisher = native.get('publisher_checks')
+    publisher_checks = publisher.get('checks') if isinstance(publisher, dict) else None
+    required_publisher_checks = {
+        'matched_previous_release_preserves_new_fixture_profiles_and_loans',
+        'legacy_missing_member_api_is_not_a_rollback_target',
+        *FALLBACK_CHECKS,
+    }
+    if (not isinstance(publisher, dict) or publisher.get('scope') != 'fixture-only'
+            or publisher.get('receipt_validation') != 'passed'
+            or publisher.get('legacy_bundle_rejected') is not True
+            or not isinstance(publisher_checks, dict)
+            or set(publisher_checks) != required_publisher_checks
+            or any(publisher_checks.get(name) is not True for name in required_publisher_checks)):
+        raise FixtureRefusal('pure publisher receipt validation lacks both named fixture checks')
+    if (any(not isinstance(value, str) or re.fullmatch(r'[0-9a-fA-F]{64}', value) is None
+            for value in profiles) or len(set(profiles)) != 1):
+        raise FixtureRefusal('native member profile hash must be a preserved 64-character SHA-256')
+    try:
+        parsed_loan_ids = [uuid.UUID(value) if isinstance(value, str) else None for value in loan_ids]
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise FixtureRefusal('native loan operation IDs must be valid UUIDs') from exc
+    if (any(value is None or value.int == 0 for value in parsed_loan_ids)
+            or len(set(parsed_loan_ids)) != 1
+            or not all(valid_timestamp(value) for value in created + confirmed)
+            or len(set(created)) != 1 or len(set(confirmed)) != 1):
+        raise FixtureRefusal('native loan ID and creation/confirmation timestamps must be valid and preserved through O/C/F/C')
+    if any(datetime.fromisoformat(start) > datetime.fromisoformat(end)
+           for start, end in zip(created, confirmed)):
+        raise FixtureRefusal('native loan confirmation timestamp precedes loan creation')
+
+    process_assertions = native.get('process_assertions')
+    expected_names = ['packaged_native_listener',
+                      'packaged_companion_code_static_and_physical_boundary',
+                      'packaged_gateway_code_and_static_root',
+                      'native_member_profile_avatar_private_note_badge_loan_history']
+    if not isinstance(process_assertions, list) or len(process_assertions) != 16:
+        raise FixtureRefusal('native process report must contain all 16 named process assertions')
+    for index, row in enumerate(process_assertions):
+        package_name = expected_transitions[index // len(expected_names)]
+        expected_binding = native_expected[package_name]
+        expected_name = expected_names[index % len(expected_names)]
+        if (not isinstance(row, dict) or row.get('result') != 'passed'
+                or row.get('name') != expected_name
+                or {key: row.get(key) for key in expected_binding} != expected_binding):
+            raise FixtureRefusal('native packaged process assertion is missing, unpassed or bound to another artifact')
+        if expected_name == 'native_member_profile_avatar_private_note_badge_loan_history':
+            if (not valid_identity(row.get('native_store_identity'))
+                    or row.get('native_store_identity') != native_ids[index // 4]
+                    or not valid_identity(row.get('ledger_store_identity'))
+                    or row.get('ledger_store_identity') != ledger_ids[index // 4]
+                    or row.get('profile_sha256') != profiles[index // 4]
+                    or row.get('loan_operation_id') != loan_ids[index // 4]
+                    or row.get('loan_created_at') != created[index // 4]
+                    or row.get('loan_confirmed_at') != confirmed[index // 4]
+                    or type(row.get('physical_effects')) is not int or row.get('physical_effects') != 0):
+                raise FixtureRefusal('native process assertion lacks valid member, loan, identity or physical-boundary evidence')
+        else:
+            if (type(row.get('pid')) is not int or row['pid'] <= 0
+                    or row.get('host') != '127.0.0.1'
+                    or type(row.get('port')) is not int or row['port'] <= 0):
+                raise FixtureRefusal('native packaged listener assertion lacks a positive PID and loopback port')
+    return checks
+
+
+def _load_bundle_api():
+    sys.path.insert(0, str(PROJECT / 'deploy'))
+    from release_bundle import (FALLBACK_CHECKS, BundleError, recover_interrupted,
+                                select_bundle, validate_bundle, _require_workshop_compatibility,
+                                _validate_fallback_policy, _validate_fallback_receipt)
+    return (FALLBACK_CHECKS, BundleError, recover_interrupted, select_bundle, validate_bundle,
+            _require_workshop_compatibility, _validate_fallback_policy,
+            _validate_fallback_receipt)
+
+
+def _inert_validation(args, paths, api):
+    _, BundleError, _, _, validate_bundle = api[:5]
+    previous_path, candidate_path, fallback_path = paths
+    previous, candidate, fallback = (validate_bundle(path) for path in paths)
+    if any(item.get('format') != 2 for item in (previous, candidate, fallback)):
+        raise BundleError('inert validation requires complete format-2 O/C/F bundles')
+    if len(set(paths)) != 3:
+        raise BundleError('previous, candidate and fallback bundles must differ')
+    return {
+        'mode': 'inert-validation', 'fixture_only': True,
+        'compatibility_claim': 'unclaimed', 'processes_started': 0,
+        'selector_exercised': False,
+        'validated_bundles': {name: _manifest_hash(path) for name, path in
+                              zip(('previous', 'candidate', 'fallback'), paths)},
+        'process_scope': 'format-and-artifact-integrity-only',
+    }
+
+
+def _free_ports(count):
+    sockets, ports = [], []
+    try:
+        for _ in range(count):
+            sock = socket.socket()
+            sock.bind(('127.0.0.1', 0))
+            sockets.append(sock)
+            ports.append(sock.getsockname()[1])
+        if len(set(ports)) != count or any(not 32768 <= port <= 60999 for port in ports):
+            raise FixtureRefusal('OS did not provide distinct unprivileged loopback ports')
+        return ports
+    finally:
+        for sock in sockets:
+            sock.close()
+
+
+def _pid_owns_listener(pid, port):
+    inodes = set()
+    for table in ('/proc/net/tcp', '/proc/net/tcp6'):
+        try:
+            rows = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            fields = row.split()
+            if len(fields) > 9 and fields[1].rsplit(':', 1)[-1] == f'{port:04X}' and fields[3] == '0A':
+                inodes.add(fields[9])
+    if not inodes:
+        return False
+    try:
+        for name in os.listdir(f'/proc/{pid}/fd'):
+            target = os.readlink(f'/proc/{pid}/fd/{name}')
+            if target.startswith('socket:[') and target.endswith(']') and target[8:-1] in inodes:
+                return True
+        return False
+    except OSError:
+        return False
+
+
+def _listener_owner_pids(port):
+    inodes = set()
+    for table in ('/proc/net/tcp', '/proc/net/tcp6'):
+        try:
+            rows = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            fields = row.split()
+            if len(fields) > 9 and fields[1].rsplit(':', 1)[-1] == f'{port:04X}' and fields[3] == '0A':
+                inodes.add(fields[9])
+    if not inodes:
+        return ()
+    owners = []
+    for process in Path('/proc').iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            descriptors = process / 'fd'
+            for name in os.listdir(descriptors):
+                target = os.readlink(descriptors / name)
+                if target.startswith('socket:[') and target.endswith(']') and target[8:-1] in inodes:
+                    owners.append(int(process.name))
+                    break
+        except OSError:
+            continue
+    return tuple(sorted(set(owners)))
+
+
+def _http(url, pid, port, expected=None):
+    if not _pid_owns_listener(pid, port):
+        owners = _listener_owner_pids(port)
+        foreign = [owner for owner in owners if owner != pid]
+        if foreign:
+            raise ListenerOwnershipMismatch(pid, port, foreign)
+        raise ConnectionError(f'fixture listener at {port} is not ready or not yet observable for pid {pid}')
+    with urllib.request.urlopen(url, timeout=0.8) as response:
+        body = response.read()
+    if not _pid_owns_listener(pid, port):
+        raise FixtureRefusal(f'listener ownership changed during probe at {port} for fixture process {pid}')
+    if callable(expected):
+        expected(body)
+    elif expected is not None and body != expected:
+        raise FixtureRefusal(f'packaged static response differs at {url}')
+    return body
+
+
+def _validate_native_status(body):
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError) as exc:
+        raise FixtureRefusal('native readiness endpoint did not return JSON') from exc
+    if not isinstance(payload, dict):
+        raise FixtureRefusal('native readiness endpoint returned an unexpected response')
+
+
+def _validate_companion_session(body):
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError) as exc:
+        raise FixtureRefusal('companion readiness endpoint did not return JSON') from exc
+    if not isinstance(payload, dict) or not {'user', 'generation', 'instance', 'return_only'} <= payload.keys():
+        raise FixtureRefusal('companion readiness endpoint returned an unexpected response')
+
+
+def _assert_native_state_snapshot(expected, observed):
+    if expected != observed:
+        raise FixtureRefusal('native member/loan state changed across packaged process transition')
+
+
+class _PackagedProcesses:
+    def __init__(self, runtime, token, dependency, log_root):
+        self.runtime, self.token, self.dependency = runtime, token, dependency
+        self.log_root = log_root
+        self.children = {}
+        self.rows = []
+        self.processes_started = 0
+        self.serial = 0
+        self.native_state = None
+        self.current_release = None
+        self.native_port_retries = []
+        self.native_port, self.companion_port, self.gateway_port = _free_ports(3)
+
+    def _base_env(self, release, component, ready=None):
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith(('HBOX_', 'WORKSHOP_', 'HOMEBOX_WEB_'))}
+        dep_link = self.runtime / 'program-files/runtime/hardware/python'
+        dep_link.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not dep_link.exists():
+            dep_link.symlink_to(self.dependency, target_is_directory=True)
+        env.update({'WORKSHOP_ROOT': str(self.runtime), 'WORKSHOP_FIXTURE_PROCESS': '1',
+                    'WORKSHOP_FIXTURE_TOKEN': self.token, 'WORKSHOP_BIND_HOST': '127.0.0.1',
+                    'PYTHONDONTWRITEBYTECODE': '1'})
+        if component == 'native':
+            env.update({'HOMEBOX_WEB_HOST': '127.0.0.1', 'HOMEBOX_WEB_PORT': str(self.native_port),
+                        'HBOX_OPTIONS_ALLOW_REGISTRATION': 'true'})
+        elif component == 'companion':
+            env.update({'WORKSHOP_NATIVE_BASE': f'http://127.0.0.1:{self.native_port}',
+                        'WORKSHOP_COMPANION_PORT': '0', 'WORKSHOP_PORT': '0',
+                        'WORKSHOP_FIXTURE_READY_FILE': str(ready)})
+        else:
+            env.update({'WORKSHOP_NATIVE_PORT': str(self.native_port),
+                        'WORKSHOP_COMPANION_PORT': str(self.companion_port), 'WORKSHOP_PORT': '0',
+                        'WORKSHOP_FIXTURE_READY_FILE': str(ready)})
+        return env
+
+    def _launch(self, release, component, ready=None):
+        self.serial += 1
+        log_path = self.log_root / f'{self.serial:02d}-{component}.log'
+        log = log_path.open('wb')
+        command = [sys.executable, str(release / 'deploy/run-release.py'), component]
+        child = subprocess.Popen(command, cwd=self.runtime, env=self._base_env(release, component, ready),
+                                 stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                 start_new_session=True)
+        self.processes_started += 1
+        self.children[component] = (child, log, log_path)
+        return child
+
+    def _wait_listener(self, child, port, url, ready=None, expected=None, origin_checks=None, timeout=30):
+        deadline = time.monotonic() + timeout
+        last_error = None
+        while time.monotonic() < deadline:
+            if child.poll() is not None:
+                raise FixtureRefusal(f'packaged process exited before readiness: pid {child.pid}')
+            try:
+                if ready:
+                    obj = json.loads(ready.read_text())
+                    if (obj.get('pid') != child.pid or obj.get('host') != '127.0.0.1'
+                            or not 32768 <= obj.get('port', 0) <= 60999):
+                        raise FixtureRefusal('packaged process ready record did not bind its owned loopback listener')
+                    if origin_checks:
+                        origin_checks(obj)
+                    port = obj['port']
+                    parsed = urlsplit(url)
+                    url = urlunsplit((parsed.scheme, f'{parsed.hostname}:{port}', parsed.path or '/',
+                                      parsed.query, parsed.fragment))
+                _http(url, child.pid, port, expected)
+                return port
+            except ListenerOwnershipMismatch:
+                raise
+            except (OSError, ValueError, urllib.error.URLError) as exc:
+                last_error = exc
+                time.sleep(0.1)
+        raise FixtureRefusal(f'packaged process did not become ready: {last_error}')
+
+    def _start_native_listener(self, release):
+        for attempt in range(3):
+            native = self._launch(release, 'native')
+            try:
+                self._wait_listener(native, self.native_port,
+                    f'http://127.0.0.1:{self.native_port}/api/v1/status', expected=_validate_native_status,
+                    timeout=90)
+                return native
+            except ListenerOwnershipMismatch as exc:
+                foreign_owners = [owner for owner in exc.owners if owner != native.pid]
+                if (not foreign_owners or native.poll() is not None or attempt == 2):
+                    raise
+                old_port = self.native_port
+                self.stop_all()
+                self.native_port = _free_ports(1)[0]
+                self.native_port_retries.append({'old_port': old_port, 'foreign_listener_pids': foreign_owners,
+                                                 'terminated_fixture_pid': native.pid,
+                                                 'new_port': self.native_port})
+        raise FixtureRefusal('native listener retry budget exhausted')
+
+    def start(self, release):
+        release = Path(release).resolve(strict=True)
+        self.current_release = release
+        binding = _artifact_binding(release)
+        manifest_hash = binding['bundle_manifest_sha256']
+        self.runtime.joinpath('work/baseline/data').mkdir(mode=0o700, parents=True, exist_ok=True)
+        baseline = self.runtime / 'work/baseline'
+        pepper = baseline / 'pepper'
+        if not pepper.exists():
+            pepper.write_text(uuid.uuid4().hex + uuid.uuid4().hex)
+        database = baseline / 'data/homebox.db'
+        database.touch(mode=0o600, exist_ok=True)
+        account_file = baseline / 'test-account.json'
+        if not account_file.exists():
+            account_file.write_text('{}')
+        pepper.chmod(0o600)
+        (baseline / 'pepper').chmod(0o600)
+        account_file.chmod(0o600)
+
+        native = self._start_native_listener(release)
+        self.rows.append({'name': 'packaged_native_listener', 'result': 'passed',
+                          **binding, 'pid': native.pid,
+                          'host': '127.0.0.1', 'port': self.native_port,
+                          'readiness_endpoint': '/api/v1/status'})
+
+        comp_ready = self.runtime / 'work/fixture-companion-ready.json'
+        companion = self._launch(release, 'companion', comp_ready)
+        def check_companion(obj):
+            if (Path(obj.get('code_root', '')).resolve() != release
+                    or obj.get('physical_boundary') != 'pre-import stubs'
+                    or any(not Path(path).resolve().is_relative_to(release)
+                           for path in obj.get('module_origins', {}).values())):
+                raise FixtureRefusal('companion code, module origin or physical boundary escaped the selected bundle')
+        self.companion_port = self._wait_listener(companion, 0,
+            'http://127.0.0.1:0/api/session', ready=comp_ready,
+            expected=_validate_companion_session, origin_checks=check_companion)
+        comp_row = json.loads(comp_ready.read_text())
+        self.rows.append({'name': 'packaged_companion_api_and_physical_boundary', 'result': 'passed',
+                          **binding, 'pid': companion.pid,
+                          'host': comp_row['host'], 'port': self.companion_port,
+                          'module_origins': comp_row['module_origins'],
+                          'physical_boundary': comp_row['physical_boundary']})
+
+        gateway_ready = self.runtime / 'work/fixture-gateway-ready.json'
+        gateway = self._launch(release, 'gateway', gateway_ready)
+        def check_gateway(obj):
+            if (Path(obj.get('code_root', '')).resolve() != release
+                    or Path(obj.get('static_root', '')).resolve() != (release / 'public').resolve()):
+                raise FixtureRefusal('gateway code or static root escaped the selected bundle')
+        self.gateway_port = self._wait_listener(gateway, 0, 'http://127.0.0.1:0/',
+            ready=gateway_ready, expected=(release / 'public/index.html').read_bytes(),
+            origin_checks=check_gateway)
+        gate_row = json.loads(gateway_ready.read_text())
+        self.rows.append({'name': 'packaged_gateway_code_and_static_root', 'result': 'passed',
+                          **binding, 'pid': gateway.pid,
+                          'host': gate_row['host'], 'port': self.gateway_port,
+                          'static_root': gate_row['static_root']})
+        if self.native_state is None:
+            self.native_state = self._create_native_state(manifest_hash)
+        else:
+            observed = self._native_state_snapshot(self.native_state)
+            _assert_native_state_snapshot(self.native_state['snapshot'], observed)
+            self.rows.append({'name': 'native_member_profile_avatar_private_note_badge_loan_history',
+                              'result': 'passed', **binding,
+                              'profile_sha256': observed['member_profile_sha256'],
+                              'loan_operation_id': observed['loan_history'][0]['operation_id'],
+                              'loan_created_at': observed['loan_history'][0]['created_at'],
+                              'loan_confirmed_at': observed['loan_history'][0]['confirmed_at'],
+                              'native_store_identity': observed['native_store_identity'],
+                              'ledger_store_identity': observed['ledger_store_identity'],
+                              'physical_effects': 0})
+
+    def _api_json(self, base, path, method='GET', payload=None, *, token=None, child=None, port=None):
+        if child is not None and not _pid_owns_listener(child.pid, port):
+            raise FixtureRefusal(f'fixture listener ownership failed before API request: {path}')
+        headers = {'Content-Type': 'application/json'}
+        if token:
+            headers['Authorization'] = 'Bearer ' + token
+        if base == f'http://127.0.0.1:{self.companion_port}':
+            headers['Origin'] = base
+        request = urllib.request.Request(base + path, method=method, headers=headers,
+            data=None if payload is None else json.dumps(payload).encode())
+        # Fixture native registration and migration-adjacent writes can take
+        # longer on the isolated storage used by the whole-map proof. Keep the
+        # bounded request timeout generous enough for those owned processes.
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read()
+        if child is not None and not _pid_owns_listener(child.pid, port):
+            raise FixtureRefusal(f'fixture listener ownership changed during API request: {path}')
+        return json.loads(body) if body else None
+
+    def _native_auth(self):
+        account = json.loads((self.runtime / 'work/baseline/test-account.json').read_text())
+        login = self._api_json(f'http://127.0.0.1:{self.native_port}', '/api/v1/users/login',
+                               'POST', {'username': account['email'], 'password': account['password']},
+                               child=self.children['native'][0], port=self.native_port)
+        return login['token'].removeprefix('Bearer ')
+
+    def _native_state_snapshot(self, state):
+        base = f'http://127.0.0.1:{self.native_port}'
+        child = self.children['native'][0]
+        token = self._native_auth()
+        profile = self._api_json(base, f"/api/v1/groups/members/{state['member_id']}/profile",
+                                 token=token, child=child, port=self.native_port)
+        if (profile.get('id') != state['member_id'] or profile.get('name') != state['member_name']
+                or profile.get('avatar') != state['avatar'] or profile.get('notes') != state['notes']):
+            raise FixtureRefusal('native member profile, avatar or private note did not reopen')
+        entity = self._api_json(base, f"/api/v1/entities/{state['entity_id']}", token=token,
+                                child=child, port=self.native_port)
+        if entity.get('id') != state['entity_id'] or entity.get('name') != state['entity_name']:
+            raise FixtureRefusal('native loan entity identity did not reopen')
+        native_db = self.runtime / 'work/baseline/data/homebox.db'
+        ledger_db = self.runtime / 'work/ops/ledger.db'
+        native_stat, ledger_stat = native_db.stat(), ledger_db.stat()
+        with sqlite3.connect(ledger_db) as db:
+            db.row_factory = sqlite3.Row
+            operation = db.execute('SELECT id,group_id,actor_id,action,status,created_at FROM operations WHERE id=?',
+                                   (state['loan_id'],)).fetchone()
+            if not operation:
+                raise FixtureRefusal('fixture loan operation disappeared from ledger history')
+            events = [dict(row) for row in db.execute(
+                'SELECT kind,created_at FROM events WHERE operation_id=? ORDER BY sequence', (state['loan_id'],))]
+            assets = [row[0] for row in db.execute(
+                'SELECT entity_id FROM operation_assets WHERE operation_id=? ORDER BY entity_id',
+                (state['loan_id'],))]
+            badges = [dict(row) for row in db.execute(
+                'SELECT id,user_id,revoked,created_at FROM badges WHERE user_id=? ORDER BY created_at',
+                (state['member_id'],))]
+            custody = [dict(row) for row in db.execute(
+                'SELECT group_id,entity_id,actor_id,operation_id FROM custody WHERE operation_id=?',
+                (state['loan_id'],))]
+        if (operation['action'] != 'check_out' or operation['status'] != 'completed'
+                or assets != [state['entity_id']] or not any(row['kind'] == 'completed' for row in events)
+                or len(badges) != 1 or badges[0]['id'] != state['badge_id']
+                or badges[0]['revoked'] != 0 or not custody
+                or custody[0]['actor_id'] != state['member_id']):
+            raise FixtureRefusal('native badge or loan/date/history state did not reopen')
+        completed = next(row['created_at'] for row in events if row['kind'] == 'completed')
+        return {'member_profile_sha256': hashlib.sha256(json.dumps(profile, sort_keys=True,
+                    separators=(',', ':')).encode()).hexdigest(),
+                'loan_history': [{'operation_id': operation['id'], 'group_id': operation['group_id'],
+                    'actor_id': operation['actor_id'], 'action': operation['action'],
+                    'status': operation['status'], 'created_at': operation['created_at'],
+                    'confirmed_at': completed, 'events': events, 'assets': assets}],
+                'badge_state': badges, 'custody': custody,
+                'native_store_identity': [native_stat.st_dev, native_stat.st_ino],
+                'ledger_store_identity': [ledger_stat.st_dev, ledger_stat.st_ino]}
+
+    def _create_native_state(self, manifest_hash):
+        base = f'http://127.0.0.1:{self.native_port}'
+        native_child = self.children['native'][0]
+        email = uuid.uuid4().hex + '@fixture.invalid'
+        password = uuid.uuid4().hex + uuid.uuid4().hex
+        self._api_json(base, '/api/v1/users/register', 'POST',
+                       {'name': 'Whole Map Fixture Owner', 'email': email, 'password': password},
+                       child=native_child, port=self.native_port)
+        account = {'email': email, 'password': password}
+        account_file = self.runtime / 'work/baseline/test-account.json'
+        account_file.write_text(json.dumps(account))
+        account_file.chmod(0o600)
+        token = self._native_auth()
+        owner = self._api_json(base, '/api/v1/users/self', token=token,
+                               child=native_child, port=self.native_port)['item']
+        request_key = str(uuid.uuid4())
+        member = self._api_json(base, '/api/v1/groups/members', 'POST',
+                    {'name': 'Fixture Member', 'email': '', 'requestKey': request_key},
+                    token=token, child=native_child, port=self.native_port)
+        member_id = member['id']
+        profile = self._api_json(base, f'/api/v1/groups/members/{member_id}/profile', token=token,
+                                 child=native_child, port=self.native_port)
+        avatar = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCABAAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDLooor6g+bCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP//Z'
+        notes = 'Fixture private member note ' + uuid.uuid4().hex
+        profile.update({'name': 'Fixture Member Updated', 'email': '', 'avatar': avatar, 'notes': notes})
+        profile = self._api_json(base, f'/api/v1/groups/members/{member_id}/profile', 'PUT', profile,
+                                 token=token, child=native_child, port=self.native_port)
+        types = self._api_json(base, '/api/v1/entity-types', token=token,
+                               child=native_child, port=self.native_port)
+        item_type = next((row for row in types if not row.get('isLocation')), None)
+        if item_type is None:
+            item_type = self._api_json(base, '/api/v1/entity-types', 'POST',
+                {'name': 'Whole Map Fixture Equipment', 'isLocation': False, 'icon': ''},
+                token=token, child=native_child, port=self.native_port)
+        entity = self._api_json(base, '/api/v1/entities', 'POST',
+                    {'name': 'Whole Map Fixture Loan Item', 'entityTypeId': item_type['id'],
+                     'parentId': None, 'quantity': 1}, token=token,
+                    child=native_child, port=self.native_port)
+        entity['parentId'] = (entity.get('parent') or {}).get('id')
+        entity['entityTypeId'] = entity.get('entityType', {}).get('id', item_type['id'])
+        entity['tagIds'] = [tag['id'] for tag in entity.get('tags', [])]
+        fields = list(entity.get('fields', []))
+        fields.append({'name': 'Equipment condition', 'type': 'text', 'textValue': 'Ready'})
+        entity['fields'] = fields
+        entity = self._api_json(base, f"/api/v1/entities/{entity['id']}", 'PUT', entity, token=token,
+                                child=native_child, port=self.native_port)
+        companion_base = f'http://127.0.0.1:{self.companion_port}'
+        companion_child = self.children['companion'][0]
+        badge = self._api_json(companion_base, '/badge/issue', 'POST', {'user_id': member_id},
+                               child=companion_child, port=self.companion_port)
+        scan = self._api_json(companion_base, '/scan', 'POST', {'code': badge['code']},
+                              child=companion_child, port=self.companion_port)
+        if scan.get('kind') != 'user' or scan.get('user', {}).get('id') != member_id:
+            raise FixtureRefusal('fixture badge did not create the expected member session')
+        loan = self._api_json(companion_base, '/checkout/confirm', 'POST',
+                    {'assets': [entity['id']], 'request_key': str(uuid.uuid4()),
+                     'session_generation': scan['generation'], 'session_instance': scan['instance']},
+                    child=companion_child, port=self.companion_port)
+        if loan.get('status') != 'completed':
+            raise FixtureRefusal('fixture native loan did not complete')
+        state = {'member_id': member_id, 'member_name': profile['name'], 'avatar': avatar,
+                 'notes': notes, 'entity_id': entity['id'], 'entity_name': entity['name'],
+                 'badge_id': badge['id'], 'loan_id': loan['id'], 'group_id': owner['defaultGroupId']}
+        snapshot = self._native_state_snapshot(state)
+        state['snapshot'] = snapshot
+        self.rows.append({'name': 'native_member_profile_avatar_private_note_badge_loan_history',
+                          'result': 'passed', **_artifact_binding(self.current_release),
+                          'profile_sha256': snapshot['member_profile_sha256'],
+                          'loan_operation_id': snapshot['loan_history'][0]['operation_id'],
+                          'loan_created_at': snapshot['loan_history'][0]['created_at'],
+                          'loan_confirmed_at': snapshot['loan_history'][0]['confirmed_at'],
+                          'native_store_identity': snapshot['native_store_identity'],
+                          'ledger_store_identity': snapshot['ledger_store_identity'],
+                          'physical_effects': 0})
+        return state
+
+    def stop_all(self):
+        errors = []
+        for component in ('gateway', 'companion', 'native'):
+            entry = self.children.get(component)
+            if not entry:
+                continue
+            child, log, _ = entry
+            try:
+                if child.poll() is None:
+                    try:
+                        child.terminate()
+                    except Exception as exc:
+                        errors.append(f'{component} terminate failed: {type(exc).__name__}: {exc}')
+                    try:
+                        child.wait(timeout=15 if component == 'native' else 5)
+                    except Exception as exc:
+                        errors.append(f'{component} wait after terminate failed: {type(exc).__name__}: {exc}')
+                        try:
+                            child.kill()
+                            child.wait(timeout=5)
+                        except Exception as kill_exc:
+                            errors.append(f'{component} kill/wait failed: {type(kill_exc).__name__}: {kill_exc}')
+            except Exception as exc:
+                errors.append(f'{component} cleanup failed: {type(exc).__name__}: {exc}')
+                try:
+                    if child.poll() is None:
+                        child.kill()
+                        child.wait(timeout=5)
+                except Exception as kill_exc:
+                    errors.append(f'{component} final kill/wait failed: {type(kill_exc).__name__}: {kill_exc}')
+            try:
+                if child.poll() is not None:
+                    self.children.pop(component, None)
+                else:
+                    # Keep unresolved children available for another cleanup
+                    # attempt and for diagnosis by the caller.
+                    errors.append(f'{component} pid {getattr(child, "pid", "unknown")} remained alive')
+            except Exception as exc:
+                errors.append(f'{component} final poll failed: {type(exc).__name__}: {exc}')
+            finally:
+                try:
+                    log.close()
+                except Exception as exc:
+                    errors.append(f'{component} log close failed: {type(exc).__name__}: {exc}')
+        if errors:
+            raise FixtureRefusal('; '.join(errors))
+
+    def run_services(self, arguments):
+        if arguments[0] == 'stop':
+            self.stop_all()
+            return
+        self.stop_all()
+        selected = (self.runtime / 'work/application-current').resolve(strict=True)
+        self.start(selected)
+
+
+def _fixture_receipt(previous, candidate, fallback, api, evidence_path=None):
+    FALLBACK_CHECKS, BundleError, _, _, validate_bundle = api[:5]
+    _, _, _, _, _, require_capability, validate_policy, validate_receipt = api
+    previous_manifest, candidate_manifest, fallback_manifest = (
+        validate_bundle(path) for path in (previous, candidate, fallback))
+    for manifest in (previous_manifest, candidate_manifest, fallback_manifest):
+        _require_receipt_bindings(manifest)
+    require_capability(previous_manifest, role='previous')
+    require_capability(candidate_manifest, role='candidate', require_writer=True)
+    capability = require_capability(fallback_manifest, role='fallback')
+    try:
+        policy = validate_policy(fallback_manifest.get('fallback_policy'))
+    except BundleError as exc:
+        raise FixtureRefusal(f'fixture fallback policy preflight failed: {exc}') from exc
+    if evidence_path is not None:
+        raw_checks = _load_fallback_evidence(evidence_path, (previous, candidate, fallback))
+    else:
+        raw_checks = fallback_manifest['provenance'].get('test_receipt', {}).get('fallback_checks')
+        if not isinstance(raw_checks, dict) or set(raw_checks) != set(FALLBACK_CHECKS) or any(
+                raw_checks.get(name) != 'passed' for name in FALLBACK_CHECKS):
+            missing = sorted(name for name in FALLBACK_CHECKS
+                             if not isinstance(raw_checks, dict) or raw_checks.get(name) != 'passed')
+            raise FixtureRefusal('artifact-bound named fallback checks are missing or unpassed: ' + ', '.join(missing))
+    if (policy.get('evidence_scope') != 'fixture-only'
+            or policy.get('runtime_state_policy') != 'same-stores-no-restore'
+            or policy.get('physical_effect_policy') != 'never-replay'
+            or policy.get('roomsv2_read_versions') != capability.get('read_versions')
+            or policy.get('workshop_mutation_mode') != capability.get('write_mode')
+            or policy.get('candidate_manifest_sha256') != _manifest_hash(candidate)
+            or policy.get('member_profile_loan_compatibility') != 'verified'):
+        raise FixtureRefusal('fixture fallback policy does not match its artifact-bound capability')
+    if candidate_manifest['provenance']['workshop_capability']['write_mode'] != 'v2':
+        raise FixtureRefusal('candidate package must have a version-2 Workshop writer')
+    # stage_bundle checked raw receipt bytes before packaging; validate_bundle
+    # rechecks the embedded canonical object hash. Only these bound `passed`
+    # results may now be translated for select_bundle's boolean schema.
+    receipt = {
+        'execution_scope': 'fixture-only',
+        'previous_bundle_manifest_sha256': _manifest_hash(previous),
+        'previous_native_sha256': previous_manifest['provenance']['native_sha256'],
+        'candidate_bundle_manifest_sha256': _manifest_hash(candidate),
+        'candidate_native_sha256': candidate_manifest['provenance']['native_sha256'],
+        'fallback_bundle_manifest_sha256': _manifest_hash(fallback),
+        'fallback_native_sha256': fallback_manifest['provenance']['native_sha256'],
+        'fallback_policy_sha256': hashlib.sha256(json.dumps(policy, sort_keys=True,
+            separators=(',', ':')).encode()).hexdigest(),
+        'checks': {name: raw_checks[name] == 'passed' for name in FALLBACK_CHECKS},
+    }
+    try:
+        validate_receipt(receipt, previous, candidate, fallback)
+    except BundleError as exc:
+        raise FixtureRefusal(f'fixture fallback receipt preflight failed: {exc}') from exc
+    return receipt
+
+
+def _preflight_fixture_packages(paths, api, evidence_path=None):
+    _, BundleError, _, _, validate_bundle, require_capability, _, _ = api
+    if len(paths) != 3 or len(set(map(Path, paths))) != 3:
+        raise BundleError('fixture-process requires distinct O/C/F packages')
+    manifests = []
+    for path in paths:
+        manifest = validate_bundle(path)
+        _require_receipt_bindings(manifest)
+        provenance = manifest.get('provenance', {})
+        if (manifest.get('format') != 2
+                or provenance.get('build_receipt', {}).get('execution_scope') != 'fixture-only'
+                or provenance.get('test_receipt', {}).get('execution_scope') != 'fixture-only'):
+            raise BundleError('fixture-process requires complete fixture-only format-2 O/C/F packages')
+        manifests.append(manifest)
+    o_capability = require_capability(manifests[0], role='previous')
+    c_capability = require_capability(manifests[1], role='candidate', require_writer=True)
+    f_capability = require_capability(manifests[2], role='fallback')
+    if (o_capability['write_mode'] != 'disabled'
+            or c_capability['write_mode'] != 'v2'
+            or f_capability['write_mode'] not in ('v2', 'disabled')):
+        raise BundleError('fixture O/C/F Workshop capabilities do not satisfy disabled-O, v2-C, compatible-F policy')
+    first_receipt = _fixture_receipt(paths[0], paths[1], paths[2], api, evidence_path)
+    # F-to-C return uses the same byte-identical F artifact and the same
+    # candidate-bound policy, with F as the selected previous package.
+    return_receipt = _fixture_receipt(paths[2], paths[1], paths[2], api, evidence_path)
+    return manifests, first_receipt, return_receipt
+
+
+def _run_fixture_process(args, paths, dependency, api):
+    _, BundleError, _, _, validate_bundle = api[:5]
+    if args.inject_candidate_interruption or args.inject_candidate_verification_failure:
+        raise BundleError('fixture-process mode uses its own same-store candidate failure scenario')
+    manifests, fallback_receipt, return_fallback_receipt = _preflight_fixture_packages(
+        paths, api, getattr(args, 'fallback_evidence', None))
+    if not dependency.is_dir() or dependency.is_symlink():
+        raise FixtureRefusal('dependency path must be an existing recorded non-symlink directory')
+
+    # Import the process runner only after every package, capability, policy and
+    # raw receipt binding has passed. No run/store root exists at this point.
+    import runpy
+    room_verifier = runpy.run_path(str(PROJECT / 'deploy/verify-workshop-rooms.py'),
+                                   run_name='fixture_process_rooms')
+
+    run_id = uuid.uuid4().hex
+    retained = PROJECT / 'work/queue-coordinator' / f'whole-map-process-run-{run_id}'
+    retained.mkdir(mode=0o700, parents=True)
+    logs = retained / 'logs'
+    logs.mkdir(mode=0o700)
+    token = uuid.uuid4().hex + uuid.uuid4().hex
+    report_path = retained / 'receipt.json'
+    process_manager = None
+    result = None
+    failure = None
+    temp_root = None
+    cleanup_errors = []
+    try:
+        temp_root = Path(tempfile.mkdtemp(prefix='whole-map-fixture-process-'))
+        os.chmod(temp_root, 0o700)
+        releases = temp_root / 'releases'
+        releases.mkdir(mode=0o700)
+        copied = []
+        for name, path in zip(('O', 'C', 'F'), paths):
+            destination = releases / name
+            shutil.copytree(path, destination, symlinks=False)
+            copied.append(destination.resolve(strict=True))
+        previous, candidate, fallback = copied
+        return_fallback = releases / 'F-return'
+        shutil.copytree(fallback, return_fallback, symlinks=False)
+        return_fallback = return_fallback.resolve(strict=True)
+        for package in (*copied, return_fallback):
+            if validate_bundle(package).get('format') != 2:
+                raise FixtureRefusal('copied fixture package changed during staging')
+
+        runtime = temp_root / 'runtime'
+        runtime.mkdir(mode=0o700)
+        (runtime / '.fixture-process-token').write_text(token)
+        (runtime / '.fixture-process-token').chmod(0o600)
+        work = runtime / 'work'
+        work.mkdir(mode=0o700)
+        (work / 'application-current').symlink_to(previous, target_is_directory=True)
+        owner_stat = temp_root.stat()
+        fixture = {
+            'owned_root': str(temp_root), 'owner_identity': (owner_stat.st_dev, owner_stat.st_ino, owner_stat.st_uid),
+            'runtime': str(runtime), 'fallback': str(fallback), 'return_fallback': str(return_fallback),
+            'process_fixture': True,
+            'workshop_db': str(work / 'ops/workshop.db'),
+            'native_db': str(work / 'baseline/data/homebox.db'),
+            'fallback_receipt': fallback_receipt,
+            'return_fallback_receipt': return_fallback_receipt,
+        }
+        process_manager = _PackagedProcesses(runtime, token, dependency, logs)
+        room_verifier['test_room_bundle_rollback'](fixture, previous, candidate,
+                                                    process_runner=process_manager.run_services)
+        result = {
+            'mode': 'fixture-process', 'fixture_only': True,
+            'compatibility_claim': 'synthetic matched-package process evidence only; production compatibility unclaimed',
+            'processes_started': process_manager.processes_started,
+            'named_assertion_count': len(process_manager.rows),
+            'named_assertions': process_manager.rows,
+            'native_port_retries': process_manager.native_port_retries,
+            'same_store_rooms': fixture.get('room_rollback_checks'),
+            'same_store_rooms_evidence_scope': 'synthetic Rooms/native fixture tables; not native member/loan compatibility evidence',
+            'bundle_manifests': {name: _manifest_hash(path) for name, path in
+                                 zip(('O', 'C', 'F'), copied)},
+            'bundle_artifact_bindings': {name: _artifact_binding(path) for name, path in
+                                         zip(('O', 'C', 'F'), copied)},
+            'fallback_evidence_path': (str(args.fallback_evidence)
+                                       if getattr(args, 'fallback_evidence', None) else None),
+            'fallback_checks': fallback_receipt['checks'],
+            'dependency_path': str(dependency),
+            'service_lifecycle_trace': process_manager.rows,
+            'logs': [str(path) for path in sorted(logs.glob('*.log'))],
+        }
+        if not result['same_store_rooms']:
+            raise FixtureRefusal('same-store Rooms assertions were not emitted')
+    except BaseException as exc:
+        failure = f'{type(exc).__name__}: {exc}'
+        raise
+    finally:
+        if process_manager:
+            try:
+                process_manager.stop_all()
+            except Exception as exc:
+                cleanup_errors.append(str(exc))
+        runtime_store_removed = (_remove_runtime_root(temp_root, cleanup_errors)
+                                 if temp_root is not None else True)
+        receipt = result or {'mode': 'fixture-process', 'fixture_only': True}
+        receipt['status'] = 'passed' if failure is None and not cleanup_errors else 'failed'
+        if failure:
+            receipt['failure'] = failure
+        if cleanup_errors:
+            receipt['cleanup_errors'] = cleanup_errors
+        receipt['runtime_store_removed'] = runtime_store_removed
+        report_path.write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+        if cleanup_errors and failure is None:
+            raise FixtureRefusal('fixture cleanup failed; receipt recorded at '
+                                 f'{report_path}: ' + '; '.join(cleanup_errors))
+    result['receipt_path'] = str(report_path)
+    return result
+
+
+def _remove_runtime_root(root, errors):
+    root = Path(root)
+    try:
+        # Restrict cleanup to a real, owned temporary root. This rejects
+        # symlinked path components before resolving them and excludes the
+        # operational tree.
+        root = _reject_operational(root)
+        os.chmod(root, 0o700)
+        for current, directories, _files in os.walk(root, topdown=True, followlinks=False):
+            parent = Path(current)
+            for name in list(directories):
+                child = parent / name
+                try:
+                    mode = child.lstat().st_mode
+                except FileNotFoundError:
+                    directories.remove(name)
+                    continue
+                if stat.S_ISLNK(mode):
+                    # Never traverse or chmod a symlink, even if it points
+                    # back into the fixture root.
+                    directories.remove(name)
+                    continue
+                if not stat.S_ISDIR(mode):
+                    directories.remove(name)
+                    continue
+                if not mode & stat.S_IWUSR or not mode & stat.S_IXUSR:
+                    os.chmod(child, 0o700, follow_symlinks=False)
+        shutil.rmtree(root)
+    except Exception as exc:
+        errors.append(f'runtime cleanup failed: {type(exc).__name__}: {exc}')
+    removed = not root.exists() and not root.is_symlink()
+    if not removed and not any(message.startswith('runtime cleanup failed:') for message in errors):
+        errors.append('runtime cleanup failed: fixture root still exists')
+    return removed
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--mode', choices=('inert-validation', 'fixture-process'), default='inert-validation')
+    parser.add_argument('--previous', required=True, type=Path)
+    parser.add_argument('--candidate', required=True, type=Path)
+    parser.add_argument('--fallback', required=True, type=Path)
+    parser.add_argument('--fallback-evidence', type=Path,
+                        help='owned fixture-only external receipt from executed artifact-bound fallback assertions')
+    parser.add_argument('--dependency-path', type=Path)
+    parser.add_argument('--inject-candidate-verification-failure', action='store_true')
+    parser.add_argument('--inject-candidate-interruption', action='store_true')
+    args = parser.parse_args(argv)
+
+    if args.mode == 'fixture-process':
+        inherited = [key for key in os.environ if key.startswith(('HBOX_', 'WORKSHOP_', 'HOMEBOX_WEB_'))]
+        if inherited:
+            parser.error('inherited HBOX endpoint configuration is refused in fixture-process mode')
+    try:
+        paths = tuple(_reject_operational(path) for path in
+                      (args.previous, args.candidate, args.fallback))
+    except (FixtureRefusal, OSError) as exc:
+        parser.error(str(exc))
+    if len(set(paths)) != 3:
+        parser.error('previous, candidate and fallback bundles must differ')
+    if args.mode == 'fixture-process' and args.dependency_path is None:
+        parser.error('fixture-process requires an explicit installed --dependency-path')
+    if args.fallback_evidence is not None:
+        if args.mode != 'fixture-process':
+            parser.error('--fallback-evidence requires fixture-process mode')
+        try:
+            args.fallback_evidence = _owned_fixture_evidence(args.fallback_evidence)
+        except (FixtureRefusal, OSError) as exc:
+            parser.error(str(exc))
+    dependency = None
+    if args.mode == 'fixture-process':
+        try:
+            dependency = _owned_dependency(args.dependency_path)
+        except (FixtureRefusal, OSError) as exc:
+            parser.error(str(exc))
+    if args.mode == 'inert-validation' and (args.inject_candidate_interruption
+            or args.inject_candidate_verification_failure):
+        parser.error('failure injection requires fixture-process mode and artifact-bound fallback checks')
+
+    # No project package is imported until endpoint and path guards have passed.
+    api = _load_bundle_api()
+    if args.inject_candidate_verification_failure and args.inject_candidate_interruption:
+        raise api[1]('select one failure injection at a time')
+    try:
+        if args.mode == 'fixture-process':
+            report = _run_fixture_process(args, paths, dependency, api)
+        else:
+            report = _inert_validation(args, paths, api)
+    except FixtureRefusal as exc:
+        parser.error(str(exc))
+    print(json.dumps(report, sort_keys=True))
+
+
+if __name__ == '__main__':
+    main()
