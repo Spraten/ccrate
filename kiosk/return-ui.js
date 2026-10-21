@@ -118,6 +118,7 @@
     });
     host.append(scan, add);
 
+    let confirmButton = null;
     for (const item of state.items) {
       const card = el('article'), available = item.availability.get(item.root.id);
       card.append(el('strong', item.root.name || item.root.id));
@@ -127,17 +128,17 @@
       condition.setAttribute('aria-label', `Condition for ${item.root.name || item.root.id}`);
       condition.append(new Option('Keep recorded condition', ''), ...['Needs Attention', 'Maintenance', 'Quarantined', 'Broken'].map(value => new Option(value, value)));
       condition.value = item.condition;
-      condition.addEventListener('change', () => { item.condition = condition.value; state.reviewed = false; });
+      condition.addEventListener('change', () => { item.condition = condition.value; state.reviewed = false; if (confirmButton) confirmButton.disabled = true; });
       card.append(condition);
       const issue = el('input'); issue.placeholder = 'Required note if condition changed'; issue.value = item.issueNote;
-      issue.addEventListener('input', () => { item.issueNote = issue.value; state.reviewed = false; }); card.append(issue);
+      issue.addEventListener('input', () => { item.issueNote = issue.value; state.reviewed = false; if (confirmButton) confirmButton.disabled = true; }); card.append(issue);
       const note = el('input'); note.placeholder = 'Optional return note'; note.value = item.note;
-      note.addEventListener('input', () => { item.note = note.value; state.reviewed = false; }); card.append(note);
+      note.addEventListener('input', () => { item.note = note.value; state.reviewed = false; if (confirmButton) confirmButton.disabled = true; }); card.append(note);
       const remove = el('button', 'Remove'); remove.type = 'button';
       remove.addEventListener('click', () => { state.items = state.items.filter(entry => entry !== item); state.reviewed = false; render(); }); card.append(remove);
       host.append(card);
     }
-    const review = button('Review return', reviewReturn), confirm = button('Confirm return', confirmReturn);
+    const review = button('Review return', reviewReturn), confirm = confirmButton = button('Confirm return', confirmReturn);
     confirm.disabled = !state.reviewed || state.sending || state.uncertain;
     const actions = el('div'); actions.className = 'flow-actions'; actions.setAttribute('aria-label', 'Return actions'); host.append(actions); actions.append(review, confirm);
     if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); }

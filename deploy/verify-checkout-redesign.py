@@ -14,6 +14,12 @@ import signal
 import shutil
 import subprocess
 import tempfile
+import base64
+import secrets
+import socket
+import time
+import urllib.request
+from urllib.parse import urlsplit
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -81,7 +87,7 @@ BOOTSTRAP = r"""<script>
    const fieldSelectors=flow==='checkout'?['#checkout-ui input[placeholder="Optional note for this item"]']:['#return-ui input[placeholder="Required note if condition changed"]','#return-ui input[placeholder="Optional return note"]'];
    const fieldVisibility=[];
    for(const selector of fieldSelectors){const field=document.querySelector(selector);if(!field)throw Error('Expected review field missing: '+selector);field.scrollIntoView({block:'center'});await new Promise(r=>setTimeout(r,30));const r=field.getBoundingClientRect(),t=tray.getBoundingClientRect();fieldVisibility.push({placeholder:field.placeholder,top:r.top,bottom:r.bottom,height:r.height,trayTop:t.top,visible:r.height>=44&&r.top>=0&&r.bottom<=t.top});}
-   window.scrollTo(0,0);
+   await new Promise(r=>setTimeout(r,150));
    if(fieldVisibility.some(field=>!field.visible))throw Error('A note field is covered by the fixed action tray: '+JSON.stringify(fieldVisibility));
    const overflow=document.documentElement.scrollWidth>document.documentElement.clientWidth;
    const shortButtons=[...document.querySelectorAll('button')].filter(b=>{const r=b.getBoundingClientRect();return r.width>0&&r.height<44;}).map(b=>b.textContent.trim());
@@ -139,9 +145,8 @@ def run_case(browser, flow, stage, screenshot):
     command = [browser, '--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
                '--disable-dev-shm-usage', '--disable-background-networking', '--disable-extensions',
                '--no-proxy-server', '--window-size=800,480', '--force-device-scale-factor=1',
+               '--run-all-compositor-stages-before-draw',
                '--virtual-time-budget=12000', '--dump-dom']
-    if screenshot:
-        command += [f'--screenshot={screenshot}']
     with tempfile.TemporaryDirectory(prefix='ccrate-touchscreen-fixture-') as temp:
         fixture = pathlib.Path(temp) / 'touchscreen.html'
         fixture.write_text(fixture_html(), encoding='utf-8')
@@ -185,7 +190,127 @@ def run_case(browser, flow, stage, screenshot):
         raise AssertionError('Return review omitted condition or location')
     if stage == 'receipt' and (not data['receiptVisible'] or data['confirmRequests'] != 1):
         raise AssertionError('Receipt missing or confirmation was not exactly once')
+    if screenshot:
+        capture_interacted_screenshot(browser, flow, screenshot)
     return data
+
+
+def capture_interacted_screenshot(browser, flow, screenshot):
+    """Capture after the scripted review state using Chromium's local CDP socket."""
+    with tempfile.TemporaryDirectory(prefix='ccrate-touchscreen-shot-') as temp:
+        temp = pathlib.Path(temp)
+        fixture = temp / 'touchscreen.html'
+        fixture.write_text(fixture_html(), encoding='utf-8')
+        profile = temp / 'profile'
+        command = [browser, '--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+                   '--disable-dev-shm-usage', '--disable-background-networking', '--disable-extensions',
+                   '--no-proxy-server', '--window-size=800,480', '--force-device-scale-factor=1',
+                   '--remote-debugging-port=0', '--remote-allow-origins=*', f'--user-data-dir={profile}',
+                   fixture.as_uri() + f'?flow={flow}&stage=review']
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+        try:
+            active_port = profile / 'DevToolsActivePort'
+            deadline = time.monotonic() + 12
+            while time.monotonic() < deadline and not active_port.exists():
+                if process.poll() is not None:
+                    raise BrowserUnavailable('Chromium exited before opening its local screenshot endpoint')
+                time.sleep(.05)
+            if not active_port.exists():
+                raise BrowserUnavailable('Chromium did not open its local screenshot endpoint')
+            port = int(active_port.read_text().splitlines()[0])
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}/json/list', timeout=5) as response:
+                pages = json.load(response)
+            target = next(page for page in pages if page.get('type') == 'page')
+            parsed = urlsplit(target['webSocketDebuggerUrl'])
+            conn = socket.create_connection((parsed.hostname, parsed.port), timeout=5)
+            key = base64.b64encode(secrets.token_bytes(16)).decode('ascii')
+            ws_path = parsed.path + (('?' + parsed.query) if parsed.query else '')
+            handshake = (f'GET {ws_path} HTTP/1.1\r\nHost: {parsed.hostname}:{parsed.port}\r\n'
+                         f'Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n'
+                         'Sec-WebSocket-Version: 13\r\nOrigin: http://localhost\r\n\r\n')
+            conn.sendall(handshake.encode('ascii'))
+            response = b''
+            while b'\r\n\r\n' not in response:
+                response += conn.recv(4096)
+            if not response.startswith(b'HTTP/1.1 101'):
+                raise BrowserUnavailable('Chromium rejected the local screenshot websocket: ' + response.decode('latin1', errors='replace')[:500])
+            conn.settimeout(5)
+
+            def read_exact(count):
+                chunks = bytearray()
+                while len(chunks) < count:
+                    chunk = conn.recv(count - len(chunks))
+                    if not chunk:
+                        raise BrowserUnavailable('Chromium closed the screenshot websocket')
+                    chunks.extend(chunk)
+                return bytes(chunks)
+
+            next_id = 0
+            def call(method, params=None):
+                nonlocal next_id
+                next_id += 1
+                message = json.dumps({'id': next_id, 'method': method, 'params': params or {}}).encode()
+                mask = secrets.token_bytes(4)
+                length = len(message)
+                header = bytearray([0x81])
+                if length < 126:
+                    header.append(0x80 | length)
+                elif length < 65536:
+                    header.extend((0x80 | 126,))
+                    header.extend(length.to_bytes(2, 'big'))
+                else:
+                    header.extend((0x80 | 127,))
+                    header.extend(length.to_bytes(8, 'big'))
+                masked = bytes(value ^ mask[index % 4] for index, value in enumerate(message))
+                conn.sendall(bytes(header) + mask + masked)
+                while True:
+                    first, second = read_exact(2)
+                    size = second & 0x7f
+                    if size == 126:
+                        size = int.from_bytes(read_exact(2), 'big')
+                    elif size == 127:
+                        size = int.from_bytes(read_exact(8), 'big')
+                    payload = read_exact(size)
+                    if second & 0x80:
+                        mask = read_exact(4)
+                        payload = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+                    if first & 0x0f == 8:
+                        raise BrowserUnavailable('Chromium closed the screenshot websocket')
+                    if first & 0x0f != 1:
+                        continue
+                    item = json.loads(payload)
+                    if item.get('id') == next_id:
+                        if 'error' in item:
+                            raise BrowserUnavailable('Chromium screenshot command failed: ' + str(item['error']))
+                        return item.get('result', {})
+
+            call('Page.enable')
+            call('Runtime.enable')
+            deadline = time.monotonic() + 20
+            result = None
+            while time.monotonic() < deadline:
+                evaluated = call('Runtime.evaluate', {'expression': 'JSON.stringify({result:document.body.dataset.result||null,error:document.body.dataset.error||null})', 'returnByValue': True})
+                value = evaluated.get('result', {}).get('value', '')
+                if value and json.loads(value).get('result'):
+                    result = json.loads(value)['result']
+                    break
+                if value and json.loads(value).get('error'):
+                    raise AssertionError('Interactive screenshot fixture failed: ' + json.loads(value)['error'])
+                time.sleep(.05)
+            if result is None:
+                raise BrowserUnavailable('Chromium did not complete the interactive screenshot fixture')
+            try:
+                json.loads(result)
+            except json.JSONDecodeError as error:
+                raise AssertionError('Interactive screenshot fixture failed: ' + result) from error
+            image_result = call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': False})
+            pathlib.Path(screenshot).write_bytes(base64.b64decode(image_result['data']))
+            conn.close()
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+            process.communicate(timeout=5)
 
 
 def main():
