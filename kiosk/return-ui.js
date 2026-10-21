@@ -3,7 +3,7 @@
   if (!host) return;
 
   const state = {
-    items: [], key: null, reviewed: false, sending: false, uncertain: false,
+    items: [], key: null, reviewed: false, sending: false, uncertain: false, cancelled: false,
     receipt: null, receiptSession: null, operationSession: null, epoch: 0, preserved: false, reviewView: false
   };
   const el = (tag, text = '') => { const node = document.createElement(tag); node.textContent = text; return node; };
@@ -46,16 +46,17 @@
       return;
     }
     host.append(el('h3', 'Return equipment'));
+    if (state.cancelled) { host.append(el('p', 'Cancelling…')); return; }
     const captured = state.operationSession;
     const allowed = valid(context()) || (state.preserved && sameSession(captured));
     if (!allowed) { host.append(el('p', 'Scan your member badge first.')); return; }
     if (state.reviewView) {
-      host.append(el('h3', 'Review return'));
-      for (const item of state.items) { const summary = el('article'); summary.append(el('strong', item.root.name || item.root.id)); summary.append(el('p', `Condition: ${item.condition || 'Keep recorded condition'} · Return location: ${item.availability.get(item.root.id)?.location?.name || 'Assigned location'}`)); if (item.issueNote) summary.append(el('p', `Issue note: ${item.issueNote}`)); if (item.note) summary.append(el('p', `Return note: ${item.note}`)); host.append(summary); }
-      if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); window.setKioskCancelAllowed?.(false); } else { if (state.sending) host.append(el('p', 'Saving return…')); else button('Back to items', () => { state.reviewView = false; render(); }); const confirm = button('Confirm return', confirmReturn); confirm.disabled = state.sending; window.setKioskCancelAllowed?.(!state.sending); }
+      host.append(el('h3', 'Review return')); if (message) host.append(el('p', message));
+      for (const item of state.items) { const summary = el('article'); summary.append(el('strong', item.root.name || item.root.id)); if (item.manifest?.length) summary.append(el('p', 'Kit manifest: ' + item.manifest.join(', '))); summary.append(el('p', `Condition: ${item.condition || 'Keep recorded condition'} · Return location: ${item.availability.get(item.root.id)?.location?.name || 'Assigned location'}`)); if (item.issueNote) summary.append(el('p', `Issue note: ${item.issueNote}`)); if (item.note) summary.append(el('p', `Return note: ${item.note}`)); for (const [id,note] of Object.entries(item.componentNotes||{})) summary.append(el('p', `Component note (${id}): ${note}`)); host.append(summary); }
+      if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); window.setKioskCancelAllowed?.('return',false); } else { if (state.sending) host.append(el('p', 'Saving return…')); else button('Back to items', () => { state.epoch++; state.reviewView = false; render(); }); const confirm = button('Confirm return', confirmReturn); confirm.disabled = state.sending; window.setKioskCancelAllowed?.('return',!state.sending&&!state.cancelled); }
       return;
     }
-    window.setKioskCancelAllowed?.(!state.sending && !state.uncertain);
+    window.setKioskCancelAllowed?.('return',!state.sending&&!state.uncertain&&!state.cancelled);
 
     const status = el('p', message);
     host.append(status);
@@ -147,11 +148,11 @@
     }
     const review = button('Review return', reviewReturn);
     const actions = el('div'); actions.className = 'flow-actions'; actions.setAttribute('aria-label', 'Return actions'); host.append(actions); actions.append(review);
-    if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); window.setKioskCancelAllowed?.(false); }
+    if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); window.setKioskCancelAllowed?.('return',false); }
   }
 
   async function beginReturn() {
-    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, reviewView: false, epoch: state.epoch + 1 });
+    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, cancelled: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, reviewView: false, epoch: state.epoch + 1 });
     window.returnReceiptPreserved = false;
     render();
   }
@@ -163,8 +164,8 @@
   }
   async function confirmReturn() {
     const captured = context(), epoch = state.epoch;
-    if (!state.reviewed || state.sending || state.uncertain || !valid(captured)) return;
-    state.key ||= crypto.randomUUID(); state.operationSession = captured; state.sending = true; state.reviewView = true; state.preserved = true; window.returnReceiptPreserved = true; render(); window.setKioskCancelAllowed?.(false);
+    if (!state.reviewed || state.sending || state.uncertain || state.cancelled || !valid(captured)) return;
+    state.key ||= crypto.randomUUID(); state.operationSession = captured; state.sending = true; state.reviewView = true; state.preserved = true; window.returnReceiptPreserved = true; render(); window.setKioskCancelAllowed?.('return',false);
     const targetsById = new Map();
     for (const item of state.items) for (const entity of item.entities) targetsById.set(entity.id, { entity_id: entity.id, ...(item.condition ? { condition: item.condition, note: item.issueNote } : {}), return_note: item.componentNotes?.[entity.id] ?? item.note });
     try {
@@ -181,7 +182,7 @@
       if (error.status === 400 && !/(interrupted|admin recovery|needs staff review|requires recovery|reconciliation)/i.test(error.message)) {
         state.uncertain = false; state.key = null; state.operationSession = null; state.preserved = false; window.returnReceiptPreserved = false; state.reviewed = false; state.reviewView = false; render(error.message); return;
       }
-      state.uncertain = true; state.reviewView = true; render(error.message); window.setKioskCancelAllowed?.(false);
+      state.uncertain = true; state.reviewView = true; render(error.message); window.setKioskCancelAllowed?.('return',false);
     }
   }
   async function recoverReturn() {
@@ -198,16 +199,17 @@
 
   window.beginReturn = beginReturn; window.addReturnItem = addReturnItem; window.reviewReturn = reviewReturn;
   window.confirmReturn = confirmReturn; window.recoverReturn = recoverReturn;
+  window.addEventListener('ccrate-cancel-intent', event => { if (event.detail?.flow !== 'return') return; state.cancelled = true; state.epoch++; render('Cancelling…'); });
   window.addEventListener('ccrate-session-change', () => {
     const captured = state.operationSession;
-    if (state.preserved && sameSession(captured)) { render(); return; }
-    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, reviewView: false, epoch: state.epoch + 1 });
+    if (state.preserved && !state.cancelled && sameSession(captured)) { render(); return;}
+    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, cancelled: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, reviewView: false, epoch: state.epoch + 1 });
     window.returnReceiptPreserved = false; render();
   });
   window.addEventListener('ccrate-flow-done', event => {
     if (!state.preserved || !sameSession(event.detail)) return;
     state.preserved = false;
-    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, epoch: state.epoch + 1 });
+    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, cancelled: false, receipt: null, receiptSession: null, operationSession: null, epoch: state.epoch + 1 });
     render();
   });
 })();
