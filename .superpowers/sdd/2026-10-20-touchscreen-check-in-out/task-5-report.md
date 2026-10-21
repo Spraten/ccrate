@@ -5,7 +5,10 @@
 - Fixed the companion route so `/checkout-ui.js` reaches the touchscreen asset handler instead of the legacy 404 guard.
 - Added static asset route and MIME checks covering the page's checkout and return scripts.
 - Fixed the home action grid remaining visible after a flow starts. The `#home` grid's `display:grid` rule overrode the browser's built-in `[hidden]` styling; `#home[hidden]{display:none}` now restores the intended one-task-at-a-time screen.
-- Replaced the stale checkout verifier with a self-contained `file://` fixture using real HTML/CSS/JS, synthetic fetch responses, and no Homebox requests. Browser/runtime startup failure and a functional flow assertion failure are reported separately.
+- Fixed hidden transaction panels being displayed because their `display:grid` rule overrode `[hidden]`. Added explicit hidden selectors for checkout and return.
+- Hide the badge form and recognition message after successful verification, clearing both when the shared session resets.
+- Added a shared fixed Review/Confirm action bar for checkout and return. The flow content reserves space below its scrollable content so the bar remains available without permanently covering the last fields.
+- Replaced the stale verifier with a self-contained `file://` fixture using the real HTML/CSS/JS, synthetic fetch responses, and no Homebox requests. It distinguishes browser startup/load failure from functional assertions and enforces primary button visibility.
 
 ## Focused verification
 
@@ -24,8 +27,10 @@ All required focused suites passed:
 
 `python3 -m py_compile deploy/verify-checkout-redesign.py` and `git diff --check` passed.
 
+`python3 deploy/verify-checkout-redesign.py` passed checkout and return badge → search → scan → review → confirm → receipt flows. At 800×480 both flows had no horizontal overflow, all buttons were at least 44 px, both primary actions were within the viewport, inactive transaction UI and manager controls were hidden, long names and per-item notes were present, return condition/location were visible, and each confirmation was sent exactly once. Synthetic APIs handled all requests; zero Homebox requests were made.
+
 ## Browser evidence and remaining gap
 
-`python3 deploy/verify-checkout-redesign.py` launches system Chromium on a temporary self-contained `file://` page and captures `/tmp/ccrate-checkout-review-800x480.png`. Visual inspection confirmed the home menu is hidden after entering checkout following the CSS fix. The synthetic runner recognizes the badge but stalls before the search UI; the run does not reach scan, review, confirm, or receipt and exits with an assertion failure. The return browser flow and touch target/overflow assertions therefore remain unverified. The screenshot is an intermediate badge-entry screen, not a review-state acceptance screenshot.
+Chromium screenshots were visually inspected: [checkout review](/tmp/ccrate-checkout-review-800x480.png) and [return review](/tmp/ccrate-return-review-800x480.png). The initial screenshots exposed the home/flow hidden-state conflict and primary actions below the viewport; both were fixed and recaptured. The final screenshots show the active flow only and the shared actions anchored at the bottom edge.
 
-No dependencies were downloaded; no Homebox, live inventory, devices, service, or deployment were used. Task 5 remains incomplete pending a working interactive browser harness and successful checkout and return review/receipt captures.
+No dependencies were downloaded; no Homebox, live inventory, devices, service, or deployment were used. Task 5 is complete for synthetic browser coverage; physical touchscreen/scanner acceptance remains for the Pi.

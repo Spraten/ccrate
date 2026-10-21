@@ -7,6 +7,7 @@ Screenshots and browser profiles are written under /tmp.
 """
 import json
 import html
+import os
 import pathlib
 import sys
 import signal
@@ -57,7 +58,8 @@ BOOTSTRAP = r"""<script>
    const flow=new URLSearchParams(location.search).get('flow'),stage=new URLSearchParams(location.search).get('stage')||'receipt';
    await click(`[data-flow="${flow}"]`); document.body.dataset.step='flow-selected';
    if(getComputedStyle(document.querySelector('#home')).display!=='none'||document.querySelector('#flow').hidden)throw Error('Flow navigation did not hide the home menu');
-   await fill('#badge-code','SYNTHETIC-BADGE');document.querySelector('#badge-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait(()=>window.checkoutSession?.generation===1);document.body.dataset.step='badge-accepted';
+   const inactiveHost=document.querySelector(flow==='checkout'?'#return-ui':'#checkout-ui');if(getComputedStyle(inactiveHost).display!=='none')throw Error('Inactive transaction UI is visible');
+   await fill('#badge-code','SYNTHETIC-BADGE');document.querySelector('#badge-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait(()=>window.checkoutSession?.generation===1);if(!document.querySelector('#badge-form').hidden)throw Error('Badge form remained visible after member verification');document.body.dataset.step='badge-accepted';
    const search=flow==='checkout'?'#checkout-ui input[aria-label="Search inventory"]':'#return-ui input[placeholder="Search by name or ID"]';
    await fill(search,'Mavic');await wait(()=>[...document.querySelectorAll('#checkout-ui button,#return-ui button')].some(b=>b.textContent.includes('Mavic')));document.body.dataset.step='search-result';
    const candidate=[...document.querySelectorAll('#checkout-ui button,#return-ui button')].find(b=>b.textContent.includes('Mavic'));
@@ -70,10 +72,14 @@ BOOTSTRAP = r"""<script>
    const review=[...document.querySelectorAll('#'+flow+'-ui button')].find(b=>b.textContent==='Review '+(flow==='checkout'?'checkout':'return'));
    if(!review)throw Error('Review action missing');review.click();await new Promise(r=>setTimeout(r,180));
    await wait(()=>[...document.querySelectorAll('#'+flow+'-ui button')].some(b=>b.textContent==='Confirm '+(flow==='checkout'?'checkout':'return')&&!b.disabled));
+   window.scrollTo(0,0);
    const overflow=document.documentElement.scrollWidth>document.documentElement.clientWidth;
    const shortButtons=[...document.querySelectorAll('button')].filter(b=>{const r=b.getBoundingClientRect();return r.width>0&&r.height<44;}).map(b=>b.textContent.trim());
    const manager=/(manager|settings|workshop|badge administration|inventory edit)/i.test(document.body.innerText);
-   const reviewData={stage:'review',flow,overflow,shortButtons,manager,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,
+   const primaryNames=['Review '+(flow==='checkout'?'checkout':'return'),'Confirm '+(flow==='checkout'?'checkout':'return')];
+   const primaryButtons=primaryNames.map(name=>{const b=[...document.querySelectorAll('#'+flow+'-ui button')].find(x=>x.textContent===name),r=b?.getBoundingClientRect();return {name,visible:!!r&&r.top>=0&&r.bottom<=innerHeight,top:r?.top??null,bottom:r?.bottom??null};});
+   if(primaryButtons.some(b=>!b.visible))throw Error('Primary review/confirm controls are outside the 800x480 viewport: '+JSON.stringify(primaryButtons));
+   const reviewData={stage:'review',flow,overflow,shortButtons,primaryButtons,inactiveFlowHidden:getComputedStyle(inactiveHost).display==='none',manager,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,
      longNameVisible:document.body.innerText.includes(item.name),noteVisible:[...document.querySelectorAll('#'+flow+'-ui input')].some(i=>i.value==='Synthetic per-item handling note'),locationVisible:document.body.innerText.includes('Lab / D Wing / G38'),
      conditionVisible:flow==='return'?document.body.innerText.includes('Recorded condition: Ready'):true,
      blockerVisible:document.body.innerText.includes('Blocked:')};
@@ -97,10 +103,14 @@ def fixture_html():
     css = (ROOT / 'kiosk/touchscreen.css').read_text(encoding='utf-8')
     body = body.replace('<link rel="stylesheet" href="/touchscreen.css">', '<style>' + css + '</style>')
     injection = BOOTSTRAP.replace('__ITEM__', json.dumps(ITEM)).replace('__MEMBER__', json.dumps(MEMBER))
-    body = body.replace('<script src="/checkout-ui.js" defer></script>', injection)
     for asset in ('checkout-ui.js', 'return-ui.js', 'touchscreen.js'):
         source = (ROOT / 'kiosk' / asset).read_text(encoding='utf-8')
-        body = body.replace(f'<script src="/{asset}" defer></script>', '<script>' + source + '</script>')
+        body = body.replace(f'<script src="/{asset}" defer></script>',
+                            f'<script data-fixture-asset="{asset}">' + source + '</script>')
+    # Install mocks before application scripts while keeping all real asset
+    # tags present for the inline bundle replacement above.
+    body = body.replace('<script data-fixture-asset="checkout-ui.js">',
+                        injection + '<script data-fixture-asset="checkout-ui.js">', 1)
     # file:// has inconsistent localStorage implementations across Chromium builds.
     shim = "<script>Object.defineProperty(window,'localStorage',{value:{getItem:()=>null,setItem:()=>{}},configurable:true});</script>"
     return body.replace('<head>', '<head>' + shim)
@@ -108,11 +118,9 @@ def fixture_html():
 
 def run_case(browser, flow, stage, screenshot):
     command = [browser, '--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
-               '--disable-dev-shm-usage', '--disable-background-networking', '--disable-extensions', '--no-proxy-server',
-               '--window-size=800,480', '--force-device-scale-factor=1', '--virtual-time-budget=5000', '--dump-dom']
-    command = [browser, '--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
                '--disable-dev-shm-usage', '--disable-background-networking', '--disable-extensions',
-               '--window-size=800,480', '--force-device-scale-factor=1', '--timeout=4000', '--dump-dom']
+               '--no-proxy-server', '--window-size=800,480', '--force-device-scale-factor=1',
+               '--virtual-time-budget=5000', '--dump-dom']
     if screenshot:
         command += [f'--screenshot={screenshot}']
     with tempfile.TemporaryDirectory(prefix='ccrate-touchscreen-fixture-') as temp:
@@ -124,7 +132,7 @@ def run_case(browser, flow, stage, screenshot):
         process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    start_new_session=True)
         try:
-            stdout, stderr = process.communicate(timeout=15)
+            stdout, stderr = process.communicate(timeout=30)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
             stdout, stderr = process.communicate(timeout=5)

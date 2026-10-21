@@ -88,7 +88,10 @@ class CompanionRouteTests(unittest.TestCase):
         css = request_type('/touchscreen.css')
         do_get(css)
         self.assertEqual(css.response, 200)
-        self.assertIn('#home[hidden]', css.wfile.getvalue().decode())
+        stylesheet = css.wfile.getvalue().decode()
+        self.assertIn('#home[hidden]', stylesheet)
+        self.assertIn('#checkout-ui[hidden],#return-ui[hidden]', stylesheet)
+        self.assertIn('.flow-actions', stylesheet)
 
         inventory = request_type('/api/inventory')
         do_get(inventory)
