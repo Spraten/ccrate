@@ -172,8 +172,8 @@ def confirm_terminal_note(client, jobs, session, data):
             ended = False
     return dict(result, note_saved=True, session_ended=ended)
 
-# Explicitly approved temporary setup mode; loopback only.
-OPEN_ADMIN=True
+# Manager operations use authenticated /workshop-api requests, even on loopback.
+OPEN_ADMIN=False
 def label_context(deadline,actor=None):
     import time
     remaining=max(.001,deadline-time.monotonic())
@@ -250,6 +250,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.reply_json(200,{'codes':codes,'detections':detections,'width':width,'height':height});return
                 data=json.loads(raw)
                 if self.path.startswith('/workshop/checks/'):
+                    if not OPEN_ADMIN:self.send_error(403);return
                     if not isinstance(data,dict):raise ValueError('Shelf-check request must be an object')
                     if any(self.headers.get(name) for name in ('X-Workshop-Actor','X-Workshop-Group','X-Workshop-Manager')):
                         raise ValueError('Shelf-check identity is supplied by Workshop')
@@ -673,6 +674,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         terminal_path=urlsplit(self.path)
         if terminal_path.path.startswith('/workshop/checks/'):
+            if not OPEN_ADMIN:self.send_error(403);return
             route=terminal_path.path.rsplit('/',1)[1]
             if route not in ('list','get'):
                 self.send_error(405);return
@@ -853,6 +855,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path=='/import-ui.js':
             body=(terminal_assets()/'import-ui.js').read_bytes();mime='text/javascript; charset=utf-8';code=200
         elif self.path in ('/api/members','/api/badges','/api/session','/api/custody'):
+            if self.path=='/api/badges' and not OPEN_ADMIN:self.send_error(403);return
             try:
                 snapshot=self.session.snapshot()
                 group,members=native_context()
@@ -861,7 +864,7 @@ class Handler(BaseHTTPRequestHandler):
                     data=ledger.custody(group)
                     names={m['id']:m['name'] for m in members}
                     for row in data:row['borrower']=names.get(row['actor_id'],'Former C-Crate member')
-                elif self.path=='/api/badges':data=badges.list(group) if OPEN_ADMIN else []
+                elif self.path=='/api/badges':data=badges.list(group)
                 else:
                     with lock:
                         member=next((m for m in members if m['id']==snapshot[0]),None)

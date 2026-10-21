@@ -479,6 +479,32 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(self.request('badges/issue', {'user_id': self.borrower, 'request_key': ident()}, headers).status, 403)
         self.assertEqual(self.badges.list(self.group), [])
 
+    def test_only_authenticated_configured_manager_can_revoke_badge(self):
+        badge = self.badges.issue(self.group, self.borrower, [self.borrower])
+        data = {'id': badge['id'], 'request_key': ident()}
+        self.assertEqual(self.request('badges/revoke', data, {'Cookie': None}).status, 401)
+        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}
+        headers['X-Workshop-Identity'] = self.request('context', headers=headers).result['identity']
+        self.assertEqual(self.request('badges/revoke', data, headers).status, 403)
+        self.assertEqual(self.badges.resolve(self.group, badge['code'], [self.borrower]), self.borrower)
+        response = self.request('badges/revoke', data)
+        self.assertEqual(response.status, 200, response.result)
+        self.assertIsNone(self.badges.resolve(self.group, badge['code'], [self.borrower]))
+
+    def test_unavailable_or_invalid_manager_configuration_denies_manager_mutations(self):
+        path = self.root/'work/ops/desktop-managers.json'
+        for configuration in (None, '{', '{}', '{"managers": null}', '{"managers": [{}]}',
+                              '{"managers": [{"user_id": "invalid", "group_id": "invalid"}]}'):
+            with self.subTest(configuration=configuration):
+                if configuration is None:
+                    path.unlink()
+                else:
+                    path.write_text(configuration)
+                self.assertFalse(self.request('context').result['manager'])
+                response = self.request('badges/revoke', {'id': ident(), 'request_key': ident()})
+                self.assertEqual(response.status, 403)
+                self.assertEqual(response.result['code'], 'manager_required')
+
     def test_workshop_shelf_order_actor_is_authenticated_manager_and_recovery_is_inspection_only(self):
         observed = []
         data = {'entity_id': self.shelf, 'updated_at': 'v1', 'shelf_ids': [], 'request_key': ident()}
