@@ -1,18 +1,201 @@
 (() => {
- const host=document.querySelector('#return-ui'); if(!host)return;
- const s={items:[],key:null,reviewed:false,sending:false,uncertain:false,receipt:null,receiptSession:null,epoch:0};
- const el=(t,x='')=>{const n=document.createElement(t);n.textContent=x;return n}, ctx=()=>({generation:window.checkoutSession?.generation??null,instance:window.checkoutSession?.instance??null}), valid=c=>c.generation!==null&&ctx().generation===c.generation&&ctx().instance===c.instance;
- async function req(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:{'X-Homebox-Client':window.touchscreenClientId||localStorage.getItem('ccrate-touchscreen-client'),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error||d.reason||'Request failed');return d}
- function render(msg=''){host.replaceChildren();if(s.receipt){host.append(el('h3','Return complete'),el('p',`Receipt ${s.receipt.id||''} · ${s.receipt.count??s.items.length} item(s)`));button('Done',()=>window.dispatchEvent(new CustomEvent('ccrate-flow-done',{detail:s.receiptSession})));return}host.append(el('h3','Return equipment'));if(!ctx().generation){host.append(el('p','Scan your member badge first.'));return}const note=el('p',msg);host.append(note);const search=el('input');search.placeholder='Search by name or ID';host.append(search);let candidate=null;const results=el('div');host.append(results);search.oninput=async()=>{results.replaceChildren();const q=search.value.trim();if(q.length<2)return;try{const data=await req('/api/inventory');for(const i of (Array.isArray(data)?data:data.items||[]).filter(x=>(x.name||'').toLowerCase().includes(q.toLowerCase())||String(x.id).includes(q)).slice(0,10)){const b=el('button',i.name||i.id);b.onclick=()=>{candidate=i;search.value=`${i.name||i.id} — scan physical code`;results.replaceChildren();};results.append(b)}}catch(e){note.textContent=e.message}};
- const scan=el('input');scan.placeholder='Scan item barcode';const add=el('button','Verify scan and add');add.onclick=async()=>{const saved=ctx();try{if(!scan.value.trim()||!valid(saved))throw Error('Scan your badge and the physical item code');const r=await req('/scan',{code:scan.value.trim()});const root=r.entity||r.code?.entity;if(!root||r.kind==='user'||r.kind==='invalid')throw Error('Scan an equipment code');if(candidate&&candidate.id!==root.id)throw Error('Scanned item does not match selected candidate');if(s.items.some(x=>x.root.id===root.id))throw Error('This item is already in the batch');let entities=[root],versions={},manifest=[];if(root.isKit||root.kit||root.type==='kit'){const k=await req('/api/kit?id='+encodeURIComponent(root.id));if(!k.kit)throw Error('Kit manifest unavailable');entities=k.entities||[root];versions=k.versions||{};manifest=entities.map(x=>x.name||x.id);for(const part of entities.slice(1))if(!(k.verified||[]).includes(part.id))throw Error(`Scan kit component ${part.name||part.id} separately`)}if(s.items.flatMap(x=>x.entities).length+entities.length>50)throw Error('A return can contain at most 50 items');const a=await req('/return/availability?ids='+encodeURIComponent(entities.map(x=>x.id).join(',')));const byId=new Map(a.items.map(x=>[x.id,x]));if(entities.some(x=>!byId.has(x.id)||!byId.get(x.id).eligible))throw Error(entities.map(x=>byId.get(x.id)?.reason||'Item is not eligible').join('; '));s.items.push({root,entities,versions,manifest,availability:byId,note:'',condition:'',issueNote:''});scan.value='';candidate=null;render('Physical scan verified.')}catch(e){note.textContent=e.message}};host.append(scan,add);
- for(const item of s.items){const card=el('article');const av=item.availability.get(item.root.id);card.append(el('strong',item.root.name||item.root.id));if(item.manifest.length)card.append(el('p','Kit manifest: '+item.manifest.join(', ')));card.append(el('p',`Recorded condition: ${av.condition||'Unknown'} · Return location: ${av.location?.name||'Assigned location'}`));const condition=document.createElement('select');condition.append(new Option('Keep recorded condition',''),...['Needs Attention','Maintenance','Quarantined','Broken'].map(x=>new Option(x,x)));condition.value=item.condition;condition.onchange=()=>{item.condition=condition.value;s.reviewed=false};card.append(condition);const issue=el('input');issue.placeholder='Required note if condition changed';issue.value=item.issueNote;issue.oninput=()=>{item.issueNote=issue.value;s.reviewed=false};card.append(issue);const rn=el('input');rn.placeholder='Optional return note';rn.value=item.note;rn.oninput=()=>{item.note=rn.value;s.reviewed=false};card.append(rn);const rm=el('button','Remove');rm.onclick=()=>{s.items=s.items.filter(x=>x!==item);s.reviewed=false;render()};card.append(rm);host.append(card)}
- if(msg)host.append(el('p',msg));if(s.uncertain){host.append(el('p','Outcome uncertain. Check status; do not confirm again.'));button('Check saved result',recoverReturn)}const review=button('Review return',reviewReturn);const c=button('Confirm return',confirmReturn);c.disabled=!s.reviewed||s.sending||s.uncertain;const actions=el('div');actions.className='flow-actions';actions.setAttribute('aria-label','Return actions');host.append(actions);actions.append(review,c);
- }
- function button(label,fn){const b=el('button',label);b.onclick=fn;host.append(b);return b}
- async function beginReturn(){Object.assign(s,{items:[],key:null,reviewed:false,sending:false,uncertain:false,receipt:null,epoch:s.epoch+1});render()}
- async function addReturnItem(item){if(!item?.scanEvidence||!valid(item))throw Error('A current physical scan is required')}
- async function reviewReturn(){if(!s.items.length||s.items.some(x=>x.condition&&!x.issueNote.trim()))return render('Add an issue note for every changed condition.');s.reviewed=true;render('Review complete. Confirm once to record these returns.')}
- async function confirmReturn(){if(!s.reviewed||s.sending||s.uncertain)return;const c=ctx();if(!valid(c))return;s.key||=crypto.randomUUID();s.operationSession=c;s.sending=true;try{s.receipt=await req('/return/confirm',{targets:s.items.flatMap(x=>x.entities.map(e=>({entity_id:e.id,...(x.condition?{condition:x.condition,note:x.issueNote}:{}),return_note:x.note}))),kit_versions:Object.assign({},...s.items.map(x=>x.versions)),request_key:s.key,session_generation:c.generation,session_instance:c.instance});s.receiptSession=c;s.sending=false;render()}catch(e){s.sending=false;s.uncertain=true;render(e.message)}}
- async function recoverReturn(){if(!s.key)return;try{const r=await req('/operation/status',{request_key:s.key});if(r.status==='completed'){s.receipt=r;s.receiptSession=s.operationSession;s.uncertain=false;render()}else render('No completed return is recorded. Ask staff to check before starting another return.')}catch(e){render('Could not check status. Ask staff to verify before another return.')}}
- window.beginReturn=beginReturn;window.addReturnItem=addReturnItem;window.reviewReturn=reviewReturn;window.confirmReturn=confirmReturn;window.recoverReturn=recoverReturn;window.addEventListener('ccrate-session-change',()=>{s.items=[];s.key=null;s.reviewed=false;s.uncertain=false;s.receipt=null;render()});
+  const host = document.querySelector('#return-ui');
+  if (!host) return;
+
+  const state = {
+    items: [], key: null, reviewed: false, sending: false, uncertain: false,
+    receipt: null, receiptSession: null, operationSession: null, epoch: 0, preserved: false
+  };
+  const el = (tag, text = '') => { const node = document.createElement(tag); node.textContent = text; return node; };
+  const context = () => ({
+    generation: window.checkoutSession?.generation ?? null,
+    instance: window.checkoutSession?.instance ?? null,
+    authenticated: window.checkoutSession?.authenticated ?? (window.checkoutSession?.generation != null)
+  });
+  const sameSession = captured => captured?.generation != null && captured.generation === context().generation && captured.instance === context().instance;
+  const valid = captured => Boolean(captured?.authenticated && sameSession(captured) && context().authenticated);
+  const current = (captured, epoch, allowEnded = false) => epoch === state.epoch && sameSession(captured) &&
+    (valid(captured) || (allowEnded && state.preserved));
+  const request = async (path, body) => {
+    const response = await fetch(path, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        'X-Homebox-Client': window.touchscreenClientId || localStorage.getItem('ccrate-touchscreen-client'),
+        ...(body ? { 'Content-Type': 'application/json' } : {})
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const data = await response.json();
+    if (!response.ok) throw Error(data.error || data.reason || 'Request failed');
+    return data;
+  };
+
+  function button(label, action) {
+    const node = el('button', label);
+    node.type = 'button';
+    node.addEventListener('click', action);
+    host.append(node);
+    return node;
+  }
+
+  function render(message = '') {
+    host.replaceChildren();
+    if (state.receipt) {
+      host.append(el('h3', 'Return complete'), el('p', `Receipt ${state.receipt.id || ''} · ${state.receipt.count ?? state.items.length} item(s)`));
+      button('Done', () => window.dispatchEvent(new CustomEvent('ccrate-flow-done', { detail: state.receiptSession })));
+      return;
+    }
+    host.append(el('h3', 'Return equipment'));
+    const captured = state.operationSession;
+    const allowed = valid(context()) || (state.preserved && sameSession(captured));
+    if (!allowed) { host.append(el('p', 'Scan your member badge first.')); return; }
+
+    const status = el('p', message);
+    host.append(status);
+    const search = el('input'); search.placeholder = 'Search by name or ID'; search.setAttribute('aria-label', 'Search inventory'); host.append(search);
+    let candidate = null, lookupEpoch = 0;
+    const results = el('div'); host.append(results);
+    search.addEventListener('input', async () => {
+      const q = search.value.trim(), lookup = ++lookupEpoch, session = context(), epoch = state.epoch;
+      results.replaceChildren();
+      if (q.length < 2 || !valid(session)) return;
+      try {
+        const data = await request('/api/inventory');
+        if (lookup !== lookupEpoch || !current(session, epoch)) return;
+        const items = Array.isArray(data) ? data : data.items || [];
+        for (const item of items.filter(x => (x.name || '').toLowerCase().includes(q.toLowerCase()) || String(x.id).toLowerCase().includes(q.toLowerCase())).slice(0, 10)) {
+          const choice = el('button', item.name || item.id); choice.type = 'button';
+          choice.addEventListener('click', () => {
+            if (!current(session, epoch)) return;
+            candidate = item; search.value = `${item.name || item.id} — scan physical code`; results.replaceChildren();
+          });
+          results.append(choice);
+        }
+      } catch (error) { if (current(session, epoch)) status.textContent = error.message; }
+    });
+
+    const scan = el('input'); scan.placeholder = 'Scan item barcode'; scan.setAttribute('aria-label', 'Scan item barcode');
+    const add = el('button', 'Verify scan and add'); add.type = 'button';
+    add.addEventListener('click', async () => {
+      const session = context(), epoch = state.epoch, code = scan.value.trim();
+      if (!code || !valid(session)) { status.textContent = 'Scan your badge and the physical item code'; return; }
+      try {
+        const result = await request('/scan', { code });
+        if (!current(session, epoch)) return;
+        const root = result.entity || result.code?.entity;
+        if (!root || result.kind === 'user' || result.kind === 'invalid') throw Error('Scan an equipment code');
+        if (candidate && candidate.id !== root.id) throw Error('Scanned item does not match selected candidate');
+        candidate = null;
+        const kit = await request('/api/kit?id=' + encodeURIComponent(root.id));
+        if (!current(session, epoch)) return;
+        let entities = [root], versions = {}, manifest = [], retainedItems = state.items, componentNotes = {};
+        if (kit.kit) {
+          if (state.items.some(item => item.root.id === root.id)) throw Error('This item is already in the batch');
+          entities = kit.entities || [root]; versions = kit.versions || {};
+          manifest = entities.map(item => item.name || item.id);
+          for (const part of entities.slice(1)) {
+            if (!(kit.verified || []).includes(part.id)) throw Error(`Scan kit component ${part.name || part.id} separately`);
+          }
+          const kitIds = new Set(entities.map(item => item.id));
+          const overlaps = state.items.filter(item => item.entities.some(entity => kitIds.has(entity.id)));
+          const merged = overlaps.filter(item => kitIds.has(item.root.id) && item.entities.every(entity => kitIds.has(entity.id)));
+          if (merged.length !== overlaps.length) throw Error('A scanned item overlaps this kit; remove it and scan the complete kit again');
+          for (const prior of merged) {
+            if (prior.root.id !== root.id && prior.note) componentNotes[prior.root.id] = prior.note;
+            Object.assign(componentNotes, prior.componentNotes || {});
+          }
+          retainedItems = state.items.filter(item => !merged.includes(item));
+        } else if (state.items.some(item => item.entities.some(entity => entity.id === root.id))) throw Error('This item is already in the batch');
+        if (new Set([...retainedItems.flatMap(item => item.entities.map(entity => entity.id)), ...entities.map(entity => entity.id)]).size > 50) throw Error('A return can contain at most 50 distinct items');
+        const availability = await request('/return/availability?ids=' + encodeURIComponent(entities.map(item => item.id).join(',')));
+        if (!current(session, epoch)) return;
+        const byId = new Map(availability.items.map(item => [item.id, item]));
+        if (entities.some(item => !byId.has(item.id) || !byId.get(item.id).eligible)) throw Error(entities.map(item => byId.get(item.id)?.reason || 'Item is not eligible').join('; '));
+        state.items = [...retainedItems, { root, entities, versions, manifest, componentNotes, availability: byId, note: '', condition: '', issueNote: '' }];
+        state.reviewed = false; scan.value = ''; search.value = ''; candidate = null;
+        render('Physical scan verified.');
+      } catch (error) { if (current(session, epoch)) status.textContent = error.message; }
+    });
+    host.append(scan, add);
+
+    for (const item of state.items) {
+      const card = el('article'), available = item.availability.get(item.root.id);
+      card.append(el('strong', item.root.name || item.root.id));
+      if (item.manifest.length) card.append(el('p', 'Kit manifest: ' + item.manifest.join(', ')));
+      card.append(el('p', `Recorded condition: ${available.condition || 'Unknown'} · Return location: ${available.location?.name || 'Assigned location'}`));
+      const condition = document.createElement('select');
+      condition.setAttribute('aria-label', `Condition for ${item.root.name || item.root.id}`);
+      condition.append(new Option('Keep recorded condition', ''), ...['Needs Attention', 'Maintenance', 'Quarantined', 'Broken'].map(value => new Option(value, value)));
+      condition.value = item.condition;
+      condition.addEventListener('change', () => { item.condition = condition.value; state.reviewed = false; });
+      card.append(condition);
+      const issue = el('input'); issue.placeholder = 'Required note if condition changed'; issue.value = item.issueNote;
+      issue.addEventListener('input', () => { item.issueNote = issue.value; state.reviewed = false; }); card.append(issue);
+      const note = el('input'); note.placeholder = 'Optional return note'; note.value = item.note;
+      note.addEventListener('input', () => { item.note = note.value; state.reviewed = false; }); card.append(note);
+      const remove = el('button', 'Remove'); remove.type = 'button';
+      remove.addEventListener('click', () => { state.items = state.items.filter(entry => entry !== item); state.reviewed = false; render(); }); card.append(remove);
+      host.append(card);
+    }
+    const review = button('Review return', reviewReturn), confirm = button('Confirm return', confirmReturn);
+    confirm.disabled = !state.reviewed || state.sending || state.uncertain;
+    const actions = el('div'); actions.className = 'flow-actions'; actions.setAttribute('aria-label', 'Return actions'); host.append(actions); actions.append(review, confirm);
+    if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); }
+  }
+
+  async function beginReturn() {
+    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, epoch: state.epoch + 1 });
+    window.returnReceiptPreserved = false;
+    render();
+  }
+  async function addReturnItem(item) { if (!item?.scanEvidence || !valid(item)) throw Error('A current physical scan is required'); }
+  async function reviewReturn() {
+    if (!valid(context()) || !state.items.length) return;
+    if (state.items.some(item => item.condition && !item.issueNote.trim())) { render('Add an issue note for every changed condition.'); return; }
+    state.reviewed = true; render('Review complete. Confirm once to record these returns.');
+  }
+  async function confirmReturn() {
+    const captured = context(), epoch = state.epoch;
+    if (!state.reviewed || state.sending || state.uncertain || !valid(captured)) return;
+    state.key ||= crypto.randomUUID(); state.operationSession = captured; state.sending = true; state.preserved = true; window.returnReceiptPreserved = true; render();
+    const targetsById = new Map();
+    for (const item of state.items) for (const entity of item.entities) targetsById.set(entity.id, { entity_id: entity.id, ...(item.condition ? { condition: item.condition, note: item.issueNote } : {}), return_note: item.componentNotes?.[entity.id] ?? item.note });
+    try {
+      const result = await request('/return/confirm', {
+        targets: [...targetsById.values()],
+        kit_versions: Object.assign({}, ...state.items.map(item => item.versions)), request_key: state.key,
+        session_generation: captured.generation, session_instance: captured.instance
+      });
+      if (!current(captured, epoch, true)) return;
+      state.receipt = result; state.receiptSession = captured; state.sending = false; state.uncertain = false; render();
+    } catch (error) {
+      if (!current(captured, epoch, true)) return;
+      state.sending = false; state.uncertain = true; render(error.message);
+    }
+  }
+  async function recoverReturn() {
+    const captured = state.operationSession, epoch = state.epoch, key = state.key;
+    if (!key || !captured || !current(captured, epoch, true)) return;
+    try {
+      const result = await request('/operation/status', { request_key: key });
+      if (!current(captured, epoch, true)) return;
+      if (result.status === 'completed') { state.receipt = result; state.receiptSession = captured; state.uncertain = false; render(); }
+      else render('No completed return is recorded. Ask staff to check before starting another return.');
+    } catch (error) { if (current(captured, epoch, true)) render('Could not check status. Ask staff to verify before another return.'); }
+  }
+
+  window.beginReturn = beginReturn; window.addReturnItem = addReturnItem; window.reviewReturn = reviewReturn;
+  window.confirmReturn = confirmReturn; window.recoverReturn = recoverReturn;
+  window.addEventListener('ccrate-session-change', () => {
+    const captured = state.operationSession;
+    if (state.preserved && sameSession(captured)) { render(); return; }
+    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, preserved: false, epoch: state.epoch + 1 });
+    window.returnReceiptPreserved = false; render();
+  });
+  window.addEventListener('ccrate-flow-done', event => {
+    if (!state.preserved || !sameSession(event.detail)) return;
+    state.preserved = false;
+    Object.assign(state, { items: [], key: null, reviewed: false, sending: false, uncertain: false, receipt: null, receiptSession: null, operationSession: null, epoch: state.epoch + 1 });
+    render();
+  });
 })();

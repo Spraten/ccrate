@@ -32,5 +32,5 @@ class ReturnScanContract(unittest.TestCase):
   self.assertEqual(result[0],(200,{'user':None,'generation':generation,'instance':session.instance,'return_only':True}))
  def test_search_candidate_requires_separate_physical_scan(self):
   ui=(ROOT/'kiosk/return-ui.js').read_text()
-  self.assertIn("req('/scan'",ui);self.assertIn('candidate&&candidate.id!==root.id',ui)
+  self.assertIn("request('/scan'",ui);self.assertIn('candidate.id !== root.id',ui)
 if __name__=='__main__':unittest.main()

@@ -17,7 +17,8 @@ class TouchscreenShellTests(unittest.TestCase):
   js=(ROOT/'kiosk/touchscreen.js').read_text()
   adopt=re.search(r'function adopt\(session\)\{(.*?)\n  function armExpiry',js,re.S).group(1)
   self.assertIn('armExpiry()',adopt)
-  self.assertIn('if(state.generation!==gen||state.instance!==inst)',adopt)
+  self.assertIn('Boolean(window.returnReceiptPreserved&&state.flow===\'return\'&&!authenticated)',adopt)
+  self.assertIn('generation:authenticated?gen:null',adopt)
   self.assertNotIn('armExpiry()',re.search(r'async function refresh\(\)(.*?)\n  badgeForm',js,re.S).group(1))
  def test_server_session_response_shape(self):
   source=(ROOT/'deploy/kiosk-server.py').read_text()
