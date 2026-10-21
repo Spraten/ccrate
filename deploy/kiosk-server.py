@@ -567,15 +567,11 @@ class Handler(BaseHTTPRequestHandler):
                         badge_actor,generation=self.session.snapshot()
                         key=uuid(data.get('request_key'))
                         checkout_request=ledger.request(group,key)
-                        if checkout_request and checkout_request['action']=='check_out':
-                            # The request key is a status-only capability for its own checkout.
-                            # Confirmation writes still require the live badge session above.
-                            owner=checkout_request['actor_id']
-                            status_actor=owner if not badge_actor or owner==badge_actor else badge_actor
-                            status_manager=False
-                        else:
-                            status_actor=checkout_status_actor(ledger,group,key,badge_actor,native['id'])
-                            status_manager=True
+                        is_checkout=bool(checkout_request and checkout_request['action']=='check_out')
+                        status_actor=checkout_status_actor(ledger,group,key,badge_actor,native['id'])
+                        # A checkout request key never grants receipt access by itself.
+                        # Require the matching active badge actor even on status reads.
+                        status_manager=False if is_checkout else True
                         result=operation_status({'group':group,'actor':status_actor,'manager':status_manager},globals(),data)
                         if result.get('action')=='check_out' and result.get('id'):
                             with ledger.connection() as db:
