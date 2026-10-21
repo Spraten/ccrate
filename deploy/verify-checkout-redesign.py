@@ -207,8 +207,9 @@ def capture_interacted_screenshot(browser, flow, screenshot):
                    '--no-proxy-server', '--window-size=800,480', '--force-device-scale-factor=1',
                    '--remote-debugging-port=0', '--remote-allow-origins=*', f'--user-data-dir={profile}',
                    fixture.as_uri() + f'?flow={flow}&stage=review']
-        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    text=True, start_new_session=True)
+        conn = None
         try:
             active_port = profile / 'DevToolsActivePort'
             deadline = time.monotonic() + 12
@@ -306,11 +307,34 @@ def capture_interacted_screenshot(browser, flow, screenshot):
                 raise AssertionError('Interactive screenshot fixture failed: ' + result) from error
             image_result = call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': False})
             pathlib.Path(screenshot).write_bytes(base64.b64decode(image_result['data']))
-            conn.close()
         finally:
-            if process.poll() is None:
-                os.killpg(process.pid, signal.SIGKILL)
-            process.communicate(timeout=5)
+            if conn is not None:
+                conn.close()
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired as error:
+                    process.kill()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired as final_error:
+                        raise BrowserUnavailable('Chromium could not be reaped after forced termination') from final_error
+            else:
+                # The leader may exit before its renderer children; close the whole group.
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
 
 def main():
