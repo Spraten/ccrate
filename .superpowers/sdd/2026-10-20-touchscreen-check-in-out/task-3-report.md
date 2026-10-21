@@ -17,7 +17,7 @@ The tests here are focused source/fixture contracts; no live Homebox or browser/
 ## Review fixes
 
 - Search now reads the companion `/api/inventory` route and filters candidate records locally. Selecting a result leaves the physical scan input empty; the subsequently scanned entity must match the selected candidate before being added.
-- The touchscreen flow loads the member's saved checkout cart, exposes save-list behavior through the existing `/checkout/cart` POST API, and supplies the saved revision/item context when the batch consists of saved roots. Saved item notes are restored when rescanned.
+- The touchscreen flow loads the member's saved checkout cart, exposes save-list behavior through the new badge-scoped `/checkout/cart` POST route, and supplies the saved revision/item context when the batch consists of saved roots. Saved item notes are restored when rescanned.
 - Updated regression assertions for supported inventory search, no candidate-to-scan prefill, scan/candidate match, and saved-cart context.
 
 Focused checkout tests and `git diff --check` pass after these fixes.
@@ -40,6 +40,6 @@ Checkout confirmation and status recovery receipts now retain the exact generati
 
 Focused checkout UI and touchscreen checkout suites passed; `git diff --check` passed.
 
-## Pending Done cleanup race
+## Done cleanup race fix
 
 The shell's `/session/end` completion now clears its local state only if generation and instance still match the context captured when Done was pressed. The regression fixture holds the end response pending, adopts a newer session, then resolves the old end request and verifies the new member identity remains visible. Focused checkout suites and `git diff --check` passed.
