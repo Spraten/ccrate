@@ -1,6 +1,7 @@
 """Authenticated collection-scoped equipment template and ID endpoints."""
 import json
 import re
+from difflib import SequenceMatcher
 import urllib.error
 from uuid import uuid5, NAMESPACE_URL
 
@@ -51,6 +52,22 @@ def equipment_type(client, entity):
 
 def _normalized(value):
     return ' '.join(str(value or '').split()).casefold()
+
+
+def _suggestion_query_matches(term, candidate):
+    """Match every query word, allowing a one-character model-name typo."""
+    normalized_term = _normalized(term)
+    normalized_candidate = _normalized(candidate)
+    if normalized_term in normalized_candidate:
+        return True
+    query_words = normalized_term.split()
+    candidate_words = normalized_candidate.split()
+    return bool(query_words) and all(
+        any(word in candidate_word or (
+            len(word) >= 4 and SequenceMatcher(None, word, candidate_word).ratio() >= 0.82
+        ) for candidate_word in candidate_words)
+        for word in query_words
+    )
 
 
 def _native_product_fields(entity, type_id):
@@ -402,7 +419,9 @@ def equipment_catalog_get(route, query, ctx, deps, ApiError):
             except (ValueError, TypeError):
                 continue
             name = str(entity.get('name') or '')
-            if term and term not in _normalized(' '.join((name, entity.get('manufacturer', ''), entity.get('modelNumber', '')))):
+            if term and not _suggestion_query_matches(
+                term, ' '.join((name, entity.get('manufacturer', ''), entity.get('modelNumber', '')))
+            ):
                 continue
             assignment = catalog.assignment(group, entity_id)
             current_code = catalog.current_product_model_code(group, assignment['product_id']) if assignment and not assignment.get('deleted') else None

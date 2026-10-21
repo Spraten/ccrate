@@ -14,7 +14,7 @@ SPEC.loader.exec_module(BUILDER)
 class ChildLocationPreviewTests(unittest.TestCase):
     def test_cabinet_filter_searches_loaded_fields_and_keeps_bin_context(self):
         component = (ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue").read_text(encoding="utf-8")
-        self.assertIn('aria-label="Filter loaded cabinet contents"', component)
+        self.assertIn('props.directOnly ? \'Filter loaded items\' : \'Filter loaded cabinet contents\'', component)
         self.assertIn('v-model="filterText"', component)
         self.assertIn('Clear filter', component)
         self.assertIn('item.manufacturer', component)
@@ -86,7 +86,13 @@ class ChildLocationPreviewTests(unittest.TestCase):
             location_page = build / "pages/location/[id]/index/index.vue"
             location_page.parent.mkdir(parents=True)
             location_page.write_text(
-                '  import LocationCard from "~/components/Location/Card.vue";\n'
+                '  import ItemViewSelectable from "~/components/Item/View/Selectable.vue";\n'
+                '  const locationId = computed<string>(() => route.params.id as string);\n'
+                '  useAsyncData(locationId.value, async () => {\n'
+                '      <!-- Items in this location -->\n'
+                '      <section v-if="location && items">\n'
+                '        <ItemViewSelectable :items="items" @refresh="refreshItemList" />\n'
+                '      </section>\n'
                 '      <!-- Child locations -->\n'
                 '      <section v-if="location && location.children && location.children.length > 0" class="mt-6">\n'
                 '        <BaseSectionHeader class="mb-5"> {{ $t("locations.child_locations") }} </BaseSectionHeader>\n'
@@ -103,10 +109,10 @@ class ChildLocationPreviewTests(unittest.TestCase):
             page = location_page.read_text()
             source_component = ROOT / "homebox-ui/overlay/components/Location/ChildContents.vue"
             component = source_component.read_text()
-            self.assertIn("<ChildContents v-if=\"location && location.children?.length\" :locations=\"location.children\" />", page)
+            self.assertIn('<ChildContents v-if="location && location.children?.length" :key="`children-${location.id}-${contentsRevision}`" :locations="location.children" />', page)
             self.assertNotIn('<LocationCard v-for="child in location.children"', page)
             self.assertIn('api.items.getAll({ parentIds: immediateChildIds, page, pageSize: 100, includeArchived: true })', component)
-            self.assertIn('item.parent.id', component)
+            self.assertIn('item.parent?.id', component)
             self.assertIn('let received = 0', component)
             self.assertIn('if (!response.data.items.length && received < total) throw new Error(\"incomplete page\")', component)
             self.assertIn('onMounted(() => {\n    if (!isRoot) return;\n    for (const location of props.locations) directItems.set(location.id, []);\n    void loadItems();\n    for (const location of props.locations) void loadDetail(location.id);\n  });', component)
@@ -127,7 +133,7 @@ class ChildLocationPreviewTests(unittest.TestCase):
             self.assertIn('v-if="stateFor(location.id).loading"', component)
             self.assertIn('v-if="stateFor(location.id).error"', component)
             self.assertIn('itemsFor(location).length === 0', component)
-            self.assertIn('<ChildContents v-if="stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" :filter="searchTerm" :parent-path="locationPath(location.name)" :loaded-states="states" :hydrator="hydrateChildItems" />', component)
+            self.assertIn('<ChildContents v-if="!props.directOnly && stateFor(location.id).children.length" :locations="stateFor(location.id).children" :depth="props.depth + 1" :filter="searchTerm" :parent-path="locationPath(location.name)" :loaded-states="states" :hydrator="hydrateChildItems" />', component)
 
 
 if __name__ == "__main__":

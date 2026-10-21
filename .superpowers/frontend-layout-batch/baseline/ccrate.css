@@ -1,0 +1,62 @@
+/* C-Crate's workshop-console palette applies to Homebox's default theme only. */
+:root.theme-homebox {
+  --background: 0 0% 100%;
+  --background-accent: 150 10% 97%;
+  --foreground: 150 10% 19%;
+  --primary: 139 16% 43%;
+  --primary-foreground: 139 100% 89%;
+  --secondary: 150 8% 95%;
+  --secondary-foreground: 150 10% 19%;
+  --accent: 139 22% 93%;
+  --accent-foreground: 150 18% 21%;
+  --muted: 150 8% 95%;
+  --muted-foreground: 150 5% 43%;
+  --card: 0 0% 100%;
+  --card-foreground: 150 10% 19%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 150 10% 19%;
+  --input: 150 10% 88%;
+  --border: 150 10% 88%;
+  --ring: 139 16% 43%;
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 150 10% 19%;
+  --sidebar-primary: 139 16% 43%;
+  --sidebar-primary-foreground: 139 100% 89%;
+  --sidebar-accent: 139 22% 93%;
+  --sidebar-accent-foreground: 150 18% 21%;
+  --sidebar-border: 150 10% 91%;
+  --sidebar-ring: 139 16% 43%;
+}
+
+:root.theme-homebox #app {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background-accent));
+}
+
+:root #app .container {
+  width: 100%;
+  max-width: 88rem;
+  padding-inline: clamp(1rem, 2.5vw, 2rem);
+}
+
+:root.theme-homebox #app [data-sidebar="sidebar"] {
+  border-right: 1px solid hsl(var(--sidebar-border));
+}
+
+:root.theme-homebox #app [data-sidebar="header"] .drop-shadow-md {
+  filter: none;
+}
+
+:root.theme-homebox #app [role="combobox"] {
+  box-shadow: none;
+}
+
+:root.theme-homebox #app .shadow-xl,
+:root.theme-homebox #app .shadow-lg,
+:root.theme-homebox #app .shadow-md {
+  box-shadow: 0 1px 3px rgb(31 52 39 / 7%);
+}
+
+:root.theme-night #app .ccrate-feedback-submitted {
+  color: rgb(134 239 172);
+}

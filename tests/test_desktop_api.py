@@ -470,12 +470,14 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual(self.request('equipment', headers={'Cookie': cookie}).status, 401)
 
     def test_member_with_admin_display_name_cannot_write_or_view_badges(self):
- =Ó½í¢G§²ÚîÆ­yŞasset, duplicate})
-                    self.assertEqual(len({json.dumps(row['path'], sort_keys=True) for row in response.result['candidates']}), 2)
-        self.assertEqual(response.status, 200)
+        headers = {'Cookie': 'hb.auth.token=member; hb.auth.remember=true'}
+        context = self.request('context', headers=headers).result
         self.assertFalse(context['manager'])
-        origins.assert_called_with('17745')
-        self.assertFalse(any(call[3] != 'GET' for call in self.native_calls))
+        headers['X-Workshop-Identity'] = context['identity']
+        self.assertEqual(self.request('equipment', headers=headers).status, 200)
+        self.assertEqual(self.request('badges', headers=headers).status, 403)
+        self.assertEqual(self.request('badges/issue', {'user_id': self.borrower, 'request_key': ident()}, headers).status, 403)
+        self.assertEqual(self.badges.list(self.group), [])
 
     def test_workshop_shelf_order_actor_is_authenticated_manager_and_recovery_is_inspection_only(self):
         observed = []

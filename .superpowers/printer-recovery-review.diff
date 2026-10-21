@@ -1,0 +1,181 @@
+diff --git a/homebox-ui/overlay/components/Workshop/DeviceStatus.vue b/homebox-ui/overlay/components/Workshop/DeviceStatus.vue
+index 16a7a20..dd2f1c1 100644
+--- a/homebox-ui/overlay/components/Workshop/DeviceStatus.vue
++++ b/homebox-ui/overlay/components/Workshop/DeviceStatus.vue
+@@ -20,7 +20,7 @@
+   const manager = computed(() => !trustNeedsConfirmation.value && workshop.manager.value);
+   const active = computed(() => props.enabled !== false);
+   const label = (device: "printer" | "camera") => device === "printer" ? "SUPVAN printer (Pi)" : "C920 camera (Pi)";
+-  const text = (state: State) => state.checking ? "Checking" : state.connected ? "Connected" : state.reason === "unknown" ? "Unavailable / Unknown" : state.reason === "disconnected" ? "Disconnected" : "Not ready";
++  const text = (state: State) => state.checking ? "Checking" : state.connected ? "Connected" : state.reason === "unknown" ? "Unavailable / Unknown" : state.reason === "disconnected" ? "Disconnected" : state.reason === "adapter_missing" ? "Software setup needed" : "Not ready";
+   const color = (state: State) => state.checking || (!state.connected && state.reason !== "unknown" && state.reason !== "disconnected") ? "amber" : state.connected ? "green" : state.reason === "disconnected" ? "red" : "neutral";
+   function unknown(message: string) {
+     states.value = Object.fromEntries((['printer', 'camera'] as const).map(device => [device, {
+diff --git a/ops/hardware.py b/ops/hardware.py
+index 5ce9862..538de13 100644
+--- a/ops/hardware.py
++++ b/ops/hardware.py
+@@ -23,6 +23,10 @@ def failure(device, error):
+         reason = 'busy'
+         message = 'Another application is using the device.'
+         steps = ['Close other camera previews or printer applications.', 'Try Reconnect again. Your draft remains available.']
++    elif isinstance(error, FileNotFoundError) and 'adapter' in detail:
++        reason = 'adapter_missing'
++        message = 'The SUPVAN printer adapter software is missing or cannot run on the Pi.'
++        steps = ['Ask an administrator to run deploy/restore-printer-adapter.sh from the C-Crate checkout on the Pi, then use Reconnect printer again. The script checks for standard system Rust tools and required development files.']
+     elif isinstance(error, FileNotFoundError) or 'connect exactly' in detail or 'not found' in detail:
+         reason = 'disconnected'
+         message = 'The workshop device was not found.'
+diff --git a/ops/labels.py b/ops/labels.py
+index d79f0b0..d6a0d78 100644
+--- a/ops/labels.py
++++ b/ops/labels.py
+@@ -3,16 +3,25 @@ import io,base64,json,pathlib,subprocess,hashlib,os,re,unicodedata
+ import qrcode
+ from PIL import Image,ImageDraw,ImageFont
+ from ledger import Conflict,uuid
+-ROOT=pathlib.Path(os.environ.get('WORKSHOP_ROOT','/home/user/Desktop/inventory-system'))
++LEGACY_ROOT='/home/user/Desktop/inventory-system'
+ def printer_path():
+     matches=[]
+     for device in pathlib.Path('/sys/class/hidraw').glob('hidraw*'):
+         if 'HID_ID=0003:00001820:0000207F' in (device/'device/uevent').read_text():matches.append('/dev/'+device.name)
+     if len(matches)!=1:raise ValueError('Connect exactly one SUPVAN printer')
+     return matches[0]
+-def adapter():return str(ROOT/'work/supvan-cups/target/release/examples/kiosk-label')
++def adapter():
++    explicit=os.environ.get('WORKSHOP_PRINTER_ADAPTER')
++    if explicit:return explicit
++    code_root=os.environ.get('WORKSHOP_CODE_ROOT')
++    if code_root:return str(pathlib.Path(code_root)/'work/supvan-cups/target/release/examples/kiosk-label')
++    # Preserve deployments that historically used WORKSHOP_ROOT as the code root.
++    return str(pathlib.Path(os.environ.get('WORKSHOP_ROOT',LEGACY_ROOT))/'work/supvan-cups/target/release/examples/kiosk-label')
+ def probe():
+-    result=subprocess.run([adapter(),'probe',printer_path()],capture_output=True,timeout=15,check=True)
++    executable=adapter()
++    if not os.path.isfile(executable) or not os.access(executable,os.X_OK):
++        raise FileNotFoundError(f'Printer adapter is missing or not executable: {executable}')
++    result=subprocess.run([executable,'probe',printer_path()],capture_output=True,timeout=15,check=True)
+     return json.loads(result.stdout)
+ def font(size):return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf',size)
+ def _fit_name_lines(content,draw,name_font,available,max_lines):
+diff --git a/tests/test_hardware.py b/tests/test_hardware.py
+index 67bc824..0c7cfec 100644
+--- a/tests/test_hardware.py
++++ b/tests/test_hardware.py
+@@ -3,13 +3,14 @@ import unittest
+ from types import SimpleNamespace
+ from unittest.mock import patch
+ import hardware
++import labels
+ 
+ 
+ class HardwareTests(unittest.TestCase):
+     def test_printer_reconnect_only_probes_and_explains_failures(self):
+         with patch.object(hardware, 'probe', return_value={'width_mm': 40, 'height_mm': 30}) as probe:
+             self.assertTrue(hardware.reconnect('printer')['connected']); probe.assert_called_once_with()
+-        failures = [(FileNotFoundError(), 'disconnected'), (PermissionError(), 'permission'),
++        failures = [(FileNotFoundError('/dev/hidraw0'), 'disconnected'), (PermissionError(), 'permission'),
+                     (OSError('resource busy'), 'busy'), (subprocess.TimeoutExpired('probe', 15), 'timeout'),
+                     (subprocess.CalledProcessError(1, 'probe', stderr=b'Permission denied'), 'permission'),
+                     (ValueError('Load paper'), 'not_ready')]
+@@ -18,6 +19,12 @@ class HardwareTests(unittest.TestCase):
+                 result = hardware.reconnect('printer')
+                 self.assertFalse(result['connected']); self.assertEqual(result['reason'], reason)
+                 self.assertTrue(result['steps'])
++        with patch.object(labels.os.path, 'isfile', return_value=False), patch.object(labels.subprocess, 'run') as run:
++            result = hardware.reconnect('printer')
++            self.assertEqual(result['reason'], 'adapter_missing')
++            self.assertIn('software', result['message'].lower())
++            self.assertFalse(any('usb' in step.lower() or 'cable' in step.lower() for step in result['steps']))
++            run.assert_not_called()
+         with self.assertRaises(ValueError): hardware.reconnect('arbitrary-device')
+ 
+     def test_camera_reconnect_uses_original_stable_path_without_changing_controls(self):
+diff --git a/tests/test_labels.py b/tests/test_labels.py
+index 36bb983..a4e605d 100644
+--- a/tests/test_labels.py
++++ b/tests/test_labels.py
+@@ -121,3 +121,27 @@ class LabelTests(unittest.TestCase):
+             with self.assertRaises(Conflict):labels.print_badge(self.client,self.badges,self.jobs,self.group,self.user,key,self.badge['id'],self.badge['code'])
+         with self.assertRaises(Conflict):self.run_print(str(uuid4()),reprint=True)
+         self.assertFalse(self.prints)
++
++
++class PrinterAdapterResolutionTests(unittest.TestCase):
++    def test_adapter_uses_code_root_over_runtime_data_root(self):
++        with patch.dict(labels.os.environ, {'WORKSHOP_PRINTER_ADAPTER':'','WORKSHOP_CODE_ROOT':'/srv/ccrate','WORKSHOP_ROOT':'/srv/data'}, clear=True):
++            self.assertEqual(labels.adapter(), '/srv/ccrate/work/supvan-cups/target/release/examples/kiosk-label')
++
++    def test_explicit_printer_adapter_overrides_code_root(self):
++        with patch.dict(labels.os.environ, {'WORKSHOP_PRINTER_ADAPTER':'/opt/kiosk-label','WORKSHOP_CODE_ROOT':'/srv/ccrate'}, clear=True):
++            self.assertEqual(labels.adapter(), '/opt/kiosk-label')
++
++    def test_legacy_workshop_root_is_used_when_code_root_is_unset(self):
++        with patch.dict(labels.os.environ, {'WORKSHOP_ROOT':'/srv/legacy-code'}, clear=True):
++            self.assertEqual(labels.adapter(), '/srv/legacy-code/work/supvan-cups/target/release/examples/kiosk-label')
++
++    def test_missing_adapter_is_detected_before_hidraw_or_subprocess(self):
++        with patch.dict(labels.os.environ, {'WORKSHOP_PRINTER_ADAPTER':'/missing/kiosk-label'}, clear=True), \
++             patch.object(labels.os.path, 'isfile', return_value=False), \
++             patch.object(labels.subprocess, 'run') as run, \
++             patch.object(labels.pathlib.Path, 'glob') as glob:
++            with self.assertRaisesRegex(FileNotFoundError, 'adapter'):
++                labels.probe()
++            run.assert_not_called()
++            glob.assert_not_called()
+#!/bin/sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+PIN=9fd7af09580c3e710202e5471e77e0b88db0e3bb
+SOURCE="$ROOT/work/supvan-cups"
+EXAMPLE="$SOURCE/crates/supvan-proto/examples/kiosk-label.rs"
+BUILD_ROOT="$ROOT/work/printer-adapter-build"
+BUILT="$BUILD_ROOT/release/examples/kiosk-label"
+DEST="$ROOT/work/supvan-cups/target/release/examples/kiosk-label"
+
+missing=""
+for tool in cargo rustc pkg-config git; do
+  if ! command -v "$tool" >/dev/null 2>&1; then missing="$missing $tool"; fi
+done
+if [ -n "$missing" ] || ! pkg-config --exists liblzma 2>/dev/null; then
+  echo "Printer adapter restore needs system Rust tools and liblzma development files." >&2
+  echo "Ask an administrator to run: sudo apt install cargo rustc pkg-config liblzma-dev" >&2
+  [ -z "$missing" ] || echo "Missing commands:$missing" >&2
+  exit 1
+fi
+if [ ! -d "$SOURCE/.git" ]; then
+  mkdir -p "$ROOT/work"
+  git clone https://github.com/heeen/supvan-cups.git "$SOURCE"
+fi
+status=$(git -C "$SOURCE" status --porcelain)
+if [ -n "$status" ]; then
+  expected="?? crates/supvan-proto/examples/kiosk-label.rs"
+  if [ "$status" != "$expected" ] || [ ! -f "$EXAMPLE" ] || ! cmp -s "$EXAMPLE" "$ROOT/deploy/kiosk-label.rs"; then
+    echo "Refusing to change a dirty printer source checkout: $SOURCE" >&2
+    exit 1
+  fi
+fi
+git -C "$SOURCE" checkout --detach "$PIN"
+if [ "$(git -C "$SOURCE" rev-parse HEAD)" != "$PIN" ]; then
+  echo "Printer source pin verification failed." >&2
+  exit 1
+fi
+mkdir -p "$(dirname -- "$EXAMPLE")"
+if [ ! -f "$EXAMPLE" ]; then
+  cp "$ROOT/deploy/kiosk-label.rs" "$EXAMPLE"
+fi
+CARGO_TARGET_DIR="$BUILD_ROOT" cargo build --locked --release -p supvan-proto --example kiosk-label -j2 --manifest-path "$SOURCE/Cargo.toml"
+if [ ! -x "$BUILT" ]; then
+  echo "Cargo completed without producing the kiosk-label adapter." >&2
+  exit 1
+fi
+mkdir -p "$(dirname -- "$DEST")"
+tmp="$DEST.restore-tmp.$$"
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+cp "$BUILT" "$tmp"
+chmod 755 "$tmp"
+mv -f "$tmp" "$DEST"
+rm -rf "$BUILD_ROOT"
+echo "Printer adapter restored at $DEST"
+echo "Use the C-Crate System page's Reconnect printer action to verify readiness. This script does not print or restart services."

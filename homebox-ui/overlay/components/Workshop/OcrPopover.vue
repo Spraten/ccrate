@@ -4,10 +4,10 @@
   import { applyRecognizedTextWithoutOverwritingEdits, recognizeStructuredTextFromImage } from "~/lib/local-ocr";
   import { clampOcrPopoverPosition, isOcrCaptureCurrent, isOcrScanCurrent, nextOcrPopoverState } from "~/lib/orc-popover-state";
 
-  const props = defineProps<{ launcherTarget: string }>();
+  const props = defineProps<{ launcherTarget: string; panelTarget: string }>();
   const enabled = ref(false), open = ref(false), minimized = ref(false), cameraBusy = ref(false), cameraActive = ref(false), scanning = ref(false), copying = ref(false);
   const video = ref<HTMLVideoElement | null>(null), preview = ref<HTMLCanvasElement | null>(null), result = ref(""), resultRevision = ref(0), error = ref(""), imageURL = ref("");
-  const controls = ref<any>(null);
+  const controls = ref<ReturnType<typeof cameraControlSessionState>["controls"]>(null);
   const digitalZoom = ref(1), hardwareZoom = ref(1), focusMode = ref(""), focusDistance = ref(0);
   const controlsBusy = ref(false), controlStatus = ref(""), controlError = ref("");
   const recognizedLines = ref<Array<{ text: string; bbox: { x0: number; y0: number; x1: number; y1: number }; confidence: number }>>([]);
@@ -236,7 +236,7 @@
         getText: () => result.value,
         getRevision: () => resultRevision.value,
         setText: (text: string) => { result.value = text; },
-        recognize: async (source: any) => {
+        recognize: async source => {
           recognized = await recognizeStructuredTextFromImage(source);
           return recognized;
         },
@@ -338,7 +338,7 @@
       <ScanText class="size-4" /> Text capture {{ enabled ? "on" : "off" }}
     </button>
   </Teleport>
-  <Teleport to="body">
+  <Teleport defer :to="props.panelTarget">
     <button
       v-if="enabled && !open"
       type="button"
@@ -349,12 +349,16 @@
     >
       <ScanText class="size-5" />
     </button>
+  </Teleport>
+  <Teleport defer :to="props.panelTarget">
     <section
       v-if="open"
       ref="panel"
-      class="fixed z-50 flex max-h-[calc(100vh-1rem)] w-[min(24rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl"
+      class="fixed z-[60] flex max-h-[calc(100vh-1rem)] w-[min(24rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl"
       :style="{ left: `${position.left}px`, top: `${position.top}px`, maxHeight: `calc(100vh - ${position.top}px - 1rem)` }"
       aria-label="Text capture"
+      @pointerdown.stop
+      @click.stop
     >
       <header
         class="flex shrink-0 cursor-move touch-none items-center justify-between border-b border-border bg-muted/60 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"

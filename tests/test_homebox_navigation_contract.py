@@ -3,7 +3,9 @@ import importlib.util
 import os
 import pathlib
 import shutil
+import subprocess
 import tempfile
+import re
 import unittest
 
 
@@ -39,15 +41,17 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertNotIn('md:order-first', self.output)
 
     def test_primary_entries_point_to_homebox_and_workshop_routes(self):
-        self.assertIn('computed<typeof baseNav>(() => [', self.output)
-        self.assertLess(self.output.index("baseNav[0]!,"), self.output.index('name: computed(() => "Inventory")'))
-        self.assertIn('{ ...baseNav[3]!, id: 1, name: computed(() => "Inventory") }', self.output)
+        self.assertIn('computed<typeof baseNav>(() => {', self.output)
+        self.assertIn('const navFor = (path: string) => baseNav.find(item => item.to === path);', self.output)
+        self.assertIn('{ ...home!, id: 0 }', self.output)
+        self.assertIn('{ ...inventory!, id: 1, name: computed(() => "Inventory") }', self.output)
         self.assertIn('name: computed(() => "Workshop"), to: "/workshop/map"', self.output)
         self.assertIn('name: computed(() => "Label"), to: "/workshop/labels"', self.output)
         self.assertIn('name: computed(() => "Users"), to: "/collection/members"', self.output)
 
     def test_equipment_id_codes_is_a_collection_member_workshop_entry(self):
         self.assertIn('["equipment-ids", "Equipment ID codes"]', self.output)
+        self.assertIn('`/workshop/${id}`', self.output)
         page = (ROOT / 'homebox-ui/overlay/pages/workshop/[tool].vue').read_text()
         self.assertIn('"equipment-ids"', page)
         self.assertIn("tool.value === 'equipment-ids' ? 'Equipment ID codes'", page)
@@ -60,11 +64,40 @@ class HomeboxNavigationContractTests(unittest.TestCase):
         self.assertIn('<SidebarMenuLink v-else', self.output)
         self.assertIn('...nav.value.filter(v => v.name.value !== "More").map', self.output)
         self.assertNotIn('name: computed(() => "More"), to: "/home"', self.output)
-        self.assertIn('...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members")', self.output)
-        self.assertNotIn('terminalURL', self.output)
-        self.assertNotIn('17749', self.output)
+        self.assertIn('...collection!.collapsible!.filter(item => item.to !== "/collection/members")', self.output)
+        self.assertNotIn('baseNav[7]', self.output)
+        self.assertIn('item.to !== "/templates"', self.output)
+        self.assertIn('...baseNav.filter(item => item !== home', self.output)
+        self.assertIn('to: terminalURL.value', self.output)
         self.assertIn('action: openScanner', self.output)
         self.assertNotIn('<!-- makes scanner accessible easily if using legacy header -->', self.output)
+
+    def test_reordered_base_navigation_without_templates_keeps_sidebar_valid(self):
+        source = (ROOT / "deploy/build-homebox-ui.py").read_text()
+        start = source.index('  const nav = computed<typeof baseNav>(() => {', source.index('def navigation_frontend'))
+        end = source.index('\n  });', start) + len('\n  });')
+        nav_code = source[start:end]
+        nav_code = nav_code.replace('const nav = computed<typeof baseNav>(() => {', 'const nav = (() => {').replace('(path: string)', '(path)')
+        nav_code = re.sub(r'([\w\]])!([,.)\]])', r'\1\2', nav_code)
+        fixture = r'''const computed = fn => ({ value: fn() });
+const route = { path: "/home" }, workshopLinks = { value: [] }, terminalURL = { value: "/terminal" };
+const MdiWrench = "wrench", MdiTagMultiple = "tag", MdiFileDocumentMultiple = "file";
+const t = value => value, openScanner = () => {};
+const entry = (to, id, collapsible) => ({ to, id, icon: `icon-${id}`, name: computed(() => to), active: computed(() => false), ...(collapsible ? { collapsible } : {}) });
+const child = to => ({ to, id: 100, name: computed(() => to), active: computed(() => false) });
+const baseNav = [entry("/profile", 6), entry("/collection/members", 7, [child("/collection/members"), child("/collection/invites")]), entry("/locations", 1), entry("/home", 0), entry("/items", 3), entry("/tags", 2), entry("/maintenance", 4)];
+NAV
+const values = nav.map(item => item.to);
+if (nav.some(item => !item || !item.icon)) throw Error("entry missing icon");
+if (nav.filter(item => item.to === "/home").length !== 1) throw Error("duplicate Home");
+const users = nav.find(item => item.name.value === "Users");
+if (users?.icon !== "icon-7") throw Error("Users lost collection icon");
+const more = nav.find(item => item.name.value === "More");
+if (more.collapsible.some(item => item.to === "/home" || item.to === "/templates")) throw Error("excluded route in More");
+if (!more.collapsible.some(item => item.to === "/collection/invites")) throw Error("collection link missing");'''.replace("NAV", nav_code[:-len("  });")] + "  })();")
+        result = subprocess.run(["node", "-e", fixture], capture_output=True, text=True); self.assertEqual(result.returncode, 0, result.stderr)
+        with_template = fixture.replace('entry("/maintenance", 4)]', 'entry("/maintenance", 4), entry("/templates", 5)]')
+        result = subprocess.run(["node", "-e", with_template], capture_output=True, text=True); self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_workshop_manager_routes_keep_their_access_gate(self):
         self.assertIn('["checkout-cart", "Checkout cart"]', self.output)

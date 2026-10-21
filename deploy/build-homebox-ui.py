@@ -721,26 +721,35 @@ def navigation_frontend():
     ["checkout-cart", "Checkout cart"],
     ...(workshop.manager.value ? [["imports", "Imports"], ["labels", "Label queue"], ["recovery", "Recovery"], ["system", "System"]] : []),
   ]);
-  const nav = computed<typeof baseNav>(() => [
-    baseNav[0]!,
-    { ...baseNav[3]!, id: 1, name: computed(() => "Inventory") },
-    { id: 8, icon: MdiWrench, name: computed(() => "Workshop"), to: "/workshop/map", active: computed(() => route.path === "/workshop/map") },
-    { ...baseNav[1]!, id: 12 },
+  const nav = computed<typeof baseNav>(() => {
+    const navFor = (path: string) => baseNav.find(item => item.to === path);
+    const home = navFor("/home");
+    const inventory = navFor("/items");
+    const locations = navFor("/locations");
+    const collection = baseNav.find(item => item.to === "/collection" || item.collapsible?.some(child => child.to === "/collection/members"));
+    const members = collection?.collapsible?.find(item => item.to === "/collection/members");
+    const required = [home, inventory, locations, collection, members];
+    if (required.some(item => !item)) throw new Error("Homebox sidebar is missing a required route");
+    return [
+    { ...home!, id: 0 },
+    { ...inventory!, id: 1, name: computed(() => "Inventory") },
+    { id: 8, icon: MdiWrench, name: computed(() => "Workshop"), to: "/workshop/map", active: computed(() => route.path === "/workshop/map"), collapsible: [locations!] },
     { id: 9, icon: MdiTagMultiple, name: computed(() => "Label"), to: "/workshop/labels", active: computed(() => route.path === "/workshop/labels") },
-    { ...baseNav[7]!, id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
+    { ...collection!, id: 10, name: computed(() => "Users"), to: "/collection/members", active: computed(() => route.path === "/collection/members"), collapsible: undefined },
     {
       id: 11, icon: MdiFileDocumentMultiple, name: computed(() => "More"), to: "",
       active: computed(() => false),
       collapsible: [
-        baseNav[2]!, baseNav[4]!, baseNav[5]!, baseNav[6]!,
-        ...baseNav[7]!.collapsible!.filter(item => item.to !== "/collection/members"),
+        ...baseNav.filter(item => item !== home && item !== collection && item !== inventory && item !== locations && item.to !== "/templates"),
+        ...collection!.collapsible!.filter(item => item.to !== "/collection/members"),
         ...workshopLinks.value.filter(([id]) => id !== "map" && id !== "labels").map(([id, name], index) => ({ id: 80 + index, name: computed(() => name!), to: `/workshop/${id}`, active: computed(() => route.path === `/workshop/${id}`) })),
         { id: 92, name: computed(() => "Report feedback"), to: "/feedback", active: computed(() => route.path === "/feedback") },
         { id: 90, name: computed(() => "Equipment Terminal"), to: terminalURL.value, active: computed(() => false) },
         { id: 91, name: computed(() => t("menu.scanner")), to: "", active: computed(() => false), action: openScanner },
       ],
     },
-  ]);
+  ];
+  });
   watch([workshopGroup, () => useAuthContext().user?.id], () => { workshop.context.value = null; workshop.refresh().catch(() => {}); }, { immediate: true });
 
   const quickMenuActions = computed(() => [''')
@@ -836,8 +845,8 @@ def ocr_popover_frontend():
     replace('layouts/default.vue', regular, regular + '\n              <div id="orc-launcher-toolbar" class="contents"></div>')
     legacy = '<SidebarTrigger class="ccrate-header-sidebar-trigger absolute left-2 top-2 hidden lg:flex" variant="default" />'
     replace('layouts/default.vue', legacy, legacy + '\n            <div id="orc-launcher-legacy" class="absolute left-14 top-2 z-30 hidden lg:flex"></div>')
-    replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" />\n      </SidebarInset>')
-    replace('layouts/default.vue', '  const search = ref("");', '  const { activeDialog: orcActiveDialog } = useDialog();\n  const orcLauncherTarget = ref("#orc-launcher-toolbar");\n  watch([orcActiveDialog, () => preferences.value.displayLegacyHeader, terminalHeader], async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)); orcLauncherTarget.value = orcActiveDialog.value === DialogID.CreateEntity ? "#orc-launcher-create" : preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar"; }, { immediate: true, flush: "post" });\n  const search = ref("");')
+    replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" :panel-target="orcPanelTarget" />\n      </SidebarInset>')
+    replace('layouts/default.vue', '  const search = ref("");', '  const { activeDialog: orcActiveDialog } = useDialog();\n  const orcLauncherTarget = ref("#orc-launcher-toolbar");\n  const orcPanelTarget = ref("body");\n  watch([orcActiveDialog, () => preferences.value.displayLegacyHeader, terminalHeader], async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)); const creatingItem = orcActiveDialog.value === DialogID.CreateEntity; orcLauncherTarget.value = creatingItem ? "#orc-launcher-create" : preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar"; orcPanelTarget.value = creatingItem ? "#orc-capture-panel" : "body"; }, { immediate: true, flush: "post" });\n  const search = ref("");')
     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import OcrPopover from "~/components/Workshop/OcrPopover.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
 
 
@@ -867,6 +876,92 @@ def strip_item_response_short_codes_from_update_tests():
 
 
 def camera_ocr_frontend():
+    def replace_once(source, old, new, label):
+        count = source.count(old)
+        if count != 1:
+            raise RuntimeError(f'Upstream changed: expected one {label} patch anchor, found {count}')
+        return source.replace(old, new, 1)
+
+    dialog = BUILD / 'components/Form/CameraCaptureDialog.vue'
+    source = dialog.read_text()
+    source = replace_once(source, '<DialogRoot :open="open" @update:open="emit(\'update:open\', $event)">', '<DialogRoot :open="open" @update:open="requestOpenChange">', 'camera dialog open guard')
+    source = replace_once(source, '        <Button type="button" variant="outline" @click="emit(\'update:open\', false)">', '        <Button type="button" variant="outline" :disabled="processing" @click="emit(\'update:open\', false)">', 'camera close button')
+    source = replace_once(source, '          <Button type="button" variant="outline" @click="retakePhoto">', '          <Button type="button" variant="outline" :disabled="processing" @click="retakePhoto">', 'camera retake button')
+    source = replace_once(source, 'const props = defineProps<{ open: boolean }>();', 'const props = withDefaults(defineProps<{ open: boolean; multiCapture?: boolean; acceptPhoto?: (file: File) => Promise<void> }>(), { multiCapture: false });', 'camera dialog props')
+    source = replace_once(source, '          <Button type="button" @click="usePhoto">', '          <Button type="button" :disabled="processing" @click="usePhoto">', 'camera use button')
+    source = replace_once(source, '  const capturedFile = ref<File>();', '  const capturedFile = ref<File>();\n  const processing = ref(false);', 'camera processing state')
+    source = replace_once(source, '''  function usePhoto() {
+    if (!props.open || !capturedFile.value) return;
+    emit("captured", capturedFile.value);
+    emit("update:open", false);
+  }''', '''  async function usePhoto() {
+    const file = capturedFile.value;
+    if (!props.open || !file || processing.value) return;
+    processing.value = true;
+    try {
+      if (props.acceptPhoto) await props.acceptPhoto(file);
+      else emit("captured", file);
+      if (!props.open || capturedFile.value !== file) return;
+      if (props.multiCapture) {
+        clearPreview();
+        void startCamera();
+      } else {
+        emit("update:open", false);
+      }
+    } catch {
+      if (props.open && capturedFile.value === file) errorMessage.value = t("components.form.camera.capture_error");
+    } finally {
+      processing.value = false;
+    }
+  }
+
+  function requestOpenChange(open: boolean) {
+    if (processing.value && !open) return;
+    emit("update:open", open);
+  }''', 'camera use handler')
+    uploader = BUILD / 'components/Form/PhotoUploader.vue'
+    dialog_source = source
+    source = uploader.read_text()
+    source = replace_once(source, '<div class="relative inline-block">', '<div class="flex gap-2">\n        <Button type="button" variant="outline" class="flex-1" @click="cameraOpen = true">{{ t("components.form.camera.take_photo") }}</Button>\n        <div class="relative inline-block flex-1">', 'photo uploader layout')
+    source = replace_once(source, '''        />
+      </div>
+    </div>
+  </div>
+</template>''', '''        />
+        </div>
+      </div>
+    </div>
+    <CameraCaptureDialog v-model:open="cameraOpen" multi-capture :accept-photo="onCameraCaptured" />
+  </div>
+</template>''', 'photo uploader camera dialog')
+    source = replace_once(source, '  import { computed, ref } from "vue";', '''  import { computed, ref } from "vue";
+  import CameraCaptureDialog from "~/components/Form/CameraCaptureDialog.vue";''', 'photo uploader dialog import')
+    source = replace_once(source, '  import { filesToPhotoPreviews, type PhotoPreview } from "./photo-uploader";', '''  import { fileToPhotoPreview, filesToPhotoPreviews, type PhotoPreview } from "./photo-uploader";''', 'photo preview import')
+    source = replace_once(source, '  const fileInput = ref<HTMLInputElement | null>(null);', '''  const fileInput = ref<HTMLInputElement | null>(null);
+  const cameraOpen = ref(false);''', 'photo uploader camera state')
+    source = replace_once(source, '  function openFilePicker() {', '''  async function onCameraCaptured(file: File) {
+    if (!cameraOpen.value) return;
+    const photo = await fileToPhotoPreview(file, props.existingCount === 0);
+    if (!cameraOpen.value) return;
+    emit("selected", [photo]);
+  }
+
+  function openFilePicker() {''', 'photo uploader capture handler')
+    dialog.write_text(dialog_source)
+    uploader.write_text(source)
+
+    for locale_path in (BUILD / 'locales').glob('*.json'):
+        locale = json.loads(locale_path.read_text(encoding='utf-8'))
+        components = locale.get('components')
+        if not isinstance(components, dict): components = {}; locale['components'] = components
+        form = components.get('form')
+        if not isinstance(form, dict): form = {}; components['form'] = form
+        camera = form.get('camera')
+        if not isinstance(camera, dict): camera = {}; form['camera'] = camera
+        capture_label = camera.get('capture')
+        camera['take_photo'] = 'Take photo' if locale_path.stem == 'en' or not isinstance(capture_label, str) else capture_label
+        locale_path.write_text(json.dumps(locale, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
     path = 'pages/item/[id]/index/edit.vue'
     replace(
         path,
@@ -1040,6 +1135,7 @@ def smart_create_form_text(text):
     suggestionSearchVersion++;
     suggestionLookup.invalidate();
     suggestions.value = [];
+    void searchSuggestions();
   }
 
 '''+text[end:]
@@ -1062,13 +1158,17 @@ def smart_create_form_text(text):
     end=text.index('      <FormTextField\n        v-if="!selectedEntityType?.isLocation"',start)
     text=text[:start]+'''      </div>
       <div id="orc-launcher-create" class="min-h-10"></div>
+      <div id="orc-capture-panel" class="contents"></div>
       <div v-if="suggestions.length" class="rounded-md border p-2" role="listbox" aria-label="Similar items">
         <button v-for="(item, index) in suggestions" :key="item.id" type="button" role="option" :aria-selected="index === suggestionIndex" class="block w-full rounded p-2 text-left hover:bg-accent" @click="chooseSuggestion(item)">
           {{ item.name }} · {{ item.manufacturer }} {{ item.modelNumber }}
         </button>
       </div>
+      <p v-if="suggestionState === 'loading'" role="status" class="text-sm text-muted-foreground">Searching matching items…</p>
+      <p v-else-if="suggestionState === 'empty'" role="status" class="text-sm text-muted-foreground">No similar items found for this equipment type.</p>
+      <p v-else-if="suggestionState === 'error'" role="alert" class="text-sm text-destructive">Could not load item suggestions. {{ suggestionError }}</p>
 '''+text[end:]
-    once('          @update:model-value="nameEditRevision++"', '          @update:model-value="searchSuggestions"\n          @keydown.down.prevent="moveSuggestion(1)"\n          @keydown.up.prevent="moveSuggestion(-1)"\n          @keydown.enter="chooseHighlightedSuggestion"\n          @keydown.esc="suggestions = []"')
+    once('          @update:model-value="nameEditRevision++"', '          @update:model-value="searchSuggestions"\n          @keydown.down.prevent="moveSuggestion(1)"\n          @keydown.up.prevent="moveSuggestion(-1)"\n          @keydown.enter="chooseHighlightedSuggestion"\n          @keydown.tab="chooseHighlightedSuggestionOnTab"\n          @keydown.esc="suggestions = []"')
     once('    <CameraCaptureDialog v-model:open="nameCameraOpen" @captured="suggestNameFromPhoto" />\n', '')
     once('  import CameraCaptureDialog from "~/components/Form/CameraCaptureDialog.vue";\n  import { recognizeNameFromImage, suggestNameWithoutOverwritingEdits } from "~/lib/local-ocr";\n', '')
     start=text.index('  const nameCameraOpen = ref(false);')
@@ -1107,17 +1207,23 @@ def smart_create_form_text(text):
     once('  const equipmentWorkshop = useWorkshop();', '''  const equipmentWorkshop = useWorkshop();
   const suggestions = ref<any[]>([]);
   const suggestionIndex = ref(0);
+  const suggestionState = ref<"idle" | "loading" | "empty" | "error" | "selected">("idle");
+  const suggestionError = ref("");
   let suggestionSearchVersion = 0;
   const suggestionLookup = createSuggestionLookup((typeId: string, query: string) => equipmentWorkshop.request(`equipment/suggestions?type_id=${encodeURIComponent(typeId)}&q=${encodeURIComponent(query)}`));
   async function searchSuggestions() {
     const typeId = selectedEntityType.value?.isLocation ? '' : selectedEntityType.value?.id || '';
     const version = ++suggestionSearchVersion;
-    try { const found = await suggestionLookup.search(typeId, form.name); if (version === suggestionSearchVersion) { suggestions.value = found; suggestionIndex.value = 0; } }
-    catch { if (version === suggestionSearchVersion) suggestions.value = []; }
+    suggestionError.value = "";
+    if (!typeId || !form.name.trim()) { suggestionLookup.invalidate(); suggestions.value = []; suggestionState.value = "idle"; return; }
+    suggestions.value = []; suggestionState.value = "loading";
+    try { const found = await suggestionLookup.search(typeId, form.name); if (version === suggestionSearchVersion) { suggestions.value = found; suggestionIndex.value = 0; suggestionState.value = found.length ? "idle" : "empty"; } }
+    catch (cause) { if (version === suggestionSearchVersion) { suggestions.value = []; suggestionState.value = "error"; suggestionError.value = (cause as Error).message || "Could not load similar items."; } }
   }
   function moveSuggestion(delta: number) { if (suggestions.value.length) suggestionIndex.value = (suggestionIndex.value + delta + suggestions.value.length) % suggestions.value.length; }
-  function chooseSuggestion(item: any) { suggestionSearchVersion++; suggestionLookup.invalidate(); selectSuggestion(form, item); suggestions.value = []; }
-  function chooseHighlightedSuggestion(event: KeyboardEvent) { if (suggestions.value.length) { event.preventDefault(); chooseSuggestion(suggestions.value[suggestionIndex.value]); } }''')
+  function chooseSuggestion(item: any) { suggestionSearchVersion++; suggestionLookup.invalidate(); selectSuggestion(form, item); suggestions.value = []; suggestionError.value = ""; suggestionState.value = "selected"; }
+  function chooseHighlightedSuggestion(event: KeyboardEvent) { if (suggestions.value.length) { event.preventDefault(); chooseSuggestion(suggestions.value[suggestionIndex.value]); } }
+  function chooseHighlightedSuggestionOnTab(event: KeyboardEvent) { if (!event.shiftKey) chooseHighlightedSuggestion(event); }''')
     once('          postCreateSteps: form.photos.map((photo: PhotoPreview, index: number) => ({', '''          postCreateSteps: [
             { key: 'metadata', name: 'Native item fields', draft: { serialNumber: form.serialNumber, packaging: form.packaging, rows: validateCustomRows(form.customRows) } },
             { key: 'field-notes', name: 'Custom field notes', request_key: workshopUUID(), fields: validateCustomRows(form.customRows).map(row => ({ name: row.name, note: row.note.trim() })) },

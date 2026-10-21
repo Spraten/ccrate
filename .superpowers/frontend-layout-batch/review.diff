@@ -1,0 +1,174 @@
+--- before/deploy/build-homebox-ui.py
++++ after/deploy/build-homebox-ui.py
+@@ -455,33 +455,35 @@
+           </NuxtLink>
+ 
+           <CollectionSelector />'''+source[end:]
+     layout.write_text(source)
+     replace('layouts/default.vue', '    SidebarGroupLabel,\n', '')
+     replace('layouts/default.vue', 'drop-shadow-md hover:bg-primary/90', 'hover:bg-primary/90')
+     replace('layouts/default.vue', 'class="flex justify-center group-data-[collapsible=icon]:justify-start group-data-[collapsible=icon]:bg-destructive group-data-[collapsible=icon]:text-destructive-foreground group-data-[collapsible=icon]:shadow-sm group-data-[collapsible=icon]:hover:bg-destructive/90"', 'class="flex justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-start"')
+     replace('layouts/default.vue', 'class="sticky top-0 z-20 flex h-[var(--header-height-mobile)] translate-y-[-0.5px] flex-col bg-secondary p-2 shadow-md sm:h-[var(--header-height)] sm:flex-row"', 'class="sticky top-0 z-20 flex min-h-[var(--header-height-mobile)] flex-col gap-1 border-b border-border bg-card px-3 py-2 sm:min-h-[var(--header-height)] sm:flex-row"')
+-    replace('layouts/default.vue', '            <div class="flex h-1/2 grow items-center justify-end gap-2 sm:h-auto">', '            <div class="flex min-w-0 grow items-center justify-end gap-2">\n              <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="shrink-0" />')
++    replace('layouts/default.vue', '            <div class="flex h-1/2 grow items-center justify-end gap-2 sm:h-auto">', '            <div class="ccrate-header-tools flex min-w-0 grow flex-wrap items-center justify-end gap-2">\n              <DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="ccrate-header-device shrink-0" />')
+     replace('layouts/default.vue', '        <AppHeaderDecor class="-mt-10 hidden lg:block" />', '''        <AppHeaderDecor class="-mt-10 hidden lg:block" />
+             <DeviceStatus v-if="preferences.displayLegacyHeader && terminalHeader" :enabled="preferences.displayLegacyHeader && terminalHeader" class="absolute right-6 top-3 z-30 hidden lg:flex" />''')
+     replace('layouts/default.vue', '<Button size="icon" @click="triggerSearch">', '<Button size="icon" :aria-label="$t(\'global.search\')" @click="triggerSearch">')
+     replace('layouts/default.vue', '<Button size="icon" @click="openScanner">', '<Button size="icon" :aria-label="$t(\'menu.scanner\')" @click="openScanner">')
++    replace('layouts/default.vue', '              <Input\n                v-model:model-value="search"', '              <div class="ccrate-header-search-group">\n                <Input\n                v-model:model-value="search"')
++    replace('layouts/default.vue', '<MdiQrcodeScan />\n                </Button>\n              </div>\n            </div>', '<MdiQrcodeScan />\n                </Button>\n              </div>\n              </div>\n            </div>')
+     replace('layouts/default.vue', '  const search = ref("");', '''  const terminalHeader = ref(false);
+   let desktopHeaderMedia: MediaQueryList | null = null;
+   const updateDesktopHeader = () => { terminalHeader.value = desktopHeaderMedia?.matches || false; };
+   onMounted(() => { desktopHeaderMedia = window.matchMedia("(min-width: 1024px)"); updateDesktopHeader(); desktopHeaderMedia.addEventListener("change", updateDesktopHeader); });
+   onBeforeUnmount(() => desktopHeaderMedia?.removeEventListener("change", updateDesktopHeader));
+   const terminalURL = computed(() => { const url = new URL(window.location.href); url.port = "17749"; url.pathname = "/"; url.search = "?mode=editor"; url.hash = ""; return url.href; });
+   const search = ref("");''')
+     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import DeviceStatus from "~/components/Workshop/DeviceStatus.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
+ 
+ 
+ def ocr_popover_frontend():
+-    regular = '<DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="shrink-0" />'
++    regular = '<DeviceStatus v-if="!preferences.displayLegacyHeader || !terminalHeader" :enabled="!preferences.displayLegacyHeader || !terminalHeader" class="ccrate-header-device shrink-0" />'
+     replace('layouts/default.vue', regular, regular + '\n              <div id="orc-launcher-toolbar" class="contents"></div>')
+     legacy = '<SidebarTrigger class="absolute left-2 top-2 hidden lg:flex" variant="default" />'
+     replace('layouts/default.vue', legacy, legacy + '\n            <div id="orc-launcher-legacy" class="absolute left-14 top-2 z-30 hidden lg:flex"></div>')
+     replace('layouts/default.vue', '      </SidebarInset>', '        <OcrPopover :launcher-target="orcLauncherTarget" />\n      </SidebarInset>')
+     replace('layouts/default.vue', '  const search = ref("");', '  const orcLauncherTarget = computed(() => preferences.value.displayLegacyHeader && terminalHeader.value ? "#orc-launcher-legacy" : "#orc-launcher-toolbar");\n  const search = ref("");')
+     replace('layouts/default.vue', '  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";', '  import OcrPopover from "~/components/Workshop/OcrPopover.vue";\n  import AppHeaderDecor from "~/components/App/HeaderDecor.vue";')
+ 
+ 
+@@ -674,17 +676,17 @@
+     # The Home dashboard shows the same current custody as the equipment terminal.
+     replace('pages/home/index.vue', '  import BaseCard from', '  import CheckedOutItems from "@/components/Workshop/CheckedOutItems.vue";\n  import BaseCard from')
+     replace('pages/home/index.vue', '      <section>\n        <Subtitle> {{ $t("home.recently_added") }}', '      <CheckedOutItems />\n\n      <section>\n        <Subtitle> {{ $t("home.recently_added") }}')
+     # Native sidebar and quick menu, with manager-only entries hidden for members.
+     navigation_frontend()
+     shell_frontend()
+     ocr_popover_frontend()
+     location_child_contents_frontend()
+-    replace('layouts/default.vue', 'class="h-9 grow sm:max-w-sm"', 'class="h-9 min-w-0 grow sm:max-w-sm"')
++    replace('layouts/default.vue', 'class="h-9 grow sm:max-w-sm"', 'class="ccrate-header-search h-11 min-w-0 grow sm:max-w-sm"')
+     # Put badges on the actual existing Collection members table.
+     path = 'pages/collection/index/members.vue'
+     replace(path, '  const loading = ref(true);', '''  const workshop = useWorkshop();
+   const { selectedId } = useCollections();
+   const badgeRows = ref<any[]>([]), peopleRows = ref<any[]>([]), workshopError = ref("");
+   const memberLoans = ref<WorkshopLoan[] | null>(null), itemLoading = ref(true), itemError = ref("");
+   let itemRevision = 0, memberTimer: ReturnType<typeof setInterval> | null = null;
+   async function loadMemberLoans() {
+--- before/homebox-ui/overlay/assets/css/ccrate.css
++++ after/homebox-ui/overlay/assets/css/ccrate.css
+@@ -55,8 +55,54 @@
+ :root.theme-homebox #app .shadow-lg,
+ :root.theme-homebox #app .shadow-md {
+   box-shadow: 0 1px 3px rgb(31 52 39 / 7%);
+ }
+ 
+ :root.theme-night #app .ccrate-feedback-submitted {
+   color: rgb(134 239 172);
+ }
++
++/* Keep the shell search usable when device controls share a narrow header. */
++:root #app .ccrate-header-tools {
++  align-content: center;
++}
++
++:root #app .ccrate-header-search-group {
++  display: flex;
++  flex: 1 1 100%;
++  align-items: center;
++  min-width: 0;
++  gap: .5rem;
++}
++
++:root #app .ccrate-header-search {
++  flex: 1 1 auto;
++  width: auto;
++  min-width: 0;
++  min-height: 2.75rem;
++}
++
++:root #app .ccrate-header-tools > div > button,
++:root #app .ccrate-header-search-group button,
++:root #app .ccrate-header-device button,
++:root #app #orc-launcher-toolbar button {
++  min-width: 2.75rem;
++  min-height: 2.75rem;
++}
++
++@media (min-width: 1024px) {
++  :root #app .ccrate-header-search-group {
++    flex-basis: auto;
++  }
++}
++
++@media (max-width: 639px) {
++  :root {
++    --header-height-mobile: 10rem;
++  }
++}
++
++@media (min-width: 640px) and (max-width: 1023px) {
++  :root {
++    --header-height: 7rem;
++  }
++}
+--- before/homebox-ui/overlay/assets/css/workshop.css
++++ after/homebox-ui/overlay/assets/css/workshop.css
+@@ -49,16 +49,17 @@
+ .workshop-native .timeline article{margin-bottom:1.5rem;overflow-wrap:anywhere}
+ .workshop-native .timeline small{color:hsl(var(--muted-foreground))}
+ .workshop-native .map{display:block;width:100%;height:27rem;background:hsl(var(--muted) / .3);border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);touch-action:none}
+ .workshop-native .map g[role=button]{cursor:pointer}
+ .workshop-native .map g[role=button]:focus{outline:none}
+ .workshop-native .map g[role=button]:focus > :is(rect,path,polygon,circle):first-child{stroke:hsl(var(--ring));stroke-width:3px;stroke-dasharray:4px 2px;vector-effect:non-scaling-stroke}
+ .workshop-native .map text{pointer-events:none}
+ .workshop-native .map-toolbar{margin-bottom:.75rem}
++.workshop-native .map-toolbar button{min-width:2.75rem;min-height:2.75rem}
+ .workshop-native .location-tree{list-style:none;padding-left:1rem}
+ .workshop-native .location-tree li{margin:.5rem 0}
+ .workshop-native .steps{margin:1rem 0}
+ .workshop-native .steps span{padding:.5rem .875rem;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);font-size:.875rem}
+ .workshop-native .bulk-progress{white-space:pre-line}
+ .workshop-native dialog{padding:0;width:calc(100% - 2rem);max-width:40rem;max-height:90dvh;overflow:auto;background:hsl(var(--background));color:hsl(var(--foreground));border:1px solid hsl(var(--border));border-radius:var(--radius);box-shadow:0 20px 25px -5px rgb(0 0 0 / .1)}
+ .workshop-native dialog::backdrop{background:rgb(0 0 0 / .8)}
+ .workshop-native .dialog-top{padding:1.5rem 1.5rem 0;display:flex;justify-content:space-between;align-items:center;gap:1rem}
+@@ -81,17 +82,17 @@
+ .workshop-native .planner-page-title>div{display:flex;align-items:baseline;gap:.75rem;flex-wrap:wrap}
+ .workshop-native .planner-page-title h1{font-size:1.5rem;line-height:1.2;margin:0}
+ .workshop-native .planner-page-title p{font-size:.78rem;line-height:1.3;margin:0;color:hsl(var(--muted-foreground))}
+ .workshop-native .planner-toolbar{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap;margin:0 0 .25rem;padding:.25rem .4rem;border:1px solid hsl(var(--border));border-radius:var(--radius);background:hsl(var(--card))}
+ .workshop-native .planner-toolbar>*{min-width:0}
+ .workshop-native .planner-room-picker{display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:600}
+ .workshop-native .planner-room-picker select{min-width:9rem;height:1.9rem;padding:.2rem .45rem;font-size:.78rem}
+ .workshop-native .planner-modes{display:flex;gap:.1rem;padding:.12rem;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px)}
+-.workshop-native .planner-modes button,.workshop-native .planner-toolbar>button{min-height:1.9rem;padding:.2rem .5rem;font-size:.76rem}
++.workshop-native .planner-modes button,.workshop-native .planner-toolbar>button{min-width:2.75rem;min-height:2.75rem;padding:.35rem .5rem;font-size:.76rem}
+ .workshop-native .planner-modes button{border:0}
+ .workshop-native .planner-modes .active{background:hsl(var(--primary));color:hsl(var(--primary-foreground))}
+ .workshop-native .planner-save-state{margin-left:auto;font-size:.75rem;font-weight:600;white-space:nowrap}
+ .workshop-native .room-planner.is-clean-browse .planner-save-button{display:none}
+ .workshop-native .planner-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(14rem,17rem);align-items:stretch;gap:.55rem;min-width:0}
+ .workshop-native .room-planner.is-editing .planner-workspace{grid-template-columns:minmax(14rem,15rem) minmax(0,1fr) minmax(14rem,15rem)}
+ .workshop-native .planner-palette,.workshop-native .planner-canvas-panel,.workshop-native .planner-inspector{min-width:0;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background:var(--planner-panel);padding:.65rem}
+ .workshop-native .room-planner:not(.is-editing) .planner-palette{display:none}
+@@ -117,17 +118,17 @@
+ .workshop-native .planner-preset-art{display:block;width:min(100%,4.25rem);height:2.65rem;object-fit:contain}
+ .workshop-native .planner-preset-name{display:block;min-width:0;max-width:100%;font-size:.72rem;overflow-wrap:anywhere}
+ .workshop-native .planner-palette>.sub{font-size:.72rem;line-height:1.4;margin:.45rem .15rem}
+ .workshop-native .planner-storage{margin-top:.7rem;border-top:1px solid hsl(var(--border));padding-top:.65rem;font-size:.78rem}
+ .workshop-native .planner-storage summary,.workshop-native .planner-coverage summary{cursor:pointer;font-weight:600;padding:.25rem 0}
+ .workshop-native .planner-canvas-panel{min-width:0}
+ .workshop-native .planner-canvas-title{font-size:.78rem;font-weight:700;color:hsl(var(--muted-foreground));margin:0 0 .2rem}
+ .workshop-native .planner-canvas-tools{display:flex;align-items:center;gap:.2rem;flex-wrap:wrap;padding:0 0 .25rem}
+-.workshop-native .planner-canvas-tools button{min-height:1.7rem;padding:.15rem .4rem;font-size:.69rem}
++.workshop-native .planner-canvas-tools button{min-width:2.75rem;min-height:2.75rem;padding:.2rem .4rem;font-size:.69rem}
+ .workshop-native .planner-canvas-tools label{display:inline-flex;align-items:center;gap:.1rem;font-size:.68rem;white-space:nowrap}
+ .workshop-native .planner-zoom-readout{margin-left:auto;font-size:.75rem;color:hsl(var(--muted-foreground))}
+ .workshop-native .planner-canvas-frame{height:clamp(18rem,calc(100dvh - 25.125rem),48rem);min-height:18rem;overflow:hidden;border:1px solid hsl(var(--border));border-radius:calc(var(--radius) - 2px);background-color:var(--planner-paper);background-image:linear-gradient(hsl(var(--border) / .28) 1px,transparent 1px),linear-gradient(90deg,hsl(var(--border) / .28) 1px,transparent 1px),linear-gradient(hsl(var(--border) / .14) 1px,transparent 1px),linear-gradient(90deg,hsl(var(--border) / .14) 1px,transparent 1px);background-size:80px 80px,80px 80px,16px 16px,16px 16px;touch-action:none}
+ .workshop-native .planner-svg{display:block;width:100%;height:100%;touch-action:none;outline:none;color:hsl(var(--foreground));cursor:grab}
+ .workshop-native .planner-svg.is-panning,.workshop-native .planner-svg.is-panning *{cursor:grabbing}
+ .workshop-native .planner-svg [data-workshop-drawing]{cursor:grab;touch-action:none}
+ .workshop-native .planner-svg [data-workshop-drawing]:active{cursor:grabbing}
+ .workshop-native .planner-svg [data-resize-handle]{cursor:nwse-resize}
