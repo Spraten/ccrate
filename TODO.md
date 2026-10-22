@@ -4,22 +4,22 @@
 
 - [x] Initial screenshot audit of the signed-out manager entry and kiosk home, badge gate, checkout, and return flow. Screenshots and findings are in `docs/reviews/2026-10-21-audit/report.md`. Kiosk interaction used synthetic fixture data with confirmation writes blocked.
 - [x] Capture authenticated manager item/location/create screens and dashboard, labels, members, workshop tools, and appearance against the current generated source. Screenshots and fixture limits are in `docs/reviews/2026-10-22-manager-audit/`.
-- [ ] Capture Create Item photo-preview and confirmed-success states in a safe disposable fixture; current captures show empty fields and no uploaded photo.
-- [ ] Re-capture the manager dashboard, member, and borrowing-history screens after the final pause-pass source changes are built; inspect the after state before release.
-- [x] Reconcile the interactive mockup and per-screen plans with the approved Homebox theme direction. The broader authenticated-manager screenshot audit is still pending before calling the full redesign complete.
+- [x] Capture Create Item photo-preview and confirmed-success states in a safe disposable fixture; confirmation was written only to the temporary fixture database.
+- [x] Re-capture and inspect the manager dashboard and member screens after the final pause-pass source changes. Item detail and workshop-loan history routes returned blank content in the fixture and remain visual capture blockers.
+- [x] Reconcile the interactive mockup and per-screen plans with the approved Homebox theme direction. The per-screen audit now lists screens that could not be rendered in the isolated fixture.
 
 ## Touchscreen check-in and checkout
 
-- [ ] High priority: investigate recurring “C-Crate unavailable; no confirmation received”. The companion returns this generic HTTP 503 for caught OSError exceptions in POST handlers and does not log the underlying exception there. Identify the affected action and root cause, add safe diagnostics without badge codes or credentials, and provide clear recovery guidance. Do not automatically resubmit uncertain transactions. Reported 2026-10-21; cause not yet established.
-- [ ] Fix NETUM badge scanning. Investigate why scans are missed; make the screen ready to receive a badge scan when an action is selected and show clear scan feedback. Confirm with the physical scanner.
+- [ ] High priority operational follow-up: investigate recurring “C-Crate unavailable; no confirmation received” on the deployed device. The companion returns this generic HTTP 503 for caught OSError exceptions in POST handlers and does not log the underlying exception there. The isolated UI fixture cannot establish the deployed root cause. Add safe diagnostics without badge codes or credentials and provide clear recovery guidance. Do not automatically resubmit uncertain transactions. Reported 2026-10-21; cause not yet established.
+- [ ] Hardware acceptance: confirm NETUM badge scanning on the physical scanner. Synthetic Enter submission works in the browser fixture; hardware behavior remains unverified.
 - [x] Add a visible Cancel / Back option to both checkout and return. Abandoning an unfinished transaction clears its badge session and draft; uncertain submissions keep safe status recovery.
 - [x] Make inventory search responsive with debounced bounded native queries, clear loading/no-result/error states, stale-response rejection, and full-ID lookup. Manager search offers opt-in broad ID/custom-field matching while ordinary searches remain narrow. Broad search loads the full selected-filter collection and may take longer; partial kiosk UUID search is unavailable. Latency was not measured.
-- [x] Redesign member checkout and return around clearer scan readiness, item review, cancel/back navigation, and safe recovery for uncertain confirmations. The screenshots use an isolated fixture; physical Netum scanning still needs hands-on confirmation.
+- [x] Redesign member checkout and return around clearer scan readiness, item review, cancel/back navigation, and safe recovery for uncertain confirmations. Review captures use an isolated fixture; success receipts and uncertain-recovery states remain screenshot blockers pending a controlled transaction fixture.
 - [x] Rework the kiosk idle screen with the shared C-Crate mark, a visible “choose a task, then scan” prompt, larger Homebox-themed actions, and a responsive one-column touch layout. Fresh before/after screenshots are in `docs/reviews/2026-10-22-frontend-redesign/report.md`.
 
 ## Item and location screens
 
-- [x] Redesign item and location browsing with a desktop results/preview split, mobile result-first detail, compact identity/contents, and reduced redundant controls. The authenticated-manager screenshot review is still pending.
+- [x] Redesign item and location browsing with a desktop results/preview split, mobile result-first detail, compact identity/contents, and reduced redundant controls. Location browsing/details are captured; item detail rendered blank in the isolated fixture, so its visual review is still pending.
 
 ## Create Item screen
 
@@ -43,4 +43,4 @@
 - Keep content left aligned and compact; use real item photos as the visual anchor. On item lists, show useful matches with thumbnails and key facts. Keep manager search responsive from desktop split view to narrow touchscreens.
 - Review the manager and kiosk screens side by side in the C-Crate theme and at least one light and one dark variant. Keep their navigation and density appropriate to their jobs while aligning their visual language.
 
-Recorded from user feedback on 2026-10-21. The authenticated screenshot pass and frontend build have been completed for the current checkpoint; automated tests were not run. Remaining work: finish the after-state screenshot review, capture Create Item photo/success states, validate with physical scanner/printer/camera and transaction recovery, investigate the recurring unavailable error, and compare manager/kiosk themes side by side at desktop and touch viewports.
+Recorded from user feedback on 2026-10-21. The manager after-state screenshot review and Create Item photo/success captures are complete in a disposable fixture. The frontend build completes; automated tests were not run. Remaining work is limited to the named screenshot blockers (item detail, workshop loan history, kiosk scan failures/receipts/uncertain recovery), a side-by-side theme capture at desktop and touch sizes, physical scanner/printer/camera acceptance, and investigation of the deployed unavailable error.
