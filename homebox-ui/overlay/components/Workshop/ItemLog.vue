@@ -2,6 +2,7 @@
   import { Input } from "@/components/ui/input";
   import { Label } from "@/components/ui/label";
   import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+  import { recentItemNotes } from "@/lib/item-activity-notes.js";
   import type { WorkshopHistoryRow } from "@/lib/workshop-loans";
 
   const props = defineProps<{ itemId: string }>();
@@ -12,6 +13,7 @@
   const rows = ref<WorkshopHistoryRow[]>([]);
   const loading = ref(false);
   const error = ref("");
+  const canAddNote = ref(false);
   const noteFilter = ref("");
   const personFilter = ref("");
   const actionFilter = ref<"all" | "check_out" | "return" | "add_note">("all");
@@ -27,6 +29,7 @@
     for (const row of rows.value) if (row.actor_id && !unique.has(row.actor_id)) unique.set(row.actor_id, row);
     return [...unique.values()].sort((a, b) => personLabel(a).localeCompare(personLabel(b)));
   });
+  const itemNotes = computed(() => recentItemNotes(rows.value, props.itemId, Infinity));
 
   function shortId(value?: string) { return value ? value.replaceAll("-", "").slice(0, 8).toUpperCase() : "unknown"; }
   function personName(row: WorkshopHistoryRow) {
@@ -58,6 +61,16 @@
   function formatTime(value?: string) {
     const instant = Date.parse(value || "");
     return Number.isFinite(instant) ? new Date(instant).toLocaleString() : "Time unavailable";
+  }
+  function noteAuthor(note: { author?: string | null; note_state?: string; note_current_text_attribution?: string }) {
+    return note.note_state === "edited" || note.note_current_text_attribution === "unknown"
+      ? "Author unknown (edited text)" : note.author || "Author unknown";
+  }
+  function noteKind(kind: string) {
+    return kind === "checkout" ? "Checkout note" : kind === "return" ? "Return note" : "Item note";
+  }
+  function openNote(event: MouseEvent) {
+    void itemActions.open({ kind: "note", itemId: props.itemId, source: "item-row" }, event.currentTarget as HTMLElement);
   }
   function parseLocalDateTime(value: string): number | null {
     if (!value) return null;
@@ -114,9 +127,13 @@
     loading.value = true;
     error.value = "";
     try {
-      const result = await workshop.request<WorkshopHistoryRow[]>(`history?entity=${encodeURIComponent(itemId)}`);
+      const [result, status] = await Promise.all([
+        workshop.request<WorkshopHistoryRow[]>(`history?entity=${encodeURIComponent(itemId)}`),
+        itemActions.loadStatus(itemId).catch(() => null),
+      ]);
       if (currentRevision !== revision || !expanded.value || expectedScope !== scope.value) return;
       rows.value = Array.isArray(result) ? result : [];
+      canAddNote.value = !!status?.can_add_note;
     } catch (cause) {
       if (currentRevision === revision && expanded.value && expectedScope === scope.value) {
         error.value = (cause as Error).message;
@@ -139,6 +156,7 @@
   watch(scope, () => {
     revision++;
     rows.value = [];
+    canAddNote.value = false;
     error.value = "";
     noteFilter.value = "";
     personFilter.value = "";
@@ -158,6 +176,19 @@
   <details data-testid="item-log" class="rounded-lg border bg-card" @toggle="toggleDisclosure">
     <summary class="cursor-pointer px-4 py-3 text-base font-medium">Log &amp; notes</summary>
     <div class="space-y-3 border-t p-3">
+      <details data-testid="item-notes" class="rounded-md border">
+        <summary class="cursor-pointer px-3 py-2 font-medium">Notes <span class="text-sm font-normal text-muted-foreground">({{ itemNotes.length }})</span></summary>
+        <div class="space-y-3 border-t p-3">
+          <button v-if="canAddNote" type="button" class="rounded-md border px-3 py-2 text-sm" @click="openNote">Add note</button>
+          <p v-if="!itemNotes.length" class="text-sm text-muted-foreground">No checkout, return, or item notes recorded.</p>
+          <ol v-else class="divide-y">
+            <li v-for="(note, index) in itemNotes" :key="index" class="space-y-1 py-2 first:pt-0 last:pb-0">
+              <p class="whitespace-pre-wrap text-sm">{{ note.text }}</p>
+              <p class="text-xs text-muted-foreground">{{ noteKind(note.kind) }} · <time v-if="note.created_at" :datetime="note.created_at">{{ formatTime(note.created_at) }}</time><span v-else>Time unavailable</span> · {{ noteAuthor(note) }}</p>
+            </li>
+          </ol>
+        </div>
+      </details>
       <p class="text-sm text-muted-foreground">Filters apply to the loaded companion records (up to 100 newest requests); older activity and unjournaled native changes are not included.</p>
       <p class="text-sm"><NuxtLink :to="`/item/${itemId}/maintenance`" class="underline">Open the native maintenance Log</NuxtLink> for legacy maintenance entries.</p>
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
