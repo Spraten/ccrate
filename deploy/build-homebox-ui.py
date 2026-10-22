@@ -1516,7 +1516,7 @@ def create_item_actions_frontend():
     path = BUILD/'components/Entity/CreateModal.vue'
     text = path.read_text()
     if 'createCompletedEntityId' in text:
-        if text.count('Create another') != 1 or text.count('View item') != 1 or text.count('type="submit"') != 1:
+        if text.count('Create another') != 1 or text.count('View item') != 1 or text.count('type="submit"') != 1 or 'createRecoveryPending' not in text:
             raise RuntimeError('Create item completion action transform is partial')
         return
 
@@ -1540,7 +1540,7 @@ def create_item_actions_frontend():
     action_end = text.index(action_end_anchor, action_start) + len('\n      </div>')
     # The old action block remains the only action after wrapping the form.
     replacement = '''      <div v-if="!createCompletedEntityId" class="mt-4 flex justify-end">
-        <Button :disabled="loading" type="submit">Create item</Button>
+        <Button :disabled="loading || createRecoveryPending" type="submit">Create item</Button>
       </div>
       <section v-else class="mt-4 flex flex-col gap-3" role="status" aria-label="Item created">
         <p>Item created.</p>
@@ -1556,6 +1556,11 @@ def create_item_actions_frontend():
         raise RuntimeError('Upstream changed: expected create loading state')
     text = text.replace(state_anchor, state_anchor + '''
   const createCompletedEntityId = ref<string | null>(null);
+  const createRecoveryPending = computed(() => {
+    if (equipmentIntent.value) return true;
+    const intent = relatedIntent.value;
+    return !!intent && (!intent.main_entity_id || (intent.steps || []).some((step: any) => step.state !== "completed"));
+  });
   function viewCreatedItem() {
     const id = createCompletedEntityId.value;
     if (!id) return;
@@ -1567,8 +1572,8 @@ def create_item_actions_frontend():
     suggestionSearchVersion++; suggestionLookup.invalidate(); suggestions.value = [];'''
     if text.count(close_watch_anchor) != 1:
         raise RuntimeError('Upstream changed: expected create dialog context watcher')
-    text = text.replace(close_watch_anchor, '''  watch([equipmentCollections.selectedId, () => equipmentAuth.user?.id, activeDialog], () => {
-    if (activeDialog.value !== DialogID.CreateEntity) createCompletedEntityId.value = null;
+    text = text.replace(close_watch_anchor, '''  watch([equipmentCollections.selectedId, () => equipmentAuth.user?.id, activeDialog], (context, previousContext) => {
+    if (activeDialog.value !== DialogID.CreateEntity || context[0] !== previousContext[0] || context[1] !== previousContext[1]) createCompletedEntityId.value = null;
     suggestionSearchVersion++; suggestionLookup.invalidate(); suggestions.value = [];''', 1)
 
     close_anchor = '''    if (close) {
@@ -1590,6 +1595,15 @@ def create_item_actions_frontend():
     if text.count(close_anchor) != 1:
         raise RuntimeError('Upstream changed: expected the post-create close/navigation branch')
     text = text.replace(close_anchor, close_replacement, 1)
+
+    create_anchor = '  async function create(close = true) {'
+    if text.count(create_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected one create function')
+    text = text.replace(create_anchor, create_anchor + '''
+    if (createRecoveryPending.value) {
+      toast.error("Resolve the pending create recovery before creating another item.");
+      return;
+    }''', 1)
     path.write_text(text)
 
 def equipment_catalog_create_frontend():
