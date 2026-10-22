@@ -155,9 +155,9 @@
 </script>
 
 <template>
-  <details data-testid="item-log" class="rounded-lg border bg-card shadow-xl" @toggle="toggleDisclosure">
-    <summary class="cursor-pointer px-4 py-5 text-lg font-medium sm:px-6">Log &amp; notes</summary>
-    <div class="space-y-4 border-t p-4 sm:px-6">
+  <details data-testid="item-log" class="rounded-lg border bg-card" @toggle="toggleDisclosure">
+    <summary class="cursor-pointer px-4 py-3 text-base font-medium">Log &amp; notes</summary>
+    <div class="space-y-3 border-t p-3">
       <p class="text-sm text-muted-foreground">Filters apply to the loaded companion records (up to 100 newest requests); older activity and unjournaled native changes are not included.</p>
       <p class="text-sm"><NuxtLink :to="`/item/${itemId}/maintenance`" class="underline">Open the native maintenance Log</NuxtLink> for legacy maintenance entries.</p>
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
