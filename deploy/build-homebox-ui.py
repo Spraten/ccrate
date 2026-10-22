@@ -1510,6 +1510,88 @@ def create_item_layout_frontend():
     text = text.replace(preview_end, '      />\n      </div>\n\n      <div class="mt-4 flex flex-row-reverse">', 1)
     path.write_text(text)
 
+
+def create_item_actions_frontend():
+    """Replace the alternate submit action with choices after a confirmed save."""
+    path = BUILD/'components/Entity/CreateModal.vue'
+    text = path.read_text()
+    if 'createCompletedEntityId' in text:
+        if text.count('Create another') != 1 or text.count('View item') != 1 or text.count('type="submit"') != 1:
+            raise RuntimeError('Create item completion action transform is partial')
+        return
+
+    form_open = '    <form class="flex min-w-0 flex-col gap-2" @submit.prevent="create()">'
+    action_open = '      <div class="mt-4 flex flex-row-reverse">'
+    form_close = '    </form>'
+    if text.count(form_open) != 1 or text.count(action_open) != 1 or text.count(form_close) != 1:
+        raise RuntimeError('Upstream changed: expected one create form and action block')
+    start = text.index(form_open) + len(form_open)
+    action_start = text.index(action_open, start)
+    action_end_anchor = '\n      </div>\n    </form>'
+    action_end = text.index(action_end_anchor, action_start) + len('\n      </div>')
+    old_actions = text[action_start:action_end]
+    if old_actions.count('type="submit"') != 1 or old_actions.count('@click="create(false)"') != 1:
+        raise RuntimeError('Upstream changed: expected the two existing create actions')
+
+    # Hide the reset form after a confirmed item save. It stays intact while a
+    # create is uncertain or an item follow-up needs recovery.
+    text = text[:start] + '\n      <template v-if="!createCompletedEntityId">' + text[start:action_start] + '      </template>\n' + text[action_start:]
+    action_start = text.index(action_open, start)
+    action_end = text.index(action_end_anchor, action_start) + len('\n      </div>')
+    # The old action block remains the only action after wrapping the form.
+    replacement = '''      <div v-if="!createCompletedEntityId" class="mt-4 flex justify-end">
+        <Button :disabled="loading" type="submit">Create item</Button>
+      </div>
+      <section v-else class="mt-4 flex flex-col gap-3" role="status" aria-label="Item created">
+        <p>Item created.</p>
+        <div class="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="outline" @click="createCompletedEntityId = null">Create another</Button>
+          <Button type="button" @click="viewCreatedItem">View item</Button>
+        </div>
+      </section>'''
+    text = text[:action_start] + replacement + text[action_end:]
+
+    state_anchor = '  const loading = ref(false);'
+    if text.count(state_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected create loading state')
+    text = text.replace(state_anchor, state_anchor + '''
+  const createCompletedEntityId = ref<string | null>(null);
+  function viewCreatedItem() {
+    const id = createCompletedEntityId.value;
+    if (!id) return;
+    closeDialog(DialogID.CreateEntity);
+    void navigateTo(`/item/${id}`);
+  }''', 1)
+
+    close_watch_anchor = '''  watch([equipmentCollections.selectedId, () => equipmentAuth.user?.id, activeDialog], () => {
+    suggestionSearchVersion++; suggestionLookup.invalidate(); suggestions.value = [];'''
+    if text.count(close_watch_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected create dialog context watcher')
+    text = text.replace(close_watch_anchor, '''  watch([equipmentCollections.selectedId, () => equipmentAuth.user?.id, activeDialog], () => {
+    if (activeDialog.value !== DialogID.CreateEntity) createCompletedEntityId.value = null;
+    suggestionSearchVersion++; suggestionLookup.invalidate(); suggestions.value = [];''', 1)
+
+    close_anchor = '''    if (close) {
+      closeDialog(DialogID.CreateEntity);
+      if (selectedEntityType.value?.isLocation) {
+        navigateTo(`/location/${data.id}`);
+      } else {
+        navigateTo(`/item/${data.id}`);
+      }
+    }'''
+    close_replacement = '''    if (selectedEntityType.value?.isLocation) {
+      if (close) {
+        closeDialog(DialogID.CreateEntity);
+        navigateTo(`/location/${data.id}`);
+      }
+    } else {
+      createCompletedEntityId.value = data.id;
+    }'''
+    if text.count(close_anchor) != 1:
+        raise RuntimeError('Upstream changed: expected the post-create close/navigation branch')
+    text = text.replace(close_anchor, close_replacement, 1)
+    path.write_text(text)
+
 def equipment_catalog_create_frontend():
     path = BUILD/'components/Entity/CreateModal.vue'
     text = path.read_text()
@@ -1928,6 +2010,7 @@ def prepare():
     nest_frontend()
     equipment_catalog_create_frontend()
     create_item_layout_frontend()
+    create_item_actions_frontend()
     equipment_assigned_ids_frontend()
     grouped_inventory_frontend()
     item_action_surfaces_frontend()
