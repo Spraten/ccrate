@@ -152,11 +152,33 @@ def item_log_frontend():
 
 
 def entity_identity_frontend():
-    # Inject the shared identity block at the native detail card boundary.
-    replace('pages/item/[id]/index.vue', '  import LabelMaker from', '  import EntityIdentityHeader from "@/components/Workshop/EntityIdentityHeader.vue";\n  import LabelMaker from')
-    replace('pages/item/[id]/index.vue', '      <Card class="p-3">', '      <Card class="p-3">\n        <EntityIdentityHeader :entity="item" kind="item" :status="item.archived ? 'Archived' : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(' / ')" />')
-    replace('pages/location/[id]/index/index.vue', '  import ItemImageDialog from', '  import EntityIdentityHeader from "@/components/Workshop/EntityIdentityHeader.vue";\n  import ItemImageDialog from')
-    replace('pages/location/[id]/index/index.vue', '      <Card class="p-3">', '      <Card class="p-3">\n        <EntityIdentityHeader :entity="location" kind="location" :status="location.archived ? 'Archived' : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(' / ')" />')
+    item = 'pages/item/[id]/index.vue'
+    replace(item, '  import LabelMaker from', '  import EntityIdentityHeader from "@/components/Workshop/EntityIdentityHeader.vue";\n  import LabelMaker from')
+    replace(item, """            <div
+              class="mb-auto flex size-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
+            >
+              <MdiPackageVariant class="size-7" />
+            </div>""", """            <EntityIdentityHeader :entity="item" kind="item" :status="item.archived ? &quot;Archived&quot; : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(&quot; / &quot;)" />""")
+    replace(item, """              <h1 class="text-wrap pb-1 text-2xl">
+                {{ item ? item.name : "" }}
+              </h1>""", '')
+
+    location = 'pages/location/[id]/index/index.vue'
+    replace(location, '  import ItemImageDialog from', '  import EntityIdentityHeader from "@/components/Workshop/EntityIdentityHeader.vue";\n  import ItemImageDialog from')
+    replace(location, """            <div
+              class="mb-auto flex size-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
+            >
+              <MdiPackageVariant class="size-7" />
+            </div>""", """            <EntityIdentityHeader :entity="location" kind="location" :show-photo="photos.length === 0" :status="location.archived ? &quot;Archived&quot; : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(&quot; / &quot;)" />""")
+    replace(location, """              <h1 class="flex items-center gap-3 pb-1 text-2xl">
+                {{ location ? location.name : "" }}
+
+                <Badge v-if="location && location.totalPrice" variant="secondary">
+                  <Currency :amount="location.totalPrice" />
+                </Badge>
+              </h1>""", """              <div v-if="location && location.totalPrice" class="pb-1">
+                <Badge variant="secondary"><Currency :amount="location.totalPrice" /></Badge>
+              </div>""")
 
 
 def item_metadata_detail_frontend():
