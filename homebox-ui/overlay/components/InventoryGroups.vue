@@ -2,13 +2,30 @@
 import { inventoryNoteRequestKey } from '@/lib/child-item-groups.js';
 type Unit = Record<string, any> & { id: string; name?: string; displayId?: string; status?: string; storagePath?: string; thumbnail?: { entity_id: string; attachment_id: string } | null };
 type Group = { key: string; name: string; items: Unit[]; recordCount: number; nativeQuantity: number; statusCounts: Record<string, number>; thumbnail: Unit['thumbnail']; locationSummary: string };
-const props = defineProps<{ groups: Group[]; page: number; pageSize: number; recentNotes?: Record<string, any>; noteLoadingKeys?: string[]; noteLoadedKeys?: string[] }>();
+const props = defineProps<{ groups: Group[]; page: number; pageSize: number; recentNotes?: Record<string, any>; noteLoadingKeys?: string[]; noteLoadedKeys?: string[]; selectedId?: string }>();
 const emit = defineEmits<{ 'update:page': [page: number]; 'load-notes': [request: { key: string; entityIds: string[]; refresh?: boolean }]; 'refresh-items': [] }>();
 const api = useUserApi();
+const route = useRoute();
+const router = useRouter();
 const itemActions = useItemActions();
 const actionStatuses = reactive(new Map<string, any>());
 const expanded = ref(new Set<string>());
 const visible = computed(() => props.groups.slice((props.page - 1) * props.pageSize, props.page * props.pageSize));
+const selectedId = computed(() => props.selectedId || (typeof route.query.selected === 'string' ? route.query.selected : ''));
+const selected = computed(() => props.groups.flatMap(group => group.items).find(item => item.id === selectedId.value));
+const selectedGroup = computed(() => props.groups.find(group => group.items.some(item => item.id === selectedId.value)));
+const isMobileDetail = ref(false);
+watch(selectedId, id => { isMobileDetail.value = !!id; }, { immediate: true });
+watch(selectedId, id => {
+  if (!id) return;
+  const index = props.groups.findIndex(group => group.items.some(item => item.id === id));
+  if (index >= 0) {
+    const targetPage = Math.floor(index / Math.max(1, props.pageSize)) + 1;
+    if (targetPage !== props.page) emit('update:page', targetPage);
+    const group = props.groups[index]!;
+    if (!expanded.value.has(group.key)) { expanded.value = new Set(expanded.value).add(group.key); emit('load-notes', { key: group.key, entityIds: group.items.map(item => item.id) }); }
+  }
+}, { immediate: true });
 watch([() => props.groups.length, () => props.pageSize], () => {
   const lastPage = Math.max(1, Math.ceil(props.groups.length / Math.max(1, props.pageSize)));
   if (props.page > lastPage) emit('update:page', lastPage);
@@ -20,11 +37,7 @@ function statusLabel(status: string) { return ({ available: 'Available', checked
 function unitStatus(unit: Unit) { return unit.archived ? 'archived' : actionStatuses.get(unit.id)?.availability || unit.status || 'unknown'; }
 function groupCounts(group: Group) {
   const counts = { available: 0, checked_out: 0, blocked: 0, archived: 0, unknown: 0 };
-  for (const unit of group.items) {
-    const raw = unitStatus(unit);
-    const key = raw === 'checkedOut' ? 'checked_out' : raw;
-    counts[key in counts ? key as keyof typeof counts : 'unknown']++;
-  }
+  for (const unit of group.items) { const raw = unitStatus(unit); const key = raw === 'checkedOut' ? 'checked_out' : raw; counts[key in counts ? key as keyof typeof counts : 'unknown']++; }
   return counts;
 }
 watch(itemActions.changed, async result => {
@@ -32,41 +45,55 @@ watch(itemActions.changed, async result => {
   const loaded = new Set(props.groups.flatMap(group => group.items.map(item => item.id)));
   for (const id of result.itemIds) {
     if (!loaded.has(id)) continue;
-    try { actionStatuses.set(id, await itemActions.loadStatus(id, true)); }
-    catch { actionStatuses.delete(id); }
+    try { actionStatuses.set(id, await itemActions.loadStatus(id, true)); } catch { actionStatuses.delete(id); }
     const group = props.groups.find(row => row.items.some(item => item.id === id));
     if (group && expanded.value.has(group.key)) emit('load-notes', { key: group.key, entityIds: [id], refresh: true });
   }
-  // The parent reruns its existing Homebox query, preserving search, location,
-  // tag, photo and archive filters while reconciling moved rows and full paths.
   emit('refresh-items');
 });
 function photoUrl(photo: Unit['thumbnail']) { return photo ? api.authURL(`/entities/${encodeURIComponent(photo.entity_id)}/attachments/${encodeURIComponent(photo.attachment_id)}`) : ''; }
+function selectUnit(unit: Unit) {
+  router.push({ query: { ...route.query, selected: unit.id } });
+  const group = props.groups.find(row => row.items.some(item => item.id === unit.id));
+  if (group && !expanded.value.has(group.key)) { expanded.value = new Set(expanded.value).add(group.key); emit('load-notes', { key: group.key, entityIds: group.items.map(item => item.id) }); }
+}
+function backToResults() { isMobileDetail.value = false; const query = { ...route.query }; delete query.selected; router.push({ query }); }
 </script>
 
 <template>
-  <section class="space-y-3" aria-label="Grouped inventory">
-    <article v-for="group in visible" :key="group.key" class="overflow-hidden rounded-lg border bg-card">
-      <button class="flex w-full items-center gap-3 p-3 text-left" :aria-expanded="expanded.has(group.key)" @click="toggle(group)">
-        <img v-if="group.thumbnail" :src="photoUrl(group.thumbnail)" alt="" class="size-14 rounded object-cover" />
-        <div v-else class="flex size-14 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">No photo</div>
-        <div class="min-w-0 flex-1"><strong class="block truncate">{{ group.name }}</strong><span class="block truncate text-sm text-muted-foreground">{{ group.locationSummary }}</span>
-          <span class="block text-xs text-muted-foreground">{{ groupCounts(group).available }} available · {{ groupCounts(group).checked_out }} checked out · {{ groupCounts(group).blocked }} blocked · {{ groupCounts(group).archived }} archived · {{ groupCounts(group).unknown }} unknown</span>
+  <section class="grid gap-4 lg:grid-cols-[minmax(18rem,0.9fr)_minmax(24rem,1.3fr)]" aria-label="Grouped inventory">
+    <div class="space-y-3" :class="{ 'hidden lg:block': isMobileDetail }">
+      <article v-for="group in visible" :key="group.key" class="overflow-hidden rounded-lg border bg-card">
+        <button class="flex w-full items-center gap-3 p-3 text-left" :aria-expanded="expanded.has(group.key)" @click="toggle(group)">
+          <img v-if="group.thumbnail" :src="photoUrl(group.thumbnail)" alt="" class="size-14 rounded object-cover" />
+          <div v-else class="flex size-14 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">No photo</div>
+          <div class="min-w-0 flex-1"><strong class="block truncate">{{ group.name }}</strong><span class="block truncate text-sm text-muted-foreground">{{ group.locationSummary }}</span><span class="block text-xs text-muted-foreground">{{ groupCounts(group).available }} available · {{ groupCounts(group).checked_out }} checked out · {{ groupCounts(group).blocked }} blocked · {{ groupCounts(group).archived }} archived · {{ groupCounts(group).unknown }} unknown</span></div>
+          <span class="whitespace-nowrap font-semibold">×{{ group.recordCount }} <span aria-hidden="true">{{ expanded.has(group.key) ? '⌄' : '›' }}</span></span>
+        </button>
+        <div v-if="expanded.has(group.key)" class="divide-y border-t">
+          <div v-for="unit in group.items" :key="unit.id" class="flex flex-wrap items-center gap-3 p-3" :class="selectedId === unit.id ? 'bg-accent text-accent-foreground' : ''">
+            <img v-if="unit.thumbnail" :src="photoUrl(unit.thumbnail)" alt="" class="size-10 rounded object-cover" />
+            <div class="min-w-0 flex-1"><button class="block max-w-full truncate text-left font-semibold underline-offset-4 hover:underline focus-visible:underline" :aria-current="selectedId === unit.id ? 'true' : undefined" @click="selectUnit(unit)">{{ unit.name || 'Unnamed item' }}</button><span class="block text-sm text-muted-foreground">{{ unit.displayId || 'No assigned ID' }} · {{ statusLabel(unitStatus(unit)) }}</span><span class="block truncate text-xs text-muted-foreground">{{ unit.storagePath || 'Location unknown' }} · Serial {{ unit.serialNumber || 'unknown' }} · {{ Number(unit.quantity) || 0 }} native quantity</span><span class="block truncate text-xs text-muted-foreground">Recent note: {{ recentNotes?.[unit.id]?.text || (noteLoadingKeys?.includes(unitNoteKey(group, unit)) || noteLoadingKeys?.includes(noteKey(group)) ? 'Loading…' : noteLoadedKeys?.includes(unitNoteKey(group, unit)) || noteLoadedKeys?.includes(noteKey(group)) ? 'No recent activity note' : 'Not loaded') }}</span></div>
+            <InventoryUnitActionLinks :item-id="unit.id" />
+          </div>
         </div>
-        <span class="whitespace-nowrap font-semibold">×{{ group.recordCount }} <span aria-hidden="true">{{ expanded.has(group.key) ? '⌄' : '›' }}</span></span>
-      </button>
-      <div v-if="expanded.has(group.key)" class="divide-y border-t">
-        <div v-for="unit in group.items" :key="unit.id" class="flex flex-wrap items-center gap-3 p-3">
-          <img v-if="unit.thumbnail" :src="photoUrl(unit.thumbnail)" alt="" class="size-10 rounded object-cover" />
-          <div class="min-w-0 flex-1"><strong class="block truncate">{{ unit.name || 'Unnamed item' }}</strong><span class="block text-sm text-muted-foreground">{{ unit.displayId || 'No assigned ID' }} · {{ statusLabel(unitStatus(unit)) }}</span><span class="block truncate text-xs text-muted-foreground">{{ unit.storagePath || 'Location unknown' }} · Serial {{ unit.serialNumber || 'unknown' }} · {{ Number(unit.quantity) || 0 }} native quantity</span><span class="block truncate text-xs text-muted-foreground">Recent note: {{ recentNotes?.[unit.id]?.text || (noteLoadingKeys?.includes(unitNoteKey(group, unit)) || noteLoadingKeys?.includes(noteKey(group)) ? 'Loading…' : noteLoadedKeys?.includes(unitNoteKey(group, unit)) || noteLoadedKeys?.includes(noteKey(group)) ? 'No recent activity note' : 'Not loaded') }}</span></div>
-          <InventoryUnitActionLinks :item-id="unit.id" />
+      </article>
+      <nav v-if="groups.length > pageSize" class="flex items-center justify-end gap-2" aria-label="Inventory group pages">
+        <button class="rounded border px-3 py-2" :disabled="page <= 1" @click="emit('update:page', page - 1)">Previous</button><span class="text-sm">Page {{ page }} of {{ Math.ceil(groups.length / pageSize) }} · {{ groups.length }} groups</span><button class="rounded border px-3 py-2" :disabled="page >= Math.ceil(groups.length / pageSize)" @click="emit('update:page', page + 1)">Next</button>
+      </nav>
+    </div>
+    <aside class="min-h-64 rounded-lg border bg-card p-4 lg:p-6" :class="{ 'hidden lg:block': !isMobileDetail, 'min-h-[calc(100dvh-2rem)] lg:min-h-64': isMobileDetail }" aria-label="Selected inventory details">
+      <button v-if="isMobileDetail" class="mb-4 rounded border px-3 py-2 lg:hidden" @click="backToResults">← Back to results</button>
+      <template v-if="selected">
+        <div class="flex flex-wrap items-start gap-4">
+          <img v-if="selected.thumbnail" :src="photoUrl(selected.thumbnail)" alt="" class="size-24 rounded object-cover" />
+          <div v-else class="flex size-24 items-center justify-center rounded bg-muted text-sm text-muted-foreground">No photo</div>
+          <div class="min-w-0 flex-1"><p class="text-sm text-muted-foreground">{{ selected.displayId || selected.id }} · {{ statusLabel(unitStatus(selected)) }}</p><h2 class="mt-1 text-xl font-semibold">{{ selected.name || 'Unnamed item' }}</h2><p class="mt-1 text-sm text-muted-foreground">{{ selected.storagePath || selectedGroup?.locationSummary || 'Location unknown' }}</p></div>
         </div>
-      </div>
-    </article>
-    <nav v-if="groups.length > pageSize" class="flex items-center justify-end gap-2" aria-label="Inventory group pages">
-      <button class="rounded border px-3 py-2" :disabled="page <= 1" @click="emit('update:page', page - 1)">Previous</button>
-      <span class="text-sm">Page {{ page }} of {{ Math.ceil(groups.length / pageSize) }} · {{ groups.length }} groups</span>
-      <button class="rounded border px-3 py-2" :disabled="page >= Math.ceil(groups.length / pageSize)" @click="emit('update:page', page + 1)">Next</button>
-    </nav>
+        <dl class="mt-5 grid grid-cols-2 gap-4 border-t pt-4 text-sm"><div><dt class="text-muted-foreground">Quantity</dt><dd class="font-medium">{{ Number(selected.quantity) || 0 }}</dd></div><div><dt class="text-muted-foreground">Serial number</dt><dd class="font-medium">{{ selected.serialNumber || 'Not set' }}</dd></div><div><dt class="text-muted-foreground">Group</dt><dd class="font-medium">{{ selectedGroup?.name || '—' }}</dd></div><div><dt class="text-muted-foreground">Recent note</dt><dd class="font-medium">{{ recentNotes?.[selected.id]?.text || (noteLoadedKeys?.some(key => key.includes(selected.id)) ? 'No recent activity note' : 'Not loaded') }}</dd></div></dl>
+        <div class="mt-5 flex flex-wrap gap-2"><NuxtLink class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-primary-foreground" :to="`/item/${encodeURIComponent(selected.id)}`">Open full details</NuxtLink></div>
+      </template>
+      <div v-else class="flex min-h-52 items-center justify-center text-center text-sm text-muted-foreground"><div><strong class="block text-base text-foreground">Select an item</strong><span class="mt-1 block">Choose an inventory row to see its details here.</span></div></div>
+    </aside>
   </section>
 </template>

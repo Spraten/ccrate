@@ -531,7 +531,7 @@ def grouped_inventory_frontend():
         :pagination="pagination"
         disable-sort
         @refresh="async () => search()"
-      />''', '''      <InventoryGroups :groups="inventoryGroups" :page="page" :page-size="pageSize" :recent-notes="recentInventoryNotes" :note-loading-keys="[...noteLoadingGroups]" :note-loaded-keys="[...noteLoadedGroups]" @load-notes="loadInventoryNotes" @refresh-items="search" @update:page="(value: number) => { page = value; }" />
+      />''', '''      <InventoryGroups :groups="inventoryGroups" :page="page" :page-size="pageSize" :selected-id="typeof route.query.selected === 'string' ? route.query.selected : ''" :recent-notes="recentInventoryNotes" :note-loading-keys="[...noteLoadingGroups]" :note-loaded-keys="[...noteLoadedGroups]" @load-notes="loadInventoryNotes" @refresh-items="search" @update:page="(value: number) => { page = value; }" />
       <details v-if="items.length" class="mt-4 rounded-lg border p-3">
         <summary class="cursor-pointer font-medium">Manage matching native items</summary>
         <ItemViewSelectable :items="nativeManageItems" :location-flat-tree="locationFlatTree" :pagination="nativePagination" disable-sort @refresh="async () => search()" />
