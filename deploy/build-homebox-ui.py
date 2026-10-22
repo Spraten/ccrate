@@ -151,6 +151,14 @@ def item_log_frontend():
     replace(path, details_anchor, '          </DetailsSection>\n          <div v-if="item.displayId" class="flex items-center gap-2 px-6 pb-2"><span class="text-sm text-muted-foreground" title="Generated from item type and full storage path; regenerated when the item moves.">Display ID</span><code class="font-mono font-semibold">{{ item.displayId }}</code><CopyText :text="item.displayId" :icon-size="16" /></div>\n          <div v-if="item.shortCode" class="flex items-center gap-2 px-6 pb-4"><span class="text-sm text-muted-foreground">Short code</span><code class="font-mono font-semibold">{{ item.shortCode }}</code><CopyText :text="item.shortCode" :icon-size="16" /></div>\n        </BaseCard>\n\n        <WorkshopItemLog v-if="!hasNested" :item-id="itemId" />\n\n        <!-- anything in this is not rendered if on another page -->')
 
 
+def entity_identity_frontend():
+    # Inject the shared identity block at the native detail card boundary.
+    replace('pages/item/[id]/index.vue', '  import LabelMaker from', '  import EntityIdentityHeader from "@/components/Workshop/EntityIdentityHeader.vue";\n  import LabelMaker from')
+    replace('pages/item/[id]/index.vue', '      <Card class="p-3">', '      <Card class="p-3">\n        <EntityIdentityHeader :entity="item" kind="item" :status="item.archived ? 'Archived' : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(' / ')" />')
+    replace('pages/location/[id]/index/index.vue', '  import ItemImageDialog from', '  import EntityIdentityHeader from "@/components/Workshop/EntityIdentityHeader.vue";\n  import ItemImageDialog from')
+    replace('pages/location/[id]/index/index.vue', '      <Card class="p-3">', '      <Card class="p-3">\n        <EntityIdentityHeader :entity="location" kind="location" :status="location.archived ? 'Archived' : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(' / ')" />')
+
+
 def item_metadata_detail_frontend():
     path = 'pages/item/[id]/index.vue'
     replace(path, '  import LabelMaker from', '  import ItemMetadataPanel from "@/components/Workshop/ItemMetadataPanel.vue";\n  import LabelMaker from')
@@ -1781,6 +1789,7 @@ def prepare():
     # Item loans sit alongside native Details/Maintenance/Edit; details show status.
     path = 'pages/item/[id]/index.vue'
     item_log_frontend()
+    entity_identity_frontend()
     replace(path, '        id: "edit",', '        id: "loans", name: "Loans & return notes", to: `/item/${itemId.value}/loans`,\n      },\n      {\n        id: "edit",')
     replace(path, '{{ $t(tab.name) }}', '{{ tab.id === "loans" ? tab.name : $t(tab.name) }}')
     replace(path, ':id="item.assetId"\n                type="asset"', ':id="item.assetId"\n                :entity-id="item.id"\n                type="asset"')
