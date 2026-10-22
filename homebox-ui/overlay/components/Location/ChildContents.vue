@@ -391,7 +391,9 @@
                   <div class="min-w-0 flex-1">
                     <NuxtLink :to="`/item/${encodeURIComponent(item.id)}`" class="block truncate hover:underline">{{ item.name }}</NuxtLink>
                     <span v-if="item.archived" class="block text-xs text-muted-foreground">Archived</span>
-                    <span v-if="item.displayId || item.assetId" class="block truncate text-xs text-muted-foreground">{{ item.displayId || item.assetId }}</span>
+                    <span v-if="item.displayId" class="block break-all text-xs text-muted-foreground">Generated ID · {{ item.displayId }}</span>
+                    <span v-else-if="item.assetId" class="block break-all text-xs text-muted-foreground">Asset ID · {{ item.assetId }}</span>
+                    <span v-if="item.serialNumber" class="block break-all text-xs text-muted-foreground">Serial · {{ item.serialNumber }}</span>
                     <span v-if="actionStatusLabel(item.id)" class="block text-xs text-muted-foreground">{{ actionStatusLabel(item.id) }}</span>
                     <span v-if="recentNotes.get(item.id)" class="block truncate text-xs text-muted-foreground">{{ recentNotes.get(item.id) }}</span>
                     <NuxtLink :to="`/location/${encodeURIComponent(location.id)}`" class="block text-xs text-muted-foreground hover:underline">{{ locationPath(location.name) }}</NuxtLink>
@@ -407,7 +409,9 @@
               <div class="min-w-0 flex-1">
                 <NuxtLink :to="`/item/${encodeURIComponent(group.matchingItems[0].id)}`" class="block truncate hover:underline">{{ group.matchingItems[0].name }}</NuxtLink>
                 <span v-if="group.matchingItems[0].archived" class="block text-xs text-muted-foreground">Archived</span>
-                <span v-if="group.matchingItems[0].displayId || group.matchingItems[0].assetId" class="block truncate text-xs text-muted-foreground">{{ group.matchingItems[0].displayId || group.matchingItems[0].assetId }}</span>
+                <span v-if="group.matchingItems[0].displayId" class="block break-all text-xs text-muted-foreground">Generated ID · {{ group.matchingItems[0].displayId }}</span>
+                <span v-else-if="group.matchingItems[0].assetId" class="block break-all text-xs text-muted-foreground">Asset ID · {{ group.matchingItems[0].assetId }}</span>
+                <span v-if="group.matchingItems[0].serialNumber" class="block break-all text-xs text-muted-foreground">Serial · {{ group.matchingItems[0].serialNumber }}</span>
                 <span v-if="actionStatusLabel(group.matchingItems[0].id)" class="block text-xs text-muted-foreground">{{ actionStatusLabel(group.matchingItems[0].id) }}</span>
                 <NuxtLink :to="`/location/${encodeURIComponent(location.id)}`" class="block text-xs text-muted-foreground hover:underline">{{ locationPath(location.name) }}</NuxtLink>
               </div>
