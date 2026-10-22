@@ -1914,6 +1914,54 @@ def equipment_catalog_create_frontend():
     remove_equipment_template_navigation()
 
 
+def responsive_members_frontend():
+    """Keep the collection member list usable without horizontal scrolling on phones."""
+    path = 'pages/collection/index/members.vue'
+    replace(path, '      <div v-else class="scroll-bg overflow-x-auto rounded-md border bg-card">', '''      <div v-else>
+        <div v-if="breakpoints.sm" class="space-y-3">
+          <article v-for="user in members" :key="user.id" class="rounded-md border bg-card p-4 text-card-foreground">
+            <div class="flex min-w-0 items-start gap-3">
+              <MemberAvatar :member-id="user.id" :name="user.name" :picture="user.avatar" />
+              <div class="min-w-0 flex-1">
+                <h3 class="break-words font-medium">{{ user.name }}</h3>
+                <p class="break-all text-sm text-muted-foreground">{{ user.email || "No email" }}</p>
+                <p class="mt-1 text-xs text-muted-foreground">Member ID {{ user.id.slice(0,8) }}</p>
+              </div>
+              <div class="flex shrink-0 items-center gap-1">
+                <Button v-if="userAdmin" variant="outline" size="sm" :aria-label="'Manage profile: ' + user.name" @click="userManager?.show(user)">Manage</Button>
+                <TooltipProvider :delay-duration="0">
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        :aria-label="$t('global.delete') + ': ' + user.name"
+                        :disabled="!userAdmin || removing[user.id] || user.id === currentUserId || !!peopleRows.find(row => row.id === user.id)?.protected_owner"
+                        @click="handleRemove(user)"
+                      >
+                        <MdiDelete class="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{{ $t("global.delete") }}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+            <div v-if="workshop.manager.value" class="mt-4 border-t pt-3">
+              <p class="mb-2 text-sm font-medium">Kiosk badge</p>
+              <BadgeActions :member="user" :badges="badgeRows.filter(row => row.user_id === user.id)" :can-manage="!!peopleRows.find(row => row.id === user.id)?.workshop_manager" :protected-owner="!!peopleRows.find(row => row.id === user.id)?.protected_owner" @changed="loadBadges" />
+            </div>
+            <div class="mt-4 border-t pt-3">
+              <p class="mb-2 text-sm font-medium">Checked-out items</p>
+              <MemberItems :member-id="user.id" :loans="memberLoans" :loading="itemLoading" :error="itemError" />
+            </div>
+          </article>
+        </div>
+        <div v-else class="scroll-bg overflow-x-auto rounded-md border bg-card">''')
+    replace(path, '        </Table>\n      </div>\n    </div>\n  </div>\n</template>', '        </Table>\n        </div>\n      </div>\n    </div>\n  </div>\n</template>')
+    replace(path, '  const workshop = useWorkshop();', '  const workshop = useWorkshop();\n  const breakpoints = useBreakpoints();')
+
+
 def prepare():
     from homebox_patchset import materialize
     native_source = materialize(UPSTREAM_ROOT)
@@ -2063,6 +2111,7 @@ def prepare():
     item_action_surfaces_frontend()
     item_metadata_detail_frontend()
     brand_frontend()
+    responsive_members_frontend()
 
 
 def prepare_source_workspace(destination, upstream_root=ROOT):
