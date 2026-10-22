@@ -23,6 +23,10 @@ function settings(track) {
   try { return track?.getSettings?.() || {}; } catch { return {}; }
 }
 
+/** @typedef {{min: number, max: number, step?: number, value?: number}} CameraControlRange */
+/** @typedef {{focusModes: string[], zoom?: CameraControlRange, focusDistance?: CameraControlRange}} CameraControls */
+
+/** @returns {CameraControlRange | undefined} */
 function rangeDescription(capability, value) {
   if (!capability || !Number.isFinite(capability.min) || !Number.isFinite(capability.max)) return undefined;
   const result = { min: capability.min, max: capability.max };
@@ -31,6 +35,9 @@ function rangeDescription(capability, value) {
   return result;
 }
 
+/** @param {MediaStreamTrack} track
+ * @returns {CameraControls}
+ */
 export function describeCameraControls(track) {
   const capabilities = ranges(track);
   const current = settings(track);
@@ -43,6 +50,9 @@ export function describeCameraControls(track) {
 }
 
 /** Fresh values for a new camera session, or neutral values after stopping it. */
+/** @param {MediaStreamTrack | null | undefined} track
+ * @returns {{controls: CameraControls | null, hardwareZoom: number, focusMode: string, focusDistance: number, defaultZoom: number | undefined, defaultFocusMode: string | undefined, defaultFocusDistance: number | undefined}}
+ */
 export function cameraControlSessionState(track) {
   if (!track) return { controls: null, hardwareZoom: 1, focusMode: '', focusDistance: 0,
     defaultZoom: undefined, defaultFocusMode: undefined, defaultFocusDistance: undefined };

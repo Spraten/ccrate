@@ -158,7 +158,7 @@ def entity_identity_frontend():
               class="mb-auto flex size-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
             >
               <MdiPackageVariant class="size-7" />
-            </div>""", """            <EntityIdentityHeader :entity="item" kind="item" :status="item.archived ? &quot;Archived&quot; : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(&quot; / &quot;)" />""")
+            </div>""", """            <EntityIdentityHeader :entity="item" kind="item" :status="item.archived ? 'Archived' : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(' / ')" />""")
     replace(item, """              <h1 class="text-wrap pb-1 text-2xl">
                 {{ item ? item.name : "" }}
               </h1>""", '')
@@ -169,7 +169,7 @@ def entity_identity_frontend():
               class="mb-auto flex size-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
             >
               <MdiPackageVariant class="size-7" />
-            </div>""", """            <EntityIdentityHeader :entity="location" kind="location" :show-photo="photos.length === 0" :status="location.archived ? &quot;Archived&quot; : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(&quot; / &quot;)" />""")
+            </div>""", """            <EntityIdentityHeader :entity="location" kind="location" :show-photo="photos.length === 0" :status="location.archived ? 'Archived' : undefined" :location-path="fullpath?.slice(0, -1).map(part => part.name).join(' / ')" />""")
     replace(location, """              <h1 class="flex items-center gap-3 pb-1 text-2xl">
                 {{ location ? location.name : "" }}
 

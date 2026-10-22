@@ -183,7 +183,8 @@
       defaultZoom = initial.defaultZoom;
       defaultFocusMode = initial.defaultFocusMode;
       defaultFocusDistance = initial.defaultFocusDistance;
-      controlStatus.value = `${controls.value.zoom ? "Camera zoom is available." : "Digital zoom crops and enlarges the image without adding detail."} ${controls.value.focusModes.length ? "Focus modes are available." : "Focus adjustment is unavailable on this camera."}`;
+      const supportedControls = controls.value;
+      controlStatus.value = `${supportedControls?.zoom ? "Camera zoom is available." : "Digital zoom crops and enlarges the image without adding detail."} ${supportedControls?.focusModes.length ? "Focus modes are available." : "Focus adjustment is unavailable on this camera."}`;
       drawPreview(track, generation);
     } catch (cause) {
       requestedStream?.getTracks().forEach(track => track.stop());
@@ -236,7 +237,7 @@
         getText: () => result.value,
         getRevision: () => resultRevision.value,
         setText: (text: string) => { result.value = text; },
-        recognize: async source => {
+        recognize: async (source: Blob) => {
           recognized = await recognizeStructuredTextFromImage(source);
           return recognized;
         },

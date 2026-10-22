@@ -66,7 +66,7 @@
     return note.note_state === "edited" || note.note_current_text_attribution === "unknown"
       ? "Author unknown (edited text)" : note.author || "Author unknown";
   }
-  function noteKind(kind: string) {
+  function noteKind(kind = "note") {
     return kind === "checkout" ? "Checkout note" : kind === "return" ? "Return note" : "Item note";
   }
   function openNote(event: MouseEvent) {
@@ -184,7 +184,7 @@
           <ol v-else class="divide-y">
             <li v-for="(note, index) in itemNotes" :key="index" class="space-y-1 py-2 first:pt-0 last:pb-0">
               <p class="whitespace-pre-wrap text-sm">{{ note.text }}</p>
-              <p class="text-xs text-muted-foreground">{{ noteKind(note.kind) }} · <time v-if="note.created_at" :datetime="note.created_at">{{ formatTime(note.created_at) }}</time><span v-else>Time unavailable</span> · {{ noteAuthor(note) }}</p>
+              <p class="text-xs text-muted-foreground">{{ noteKind(note.kind) }} · <time v-if="note.created_at" :datetime="note.created_at || ''">{{ formatTime(note.created_at) }}</time><span v-else>Time unavailable</span> · {{ noteAuthor(note) }}</p>
             </li>
           </ol>
         </div>

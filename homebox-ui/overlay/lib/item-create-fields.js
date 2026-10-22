@@ -211,6 +211,9 @@ export function selectSuggestion(form, item) {
   form.serialNumber = '';
 }
 
+/** @param {Array<{name: string, value: string, note: string}>} rows
+ * @returns {Array<{name: string, value: string, note: string}>}
+ */
 export function validateCustomRows(rows) {
   const seen = new Set(['device packaging']);
   return (rows || []).map(row => ({ name: String(row.name || '').trim().replace(/\s+/g, ' '), value: String(row.value || ''), note: String(row.note || '') })).filter(row => row.name || row.value || row.note).map(row => {

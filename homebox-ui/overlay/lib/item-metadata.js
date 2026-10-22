@@ -98,6 +98,9 @@ function mergeDetailDraft(baseline, current, draft, baselineNotes = {}, currentN
   return { serialNumber, packaging, rows: merged, notes };
 }
 
+/**
+ * @param {{ api: any, workshop: any, item: any, draft: any, identity: string, requestKey: string, baselineNotes?: Record<string, string> | null }} options
+ */
 export async function saveDetailMetadata({ api, workshop, item, draft, identity, requestKey, baselineNotes = null }) {
   const presentRows = (draft.rows || []).filter(row => String(row.name || '').trim() || String(row.value || '') || String(row.note || ''));
   const baselineByName = new Map((item.fields || []).filter(field => field.type === 'text' && fieldKey(field.name) !== 'device packaging').map(field => [fieldKey(field.name), field]));
