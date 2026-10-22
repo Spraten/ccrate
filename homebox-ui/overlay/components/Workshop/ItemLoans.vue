@@ -29,7 +29,15 @@
   const allActivityNotes = computed(() => recentItemNotes(history.value, props.itemId, Infinity));
   const recentNotes = computed(() => recentItemNotes(history.value, props.itemId,
     props.activityMode === "all" || showAllActivity.value ? Infinity : compactActivity.value ? 1 : 5));
-  function date(value: string) { return new Date(value.includes("T") ? value : value.replace(" ", "T") + "Z").toLocaleString(); }
+  function date(value?: string | null) {
+    if (!value) return "Time unavailable";
+    const instant = new Date(value.includes("T") ? value : value.replace(" ", "T") + "Z");
+    return Number.isFinite(instant.getTime()) ? instant.toLocaleString() : "Time unavailable";
+  }
+  function noteAuthor(note: any) {
+    return note.note_state === "edited" || note.note_current_text_attribution === "unknown"
+      ? "Author unknown (edited text)" : note.author || "Author unknown";
+  }
   async function load() {
     const revision = ++generation;
     loading.value = true; error.value = ""; mode.value = null; data.value = null; loan.value = null; history.value = []; showAllActivity.value = false;
@@ -89,10 +97,10 @@
           <div v-if="!compactActivity && manager" class="flex flex-wrap gap-2"><Button variant="outline" :disabled="busy" @click="state = data.condition; dialogKind = 'condition'; mode = 'condition'">Review condition</Button></div>
         </div>
         <template v-if="!compactActivity">
-          <div class="space-y-3 border-t pt-4"><h3 class="font-medium">Recent activity notes</h3><p v-if="!recentNotes.length" class="text-sm text-muted-foreground">No checkout, return, or item notes recorded.</p><article v-for="(note, index) in recentNotes" :key="index" class="space-y-1 border-l-2 pl-4"><p class="text-xs uppercase text-muted-foreground">{{ note.kind === 'checkout' ? 'Checkout note' : note.kind === 'return' ? 'Return note' : 'Item note' }}</p><p class="whitespace-pre-wrap">{{ note.text }}</p><p class="text-sm text-muted-foreground">{{ note.author || 'C-Crate member' }} · {{ date(note.created_at) }}</p></article><Button v-if="!showAllActivity && props.activityMode !== 'all' && allActivityNotes.length > 5" variant="link" @click="showAllActivity = true">View all activity notes</Button><Button v-else-if="showAllActivity" variant="link" @click="showAllActivity = false">Show recent five notes</Button></div>
+          <div class="space-y-3 border-t pt-4"><h3 class="font-medium">Recent activity notes</h3><p v-if="!recentNotes.length" class="text-sm text-muted-foreground">No checkout, return, or item notes recorded.</p><article v-for="(note, index) in recentNotes" :key="index" class="space-y-1 border-l-2 pl-4"><p class="text-xs uppercase text-muted-foreground">{{ note.kind === 'checkout' ? 'Checkout note' : note.kind === 'return' ? 'Return note' : 'Item note' }}</p><p class="whitespace-pre-wrap">{{ note.text }}</p><p class="text-sm text-muted-foreground">{{ noteAuthor(note) }} · {{ date(note.created_at) }}</p></article><Button v-if="!showAllActivity && props.activityMode !== 'all' && allActivityNotes.length > 5" variant="link" @click="showAllActivity = true">View all activity notes</Button><Button v-else-if="showAllActivity" variant="link" @click="showAllActivity = false">Show recent five notes</Button></div>
           <div class="space-y-3 border-t pt-4"><h3 class="font-medium">Borrowing history</h3><p v-if="!history.length" class="text-sm text-muted-foreground">No borrowing activity yet.</p><p v-for="row in history" :key="row.id" class="text-sm"><span class="capitalize">{{ row.action }}</span> · {{ row.status }} · {{ row.actor }} · {{ date(row.created_at) }}</p></div>
         </template>
-        <p v-if="compactActivity && recentNotes.length" class="text-sm text-muted-foreground">Latest {{ recentNotes[0].kind }} note · {{ recentNotes[0].author || 'C-Crate member' }}: {{ recentNotes[0].text }}</p>
+        <p v-if="compactActivity && recentNotes.length" class="text-sm text-muted-foreground">Latest {{ recentNotes[0].kind }} note · {{ date(recentNotes[0].created_at) }} · {{ noteAuthor(recentNotes[0]) }}: {{ recentNotes[0].text }}</p>
       </template>
       <p v-if="error && !mode" role="alert" class="text-sm text-destructive">{{ error }} <Button variant="link" @click="load">Reload</Button></p>
     </div>
