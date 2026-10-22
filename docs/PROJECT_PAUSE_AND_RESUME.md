@@ -2,7 +2,7 @@
 
 ## Current stopping point
 
-The front-end rework is paused on `main`. The branch contains the latest local work plus 139 commits not yet present on GitHub `origin/main`; this checkpoint should be pushed before the project is considered safely parked. The redesign is in progress, not a finished release. The generated UI has been built before; changes from this final pause pass are being built now.
+The front-end rework is paused on `main`. The design checkpoint is commit `5f15135` (`ui: checkpoint C-Crate frontend redesign`), followed by this pause/resume note. Local `main` is ahead of GitHub `origin/main`. The push was attempted but could not authenticate: the configured GitHub credential helper points to `/home/user/.local/share/github-cli/usr/bin/gh`, which is missing. Keep this checkout as the current copy until the push succeeds. The redesign is in progress, not a finished release.
 
 Recent work covers the inventory browse/preview, item and location detail density, Create Item grouping, timestamped item notes, kiosk checkout/return cancellation and review states, item preview cards, shared Homebox theme CSS, manager-controlled touchscreen theme selection, Netum return scan Enter handling, dashboard statistics, member loan indicators, and workshop borrowing history.
 
@@ -16,12 +16,18 @@ Evidence is under:
 
 ## Resume instructions
 
-From a clone of the GitHub repository:
+The GitHub CLI executable is missing at the configured helper path. On this Debian machine, install it through apt, authenticate in a browser, then push from this checkout:
 
 ```bash
-git switch main
-git pull --ff-only origin main
+sudo apt update
+sudo apt install gh
+gh auth login --hostname github.com --git-protocol https --web
+gh auth setup-git
+git push origin main
+git rev-list --left-right --count origin/main...main
 ```
+
+The final command should print `0 0`. The pending push is a fast-forward from the observed `origin/main` (`a98cabe`); do not force-push. Once uploaded, another machine can use `git clone https://github.com/Spraten/ccrate.git` and `git switch main`.
 
 Read `docs/superpowers/plans/2026-10-21-ccrate-full-frontend-audit-and-redesign.md` first, then the screen-specific plans in `docs/superpowers/plans/`. Check `git status --short` before editing so local user files are preserved. Rebuild the generated Homebox UI with:
 
