@@ -2,7 +2,7 @@
 """Loopback Homebox companion with browser-owned badge sessions."""
 import base64, io, json, os, pathlib, signal, stat, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlencode
 from uuid import UUID as NativeUUID
 FIXTURE_PROCESS=os.environ.get('WORKSHOP_FIXTURE_PROCESS')=='1'
 def fixture_process_root():
@@ -189,12 +189,17 @@ def label_context(deadline,actor=None):
 def terminal_assets():
     selected=CODE_ROOT/'work/kiosk-ui-current'
     return selected if selected.is_dir() else CODE_ROOT/'kiosk'
-def inventory(locations=False):
+def inventory(locations=False, query=''):
     # Native service credentials stay on the Pi. Tokens never reach the browser or logs.
     account=json.loads((ROOT/'work/baseline/test-account.json').read_text())
     req=urllib.request.Request(BASE+'/api/v1/users/login',data=json.dumps({'username':account['email'],'password':account['password']}).encode(),headers={'Content-Type':'application/json'})
     with urllib.request.urlopen(req,timeout=8) as response:token=json.load(response)['token'].removeprefix('Bearer ')
     items=[]
+    if query:
+        params=urlencode({'q':query,'page':1,'pageSize':20,'includeArchived':'false','isLocation':str(locations).lower()})
+        req=urllib.request.Request(BASE+'/api/v1/entities?'+params,headers={'Authorization':'Bearer '+token})
+        with urllib.request.urlopen(req,timeout=8) as response:data=json.load(response)
+        return data['items'][:20]
     page=1
     while True:
         req=urllib.request.Request(BASE+f'/api/v1/entities?page={page}&pageSize=100&includeArchived=true&isLocation={str(locations).lower()}',headers={'Authorization':'Bearer '+token})
@@ -936,9 +941,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json(200,data)
             except (OSError,ValueError,KeyError):self.reply_json(503,{'error':'C-Crate unavailable'})
             return
-        elif self.path in ('/api/inventory','/api/locations'):
+        elif urlsplit(self.path).path in ('/api/inventory','/api/locations'):
             try:
-                with lock:body=json.dumps(inventory(self.path=='/api/locations')).encode()
+                route=urlsplit(self.path)
+                query=parse_qs(route.query).get('q',[''])[0].strip()
+                with lock:
+                    rows=inventory(route.path=='/api/locations',query=query) if query else inventory(route.path=='/api/locations')
+                    body=json.dumps(rows).encode()
                 code=200
             except (OSError,ValueError,KeyError):body=b'{"error":"C-Crate unavailable"}';code=503
             mime='application/json'

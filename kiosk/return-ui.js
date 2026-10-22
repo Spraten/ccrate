@@ -61,25 +61,34 @@
     const status = el('p', message);
     host.append(status);
     const search = el('input'); search.placeholder = 'Search by name or ID'; search.setAttribute('aria-label', 'Search inventory'); host.append(search);
-    let candidate = null, lookupEpoch = 0;
+    let candidate = null, lookupEpoch = 0, searchTimer = null;
+    const searchStatus = el('p'); searchStatus.setAttribute('role', 'status'); host.append(searchStatus);
     const results = el('div'); host.append(results);
-    search.addEventListener('input', async () => {
+    search.addEventListener('input', () => {
       const q = search.value.trim(), lookup = ++lookupEpoch, session = context(), epoch = state.epoch;
-      results.replaceChildren();
-      if (q.length < 2 || !valid(session)) return;
-      try {
-        const data = await request('/api/inventory');
+      candidate = null;
+      clearTimeout(searchTimer);
+      if (q.length < 2 || !valid(session)) { results.replaceChildren(); searchStatus.textContent = q ? 'Enter at least two characters to search.' : ''; return; }
+      searchStatus.textContent = 'Searching…';
+      searchTimer = setTimeout(async () => { try {
+        const data = await request('/api/inventory?q=' + encodeURIComponent(q));
         if (lookup !== lookupEpoch || !current(session, epoch)) return;
         const items = Array.isArray(data) ? data : data.items || [];
-        for (const item of items.filter(x => (x.name || '').toLowerCase().includes(q.toLowerCase()) || String(x.id).toLowerCase().includes(q.toLowerCase())).slice(0, 10)) {
+        const matches = items.filter(item => !item.archived && !item.archivedAt && !item.isLocation);
+        results.replaceChildren();
+        if (!matches.length) { searchStatus.textContent = 'No matching equipment.'; return; }
+        searchStatus.textContent = `${Math.min(matches.length, 10)} result(s) shown.`;
+        for (const item of matches.slice(0, 10)) {
           const choice = el('button', item.name || item.id); choice.type = 'button';
           choice.addEventListener('click', () => {
-            if (!current(session, epoch)) return;
+            if (lookup !== lookupEpoch || !current(session, epoch)) return;
             candidate = item; search.value = `${item.name || item.id} — scan physical code`; results.replaceChildren();
+            searchStatus.textContent = 'Candidate selected. Scan its physical code.';
           });
           results.append(choice);
         }
-      } catch (error) { if (current(session, epoch)) status.textContent = error.message; }
+        if (matches.length > 10) searchStatus.textContent = 'Showing 10 results. Refine your search to see more.';
+      } catch (error) { if (lookup === lookupEpoch && current(session, epoch)) searchStatus.textContent = 'Search unavailable: ' + error.message; } }, 200);
     });
 
     const scan = el('input'); scan.placeholder = 'Scan item barcode'; scan.setAttribute('aria-label', 'Scan item barcode');
