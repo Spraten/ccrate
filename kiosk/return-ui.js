@@ -60,7 +60,7 @@
 
     const status = el('p', message);
     host.append(status);
-    const search = el('input'); search.placeholder = 'Search by name or ID'; search.setAttribute('aria-label', 'Search inventory'); host.append(search);
+    const search = el('input'); search.placeholder = 'Search by name or full ID'; search.setAttribute('aria-label', 'Search inventory'); host.append(search);
     let candidate = null, lookupEpoch = 0, searchTimer = null;
     const searchStatus = el('p'); searchStatus.setAttribute('role', 'status'); host.append(searchStatus);
     const results = el('div'); host.append(results);

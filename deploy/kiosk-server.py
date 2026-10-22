@@ -196,6 +196,19 @@ def inventory(locations=False, query=''):
     with urllib.request.urlopen(req,timeout=8) as response:token=json.load(response)['token'].removeprefix('Bearer ')
     items=[]
     if query:
+        try:entity_id=str(NativeUUID(query))
+        except ValueError:entity_id=None
+        if entity_id:
+            req=urllib.request.Request(BASE+'/api/v1/entities/'+entity_id,headers={'Authorization':'Bearer '+token})
+            try:
+                with urllib.request.urlopen(req,timeout=8) as response:item=json.load(response)
+            except urllib.error.HTTPError as error:
+                if error.code==404:
+                    error.close()
+                    return []
+                raise
+            is_location=item.get('isLocation') or (item.get('entityType') or {}).get('isLocation')
+            return [item] if not item.get('archived') and not item.get('archivedAt') and bool(is_location)==locations else []
         params=urlencode({'q':query,'page':1,'pageSize':20,'includeArchived':'false','isLocation':str(locations).lower()})
         req=urllib.request.Request(BASE+'/api/v1/entities?'+params,headers={'Authorization':'Bearer '+token})
         with urllib.request.urlopen(req,timeout=8) as response:data=json.load(response)
