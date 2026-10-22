@@ -33,7 +33,7 @@
     <span v-else-if="error" class="text-sm text-muted-foreground">Items unavailable</span>
     <Popover v-else v-model:open="open">
       <PopoverTrigger as-child>
-        <Button variant="outline" size="sm" :disabled="!items.length" :aria-label="items.length + (items.length === 1 ? ' item checked out' : ' items checked out')">
+        <Button v-if="items.length" variant="outline" size="sm" :aria-label="items.length + (items.length === 1 ? ' item checked out' : ' items checked out')">
           {{ items.length }} {{ items.length === 1 ? 'item' : 'items' }} checked out<ChevronDown class="ml-2 size-4" />
         </Button>
       </PopoverTrigger>
@@ -55,5 +55,6 @@
         </div>
       </PopoverContent>
     </Popover>
+    <span v-if="!loading && !error && loans !== null && !items.length" class="text-sm text-muted-foreground">No items checked out</span>
   </div>
 </template>

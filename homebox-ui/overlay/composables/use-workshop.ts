@@ -28,7 +28,7 @@ export function useWorkshop() {
       const headers: Record<string, string> = {};
       if (currentGroup) headers["X-Workshop-Group"] = currentGroup;
       if (data !== undefined) { headers["Content-Type"] = "application/json"; headers["X-Workshop-Identity"] = identity || context.value?.identity || ""; }
-      else if (path.startsWith("workshop/view") || path.startsWith("item-actions/status") || ["workshop/checks/get", "workshop/checks/list"].includes(path.split("?")[0] ?? "")) headers["X-Workshop-Identity"] = context.value?.identity || "";
+      else if (path.startsWith("workshop/view") || path.startsWith("item-actions/status") || ["workshop/checks/get", "workshop/checks/list", "kiosk/theme"].includes(path.split("?")[0] ?? "")) headers["X-Workshop-Identity"] = context.value?.identity || "";
       const response = await fetch(`/workshop-api/${path}`, {
         method: data === undefined ? "GET" : "POST", credentials: "same-origin", headers,
         body: data === undefined ? undefined : JSON.stringify(data), signal: controller.signal,

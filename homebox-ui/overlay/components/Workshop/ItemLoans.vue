@@ -99,7 +99,20 @@
         </div>
         <template v-if="!compactActivity">
           <div class="space-y-3 border-t pt-4"><h3 class="font-medium">Recent activity notes</h3><p v-if="!recentNotes.length" class="text-sm text-muted-foreground">No checkout, return, or item notes recorded.</p><article v-for="(note, index) in recentNotes" :key="index" class="space-y-1 border-l-2 pl-4"><p class="text-xs uppercase text-muted-foreground">{{ note.kind === 'checkout' ? 'Checkout note' : note.kind === 'return' ? 'Return note' : 'Item note' }}</p><p class="whitespace-pre-wrap">{{ note.text }}</p><p class="text-sm text-muted-foreground">{{ noteAuthor(note) }} · {{ date(note.created_at) }}</p></article><Button v-if="!showAllActivity && props.activityMode !== 'all' && allActivityNotes.length > 5" variant="link" @click="showAllActivity = true">View all activity notes</Button><Button v-else-if="showAllActivity" variant="link" @click="showAllActivity = false">Show recent five notes</Button></div>
-          <div class="space-y-3 border-t pt-4"><h3 class="font-medium">Borrowing history</h3><p v-if="!history.length" class="text-sm text-muted-foreground">No borrowing activity yet.</p><p v-for="row in history" :key="row.id" class="text-sm"><span class="capitalize">{{ row.action }}</span> · {{ row.status }} · {{ row.actor }} · {{ date(row.created_at) }}</p></div>
+          <div class="space-y-3 border-t pt-4">
+            <h3 class="font-medium">Borrowing history</h3>
+            <p v-if="!history.length" class="text-sm text-muted-foreground">No borrowing activity yet.</p>
+            <article v-for="row in history" :key="row.id" class="rounded-md border bg-card p-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="text-sm font-medium capitalize">{{ row.action }}</p>
+                <Badge variant="outline">{{ row.status }}</Badge>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <p><span class="text-foreground">By</span> {{ row.actor || "Unknown" }}</p>
+                <p><span class="text-foreground">When</span> {{ date(row.created_at) }}</p>
+              </div>
+            </article>
+          </div>
         </template>
         <p v-if="compactActivity && latestNote" class="text-sm text-muted-foreground">Latest {{ latestNote.kind }} note · {{ date(latestNote.created_at) }} · {{ noteAuthor(latestNote) }}: {{ latestNote.text }}</p>
       </template>

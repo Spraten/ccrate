@@ -106,8 +106,9 @@ onMounted(load);
 </script>
 
 <template>
-  <section class="rounded-md border p-4 space-y-4" aria-label="Packaging, custom fields and related items">
-    <h2 class="text-base font-semibold">Packaging, custom fields and related items</h2>
+  <details class="rounded-md border p-4" :open="!!error" aria-label="Packaging, custom fields and related items">
+    <summary class="cursor-pointer text-base font-semibold">Packaging, custom fields and related items <span v-if="loading" class="ml-2 text-sm font-normal text-muted-foreground">Loading…</span></summary>
+    <div class="mt-4 space-y-4">
     <p v-if="loading" role="status" class="text-sm">Loading item metadata…</p>
     <button v-if="!ready && !loading" type="button" class="rounded border px-3 py-1 text-sm" @click="load">Retry metadata load</button>
     <div v-if="!loading" class="space-y-3">
@@ -154,5 +155,6 @@ onMounted(load);
     </div>
     <p v-if="message" role="status" class="text-sm">{{ message }}</p>
     <p v-if="error" role="alert" class="text-sm text-destructive">{{ error }}</p>
-  </section>
+    </div>
+  </details>
 </template>

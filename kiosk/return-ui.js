@@ -7,6 +7,7 @@
     receipt: null, receiptSession: null, operationSession: null, epoch: 0, preserved: false, reviewView: false
   };
   const el = (tag, text = '') => { const node = document.createElement(tag); node.textContent = text; return node; };
+  function addItemPreview(container,item){const attachment=item?.thumbnailId||item?.imageId;const preview=el('div',attachment?'':'No photo');preview.className='item-preview'+(attachment?'':' item-preview-empty');if(attachment){const image=document.createElement('img');image.src=`/api/file?entity=${encodeURIComponent(item.id)}&attachment=${encodeURIComponent(attachment)}`;image.alt=`Photo of ${item.name||'item'}`;image.loading='lazy';image.addEventListener('error',()=>{preview.replaceChildren(el('span','No photo'));preview.classList.add('item-preview-empty');},{once:true});preview.append(image);}container.append(preview);}
   const context = () => ({
     generation: window.checkoutSession?.generation ?? null,
     instance: window.checkoutSession?.instance ?? null,
@@ -52,7 +53,7 @@
     if (!allowed) { host.append(el('p', 'Scan your member badge first.')); return; }
     if (state.reviewView) {
       host.append(el('h3', 'Review return')); if (message) host.append(el('p', message));
-      for (const item of state.items) { const summary = el('article'); summary.append(el('strong', item.root.name || item.root.id)); if (item.manifest?.length) summary.append(el('p', 'Kit manifest: ' + item.manifest.join(', '))); summary.append(el('p', `Condition: ${item.condition || 'Keep recorded condition'} · Return location: ${item.availability.get(item.root.id)?.location?.name || 'Assigned location'}`)); if (item.issueNote) summary.append(el('p', `Issue note: ${item.issueNote}`)); if (item.note) summary.append(el('p', `Return note: ${item.note}`)); for (const [id,note] of Object.entries(item.componentNotes||{})) summary.append(el('p', `Component note (${id}): ${note}`)); host.append(summary); }
+      for (const item of state.items) { const summary = el('article'), details=el('div'); summary.className='item-preview-card'; details.className='item-preview-details'; addItemPreview(summary,item.root); details.append(el('strong', item.root.name || item.root.id)); if (item.manifest?.length) details.append(el('p', 'Kit manifest: ' + item.manifest.join(', '))); details.append(el('p', `Condition: ${item.condition || 'Keep recorded condition'} · Return location: ${item.availability.get(item.root.id)?.location?.name || 'Assigned location'}`)); if (item.issueNote) details.append(el('p', `Issue note: ${item.issueNote}`)); if (item.note) details.append(el('p', `Return note: ${item.note}`)); for (const [id,note] of Object.entries(item.componentNotes||{})) details.append(el('p', `Component note (${id}): ${note}`)); summary.append(details); host.append(summary); }
       if (state.uncertain) { host.append(el('p', 'Outcome uncertain. Check status; do not confirm again.')); button('Check saved result', recoverReturn); window.setKioskCancelAllowed?.('return',false); } else { if (state.sending) host.append(el('p', 'Saving return…')); else button('Back to items', () => { state.epoch++; state.reviewView = false; render(); }); const confirm = button('Confirm return', confirmReturn); confirm.disabled = state.sending; window.setKioskCancelAllowed?.('return',!state.sending&&!state.cancelled); }
       return;
     }
@@ -93,6 +94,9 @@
 
     const scan = el('input'); scan.placeholder = 'Scan item barcode'; scan.setAttribute('aria-label', 'Scan item barcode');
     const add = el('button', 'Verify scan and add'); add.type = 'button';
+    scan.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); add.click(); }
+    });
     add.addEventListener('click', async () => {
       const session = context(), epoch = state.epoch, code = scan.value.trim();
       if (!code || !valid(session)) { status.textContent = 'Scan your badge and the physical item code'; return; }
@@ -137,22 +141,23 @@
 
     let confirmButton = null;
     for (const item of state.items) {
-      const card = el('article'), available = item.availability.get(item.root.id);
-      card.append(el('strong', item.root.name || item.root.id));
-      if (item.manifest.length) card.append(el('p', 'Kit manifest: ' + item.manifest.join(', ')));
-      card.append(el('p', `Recorded condition: ${available.condition || 'Unknown'} · Return location: ${available.location?.name || 'Assigned location'}`));
+      const card = el('article'), available = item.availability.get(item.root.id), details = el('div'); card.className='item-preview-card';
+      details.className='item-preview-details'; addItemPreview(card,item.root);
+      details.append(el('strong', item.root.name || item.root.id));
+      if (item.manifest.length) details.append(el('p', 'Kit manifest: ' + item.manifest.join(', ')));
+      details.append(el('p', `Recorded condition: ${available.condition || 'Unknown'} · Return location: ${available.location?.name || 'Assigned location'}`));
       const condition = document.createElement('select');
       condition.setAttribute('aria-label', `Condition for ${item.root.name || item.root.id}`);
       condition.append(new Option('Keep recorded condition', ''), ...['Needs Attention', 'Maintenance', 'Quarantined', 'Broken'].map(value => new Option(value, value)));
       condition.value = item.condition;
       condition.addEventListener('change', () => { item.condition = condition.value; state.reviewed = false; if (confirmButton) confirmButton.disabled = true; });
-      card.append(condition);
+      details.append(condition);
       const issue = el('input'); issue.placeholder = 'Required note if condition changed'; issue.value = item.issueNote;
-      issue.addEventListener('input', () => { item.issueNote = issue.value; state.reviewed = false; if (confirmButton) confirmButton.disabled = true; }); card.append(issue);
+      issue.addEventListener('input', () => { item.issueNote = issue.value; state.reviewed = false; if (confirmButton) confirmButton.disabled = true; }); details.append(issue);
       const note = el('input'); note.placeholder = 'Optional return note'; note.value = item.note;
-      note.addEventListener('input', () => { item.note = note.value; state.reviewed = false; if (confirmButton) confirmButton.disabled = true; }); card.append(note);
+      note.addEventListener('input', () => { item.note = note.value; state.reviewed = false; if (confirmButton) confirmButton.disabled = true; }); details.append(note);
       const remove = el('button', 'Remove'); remove.type = 'button';
-      remove.addEventListener('click', () => { state.items = state.items.filter(entry => entry !== item); state.reviewed = false; render(); }); card.append(remove);
+      remove.addEventListener('click', () => { state.items = state.items.filter(entry => entry !== item); state.reviewed = false; render(); }); details.append(remove); card.append(details);
       host.append(card);
     }
     const review = button('Review return', reviewReturn);

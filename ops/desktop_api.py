@@ -34,7 +34,7 @@ from native_fields import update_payload
 PREFIX = '/workshop-api/'
 PRODUCT_GROUP_TAG_PREFIX = 'C-Crate Product group: '
 READ_POSTS = {'labels/preview', 'labels/paper', 'labels/templates/result', 'imports/get', 'operation/status', 'history/group', 'workshop/checks/resolve', 'workshop/checks/request'}
-MANAGER_READS = {'people', 'badges', 'recovery', 'system', 'hardware/status', 'imports', 'invitations', 'users/administration', 'users/profile', 'labels/templates', 'workshop/checks/list', 'workshop/checks/get'}
+MANAGER_READS = {'people', 'badges', 'recovery', 'system', 'hardware/status', 'imports', 'invitations', 'users/administration', 'users/profile', 'labels/templates', 'workshop/checks/list', 'workshop/checks/get', 'kiosk/theme'}
 SHELF_CHECK_POSTS = {'workshop/checks/resolve', 'workshop/checks/request'}
 SHELF_CHECK_WRITES = {'workshop/checks/start', 'workshop/checks/observe', 'workshop/checks/notes', 'workshop/checks/refresh', 'workshop/checks/finish', 'workshop/checks/cancel'}
 SHELF_CHECK_ROUTES = SHELF_CHECK_POSTS | SHELF_CHECK_WRITES
@@ -572,6 +572,9 @@ def get_action(route, query, ctx, deps):
         return native_op('checkout', 'checkout_availability', client, dependency(deps, 'ledger'), group, values[0].split(','))
     if route in MANAGER_READS:
         require_manager(ctx)
+    if route == 'kiosk/theme':
+        from kiosk_theme import get_theme
+        return {'theme': get_theme(dependency(deps, 'root'), group)}
     if route == 'workshop/checks/list':
         values = query.get('location_id', [None])
         limits = query.get('limit', ['100'])
@@ -1057,6 +1060,8 @@ def handle(handler, deps):
                     require_manager(ctx)
                 if route in {'workshop/view', 'item-actions/status'} or route.startswith('workshop/checks/'):
                     binding(handler, ctx)
+                if route == 'kiosk/theme':
+                    binding(handler, ctx)
                 result = get_action(route, query, ctx, deps)
         else:
             address = origin(handler, deps); data = read_body(handler)
@@ -1077,6 +1082,10 @@ def handle(handler, deps):
                     elif route in ('equipment/groups/assign', 'equipment/groups/remove'):
                         require_manager(ctx)
                         result = custom_group_change(ctx['client'], route, data)
+                    elif route == 'kiosk/theme':
+                        require_manager(ctx)
+                        from kiosk_theme import set_theme
+                        result = {'theme': set_theme(dependency(deps, 'root'), ctx['group'], data.get('theme'))}
                     else:
                         result = post_action(route, data, ctx, deps, address)
                     if route in {'condition', 'return', 'imports/create', 'workshop/move', 'locations/create', 'recovery/resolve'}:

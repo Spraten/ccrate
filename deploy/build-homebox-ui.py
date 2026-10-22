@@ -341,7 +341,7 @@ def grouped_inventory_frontend():
     """Render collection filtered inventory as cross-location product groups."""
     once = lambda old, new: replace('pages/items.vue', old, new)
     once('  import type { LocationQueryRaw } from "vue-router";',
-         '  import type { LocationQueryRaw } from "vue-router";\n  import { loadAllFilteredInventory, loadInventoryActionStatuses, loadScopedInventoryDetails, groupInventoryItems, buildInventoryStoragePath, mergeInventorySummaries, inventoryNoteRequestKey, createInventoryNoteVersionGuard } from "@/lib/child-item-groups.js";\n  import { recentItemNotes } from "@/lib/item-activity-notes.js";')
+         '  import type { LocationQueryRaw } from "vue-router";\n  import InventoryGroups from "@/components/InventoryGroups.vue";\n  import { loadAllFilteredInventory, loadInventoryActionStatuses, loadScopedInventoryDetails, groupInventoryItems, buildInventoryStoragePath, mergeInventorySummaries, inventoryNoteRequestKey, createInventoryNoteVersionGuard } from "@/lib/child-item-groups.js";\n  import { recentItemNotes } from "@/lib/item-activity-notes.js";')
     once('  const items = ref<EntitySummary[]>([]);\n  const total = ref(0);',
          '  const items = ref<EntitySummary[]>([]);\n  const inventoryGroups = ref<any[]>([]);\n  const broadSearchMode = ref(false);\n  const broadSearchAvailable = ref(false);\n  const nativeManagePage = ref(1);\n  const nativeTotal = ref(0);\n  const nativeManageItems = computed(() => items.value.slice((nativeManagePage.value - 1) * pageSize.value, nativeManagePage.value * pageSize.value));\n  const total = ref(0);')
     once('  const nativeManagePage = ref(1);', '  const recentInventoryNotes = ref<Record<string, any>>({});\n  const noteLoadingGroups = ref(new Set<string>());\n  const noteLoadedGroups = ref(new Set<string>());\n  const noteRequestVersions = createInventoryNoteVersionGuard();\n  const noteLoadVersions = new Map<string, number>();\n  let inventoryNotesIdentity = "";\n  const nativeManagePage = ref(1);')
@@ -565,11 +565,16 @@ def grouped_inventory_frontend():
         <p class="mb-3 text-sm text-muted-foreground">Include C-Crate IDs and custom fields within the selected filters.</p>
         <Button variant="outline" @click="searchIDsAndCustomFields">Include ID and custom field matches</Button>
       </div>
-      <InventoryGroups :groups="inventoryGroups" :page="page" :page-size="pageSize" :selected-id="typeof route.query.selected === 'string' ? route.query.selected : ''" :recent-notes="recentInventoryNotes" :note-loading-keys="[...noteLoadingGroups]" :note-loaded-keys="[...noteLoadedGroups]" @load-notes="loadInventoryNotes" @refresh-items="search" @update:page="(value: number) => { page = value; }" />
+      <InventoryGroups :groups="inventoryGroups" :page="page" :page-size="pageSize" :selected-id="typeof route.query.selected === 'string' ? route.query.selected : ''" :recent-notes="recentInventoryNotes" :note-loading-keys="[...noteLoadingGroups]" :note-loaded-keys="[...noteLoadedGroups]" :native-count="nativeTotal" @load-notes="loadInventoryNotes" @refresh-items="search" @update:page="(value: number) => { page = value; }" />
       <details v-if="items.length" class="mt-4 rounded-lg border p-3">
         <summary class="cursor-pointer font-medium">Manage matching native items</summary>
         <ItemViewSelectable :items="nativeManageItems" :location-flat-tree="locationFlatTree" :pagination="nativePagination" disable-sort @refresh="async () => search()" />
       </details>''')
+
+
+def compact_empty_fields_frontend():
+    """Default entity details to hiding empty rows while preserving user control."""
+    replace('composables/use-preferences.ts', '  showEmpty: true,', '  showEmpty: false,')
 
 
 def item_action_surfaces_frontend():
@@ -748,6 +753,22 @@ def nest_frontend():
     replace('pages/locations.vue','@click="openAll"','@click="openAll" :aria-label="$t(\'locations.expand_tree\')"')
     replace('pages/locations.vue','@click="closeAll"','@click="closeAll" :aria-label="$t(\'locations.collapse_tree\')"')
     replace('pages/locations.vue','@click="showItems = !showItems"','@click="showItems = !showItems" :aria-label="showItems ? $t(\'locations.hide_items\') : $t(\'locations.show_items\')"')
+    replace('pages/locations.vue','''<Button size="icon" variant="outline" data-pos="start" @click="openAll" :aria-label="$t('locations.expand_tree')">
+                  <MdiExpandAllOutline />
+                </Button>''','''<Button size="sm" variant="outline" data-pos="start" @click="openAll" :aria-label="$t('locations.expand_tree')">
+                  <MdiExpandAllOutline /><span>Expand all</span>
+                </Button>''')
+    replace('pages/locations.vue','''<Button size="icon" variant="outline" data-pos="middle" @click="closeAll" :aria-label="$t('locations.collapse_tree')">
+                  <MdiCollapseAllOutline />
+                </Button>''','''<Button size="sm" variant="outline" data-pos="middle" @click="closeAll" :aria-label="$t('locations.collapse_tree')">
+                  <MdiCollapseAllOutline /><span>Collapse all</span>
+                </Button>''')
+    replace('pages/locations.vue','''                  size="icon"
+                  :variant="showItems ? 'default' : 'outline'"''','''                  size="sm"
+                  :variant="showItems ? 'default' : 'outline'"''')
+    replace('pages/locations.vue','''                  <MdiPackageVariant />
+                </Button>''','''                  <MdiPackageVariant /><span>{{ showItems ? 'Hide items' : 'Show items' }}</span>
+                </Button>''')
     # Mixed ancestors link to their actual native item/location pages.
     path='pages/location/[id]/index/index.vue'
     target=BUILD/path; text=target.read_text()
@@ -1969,6 +1990,8 @@ def prepare():
                     ignore=shutil.ignore_patterns('node_modules', '.nuxt', '.output'))
     strip_item_response_short_codes_from_update_tests()
     shutil.copytree(ROOT/'homebox-ui/overlay', BUILD, dirs_exist_ok=True)
+    replace('pages/profile.vue', '  import ThemePicker from "~/components/App/ThemePicker.vue";', '  import ThemePicker from "~/components/App/ThemePicker.vue";\n  import KioskThemePicker from "~/components/Workshop/KioskThemePicker.vue";')
+    replace('pages/profile.vue', '          <ThemePicker />', '          <ThemePicker />\n          <KioskThemePicker />')
     camera_ocr_frontend()
     shutil.copy2(ROOT/'kiosk/member-avatar.js', BUILD/'lib/member-avatar.js')
     shutil.copy2(ROOT/'kiosk/label-editor.js', BUILD/'lib/label-editor.js')
@@ -2108,6 +2131,7 @@ def prepare():
     create_item_actions_frontend()
     equipment_assigned_ids_frontend()
     grouped_inventory_frontend()
+    compact_empty_fields_frontend()
     item_action_surfaces_frontend()
     item_metadata_detail_frontend()
     brand_frontend()

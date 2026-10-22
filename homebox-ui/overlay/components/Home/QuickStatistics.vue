@@ -162,13 +162,25 @@
                   </div>
                 </div>
                 <ul class="w-full min-w-0 space-y-2 text-sm" :aria-label="`${chart.title} counts`">
-                  <li v-for="row in chart.rows" :key="row.key" class="flex min-w-0 items-start gap-2">
+                  <li v-for="row in chart.rows.filter(category => category.count > 0)" :key="row.key" class="flex min-w-0 items-start gap-2">
                     <span aria-hidden="true" class="mt-1 size-2.5 shrink-0 rounded-full" :class="`stat-swatch-${row.tone}`" />
                     <span class="min-w-0 flex-1 break-words">{{ row.label }}</span>
                     <span class="shrink-0 tabular-nums">{{ number(row.count) }} <span class="text-muted-foreground">({{ percentage(row.percent) }})</span></span>
                   </li>
                 </ul>
               </div>
+              <details v-if="chart.rows.some(category => category.count === 0)" class="mt-3 border-t pt-2 text-sm text-muted-foreground">
+                <summary class="min-h-11 cursor-pointer py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2">
+                  Show {{ chart.rows.filter(category => category.count === 0).length }} categories with no items
+                </summary>
+                <ul class="space-y-2 pb-2 pl-5">
+                  <li v-for="row in chart.rows.filter(category => category.count === 0)" :key="row.key" class="flex min-w-0 items-start gap-2">
+                    <span aria-hidden="true" class="mt-1 size-2.5 shrink-0 rounded-full" :class="`stat-swatch-${row.tone}`" />
+                    <span class="min-w-0 flex-1 break-words">{{ row.label }}</span>
+                    <span class="shrink-0 tabular-nums">{{ number(row.count) }} <span class="text-muted-foreground">({{ percentage(row.percent) }})</span></span>
+                  </li>
+                </ul>
+              </details>
             </div>
           </BaseCard>
         </div>

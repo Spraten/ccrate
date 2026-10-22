@@ -50,9 +50,10 @@ const designerOpen = ref(false);
 const designerRef = ref<InstanceType<typeof LabelDesigner> | null>(null);
 const selectionNotice = ref("");
 watch(() => props.workspace, value => { if (!value) designerOpen.value = false; });
-const items = computed(() => (props.workspace?.items || []).filter(item =>
+const matchingItems = computed(() => (props.workspace?.items || []).filter(item =>
   `${item.name} ${item.assetId || ""} ${item.displayId || ""} ${item.shortCode || ""}`.toLowerCase().includes(search.value.toLowerCase()),
-).slice(0, 100));
+));
+const items = computed(() => matchingItems.value.slice(0, 100));
 const selected = (id: string) => props.workspace?.selectedIds.includes(id) || false;
 const selectedEquipment = computed(() => {
   const workspace = props.workspace;
@@ -119,7 +120,7 @@ function designerClosed() {
       <div class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,.9fr)]">
         <section class="rounded-lg border bg-card p-4 text-card-foreground">
           <div class="mb-3 flex items-center justify-between gap-3">
-            <div><h2 class="text-lg font-semibold">Equipment</h2><p class="text-sm text-muted-foreground">{{ workspace.selectedIds.length }} selected in this collection</p></div>
+            <div><h2 class="text-lg font-semibold">Equipment</h2><p class="text-sm text-muted-foreground">{{ workspace.selectedIds.length }} selected · {{ matchingItems.length }} match{{ matchingItems.length === 1 ? '' : 'es' }}</p></div>
             <Button variant="outline" :disabled="workspace.selectedIds.length === 0" @click="workspace.actions.select([])">Clear selection</Button>
           </div>
           <p v-if="selectionNotice || workspace.selectedIds.length >= REVIEW_LIMIT" class="mb-2 text-sm text-muted-foreground" role="status">{{ selectionNotice || `Batch limit: ${REVIEW_LIMIT} items per preview.` }}</p>
@@ -130,7 +131,11 @@ function designerClosed() {
               <input class="h-4 w-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50" type="checkbox" :checked="selected(item.id)" :disabled="!selected(item.id) && workspace.selectedIds.length >= REVIEW_LIMIT" @change="toggleItem(item.id, ($event.target as HTMLInputElement).checked)" />
               <span class="min-w-0"><span class="block truncate font-medium">{{ item.name }}</span><span class="text-xs text-muted-foreground">{{ item.assetId || 'No asset code' }}<span v-if="item.shortCode"> · Short code {{ item.shortCode }}</span></span><span v-if="item.displayId" class="block truncate text-xs text-muted-foreground">Generated ID · {{ item.displayId }}</span></span>
             </label>
-            <p v-if="!items.length" class="p-3 text-sm text-muted-foreground">No current equipment matches.</p>
+            <div v-if="!items.length" class="p-3 text-sm text-muted-foreground">
+              <p>{{ search.trim() ? `No equipment matches “${search.trim()}”.` : 'No equipment is available in this collection for labels.' }}</p>
+              <Button v-if="search.trim()" variant="link" size="sm" class="mt-1 h-auto px-0" @click="search = ''">Clear search</Button>
+            </div>
+            <p v-else-if="matchingItems.length > items.length" class="px-3 py-2 text-xs text-muted-foreground" role="status">Showing the first 100 matches. Refine your search to find more.</p>
           </div>
         </section>
 
