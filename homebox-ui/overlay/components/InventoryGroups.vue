@@ -15,16 +15,18 @@ const selectedId = computed(() => props.selectedId || (typeof route.query.select
 const selected = computed(() => props.groups.flatMap(group => group.items).find(item => item.id === selectedId.value));
 const selectedGroup = computed(() => props.groups.find(group => group.items.some(item => item.id === selectedId.value)));
 const isMobileDetail = ref(false);
+const selectedHeading = ref<HTMLElement | null>(null);
+const rowRefs = new Map<string, HTMLElement>();
+function setRowRef(id: string, element: Element | null) { if (element instanceof HTMLElement) rowRefs.set(id, element); else rowRefs.delete(id); }
 watch(selectedId, id => { isMobileDetail.value = !!id; }, { immediate: true });
-watch(selectedId, id => {
+watch([selectedId, () => props.groups, () => props.pageSize], ([id]) => {
   if (!id) return;
   const index = props.groups.findIndex(group => group.items.some(item => item.id === id));
-  if (index >= 0) {
-    const targetPage = Math.floor(index / Math.max(1, props.pageSize)) + 1;
-    if (targetPage !== props.page) emit('update:page', targetPage);
-    const group = props.groups[index]!;
-    if (!expanded.value.has(group.key)) { expanded.value = new Set(expanded.value).add(group.key); emit('load-notes', { key: group.key, entityIds: group.items.map(item => item.id) }); }
-  }
+  if (index < 0) return;
+  const targetPage = Math.floor(index / Math.max(1, props.pageSize)) + 1;
+  if (targetPage !== props.page) emit('update:page', targetPage);
+  const group = props.groups[index]!;
+  if (!expanded.value.has(group.key)) { expanded.value = new Set(expanded.value).add(group.key); emit('load-notes', { key: group.key, entityIds: group.items.map(item => item.id) }); }
 }, { immediate: true });
 watch([() => props.groups.length, () => props.pageSize], () => {
   const lastPage = Math.max(1, Math.ceil(props.groups.length / Math.max(1, props.pageSize)));
@@ -52,12 +54,23 @@ watch(itemActions.changed, async result => {
   emit('refresh-items');
 });
 function photoUrl(photo: Unit['thumbnail']) { return photo ? api.authURL(`/entities/${encodeURIComponent(photo.entity_id)}/attachments/${encodeURIComponent(photo.attachment_id)}`) : ''; }
-function selectUnit(unit: Unit) {
+async function selectUnit(unit: Unit) {
   router.push({ query: { ...route.query, selected: unit.id } });
+  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+    await nextTick();
+    selectedHeading.value?.focus();
+  }
   const group = props.groups.find(row => row.items.some(item => item.id === unit.id));
   if (group && !expanded.value.has(group.key)) { expanded.value = new Set(expanded.value).add(group.key); emit('load-notes', { key: group.key, entityIds: group.items.map(item => item.id) }); }
 }
-function backToResults() { isMobileDetail.value = false; const query = { ...route.query }; delete query.selected; router.push({ query }); }
+async function backToResults() {
+  isMobileDetail.value = false;
+  const id = selectedId.value;
+  const query = { ...route.query }; delete query.selected;
+  await router.push({ query });
+  await nextTick();
+  if (id) rowRefs.get(id)?.focus();
+}
 </script>
 
 <template>
@@ -73,7 +86,7 @@ function backToResults() { isMobileDetail.value = false; const query = { ...rout
         <div v-if="expanded.has(group.key)" class="divide-y border-t">
           <div v-for="unit in group.items" :key="unit.id" class="flex flex-wrap items-center gap-3 p-3" :class="selectedId === unit.id ? 'bg-accent text-accent-foreground' : ''">
             <img v-if="unit.thumbnail" :src="photoUrl(unit.thumbnail)" alt="" class="size-10 rounded object-cover" />
-            <div class="min-w-0 flex-1"><button class="block max-w-full truncate text-left font-semibold underline-offset-4 hover:underline focus-visible:underline" :aria-current="selectedId === unit.id ? 'true' : undefined" @click="selectUnit(unit)">{{ unit.name || 'Unnamed item' }}</button><span class="block text-sm text-muted-foreground">{{ unit.displayId || 'No assigned ID' }} · {{ statusLabel(unitStatus(unit)) }}</span><span class="block truncate text-xs text-muted-foreground">{{ unit.storagePath || 'Location unknown' }} · Serial {{ unit.serialNumber || 'unknown' }} · {{ Number(unit.quantity) || 0 }} native quantity</span><span class="block truncate text-xs text-muted-foreground">Recent note: {{ recentNotes?.[unit.id]?.text || (noteLoadingKeys?.includes(unitNoteKey(group, unit)) || noteLoadingKeys?.includes(noteKey(group)) ? 'Loading…' : noteLoadedKeys?.includes(unitNoteKey(group, unit)) || noteLoadedKeys?.includes(noteKey(group)) ? 'No recent activity note' : 'Not loaded') }}</span></div>
+            <div class="min-w-0 flex-1"><button class="block max-w-full truncate text-left font-semibold underline-offset-4 hover:underline focus-visible:underline" :aria-current="selectedId === unit.id ? 'true' : undefined" :ref="element => setRowRef(unit.id, element as Element | null)" @click="selectUnit(unit)">{{ unit.name || 'Unnamed item' }}</button><span class="block text-sm text-muted-foreground">{{ unit.displayId || 'No assigned ID' }} · {{ statusLabel(unitStatus(unit)) }}</span><span class="block truncate text-xs text-muted-foreground">{{ unit.storagePath || 'Location unknown' }} · Serial {{ unit.serialNumber || 'unknown' }} · {{ Number(unit.quantity) || 0 }} native quantity</span><span class="block truncate text-xs text-muted-foreground">Recent note: {{ recentNotes?.[unit.id]?.text || (noteLoadingKeys?.includes(unitNoteKey(group, unit)) || noteLoadingKeys?.includes(noteKey(group)) ? 'Loading…' : noteLoadedKeys?.includes(unitNoteKey(group, unit)) || noteLoadedKeys?.includes(noteKey(group)) ? 'No recent activity note' : 'Not loaded') }}</span></div>
             <InventoryUnitActionLinks :item-id="unit.id" />
           </div>
         </div>
@@ -88,7 +101,7 @@ function backToResults() { isMobileDetail.value = false; const query = { ...rout
         <div class="flex flex-wrap items-start gap-4">
           <img v-if="selected.thumbnail" :src="photoUrl(selected.thumbnail)" alt="" class="size-24 rounded object-cover" />
           <div v-else class="flex size-24 items-center justify-center rounded bg-muted text-sm text-muted-foreground">No photo</div>
-          <div class="min-w-0 flex-1"><p class="text-sm text-muted-foreground">{{ selected.displayId || selected.id }} · {{ statusLabel(unitStatus(selected)) }}</p><h2 class="mt-1 text-xl font-semibold">{{ selected.name || 'Unnamed item' }}</h2><p class="mt-1 text-sm text-muted-foreground">{{ selected.storagePath || selectedGroup?.locationSummary || 'Location unknown' }}</p></div>
+          <div class="min-w-0 flex-1"><p class="text-sm text-muted-foreground">{{ selected.displayId || selected.id }} · {{ statusLabel(unitStatus(selected)) }}</p><h2 ref="selectedHeading" tabindex="-1" class="mt-1 text-xl font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">{{ selected.name || 'Unnamed item' }}</h2><p class="mt-1 text-sm text-muted-foreground">{{ selected.storagePath || selectedGroup?.locationSummary || 'Location unknown' }}</p></div>
         </div>
         <dl class="mt-5 grid grid-cols-2 gap-4 border-t pt-4 text-sm"><div><dt class="text-muted-foreground">Quantity</dt><dd class="font-medium">{{ Number(selected.quantity) || 0 }}</dd></div><div><dt class="text-muted-foreground">Serial number</dt><dd class="font-medium">{{ selected.serialNumber || 'Not set' }}</dd></div><div><dt class="text-muted-foreground">Group</dt><dd class="font-medium">{{ selectedGroup?.name || '—' }}</dd></div><div><dt class="text-muted-foreground">Recent note</dt><dd class="font-medium">{{ recentNotes?.[selected.id]?.text || (noteLoadedKeys?.some(key => key.includes(selected.id)) ? 'No recent activity note' : 'Not loaded') }}</dd></div></dl>
         <div class="mt-5 flex flex-wrap gap-2"><NuxtLink class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-primary-foreground" :to="`/item/${encodeURIComponent(selected.id)}`">Open full details</NuxtLink></div>

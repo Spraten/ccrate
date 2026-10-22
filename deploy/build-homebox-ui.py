@@ -450,6 +450,7 @@ def grouped_inventory_frontend():
       data = { items: allItems, total: allItems.length };
     } catch (loadError) { error = loadError; }'''
     once(old, new)
+    once("      fields: fields,\n    };", '      fields: fields,\n      selected: typeof route.query.selected === "string" ? route.query.selected : undefined,\n    };')
     once('''    if (error) {
       resetItems();
       toast.error(t("items.toast.failed_search_items"));
