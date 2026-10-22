@@ -343,7 +343,7 @@ def grouped_inventory_frontend():
     once('  import type { LocationQueryRaw } from "vue-router";',
          '  import type { LocationQueryRaw } from "vue-router";\n  import { loadAllFilteredInventory, loadInventoryActionStatuses, loadScopedInventoryDetails, groupInventoryItems, buildInventoryStoragePath, mergeInventorySummaries, inventoryNoteRequestKey, createInventoryNoteVersionGuard } from "@/lib/child-item-groups.js";\n  import { recentItemNotes } from "@/lib/item-activity-notes.js";')
     once('  const items = ref<EntitySummary[]>([]);\n  const total = ref(0);',
-         '  const items = ref<EntitySummary[]>([]);\n  const inventoryGroups = ref<any[]>([]);\n  const broadSearchMode = ref(false);\n  const broadSearchAvailable = ref(false);\n  const nativeSearchMatches = ref<string[]>([]);\n  const nativeManagePage = ref(1);\n  const nativeTotal = ref(0);\n  const nativeManageItems = computed(() => items.value.slice((nativeManagePage.value - 1) * pageSize.value, nativeManagePage.value * pageSize.value));\n  const total = ref(0);')
+         '  const items = ref<EntitySummary[]>([]);\n  const inventoryGroups = ref<any[]>([]);\n  const broadSearchMode = ref(false);\n  const broadSearchAvailable = ref(false);\n  const nativeManagePage = ref(1);\n  const nativeTotal = ref(0);\n  const nativeManageItems = computed(() => items.value.slice((nativeManagePage.value - 1) * pageSize.value, nativeManagePage.value * pageSize.value));\n  const total = ref(0);')
     once('  const nativeManagePage = ref(1);', '  const recentInventoryNotes = ref<Record<string, any>>({});\n  const noteLoadingGroups = ref(new Set<string>());\n  const noteLoadedGroups = ref(new Set<string>());\n  const noteRequestVersions = createInventoryNoteVersionGuard();\n  const noteLoadVersions = new Map<string, number>();\n  let inventoryNotesIdentity = "";\n  const nativeManagePage = ref(1);')
     once('''    const searchedQuery = query.value;
 
@@ -356,7 +356,6 @@ def grouped_inventory_frontend():
       noteLoadedGroups.value = new Set();
       broadSearchMode.value = false;
       broadSearchAvailable.value = false;
-      nativeSearchMatches.value = [];
     }
     const broadSearch = broadSearchMode.value && !!searchedQuery.trim();
 
@@ -426,7 +425,7 @@ def grouped_inventory_frontend():
       fields,
     });'''
     new = '''    const nativeOptions = {
-      q: broadSearch ? "" : searchedQuery.trim() ? searchedQuery : "",
+      q: searchedQuery.trim() ? searchedQuery : "",
       parentIds: locIDs.value,
       tags: tagIDs.value,
       negateTags: negateTags.value,
@@ -439,12 +438,15 @@ def grouped_inventory_frontend():
     };
     let data: any = null;
     let error: any = null;
+    let nativeMatchedIds: string[] = [];
     try {
-      const filteredItems = await loadAllFilteredInventory(async (nativePage: number, nativePageSize: number) => {
-        const response = await api.items.getAll({ ...nativeOptions, page: nativePage, pageSize: nativePageSize });
+      const loadNative = (nativeQuery: string) => loadAllFilteredInventory(async (nativePage: number, nativePageSize: number) => {
+        const response = await api.items.getAll({ ...nativeOptions, q: nativeQuery, page: nativePage, pageSize: nativePageSize });
         if (response.error) throw response.error;
         return response.data;
       }, { pageSize: pageSize.value, isCurrent: () => revision === searchRevision && searchedQuery === query.value });
+      if (broadSearch) nativeMatchedIds = (await loadNative(searchedQuery)).map((item: any) => item.id);
+      const filteredItems = await loadNative(broadSearch ? "" : nativeOptions.q);
       data = { items: filteredItems, total: filteredItems.length };
     } catch (loadError) { error = loadError; }'''
     once(old, new)
@@ -453,7 +455,6 @@ def grouped_inventory_frontend():
     }
 
     let assignmentMap = {};''', '''      resetItems();
-      if (!broadSearch) nativeSearchMatches.value = [];
       broadSearchAvailable.value = !broadSearch && !!searchedQuery.trim();
       return;
     }
@@ -511,7 +512,7 @@ def grouped_inventory_frontend():
     if (revision !== searchRevision || searchedQuery !== query.value) return;
     const enriched = mergeInventorySummaries(data.items, equipmentRows);
     const projected = projectAssignedDisplayIds(enriched, assignmentMap);
-    const matchingEntityIds = new Set<string>(broadSearch ? nativeSearchMatches.value : data.items.map((item: any) => item.id));
+    const matchingEntityIds = new Set<string>(broadSearch ? nativeMatchedIds : data.items.map((item: any) => item.id));
     const normalizedQuery = searchedQuery.trim().toLocaleLowerCase();
     if (normalizedQuery) for (const item of projected) {
       if (String(item.displayId || "").toLocaleLowerCase().includes(normalizedQuery)) matchingEntityIds.add(item.id);
@@ -529,19 +530,17 @@ def grouped_inventory_frontend():
     } catch { /* Native item photos remain primary; missing templates are optional. */ }
     if (revision !== searchRevision || searchedQuery !== query.value) return;
     inventoryGroups.value = groupInventoryItems(projected, assignmentMap, { query: searchedQuery, matchedEntityIds: [...matchingEntityIds], statuses, storagePath, templateThumbnails, recentNotes: recentInventoryNotes.value });
-    if (!broadSearch) nativeSearchMatches.value = data.items.map((item: any) => item.id);
     broadSearchAvailable.value = !broadSearch && !!searchedQuery.trim();
     page.value = Math.min(page.value, Math.max(1, Math.ceil(inventoryGroups.value.length / pageSize.value)));
     total.value = inventoryGroups.value.length;
     items.value = data.items;'''
     once(old_project, new_project)
-    once('''  watchDebounced([page, pageSize, query, selectedTags, selectedLocations], search, { debounce: 250, maxWait: 1000 });''', '''  watch([query, selectedTags, selectedLocations, includeArchived, fieldSelector, negateTags, onlyWithoutPhoto, onlyWithPhoto, orderBy, fieldTuples], () => {
+    once('''  watchDebounced([page, pageSize, query, selectedTags, selectedLocations], search, { debounce: 250, maxWait: 1000 });''', '''  watch([query, selectedTags, selectedLocations, includeArchived, negateTags, onlyWithoutPhoto, onlyWithPhoto, orderBy, fieldTuples], () => {
     broadSearchMode.value = false;
     broadSearchAvailable.value = false;
-    nativeSearchMatches.value = [];
     searchRevision++;
   }, { deep: true, flush: "sync" });
-  watchDebounced([page, pageSize, query, selectedTags, selectedLocations], search, { debounce: 250, maxWait: 1000 });''')
+  watchDebounced([page, pageSize, query, selectedTags, selectedLocations, fieldTuples], search, { deep: true, debounce: 250, maxWait: 1000 });''')
     once('''  const nativePagination = proxyRefs({''', '''  async function searchIDsAndCustomFields() {
     broadSearchMode.value = true;
     await search();
