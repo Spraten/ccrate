@@ -158,6 +158,7 @@ function designerClosed() {
           <p v-if="selectedTemplate?.profile === 'letter'" class="mt-3 text-sm text-muted-foreground">Letter sheets follow the selected design’s physical label size. Print at Actual Size / 100%.</p>
           <p v-else class="mt-3 text-sm text-muted-foreground">Preview labels here, then print each one from its card.</p>
           <Button class="mt-4 w-full" :disabled="!canReview" @click="workspace.actions.review()">Preview selected labels</Button>
+          <p class="mt-2 text-sm text-muted-foreground" role="status">{{ workspace.selectedIds.length ? 'Preview the selected equipment before printing.' : 'Select equipment to enable preview.' }}</p>
         </section>
       </div>
 
@@ -166,10 +167,9 @@ function designerClosed() {
         <LabelDesigner ref="designerRef" :selected-item="selectedEquipment" @ready="designerReady" @closed="designerClosed" @dirty="workspace.actions.designerDirty" @saved="workspace.actions.designerSaved" @busy="workspace.actions.designerBusy" />
       </section>
 
-      <section v-if="!designerOpen" class="rounded-lg border bg-card p-4 text-card-foreground">
+      <section v-if="!designerOpen && workspace.reviews.length" class="rounded-lg border bg-card p-4 text-card-foreground">
         <h2 class="text-lg font-semibold">Preview and print</h2>
-        <p v-if="!workspace.reviews.length" class="text-sm text-muted-foreground">Preview selected items to see their current values before printing.</p>
-        <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <article v-for="row in workspace.reviews" :key="row.review_id" class="rounded-md border p-3">
             <img :src="row.image" :alt="'Label preview for ' + (workspace.items.find(item => item.id === row.entity_id)?.name || 'equipment')" class="mx-auto max-h-56 max-w-full bg-white object-contain" />
             <p class="truncate text-sm font-medium">{{ workspace.items.find(item => item.id === row.entity_id)?.name || row.entity_id }}</p>
@@ -178,7 +178,7 @@ function designerClosed() {
         </div>
       </section>
 
-      <section v-if="!designerOpen && (selectedTemplate?.profile === 'letter' || workspace.pages.length || workspace.reviews.some(row => row.profile === 'letter'))" class="rounded-lg border bg-card p-4 text-card-foreground">
+      <section v-if="!designerOpen && (workspace.pages.length || workspace.reviews.some(row => row.profile === 'letter'))" class="rounded-lg border bg-card p-4 text-card-foreground">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div><h2 class="text-lg font-semibold">Letter sheet</h2><p class="text-sm text-muted-foreground">Arrange the current Letter label previews on a sheet.</p></div>
           <div class="flex flex-wrap gap-2">
