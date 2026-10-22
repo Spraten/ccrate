@@ -18,11 +18,14 @@ const isMobileDetail = ref(false);
 const selectedHeading = ref<HTMLElement | null>(null);
 const rowRefs = new Map<string, HTMLElement>();
 function setRowRef(id: string, element: Element | null) { if (element instanceof HTMLElement) rowRefs.set(id, element); else rowRefs.delete(id); }
+let reconciledSelectionId = '';
 watch(selectedId, id => { isMobileDetail.value = !!id; }, { immediate: true });
 watch([selectedId, () => props.groups, () => props.pageSize], ([id]) => {
-  if (!id) return;
+  if (!id) { reconciledSelectionId = ''; return; }
+  if (id === reconciledSelectionId) return;
   const index = props.groups.findIndex(group => group.items.some(item => item.id === id));
   if (index < 0) return;
+  reconciledSelectionId = id;
   const targetPage = Math.floor(index / Math.max(1, props.pageSize)) + 1;
   if (targetPage !== props.page) emit('update:page', targetPage);
   const group = props.groups[index]!;
@@ -55,7 +58,7 @@ watch(itemActions.changed, async result => {
 });
 function photoUrl(photo: Unit['thumbnail']) { return photo ? api.authURL(`/entities/${encodeURIComponent(photo.entity_id)}/attachments/${encodeURIComponent(photo.attachment_id)}`) : ''; }
 async function selectUnit(unit: Unit) {
-  router.push({ query: { ...route.query, selected: unit.id } });
+  await router.push({ query: { ...route.query, selected: unit.id } });
   if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
     await nextTick();
     selectedHeading.value?.focus();
