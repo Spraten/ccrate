@@ -208,6 +208,35 @@ export function mergeInventorySummaries(summaries = [], fullRecords = []) {
   });
 }
 
+/** Fetch matching native records and only the ancestors needed for storage paths. */
+export async function loadScopedInventoryDetails(summaries, fetchDetail, options = {}) {
+  const isCurrent = typeof options.isCurrent === 'function' ? options.isCurrent : () => true;
+  const concurrency = Math.max(1, Math.min(4, Math.floor(Number(options.concurrency) || 4)));
+  const records = new Map();
+  const attempted = new Set();
+  let pending = [...new Set((summaries || []).map(item => item?.id).filter(Boolean))];
+  while (pending.length) {
+    if (!isCurrent()) throw new Error('Inventory detail load is stale');
+    const batch = pending.filter(id => !attempted.has(id));
+    batch.forEach(id => attempted.add(id));
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(concurrency, batch.length) }, async () => {
+      while (next < batch.length) {
+        if (!isCurrent()) return;
+        const id = batch[next++];
+        try {
+          const detail = await fetchDetail(id);
+          if (detail?.id === id) records.set(id, detail);
+        } catch { /* Keep the native summary when optional detail is unavailable. */ }
+      }
+    }));
+    if (!isCurrent()) throw new Error('Inventory detail load is stale');
+    pending = [...new Set([...(summaries || []), ...records.values()]
+      .map(item => item.parent?.id || item.parentId).filter(id => id && !attempted.has(id)))];
+  }
+  return [...records.values()];
+}
+
 export function inventoryNoteRequestKey(groupKey, entityIds = []) {
   return JSON.stringify([groupKey, [...new Set(entityIds)].sort()]);
 }

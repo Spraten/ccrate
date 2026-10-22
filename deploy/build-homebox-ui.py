@@ -341,7 +341,7 @@ def grouped_inventory_frontend():
     """Render collection filtered inventory as cross-location product groups."""
     once = lambda old, new: replace('pages/items.vue', old, new)
     once('  import type { LocationQueryRaw } from "vue-router";',
-         '  import type { LocationQueryRaw } from "vue-router";\n  import { loadAllFilteredInventory, loadInventoryActionStatuses, groupInventoryItems, buildInventoryStoragePath, mergeInventorySummaries, inventoryNoteRequestKey, createInventoryNoteVersionGuard } from "@/lib/child-item-groups.js";\n  import { recentItemNotes } from "@/lib/item-activity-notes.js";')
+         '  import type { LocationQueryRaw } from "vue-router";\n  import { loadAllFilteredInventory, loadInventoryActionStatuses, loadScopedInventoryDetails, groupInventoryItems, buildInventoryStoragePath, mergeInventorySummaries, inventoryNoteRequestKey, createInventoryNoteVersionGuard } from "@/lib/child-item-groups.js";\n  import { recentItemNotes } from "@/lib/item-activity-notes.js";')
     once('  const items = ref<EntitySummary[]>([]);\n  const total = ref(0);',
          '  const items = ref<EntitySummary[]>([]);\n  const inventoryGroups = ref<any[]>([]);\n  const nativeManagePage = ref(1);\n  const nativeTotal = ref(0);\n  const nativeManageItems = computed(() => items.value.slice((nativeManagePage.value - 1) * pageSize.value, nativeManagePage.value * pageSize.value));\n  const total = ref(0);')
     once('  const inventoryGroups = ref<any[]>([]);\n  const nativeManagePage = ref(1);', '  const inventoryGroups = ref<any[]>([]);\n  const recentInventoryNotes = ref<Record<string, any>>({});\n  const noteLoadingGroups = ref(new Set<string>());\n  const noteLoadedGroups = ref(new Set<string>());\n  const noteRequestVersions = createInventoryNoteVersionGuard();\n  const noteLoadVersions = new Map<string, number>();\n  let inventoryNotesIdentity = "";\n  const nativeManagePage = ref(1);')
@@ -475,13 +475,20 @@ def grouped_inventory_frontend():
       );
     } catch { /* Native rows remain visible with their native IDs. */ }
     try {
-      const [fullRows, locations] = await Promise.all([equipmentWorkshop.request<any[]>("equipment"), equipmentWorkshop.request<any[]>("locations")]);
-      equipmentRows = fullRows || [];
-      locationRows = locations || [];
-    } catch { /* Missing authoritative status stays unknown. */ }
+      if (searchedQuery.trim()) {
+        equipmentRows = await loadScopedInventoryDetails(data.items, async (id: string) => {
+          const detail = await equipmentWorkshop.request<any>(`entity?id=${encodeURIComponent(id)}`);
+          return detail?.entity;
+        }, { isCurrent: () => revision === searchRevision && searchedQuery === query.value && currentIdentity === (equipmentWorkshop.context.value?.identity || "") });
+      } else {
+        const [fullRows, locations] = await Promise.all([equipmentWorkshop.request<any[]>("equipment"), equipmentWorkshop.request<any[]>("locations")]);
+        equipmentRows = fullRows || [];
+        locationRows = locations || [];
+      }
+    } catch { /* Native summaries remain visible when optional detail is unavailable. */ }
     if (revision !== searchRevision || searchedQuery !== query.value) return;
     try {
-      statuses = await loadInventoryActionStatuses(equipmentRows.map((row: any) => row.id), (ids: string[]) =>
+      statuses = await loadInventoryActionStatuses(data.items.map((row: any) => row.id), (ids: string[]) =>
         equipmentWorkshop.request(`item-actions/status?ids=${encodeURIComponent(ids.join(","))}`),
         { isCurrent: () => revision === searchRevision && searchedQuery === query.value && currentIdentity === (equipmentWorkshop.context.value?.identity || "") }
       );
