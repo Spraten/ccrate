@@ -1439,18 +1439,48 @@ def create_item_layout_frontend():
     """Group optional create fields while keeping identity and photo controls in view."""
     path = BUILD/'components/Entity/CreateModal.vue'
     text = path.read_text()
-    if '<summary>More details</summary>' in text:
-        if text.count('<summary>More details</summary>') != 1:
+    summary = re.compile(r'<summary[^>]*>More details</summary>')
+    if summary.search(text):
+        if len(summary.findall(text)) != 1 or text.count('aria-label="Uploaded photo previews"') != 1:
             raise RuntimeError('Create item layout transform is partial')
+        details_start = text.index('<details')
+        details_end = text.index('</details>', details_start)
+        collapsed_fields = text[details_start:details_end]
+        if 'v-if="equipmentIntent"' in collapsed_fields or 'v-if="relatedIntent?.main_entity_id"' in collapsed_fields:
+            raise RuntimeError('Create item recovery must remain outside More details')
+        essentials = text[:details_start]
+        if 'v-model="form.modelCode"' not in essentials or 'v-model="form.barcode"' not in essentials or 'v-if="barcodeLookupMessage"' not in essentials:
+            raise RuntimeError('Create item code fields and lookup must remain in the essential form group')
         return
 
     # Recovery must remain visible even while the optional fields are closed.
-    recovery = re.compile(r'      <section v-if="equipmentIntent".*?\n      </section>\n', re.S)
-    matches = list(recovery.finditer(text))
-    if len(matches) != 1:
-        raise RuntimeError('Upstream changed: expected one equipment create recovery section')
-    recovery_markup = matches[0].group(0)
-    text = text[:matches[0].start()] + text[matches[0].end():]
+    recovery = re.compile(r'      <section v-if="(?:equipmentIntent|relatedIntent\?\.main_entity_id)".*?\n      </section>\n', re.S)
+    recovery_matches = list(recovery.finditer(text))
+    if len(recovery_matches) != 2 or {re.search(r'v-if="([^"]+)"', match.group(0)).group(1) for match in recovery_matches} != {'equipmentIntent', 'relatedIntent?.main_entity_id'}:
+        raise RuntimeError('Upstream changed: expected both equipment and related-item recovery sections')
+    recovery_markup = ''.join(match.group(0) for match in recovery_matches)
+    for match in reversed(recovery_matches):
+        text = text[:match.start()] + text[match.end():]
+
+    # Barcode lookup is a code-identity action, so keep both its input and
+    # results visible with the essential name, location, and quantity fields.
+    barcode_input_start = '      <div v-if="!selectedEntityType?.isLocation" class="flex items-end gap-2">'
+    barcode_input_end = '      <div v-if="!selectedEntityType?.isLocation" class="grid grid-cols-1 gap-2 sm:grid-cols-2">'
+    model_code = '        <FormTextField v-model="form.modelCode" label="Equipment model code" :max-length="80" />'
+    barcode_results_start = '      <p v-if="barcodeLookupMessage"'
+    barcode_results_end = '      <TagSelector v-model="form.tags"'
+    if any(text.count(anchor) != 1 for anchor in (barcode_input_start, barcode_input_end, model_code, barcode_results_start, barcode_results_end)):
+        raise RuntimeError('Upstream changed: expected barcode input and result controls in CreateModal.vue')
+    text = text.replace(model_code, '', 1)
+    code_field = '      ' + model_code.strip() + '\n'
+    input_start = text.index(barcode_input_start)
+    input_end = text.index(barcode_input_end, input_start)
+    barcode_input = text[input_start:input_end]
+    text = text[:input_start] + text[input_end:]
+    results_start = text.index(barcode_results_start)
+    results_end = text.index(barcode_results_end, results_start)
+    barcode_results = text[results_start:results_end]
+    text = text[:results_start] + text[results_end:]
 
     details_start = '      <FormTextArea\n        v-model="form.description"'
     photo_start = '      <PhotoUploader\n'
@@ -1462,7 +1492,7 @@ def create_item_layout_frontend():
     # The section contains all of the existing optional item fields and keeps
     # their v-model bindings intact. The name, location, quantity, and photo
     # uploader/preview remain outside it.
-    disclosure = '''      <details class="rounded-md border border-border bg-card p-3">
+    disclosure = code_field + barcode_input + barcode_results + '''      <details class="rounded-md border border-border bg-card p-3">
         <summary class="cursor-pointer font-medium text-foreground">More details</summary>
         <div class="mt-3 flex flex-col gap-2">
 ''' + optional_fields + '''        </div>
