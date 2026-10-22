@@ -1472,7 +1472,7 @@ def create_item_layout_frontend():
     if any(text.count(anchor) != 1 for anchor in (barcode_input_start, barcode_input_end, model_code, barcode_results_start, barcode_results_end)):
         raise RuntimeError('Upstream changed: expected barcode input and result controls in CreateModal.vue')
     text = text.replace(model_code, '', 1)
-    code_field = '      ' + model_code.strip() + '\n'
+    code_field = '      <div v-if="!selectedEntityType?.isLocation">\n        ' + model_code.strip() + '\n      </div>\n'
     input_start = text.index(barcode_input_start)
     input_end = text.index(barcode_input_end, input_start)
     barcode_input = text[input_start:input_end]
