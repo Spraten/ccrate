@@ -26,7 +26,7 @@
       body: body ? JSON.stringify(body) : undefined
     });
     const data = await response.json();
-    if (!response.ok) { const error = Error(data.error || data.reason || 'Request failed'); error.status = response.status; throw error; }
+    if (!response.ok) { const reference = typeof data.request_id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.request_id) ? ` · Reference: ${data.request_id}` : ''; const error = Error((data.error || data.reason || 'Request failed') + reference); error.status = response.status; throw error; }
     return data;
   };
 
