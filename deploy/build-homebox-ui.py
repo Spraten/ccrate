@@ -422,7 +422,7 @@ def grouped_inventory_frontend():
       fields,
     });'''
     new = '''    const nativeOptions = {
-      q: "",
+      q: searchedQuery.trim() ? searchedQuery : "",
       parentIds: locIDs.value,
       tags: tagIDs.value,
       negateTags: negateTags.value,
@@ -434,20 +434,14 @@ def grouped_inventory_frontend():
       fields,
     };
     let data: any = null;
-    let nativeMatches: any[] = [];
     let error: any = null;
     try {
-      const allItems = await loadAllFilteredInventory(async (nativePage: number, nativePageSize: number) => {
+      const filteredItems = await loadAllFilteredInventory(async (nativePage: number, nativePageSize: number) => {
         const response = await api.items.getAll({ ...nativeOptions, page: nativePage, pageSize: nativePageSize });
         if (response.error) throw response.error;
         return response.data;
       }, { pageSize: pageSize.value, isCurrent: () => revision === searchRevision && searchedQuery === query.value });
-      nativeMatches = searchedQuery.trim() ? await loadAllFilteredInventory(async (nativePage: number, nativePageSize: number) => {
-        const response = await api.items.getAll({ ...nativeOptions, q: searchedQuery, page: nativePage, pageSize: nativePageSize });
-        if (response.error) throw response.error;
-        return response.data;
-      }, { pageSize: pageSize.value, isCurrent: () => revision === searchRevision && searchedQuery === query.value }) : allItems;
-      data = { items: allItems, total: allItems.length };
+      data = { items: filteredItems, total: filteredItems.length };
     } catch (loadError) { error = loadError; }'''
     once(old, new)
     once("      fields: fields,\n    };", '      fields: fields,\n      selected: typeof route.query.selected === "string" ? route.query.selected : undefined,\n    };')
@@ -495,7 +489,7 @@ def grouped_inventory_frontend():
     if (revision !== searchRevision || searchedQuery !== query.value) return;
     const enriched = mergeInventorySummaries(data.items, equipmentRows);
     const projected = projectAssignedDisplayIds(enriched, assignmentMap);
-    const matchingEntityIds = new Set(nativeMatches.map(item => item.id));
+    const matchingEntityIds = new Set(data.items.map((item: any) => item.id));
     const normalizedQuery = searchedQuery.trim().toLocaleLowerCase();
     if (normalizedQuery) for (const item of projected) {
       if (String(item.displayId || "").toLocaleLowerCase().includes(normalizedQuery)) matchingEntityIds.add(item.id);

@@ -239,8 +239,8 @@ export function indexLatestInventoryNotes(rows = []) {
 
 /**
  * Group one complete, already Homebox-filtered inventory result. Search and
- * status filters choose matching units, then search expands to their complete
- * group so the unit that matched stays visible with its peers.
+ * status filters choose matching units, then search includes their peers
+ * within that result so the matching unit stays visible in its group.
  */
 export function groupInventoryItems(items, productAssignments = {}, options = {}) {
   const query = fold(options.query), statusFilter = options.filters?.status || '';
