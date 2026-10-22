@@ -1434,6 +1434,52 @@ def related_create_form_text(text):
       toast.success(`Assigned equipment ID ${result.assignment.display_id}.`);''')
     return text
 
+
+def create_item_layout_frontend():
+    """Group optional create fields while keeping identity and photo controls in view."""
+    path = BUILD/'components/Entity/CreateModal.vue'
+    text = path.read_text()
+    if '<summary>More details</summary>' in text:
+        if text.count('<summary>More details</summary>') != 1:
+            raise RuntimeError('Create item layout transform is partial')
+        return
+
+    # Recovery must remain visible even while the optional fields are closed.
+    recovery = re.compile(r'      <section v-if="equipmentIntent".*?\n      </section>\n', re.S)
+    matches = list(recovery.finditer(text))
+    if len(matches) != 1:
+        raise RuntimeError('Upstream changed: expected one equipment create recovery section')
+    recovery_markup = matches[0].group(0)
+    text = text[:matches[0].start()] + text[matches[0].end():]
+
+    details_start = '      <FormTextArea\n        v-model="form.description"'
+    photo_start = '      <PhotoUploader\n'
+    if text.count(details_start) != 1 or text.count(photo_start) != 1:
+        raise RuntimeError('Upstream changed: expected description and photo controls in CreateModal.vue')
+    start = text.index(details_start)
+    end = text.index(photo_start, start)
+    optional_fields = text[start:end]
+    # The section contains all of the existing optional item fields and keeps
+    # their v-model bindings intact. The name, location, quantity, and photo
+    # uploader/preview remain outside it.
+    disclosure = '''      <details class="rounded-md border border-border bg-card p-3">
+        <summary class="cursor-pointer font-medium text-foreground">More details</summary>
+        <div class="mt-3 flex flex-col gap-2">
+''' + optional_fields + '''        </div>
+      </details>
+'''
+    text = text[:start] + disclosure + recovery_markup + text[end:]
+
+    preview = '      <PhotoUploaderPreview\n'
+    if text.count(preview) != 1:
+        raise RuntimeError('Upstream changed: expected one photo preview in CreateModal.vue')
+    text = text.replace(preview, '      <div role="group" aria-label="Uploaded photo previews">\n' + preview, 1)
+    preview_end = '      />\n\n      <div class="mt-4 flex flex-row-reverse">'
+    if text.count(preview_end) != 1:
+        raise RuntimeError('Upstream changed: expected photo preview before create actions')
+    text = text.replace(preview_end, '      />\n      </div>\n\n      <div class="mt-4 flex flex-row-reverse">', 1)
+    path.write_text(text)
+
 def equipment_catalog_create_frontend():
     path = BUILD/'components/Entity/CreateModal.vue'
     text = path.read_text()
@@ -1851,6 +1897,7 @@ def prepare():
     target.write_text(body)
     nest_frontend()
     equipment_catalog_create_frontend()
+    create_item_layout_frontend()
     equipment_assigned_ids_frontend()
     grouped_inventory_frontend()
     item_action_surfaces_frontend()
