@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Loopback Homebox companion with browser-owned badge sessions."""
-import base64, io, json, os, pathlib, signal, stat, sys, tempfile, threading, time, urllib.request, urllib.error
+import base64, io, json, logging, os, pathlib, signal, stat, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, urlencode
-from uuid import UUID as NativeUUID
+from uuid import UUID as NativeUUID, uuid4
 FIXTURE_PROCESS=os.environ.get('WORKSHOP_FIXTURE_PROCESS')=='1'
 def fixture_process_root():
     if not FIXTURE_PROCESS:return None
@@ -248,6 +248,14 @@ class Handler(BaseHTTPRequestHandler):
     def reply_json(self,code,data):
         body=json.dumps(data).encode()
         self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+    def reply_api_unavailable(self,error: OSError) -> None:
+        request_id=str(uuid4())
+        errno=error.errno if type(error.errno) is int else None
+        logging.getLogger(__name__).warning(
+            'Kiosk POST unavailable request_id=%s route=%s exception=%s errno=%s',
+            request_id,urlsplit(self.path).path,type(error).__name__,errno)
+        self.reply_json(503,{'error':'C-Crate unavailable; no confirmation received',
+                             'reason':'C-Crate unavailable; try again','request_id':request_id})
     def do_POST(self):
         if desktop_handle(self,{'root':ROOT,'lock':lock,'ledger':ledger,'checkout_cart':checkout_cart,'shelf_checks':shelf_checks,'badges':badges,'native_jobs':native_jobs,'imports':imports,'workshop':workshop,'sessions':sessions,'web_item_actions':web_item_actions,'label_layouts':label_layouts,'label_asset_root':LABEL_ASSET_ROOT}):return
         try:self.session
@@ -656,8 +664,9 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,TypeError,AttributeError,KeyError) as error:self.reply_json(400,{'kind':'invalid','error':str(error),'reason':str(error)})
             except CheckAccessDenied as error:self.reply_json(403,{'error':str(error),'reason':str(error)})
             except OSError as error:
-                if self.path in ('/label/preview','/label/paper','/label/templates/result'):self.reply_json(503,{'error':str(error) or 'Label preview is busy. Try again'})
-                else:self.reply_json(503,{'error':'C-Crate unavailable; no confirmation received','reason':'C-Crate unavailable; try again'})
+                if self.path in ('/label/preview','/label/paper','/label/templates/result'):
+                    self.reply_json(503,{'error':'Label preview is busy. Try again'})
+                else:self.reply_api_unavailable(error)
             return
 
         if self.client_address[0] not in ('127.0.0.1','::1') or self.headers.get('X-Homebox-Client-Mode') == 'editor' or self.path != '/exit' or self.headers.get('Origin') != 'http://127.0.0.1:17749':
